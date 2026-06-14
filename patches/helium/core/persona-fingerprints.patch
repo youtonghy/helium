@@ -1,0 +1,2611 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1504,6 +1504,8 @@ static_library("ui") {
+       "webui/settings/search_engines_handler.h",
+       "webui/settings/security_settings_provider.cc",
+       "webui/settings/security_settings_provider.h",
++      "webui/settings/persona_handler.cc",
++      "webui/settings/persona_handler.h",
+       "webui/settings/services_schema_handler.cc",
+       "webui/settings/services_schema_handler.h",
+       "webui/settings/settings_clear_browsing_data_handler.cc",
+@@ -1701,6 +1703,7 @@ static_library("ui") {
+     "//components/feature_engagement/public",
+     "//components/feedback",
+     "//components/favicon/content",
++    "//components/helium_persona",
+     "//components/helium_services",
+     "//components/history/core/browser",
+     "//components/image_fetcher/core",
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -16,5 +16,6 @@
+ #include "chrome/common/buildflags.h"
+ #include "chrome/common/pref_names.h"
++#include "components/helium_persona/persona_prefs.h"
+ #include "components/helium_services/pref_names.h"
+ #include "components/policy/core/common/policy_pref_names.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+@@ -223,6 +224,8 @@ void RegisterBrowserUserPrefs(user_prefs
+     registry->RegisterStringPref(prefs::kHeliumServicesOrigin, "");
+   }
+ 
++  helium_persona::RegisterProfilePrefs(registry);
++
+   registry->RegisterBooleanPref(
+       prefs::kHttpsOnlyModeEnabled, false,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -79,5 +79,6 @@
+ #include "chrome/browser/ui/webui/settings/password_manager_handler.h"
+ #include "chrome/browser/ui/webui/settings/performance_handler.h"
++#include "chrome/browser/ui/webui/settings/persona_handler.h"
+ #include "chrome/browser/ui/webui/settings/profile_info_handler.h"
+ #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
+ #include "chrome/browser/ui/webui/settings/safety_check_handler.h"
+@@ -271,6 +272,7 @@ SettingsUI::SettingsUI(content::WebUI* w
+   AddSettingsPageUIHandler(std::make_unique<PeopleHandler>(profile));
+   AddSettingsPageUIHandler(std::make_unique<PerformanceHandler>(profile));
+   AddSettingsPageUIHandler(std::make_unique<PrivacySandboxHandler>());
++  AddSettingsPageUIHandler(std::make_unique<HeliumPersonaHandler>(profile));
+   AddSettingsPageUIHandler(std::make_unique<SearchEnginesHandler>(profile));
+   AddSettingsPageUIHandler(
+       std::make_unique<HeliumServicesSchemaHandler>(profile));
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -1743,6 +1743,59 @@
+       Invalid origin
+     </message>
+ 
++    <!-- Helium Persona Privacy Settings (helium://settings/privacy/persona) -->
++    <message name="IDS_SETTINGS_HELIUM_PERSONA" desc="Name of the page which controls browser fingerprint personas.">
++      Persona fingerprint
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_DESCRIPTION" desc="Description of the controls available on the persona fingerprint settings page.">
++      Manage profile-level browser, region, hardware, display, and font fingerprints
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_ACTIVE" desc="Label for the active persona selector.">
++      Active persona
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_PRESETS" desc="Title for the built-in persona presets section.">
++      Presets
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_SAVED" desc="Title for the saved personas section.">
++      Saved personas
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_CLONE" desc="Button label for copying a built-in persona preset.">
++      Copy preset
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_USE" desc="Button label for selecting a persona.">
++      Use
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_DELETE" desc="Button label for deleting a custom persona.">
++      Delete
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_SAVE" desc="Button label for saving persona edits.">
++      Save persona
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_WARNINGS" desc="Title for persona consistency warnings.">
++      Consistency warnings
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_IDENTITY" desc="Persona identity group title.">
++      Identity
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_REGION" desc="Persona region group title.">
++      Region
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_HARDWARE" desc="Persona hardware group title.">
++      Hardware
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_DISPLAY" desc="Persona display group title.">
++      Display
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_FONTS" desc="Persona fonts group title.">
++      Fonts
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_ADVANCED" desc="Persona advanced exposed APIs group title.">
++      Advanced exposed APIs
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_PERSONA_FULL_IMAGE" desc="Short note explaining built-in presets.">
++      Presets include UA, platform, timezone, language, GPU, screen, CPU, memory, touch, and virtual font pack values.
++    </message>
++
+     <!-- Safety check -->
+     <message name="IDS_SETTINGS_SAFETY_CHECK_ICON_INFO_ARIA_LABEL" desc="Accessibility text for a safety check child icon, that indicates info for the child check.">
+       Info
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -2253,6 +2253,23 @@ void AddPrivacyStrings(content::WebUIDat
+         IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL},
+       {"heliumOriginOverrideInvalidOrigin",
+         IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN},
++      {"heliumPersonaTitle", IDS_SETTINGS_HELIUM_PERSONA},
++      {"heliumPersonaDescription", IDS_SETTINGS_HELIUM_PERSONA_DESCRIPTION},
++      {"heliumPersonaActive", IDS_SETTINGS_HELIUM_PERSONA_ACTIVE},
++      {"heliumPersonaPresets", IDS_SETTINGS_HELIUM_PERSONA_PRESETS},
++      {"heliumPersonaSaved", IDS_SETTINGS_HELIUM_PERSONA_SAVED},
++      {"heliumPersonaClone", IDS_SETTINGS_HELIUM_PERSONA_CLONE},
++      {"heliumPersonaUse", IDS_SETTINGS_HELIUM_PERSONA_USE},
++      {"heliumPersonaDelete", IDS_SETTINGS_HELIUM_PERSONA_DELETE},
++      {"heliumPersonaSave", IDS_SETTINGS_HELIUM_PERSONA_SAVE},
++      {"heliumPersonaWarnings", IDS_SETTINGS_HELIUM_PERSONA_WARNINGS},
++      {"heliumPersonaIdentity", IDS_SETTINGS_HELIUM_PERSONA_IDENTITY},
++      {"heliumPersonaRegion", IDS_SETTINGS_HELIUM_PERSONA_REGION},
++      {"heliumPersonaHardware", IDS_SETTINGS_HELIUM_PERSONA_HARDWARE},
++      {"heliumPersonaDisplay", IDS_SETTINGS_HELIUM_PERSONA_DISPLAY},
++      {"heliumPersonaFonts", IDS_SETTINGS_HELIUM_PERSONA_FONTS},
++      {"heliumPersonaAdvanced", IDS_SETTINGS_HELIUM_PERSONA_ADVANCED},
++      {"heliumPersonaFullImage", IDS_SETTINGS_HELIUM_PERSONA_FULL_IMAGE},
+       {"advancedProtectionProgramTitle",
+        IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM},
+       {"advancedProtectionProgramDesc",
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
+@@ -51,6 +51,11 @@
+         sub-label="$i18n{heliumServicesDescription}"
+         on-click="onHeliumServicesPageClick_"
+         role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
++    <cr-link-row id="heliumPersonaLinkRow" start-icon="privacy:page-info"
++        class="hr" label="$i18n{heliumPersonaTitle}"
++        sub-label="$i18n{heliumPersonaDescription}"
++        on-click="onHeliumPersonaPageClick_"
++        role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
+     <cr-toast id="deleteBrowsingDataToast" duration="5000">
+       <div>[[dbdDeletionConfirmationToastLabel_]]</div>
+     </cr-toast>
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
+@@ -47,6 +47,14 @@
+     </settings-helium-services-page>
+   </template>
+ 
++  <template is="dom-if" if="[[renderView_(
++      routes_.HELIUM_PERSONA, currentRoute, inSearchMode)]]">
++    <settings-helium-persona-page slot="view" id="heliumPersona"
++        data-parent-view-id="privacy"
++        route-path$="[[routes_.HELIUM_PERSONA.path]]">
++    </settings-helium-persona-page>
++  </template>
++
+   <template is="dom-if" if="[[isAdPrivacyAvailable_]]" restamp>
+     <template is="dom-if" if="[[renderView_(
+         routes_.PRIVACY_SANDBOX, currentRoute, inSearchMode)]]"
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
+@@ -171,6 +171,12 @@ export class SettingsPrivacyPageElement
+     Router.getInstance().navigateTo(routes.HELIUM_SERVICES);
+   }
+ 
++  private onHeliumPersonaPageClick_() {
++    this.interactedWithPage_();
++
++    Router.getInstance().navigateTo(routes.HELIUM_PERSONA);
++  }
++
+   private onSecurityPageClick_() {
+     this.interactedWithPage_();
+     this.metricsBrowserProxy_.recordAction(
+@@ -237,6 +243,10 @@ export class SettingsPrivacyPageElement
+       map.set(routes.HELIUM_SERVICES.path, '#heliumServicesLinkRow');
+     }
+ 
++    if (routes.HELIUM_PERSONA) {
++      map.set(routes.HELIUM_PERSONA.path, '#heliumPersonaLinkRow');
++    }
++
+     if (routes.COOKIES) {
+       map.set(routes.COOKIES.path, '#thirdPartyCookiesLinkRow');
+     }
+@@ -268,6 +278,9 @@ export class SettingsPrivacyPageElement
+       case 'heliumServices':
+         triggerId = 'heliumServicesLinkRow';
+         break;
++      case 'heliumPersona':
++        triggerId = 'heliumPersonaLinkRow';
++        break;
+       case 'cookies':
+       case 'siteSettings':
+       case 'siteSettingsAds':
+--- a/chrome/browser/resources/settings/router.ts
++++ b/chrome/browser/resources/settings/router.ts
+@@ -35,6 +35,7 @@ export interface SettingsRoutes {
+   GEMINI_LOGIN: Route;
+   GLIC_SECTION: Route;
+   HELIUM_SERVICES: Route;
++  HELIUM_PERSONA: Route;
+   HISTORY_SEARCH: Route;
+   LANGUAGES: Route;
+   MANAGE_PROFILE: Route;
+--- a/chrome/browser/resources/settings/route.ts
++++ b/chrome/browser/resources/settings/route.ts
+@@ -20,6 +20,7 @@ function addPrivacyChildRoutes(r: Partia
+   r.CLEAR_BROWSER_DATA.isNavigableDialog = true;
+ 
+   r.HELIUM_SERVICES = r.PRIVACY.createChild('services');
++  r.HELIUM_PERSONA = r.PRIVACY.createChild('persona');
+ 
+   const visibility = pageVisibility || {};
+ 
+--- a/chrome/browser/resources/settings/BUILD.gn
++++ b/chrome/browser/resources/settings/BUILD.gn
+@@ -157,6 +157,7 @@ build_webui("build") {
+     "privacy_page/security/security_page.ts",
+     "privacy_page/security/security_page_feature_row.ts",
+     "privacy_page/security/security_page_v2.ts",
++    "privacy_page/persona_page.ts",
+     "privacy_page/services_page.ts",
+     "privacy_sandbox/privacy_sandbox_ad_measurement_subpage.ts",
+     "privacy_sandbox/privacy_sandbox_fledge_subpage.ts",
+@@ -395,6 +396,7 @@ build_webui("build") {
+       "languages_page/languages_util.ts",
+       "people_page/import_data_browser_proxy.ts",
+       "people_page/manage_profile_browser_proxy.ts",
++      "privacy_page/persona_browser_proxy.ts",
+       "privacy_page/changelog_proxy.ts",
+       "system_page/system_page_browser_proxy.ts",
+     ]
+--- a/chrome/browser/resources/settings/lazy_load.ts
++++ b/chrome/browser/resources/settings/lazy_load.ts
+@@ -26,6 +26,7 @@ import './privacy_page/privacy_guide/pri
+ import './privacy_page/security/security_keys_subpage.js';
+ import './privacy_page/security/security_page_v2.js';
+ import './privacy_page/security/security_page.js';
++import './privacy_page/persona_page.js';
+ import './privacy_page/services_page.js';
+ import './privacy_sandbox/privacy_sandbox_ad_measurement_subpage.js';
+ import './privacy_sandbox/privacy_sandbox_fledge_subpage.js';
+@@ -271,6 +272,7 @@ export {SecurityKeysSubpageElement} from
+ export {HttpsFirstModeSetting, SettingsSecurityPageElement} from './privacy_page/security/security_page.js';
+ export {SecurityPageFeatureRowElement} from './privacy_page/security/security_page_feature_row.js';
+ export {SecuritySettingsBundleSetting, SettingsSecurityPageV2Element} from './privacy_page/security/security_page_v2.js';
++export {SettingsHeliumPersonaPageElement} from './privacy_page/persona_page.js';
+ export {SettingsHeliumServicesPageElement} from './privacy_page/services_page.js';
+ export {SettingsPrivacySandboxAdMeasurementSubpageElement} from './privacy_sandbox/privacy_sandbox_ad_measurement_subpage.js';
+ export {SettingsPrivacySandboxFledgeSubpageElement} from './privacy_sandbox/privacy_sandbox_fledge_subpage.js';
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+@@ -0,0 +1,76 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++import {sendWithPromise} from 'chrome://resources/js/cr.js';
++
++export interface PersonaRecord {
++  id: string;
++  name: string;
++  source: string;
++  device: string;
++  os: string;
++  userAgent: string;
++  platform: string;
++  uaCh: Record<string, unknown>;
++  region: Record<string, unknown>;
++  gpu: Record<string, unknown>;
++  screen: Record<string, unknown>;
++  hardware: Record<string, unknown>;
++  fonts: Record<string, unknown>;
++  advanced: Record<string, unknown>;
++  builtin?: boolean;
++  modified?: boolean;
++  passthrough?: boolean;
++  warnings?: string[];
++}
++
++export interface PersonaState {
++  activePersonaId: string;
++  activePersona: PersonaRecord;
++  presets: PersonaRecord[];
++  personas: PersonaRecord[];
++  warnings: string[];
++  revision: number;
++}
++
++export interface HeliumPersonaBrowserProxy {
++  getState(): Promise<PersonaState>;
++  setActivePersona(personaId: string): Promise<boolean>;
++  clonePreset(presetId: string): Promise<PersonaRecord>;
++  savePersona(persona: PersonaRecord): Promise<boolean>;
++  deletePersona(personaId: string): Promise<boolean>;
++}
++
++export class HeliumPersonaBrowserProxyImpl implements
++    HeliumPersonaBrowserProxy {
++  getState() {
++    return sendWithPromise<PersonaState>('getHeliumPersonaState');
++  }
++
++  setActivePersona(personaId: string) {
++    return sendWithPromise<boolean>('setHeliumActivePersona', personaId);
++  }
++
++  clonePreset(presetId: string) {
++    return sendWithPromise<PersonaRecord>('cloneHeliumPersonaPreset', presetId);
++  }
++
++  savePersona(persona: PersonaRecord) {
++    return sendWithPromise<boolean>('saveHeliumPersona', persona);
++  }
++
++  deletePersona(personaId: string) {
++    return sendWithPromise<boolean>('deleteHeliumPersona', personaId);
++  }
++
++  static getInstance(): HeliumPersonaBrowserProxy {
++    return instance || (instance = new HeliumPersonaBrowserProxyImpl());
++  }
++
++  static setInstance(obj: HeliumPersonaBrowserProxy) {
++    instance = obj;
++  }
++}
++
++let instance: HeliumPersonaBrowserProxy|null = null;
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -0,0 +1,279 @@
++<style include="cr-shared-style settings-shared">
++  .persona-note {
++    color: var(--cr-secondary-text-color);
++    line-height: 20px;
++    padding: 0 var(--cr-section-padding) 12px;
++  }
++
++  .persona-section-title {
++    color: var(--cr-primary-text-color);
++    font-size: 13px;
++    font-weight: 500;
++    padding: 16px var(--cr-section-padding) 8px;
++  }
++
++  .persona-card {
++    align-items: center;
++    display: grid;
++    gap: 8px 16px;
++    grid-template-columns: 1fr auto;
++    min-height: var(--cr-section-two-line-min-height);
++  }
++
++  .persona-main {
++    min-width: 0;
++  }
++
++  .persona-name {
++    line-height: 20px;
++  }
++
++  .persona-detail {
++    color: var(--cr-secondary-text-color);
++    line-height: 20px;
++  }
++
++  .persona-actions {
++    display: flex;
++    gap: 8px;
++  }
++
++  .warning-box {
++    background: var(--cr-hover-background-color);
++    border-radius: 8px;
++    margin: 0 var(--cr-section-padding) 12px;
++    padding: 12px 16px;
++  }
++
++  .warning-box ul {
++    margin: 8px 0 0;
++    padding-inline-start: 20px;
++  }
++
++  .editor-grid {
++    display: grid;
++    gap: 8px 16px;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    padding: 0 var(--cr-section-padding) 16px;
++  }
++
++  .editor-grid cr-input,
++  .editor-grid cr-checkbox {
++    min-width: 0;
++  }
++
++  .md-select {
++    margin-inline-end: var(--cr-section-padding);
++    max-width: 320px;
++  }
++
++  .wide {
++    grid-column: 1 / -1;
++  }
++
++  .actions-row {
++    display: flex;
++    justify-content: flex-end;
++    padding: 0 var(--cr-section-padding) 16px;
++  }
++
++  @media (max-width: 700px) {
++    .persona-card {
++      grid-template-columns: 1fr;
++    }
++
++    .persona-actions {
++      justify-content: flex-end;
++    }
++
++    .editor-grid {
++      grid-template-columns: 1fr;
++    }
++  }
++</style>
++
++<settings-subpage page-title="$i18n{heliumPersonaTitle}"
++    route-path$="[[routePath]]">
++  <div class="persona-note">$i18n{heliumPersonaFullImage}</div>
++
++  <template is="dom-if" if="[[warnings_.length]]">
++    <div class="warning-box">
++      <div>$i18n{heliumPersonaWarnings}</div>
++      <ul>
++        <template is="dom-repeat" items="[[warnings_]]" as="warning">
++          <li>[[warning]]</li>
++        </template>
++      </ul>
++    </div>
++  </template>
++
++  <div class="persona-section-title">$i18n{heliumPersonaActive}</div>
++  <div class="cr-row">
++    <div class="flex cr-padded-text">
++      <div class="label">Persona</div>
++      <div class="cr-secondary-text">
++        [[activePersonaSummary_]]
++      </div>
++    </div>
++    <select class="md-select" value="{{activePersonaId_::change}}"
++        on-change="onActivePersonaChanged_">
++      <template is="dom-repeat" items="[[personaOptions_]]" as="option">
++        <option value$="[[option.id]]"
++            selected$="[[isActiveOption_(option.id, activePersonaId_)]]">
++          [[option.name]]
++        </option>
++      </template>
++    </select>
++  </div>
++
++  <div class="persona-section-title">$i18n{heliumPersonaPresets}</div>
++  <template is="dom-repeat" items="[[presets_]]" as="preset">
++    <div class="cr-row persona-card">
++      <div class="persona-main cr-padded-text">
++        <div class="persona-name">[[preset.name]]</div>
++        <div class="persona-detail">
++          [[preset.device]] / [[preset.os]] / [[formatRegion_(preset)]]
++        </div>
++      </div>
++      <div class="persona-actions">
++        <cr-button on-click="onUsePresetClick_">$i18n{heliumPersonaUse}</cr-button>
++        <cr-button disabled="[[isPassthroughPersona_(preset)]]"
++            on-click="onClonePresetClick_">$i18n{heliumPersonaClone}</cr-button>
++      </div>
++    </div>
++  </template>
++
++  <div class="persona-section-title">$i18n{heliumPersonaSaved}</div>
++  <template is="dom-repeat" items="[[personas_]]" as="persona">
++    <div class="cr-row persona-card">
++      <div class="persona-main cr-padded-text">
++        <div class="persona-name">[[persona.name]]</div>
++        <div class="persona-detail">
++          [[persona.device]] / [[persona.os]] / [[formatRegion_(persona)]]
++        </div>
++      </div>
++      <div class="persona-actions">
++        <cr-button on-click="onUsePersonaClick_">$i18n{heliumPersonaUse}</cr-button>
++        <cr-button on-click="onDeletePersonaClick_">$i18n{heliumPersonaDelete}</cr-button>
++      </div>
++    </div>
++  </template>
++
++  <div class="persona-section-title">$i18n{heliumPersonaIdentity}</div>
++  <div class="editor-grid">
++    <cr-input label="Name" value="{{editablePersona_.name}}"></cr-input>
++    <cr-input label="Device" value="{{editablePersona_.device}}"></cr-input>
++    <cr-input label="OS" value="{{editablePersona_.os}}"></cr-input>
++    <cr-input label="Platform" value="{{editablePersona_.platform}}"></cr-input>
++    <cr-input class="wide" label="User agent"
++        value="{{editablePersona_.userAgent}}"></cr-input>
++    <cr-input label="UA-CH platform"
++        value="{{editablePersona_.uaCh.platform}}"></cr-input>
++    <cr-input label="UA-CH platform version"
++        value="{{editablePersona_.uaCh.platformVersion}}"></cr-input>
++    <cr-input label="UA-CH architecture"
++        value="{{editablePersona_.uaCh.architecture}}"></cr-input>
++    <cr-input label="UA-CH bitness"
++        value="{{editablePersona_.uaCh.bitness}}"></cr-input>
++    <cr-input label="UA-CH model"
++        value="{{editablePersona_.uaCh.model}}"></cr-input>
++    <cr-checkbox checked="{{editablePersona_.uaCh.mobile}}">
++      UA-CH mobile
++    </cr-checkbox>
++  </div>
++
++  <div class="persona-section-title">$i18n{heliumPersonaRegion}</div>
++  <div class="editor-grid">
++    <cr-input label="Timezone"
++        value="{{editablePersona_.region.timezone}}"></cr-input>
++    <cr-input label="Locale"
++        value="{{editablePersona_.region.locale}}"></cr-input>
++    <cr-input class="wide" label="Accept-Language"
++        value="{{editablePersona_.region.acceptLanguage}}"></cr-input>
++    <cr-input class="wide" label="navigator.languages"
++        value="{{navigatorLanguagesText_}}"
++        on-change="onNavigatorLanguagesChanged_"></cr-input>
++  </div>
++
++  <div class="persona-section-title">$i18n{heliumPersonaHardware}</div>
++  <div class="editor-grid">
++    <cr-input label="GPU vendor"
++        value="{{editablePersona_.gpu.vendor}}"></cr-input>
++    <cr-input label="GPU renderer"
++        value="{{editablePersona_.gpu.renderer}}"></cr-input>
++    <cr-input label="WebGPU adapter"
++        value="{{editablePersona_.gpu.webgpuAdapter}}"></cr-input>
++    <cr-input label="GPU driver"
++        value="{{editablePersona_.gpu.driver}}"></cr-input>
++    <cr-input label="CPU cores"
++        value="{{editablePersona_.hardware.hardwareConcurrency}}"
++        type="number"></cr-input>
++    <cr-input label="Device memory (GB)"
++        value="{{editablePersona_.hardware.deviceMemory}}"
++        type="number"></cr-input>
++    <cr-input label="Max touch points"
++        value="{{editablePersona_.hardware.maxTouchPoints}}"
++        type="number"></cr-input>
++    <cr-checkbox checked="{{editablePersona_.hardware.touchEnabled}}">
++      Touch capability
++    </cr-checkbox>
++  </div>
++
++  <div class="persona-section-title">$i18n{heliumPersonaDisplay}</div>
++  <div class="editor-grid">
++    <cr-input label="Width"
++        value="{{editablePersona_.screen.width}}" type="number"></cr-input>
++    <cr-input label="Height"
++        value="{{editablePersona_.screen.height}}" type="number"></cr-input>
++    <cr-input label="Available width"
++        value="{{editablePersona_.screen.availWidth}}" type="number"></cr-input>
++    <cr-input label="Available height"
++        value="{{editablePersona_.screen.availHeight}}" type="number"></cr-input>
++    <cr-input label="Device scale factor"
++        value="{{editablePersona_.screen.deviceScaleFactor}}"
++        type="number"></cr-input>
++    <cr-input label="Color depth"
++        value="{{editablePersona_.screen.colorDepth}}" type="number"></cr-input>
++    <cr-input label="Pixel depth"
++        value="{{editablePersona_.screen.pixelDepth}}" type="number"></cr-input>
++    <cr-input label="Refresh rate"
++        value="{{editablePersona_.screen.refreshRate}}" type="number"></cr-input>
++  </div>
++
++  <div class="persona-section-title">$i18n{heliumPersonaFonts}</div>
++  <div class="editor-grid">
++    <cr-input label="Font pack"
++        value="{{editablePersona_.fonts.displayName}}"></cr-input>
++    <cr-input class="wide" label="Families"
++        value="{{fontFamiliesText_}}"
++        on-change="onFontFamiliesChanged_"></cr-input>
++    <cr-input class="wide" label="Aliases"
++        value="{{fontAliasesText_}}"
++        on-change="onFontAliasesChanged_"></cr-input>
++  </div>
++
++  <div class="persona-section-title">$i18n{heliumPersonaAdvanced}</div>
++  <div class="editor-grid">
++    <cr-checkbox checked="{{editablePersona_.advanced.clientHintsEnabled}}">
++      Client hints
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.reduceSystemInfo}}">
++      Reduce system info
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.canvasNoise}}">
++      Canvas noise
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.audioNoise}}">
++      Audio noise
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.fontMetricNoise}}">
++      Font metric noise
++    </cr-checkbox>
++  </div>
++
++  <div class="actions-row">
++    <cr-button class="action-button" on-click="onSaveClick_">
++      $i18n{heliumPersonaSave}
++    </cr-button>
++  </div>
++</settings-subpage>
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -0,0 +1,227 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++import '../settings_page/settings_subpage.js';
++import 'chrome://resources/cr_elements/cr_button/cr_button.js';
++import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
++import 'chrome://resources/cr_elements/cr_input/cr_input.js';
++
++import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
++
++import type {PersonaRecord, PersonaState} from './persona_browser_proxy.js';
++import {HeliumPersonaBrowserProxyImpl} from './persona_browser_proxy.js';
++import {getTemplate} from './persona_page.html.js';
++
++export class SettingsHeliumPersonaPageElement extends PolymerElement {
++  static get is() {
++    return 'settings-helium-persona-page';
++  }
++
++  static get template() {
++    return getTemplate();
++  }
++
++  static get properties() {
++    return {
++      routePath: String,
++      presets_: Array,
++      personas_: Array,
++      personaOptions_: Array,
++      editablePersona_: Object,
++      activePersonaId_: String,
++      activePersonaSummary_: String,
++      warnings_: Array,
++      navigatorLanguagesText_: String,
++      fontFamiliesText_: String,
++      fontAliasesText_: String,
++    };
++  }
++
++  declare routePath: string;
++  declare private presets_: PersonaRecord[];
++  declare private personas_: PersonaRecord[];
++  declare private personaOptions_: PersonaRecord[];
++  declare private editablePersona_: PersonaRecord;
++  declare private activePersonaId_: string;
++  declare private activePersonaSummary_: string;
++  declare private warnings_: string[];
++  declare private navigatorLanguagesText_: string;
++  declare private fontFamiliesText_: string;
++  declare private fontAliasesText_: string;
++
++  private browserProxy_ = HeliumPersonaBrowserProxyImpl.getInstance();
++
++  override connectedCallback() {
++    super.connectedCallback();
++    this.loadState_();
++  }
++
++  private async loadState_() {
++    const state = await this.browserProxy_.getState();
++    this.applyState_(state);
++  }
++
++  private applyState_(state: PersonaState) {
++    this.presets_ = state.presets || [];
++    this.personas_ = state.personas || [];
++    this.personaOptions_ = [...this.presets_, ...this.personas_];
++    this.activePersonaId_ = state.activePersonaId || state.activePersona?.id || '';
++    this.editablePersona_ = this.clonePersona_(state.activePersona);
++    this.activePersonaSummary_ = this.formatPersonaSummary_(this.editablePersona_);
++    this.warnings_ = state.warnings || [];
++    this.syncTextFields_();
++  }
++
++  private clonePersona_(persona: PersonaRecord): PersonaRecord {
++    return JSON.parse(JSON.stringify(persona || {}));
++  }
++
++  private syncTextFields_() {
++    const region = this.editablePersona_.region || {};
++    const languages = region['navigatorLanguages'] as string[]|undefined;
++    this.navigatorLanguagesText_ = (languages || []).join(', ');
++
++    const fonts = this.editablePersona_.fonts || {};
++    this.fontFamiliesText_ = ((fonts['families'] as string[]|undefined) || [])
++        .join(', ');
++    this.fontAliasesText_ = ((fonts['aliases'] as string[]|undefined) || [])
++        .join(', ');
++  }
++
++  private stringListFromInput_(value: string): string[] {
++    return value.split(',')
++        .map(item => item.trim())
++        .filter(item => item.length > 0);
++  }
++
++  private onNavigatorLanguagesChanged_() {
++    this.set(
++        'editablePersona_.region.navigatorLanguages',
++        this.stringListFromInput_(this.navigatorLanguagesText_));
++  }
++
++  private onFontFamiliesChanged_() {
++    this.set(
++        'editablePersona_.fonts.families',
++        this.stringListFromInput_(this.fontFamiliesText_));
++  }
++
++  private onFontAliasesChanged_() {
++    this.set(
++        'editablePersona_.fonts.aliases',
++        this.stringListFromInput_(this.fontAliasesText_));
++  }
++
++  private formatRegion_(persona: PersonaRecord): string {
++    const region = persona.region || {};
++    return [
++      region['locale'] || '',
++      region['timezone'] || '',
++    ].filter(Boolean).join(' / ');
++  }
++
++  private formatPersonaSummary_(persona: PersonaRecord): string {
++    return [
++      persona.device || '',
++      persona.os || '',
++      this.formatRegion_(persona),
++    ].filter(Boolean).join(' / ');
++  }
++
++  private isActiveOption_(optionId: string, activePersonaId: string): boolean {
++    return optionId === activePersonaId;
++  }
++
++  private isPassthroughPersona_(persona: PersonaRecord): boolean {
++    return Boolean(persona?.passthrough);
++  }
++
++  private async onActivePersonaChanged_(event: Event) {
++    const select = event.target as HTMLSelectElement;
++    if (!select.value) {
++      return;
++    }
++    await this.browserProxy_.setActivePersona(select.value);
++    await this.loadState_();
++  }
++
++  private async onUsePresetClick_(event: Event) {
++    const model = (event as CustomEvent).model;
++    const preset = model.preset as PersonaRecord;
++    await this.browserProxy_.setActivePersona(preset.id);
++    await this.loadState_();
++  }
++
++  private async onClonePresetClick_(event: Event) {
++    const model = (event as CustomEvent).model;
++    const preset = model.preset as PersonaRecord;
++    if (this.isPassthroughPersona_(preset)) {
++      return;
++    }
++    await this.browserProxy_.clonePreset(preset.id);
++    await this.loadState_();
++  }
++
++  private async onUsePersonaClick_(event: Event) {
++    const model = (event as CustomEvent).model;
++    const persona = model.persona as PersonaRecord;
++    await this.browserProxy_.setActivePersona(persona.id);
++    await this.loadState_();
++  }
++
++  private async onDeletePersonaClick_(event: Event) {
++    const model = (event as CustomEvent).model;
++    const persona = model.persona as PersonaRecord;
++    await this.browserProxy_.deletePersona(persona.id);
++    await this.loadState_();
++  }
++
++  private ensureEditableShape_(persona: PersonaRecord) {
++    persona.uaCh = persona.uaCh || {};
++    persona.region = persona.region || {};
++    persona.gpu = persona.gpu || {};
++    persona.hardware = persona.hardware || {};
++    persona.screen = persona.screen || {};
++    persona.fonts = persona.fonts || {};
++    persona.advanced = persona.advanced || {};
++  }
++
++  private normalizeNumbers_(persona: PersonaRecord) {
++    this.ensureEditableShape_(persona);
++    const toNumber = (value: unknown) => Number(value || 0);
++    persona.hardware['hardwareConcurrency'] =
++        toNumber(persona.hardware['hardwareConcurrency']);
++    persona.hardware['deviceMemory'] =
++        toNumber(persona.hardware['deviceMemory']);
++    persona.hardware['maxTouchPoints'] =
++        toNumber(persona.hardware['maxTouchPoints']);
++    persona.hardware['touchEnabled'] = Boolean(persona.hardware['touchEnabled']);
++    persona.uaCh['mobile'] = Boolean(persona.uaCh['mobile']);
++    persona.screen['width'] = toNumber(persona.screen['width']);
++    persona.screen['height'] = toNumber(persona.screen['height']);
++    persona.screen['availWidth'] = toNumber(persona.screen['availWidth']);
++    persona.screen['availHeight'] = toNumber(persona.screen['availHeight']);
++    persona.screen['deviceScaleFactor'] =
++        toNumber(persona.screen['deviceScaleFactor']);
++    persona.screen['colorDepth'] = toNumber(persona.screen['colorDepth']);
++    persona.screen['pixelDepth'] = toNumber(persona.screen['pixelDepth']);
++    persona.screen['refreshRate'] = toNumber(persona.screen['refreshRate']);
++  }
++
++  private async onSaveClick_() {
++    const persona = this.clonePersona_(this.editablePersona_);
++    this.normalizeNumbers_(persona);
++    await this.browserProxy_.savePersona(persona);
++    await this.loadState_();
++  }
++}
++
++declare global {
++  interface HTMLElementTagNameMap {
++    'settings-helium-persona-page': SettingsHeliumPersonaPageElement;
++  }
++}
++
++customElements.define(
++    SettingsHeliumPersonaPageElement.is, SettingsHeliumPersonaPageElement);
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/persona_handler.cc
+@@ -0,0 +1,102 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/webui/settings/persona_handler.h"
++
++#include <string>
++#include <string_view>
++
++#include "base/functional/bind.h"
++#include "base/values.h"
++#include "chrome/browser/profiles/profile.h"
++#include "components/helium_persona/persona_prefs.h"
++#include "components/prefs/pref_service.h"
++
++HeliumPersonaHandler::HeliumPersonaHandler(Profile* profile)
++    : pref_service_(profile->GetPrefs()) {}
++
++HeliumPersonaHandler::~HeliumPersonaHandler() = default;
++
++void HeliumPersonaHandler::RegisterMessages() {
++  web_ui()->RegisterMessageCallback(
++      "getHeliumPersonaState",
++      base::BindRepeating(&HeliumPersonaHandler::HandleGetState,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setHeliumActivePersona",
++      base::BindRepeating(&HeliumPersonaHandler::HandleSetActivePersona,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "cloneHeliumPersonaPreset",
++      base::BindRepeating(&HeliumPersonaHandler::HandleClonePreset,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "saveHeliumPersona",
++      base::BindRepeating(&HeliumPersonaHandler::HandleSavePersona,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "deleteHeliumPersona",
++      base::BindRepeating(&HeliumPersonaHandler::HandleDeletePersona,
++                          base::Unretained(this)));
++}
++
++void HeliumPersonaHandler::HandleGetState(const base::ListValue& args) {
++  CHECK_EQ(1U, args.size());
++  const std::string& callback_id = args[0].GetString();
++
++  AllowJavascript();
++  ResolveJavascriptCallback(base::Value(callback_id),
++                            helium_persona::GetPersonaState(*pref_service_));
++}
++
++void HeliumPersonaHandler::HandleSetActivePersona(
++    const base::ListValue& args) {
++  CHECK_EQ(2U, args.size());
++  const std::string& callback_id = args[0].GetString();
++  const std::string& persona_id = args[1].GetString();
++
++  const bool success =
++      helium_persona::SetActivePersona(*pref_service_, persona_id);
++  AllowJavascript();
++  ResolveJavascriptCallback(base::Value(callback_id), base::Value(success));
++}
++
++void HeliumPersonaHandler::HandleClonePreset(const base::ListValue& args) {
++  CHECK_EQ(2U, args.size());
++  const std::string& callback_id = args[0].GetString();
++  const std::string& preset_id = args[1].GetString();
++
++  base::Value::Dict persona =
++      helium_persona::ClonePresetIntoProfile(*pref_service_, preset_id);
++  AllowJavascript();
++  ResolveJavascriptCallback(base::Value(callback_id),
++                            base::Value(std::move(persona)));
++}
++
++void HeliumPersonaHandler::HandleSavePersona(const base::ListValue& args) {
++  CHECK_EQ(2U, args.size());
++  const std::string& callback_id = args[0].GetString();
++  const base::Value::Dict* persona = args[1].GetIfDict();
++  if (!persona) {
++    AllowJavascript();
++    ResolveJavascriptCallback(base::Value(callback_id), base::Value(false));
++    return;
++  }
++
++  const bool success =
++      helium_persona::SavePersona(*pref_service_, persona->Clone());
++  AllowJavascript();
++  ResolveJavascriptCallback(base::Value(callback_id), base::Value(success));
++}
++
++void HeliumPersonaHandler::HandleDeletePersona(const base::ListValue& args) {
++  CHECK_EQ(2U, args.size());
++  const std::string& callback_id = args[0].GetString();
++  const std::string& persona_id = args[1].GetString();
++
++  const bool success =
++      helium_persona::DeletePersona(*pref_service_, persona_id);
++  AllowJavascript();
++  ResolveJavascriptCallback(base::Value(callback_id), base::Value(success));
++}
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/persona_handler.h
+@@ -0,0 +1,34 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_PERSONA_HANDLER_H_
++#define CHROME_BROWSER_UI_WEBUI_SETTINGS_PERSONA_HANDLER_H_
++
++#include "base/memory/raw_ptr.h"
++#include "base/values.h"
++#include "content/public/browser/web_ui_message_handler.h"
++
++class PrefService;
++class Profile;
++
++class HeliumPersonaHandler : public content::WebUIMessageHandler {
++ public:
++  explicit HeliumPersonaHandler(Profile* profile);
++  HeliumPersonaHandler(const HeliumPersonaHandler&) = delete;
++  HeliumPersonaHandler& operator=(const HeliumPersonaHandler&) = delete;
++  ~HeliumPersonaHandler() override;
++
++  void RegisterMessages() override;
++
++ private:
++  void HandleGetState(const base::ListValue& args);
++  void HandleSetActivePersona(const base::ListValue& args);
++  void HandleClonePreset(const base::ListValue& args);
++  void HandleSavePersona(const base::ListValue& args);
++  void HandleDeletePersona(const base::ListValue& args);
++
++  raw_ptr<PrefService> pref_service_ = nullptr;
++};
++
++#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_PERSONA_HANDLER_H_
+--- /dev/null
++++ b/components/helium_persona/BUILD.gn
+@@ -0,0 +1,36 @@
++# Copyright 2026 The Helium Authors
++# You can use, redistribute, and/or modify this source code under
++# the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++component("helium_persona") {
++  sources = [
++    "persona_prefs.cc",
++    "persona_prefs.h",
++    "persona_presets.cc",
++    "persona_presets.h",
++    "persona_snapshot.cc",
++    "persona_snapshot.h",
++    "persona_validation.cc",
++    "persona_validation.h",
++    "pref_names.h",
++  ]
++
++  public_deps = [
++    "//base",
++    "//components/pref_registry",
++    "//components/prefs",
++  ]
++
++  defines = [ "IS_HELIUM_PERSONA_IMPL" ]
++}
++
++source_set("unit_tests") {
++  testonly = true
++  sources = [ "persona_prefs_unittest.cc" ]
++  deps = [
++    ":helium_persona",
++    "//base/test:test_support",
++    "//components/sync_preferences:test_support",
++    "//testing/gtest",
++  ]
++}
+--- /dev/null
++++ b/components/helium_persona/pref_names.h
+@@ -0,0 +1,24 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef COMPONENTS_HELIUM_PERSONA_PREF_NAMES_H_
++#define COMPONENTS_HELIUM_PERSONA_PREF_NAMES_H_
++
++namespace prefs {
++
++inline constexpr char kHeliumActivePersonaId[] =
++    "helium.persona.active_id";
++
++inline constexpr char kHeliumPersonaRecords[] =
++    "helium.persona.records";
++
++inline constexpr char kHeliumPersonaRevision[] =
++    "helium.persona.revision";
++
++inline constexpr char kHeliumPersonaLegacyFlagsMigrated[] =
++    "helium.persona.legacy_flags_migrated";
++
++}  // namespace prefs
++
++#endif  // COMPONENTS_HELIUM_PERSONA_PREF_NAMES_H_
+--- /dev/null
++++ b/components/helium_persona/persona_presets.h
+@@ -0,0 +1,23 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef COMPONENTS_HELIUM_PERSONA_PERSONA_PRESETS_H_
++#define COMPONENTS_HELIUM_PERSONA_PERSONA_PRESETS_H_
++
++#include "base/component_export.h"
++#include "base/values.h"
++
++namespace helium_persona {
++
++inline constexpr char kDefaultPresetId[] = "preset-current-system";
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++base::Value::List GetBuiltinPersonaPresets();
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++base::Value::Dict MakeCurrentSystemPreset();
++
++}  // namespace helium_persona
++
++#endif  // COMPONENTS_HELIUM_PERSONA_PERSONA_PRESETS_H_
+--- /dev/null
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -0,0 +1,173 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "components/helium_persona/persona_prefs.h"
++
++#include <string>
++
++#include "base/values.h"
++#include "components/helium_persona/persona_presets.h"
++#include "components/helium_persona/persona_snapshot.h"
++#include "components/helium_persona/persona_validation.h"
++#include "components/helium_persona/pref_names.h"
++#include "components/sync_preferences/testing_pref_service_syncable.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace helium_persona {
++
++namespace {
++
++void RegisterTestPrefs(sync_preferences::TestingPrefServiceSyncable& prefs) {
++  RegisterProfilePrefs(prefs.registry());
++}
++
++const base::Value::Dict& DictAt(const base::Value::List& list, size_t index) {
++  const base::Value::Dict* dict = list[index].GetIfDict();
++  CHECK(dict);
++  return *dict;
++}
++
++bool WarningsContain(const base::Value::List& warnings,
++                     std::string_view expected) {
++  for (const base::Value& warning : warnings) {
++    const std::string* text = warning.GetIfString();
++    if (text && text->find(expected) != std::string::npos) {
++      return true;
++    }
++  }
++  return false;
++}
++
++}  // namespace
++
++TEST(HeliumPersonaPrefsTest, BuiltinPresetsContainCompleteSystemImage) {
++  base::Value::List presets = GetBuiltinPersonaPresets();
++  ASSERT_GE(presets.size(), 5u);
++
++  const base::Value::Dict& windows = DictAt(presets, 1);
++  EXPECT_TRUE(PersonaHasRequiredFields(windows));
++  EXPECT_EQ("Windows 11", *windows.FindString("os"));
++  EXPECT_EQ("Win32", *windows.FindString("platform"));
++
++  const base::Value::Dict* region = windows.FindDict("region");
++  ASSERT_TRUE(region);
++  EXPECT_EQ("America/New_York", *region->FindString("timezone"));
++  EXPECT_EQ("en-US", *region->FindString("locale"));
++
++  const base::Value::Dict* gpu = windows.FindDict("gpu");
++  ASSERT_TRUE(gpu);
++  EXPECT_TRUE(gpu->FindString("renderer"));
++
++  const base::Value::Dict* fonts = windows.FindDict("fonts");
++  ASSERT_TRUE(fonts);
++  const base::Value::List* families = fonts->FindList("families");
++  ASSERT_TRUE(families);
++  EXPECT_FALSE(families->empty());
++
++  const base::Value::Dict& current = DictAt(presets, 0);
++  EXPECT_TRUE(current.FindBool("passthrough").value_or(false));
++  EXPECT_TRUE(PersonaHasRequiredFields(current));
++  EXPECT_TRUE(ValidatePersona(current).empty());
++
++  const base::Value::Dict& macos = DictAt(presets, 2);
++  EXPECT_EQ("arm", *macos.FindDict("uaCh")->FindString("architecture"));
++  EXPECT_EQ(24, macos.FindDict("screen")->FindInt("colorDepth").value_or(0));
++
++  const base::Value::Dict& zh_cn = DictAt(presets, 3);
++  EXPECT_EQ(
++      8, zh_cn.FindDict("hardware")->FindDouble("deviceMemory").value_or(0));
++
++  const base::Value::Dict& linux = DictAt(presets, 4);
++  EXPECT_TRUE(linux.FindDict("uaCh")->FindString("platformVersion")->empty());
++}
++
++TEST(HeliumPersonaPrefsTest, ClonePresetPersistsAndBecomesActive) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict cloned = ClonePresetIntoProfile(
++      prefs, "preset-windows-11-zh-cn-shanghai");
++  const std::string* cloned_id = cloned.FindString("id");
++  ASSERT_TRUE(cloned_id);
++  EXPECT_EQ(*cloned_id, prefs.GetString(prefs::kHeliumActivePersonaId));
++
++  const base::Value::List& personas =
++      prefs.GetList(prefs::kHeliumPersonaRecords);
++  ASSERT_EQ(1u, personas.size());
++  EXPECT_EQ(*cloned_id, *DictAt(personas, 0).FindString("id"));
++
++  base::Value::Dict active = GetActivePersona(prefs);
++  EXPECT_EQ(*cloned_id, *active.FindString("id"));
++  EXPECT_FALSE(active.FindBool("builtin").value_or(true));
++}
++
++TEST(HeliumPersonaPrefsTest, PassthroughPresetCannotBecomeCustomPersona) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  EXPECT_TRUE(ClonePresetIntoProfile(prefs, kDefaultPresetId).empty());
++  EXPECT_TRUE(prefs.GetList(prefs::kHeliumPersonaRecords).empty());
++  EXPECT_FALSE(SavePersona(prefs, MakeCurrentSystemPreset()));
++}
++
++TEST(HeliumPersonaPrefsTest, SaveBuiltinIdCreatesCustomPersona) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++  base::Value::List presets = GetBuiltinPersonaPresets();
++  base::Value::Dict persona = DictAt(presets, 1).Clone();
++  const std::string original_id = *persona.FindString("id");
++
++  EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
++  base::Value::Dict active = GetActivePersona(prefs);
++  ASSERT_TRUE(active.FindString("id"));
++  EXPECT_NE(original_id, *active.FindString("id"));
++  EXPECT_TRUE(active.FindBool("modified").value_or(false));
++}
++
++TEST(HeliumPersonaPrefsTest, ValidationWarnsButAllowsConflicts) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++  base::Value::Dict persona = ClonePresetIntoProfile(
++      prefs, "preset-macos-en-au-melbourne");
++  base::Value::Dict* gpu = persona.FindDict("gpu");
++  ASSERT_TRUE(gpu);
++  gpu->Set("vendor", "NVIDIA Corporation");
++  base::Value::Dict* region = persona.FindDict("region");
++  ASSERT_TRUE(region);
++  region->Set("locale", "zh-CN");
++  region->Set("timezone", "America/New_York");
++  region->Set("acceptLanguage", "en-US,en;q=0.9");
++  base::Value::Dict* hardware = persona.FindDict("hardware");
++  ASSERT_TRUE(hardware);
++  hardware->Set("deviceMemory", 16);
++  hardware->Set("maxTouchPoints", 2);
++
++  base::Value::List warnings = ValidatePersona(persona);
++  EXPECT_TRUE(WarningsContain(warnings, "Chinese language profiles"));
++  EXPECT_TRUE(WarningsContain(warnings, "Accept-Language should begin"));
++  EXPECT_TRUE(WarningsContain(warnings, "deviceMemory should use"));
++  EXPECT_TRUE(WarningsContain(warnings, "maxTouchPoints should be 0"));
++  EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
++}
++
++TEST(HeliumPersonaPrefsTest, SnapshotRoundTripsCompleteFields) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++  EXPECT_TRUE(SetActivePersona(prefs, "preset-linux-de-de-berlin"));
++  PersonaSnapshot snapshot = MakePersonaSnapshot(prefs);
++  EXPECT_EQ("Linux x86_64", snapshot.os);
++  EXPECT_FALSE(snapshot.passthrough);
++  EXPECT_EQ("Europe/Berlin", snapshot.timezone);
++  EXPECT_FALSE(snapshot.font_families.empty());
++
++  base::Value::Dict value = PersonaSnapshotToValue(snapshot);
++  EXPECT_TRUE(PersonaHasRequiredFields(value));
++  EXPECT_FALSE(value.FindBool("passthrough").value_or(true));
++  EXPECT_EQ("Linux", *value.FindDict("uaCh")->FindString("platform"));
++  EXPECT_EQ("de-DE", *value.FindDict("region")->FindString("locale"));
++  EXPECT_TRUE(value.FindDict("advanced")->FindBool("clientHintsEnabled")
++                  .value_or(false));
++}
++
++}  // namespace helium_persona
+--- /dev/null
++++ b/components/helium_persona/persona_snapshot.h
+@@ -0,0 +1,81 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef COMPONENTS_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
++#define COMPONENTS_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
++
++#include <string>
++#include <vector>
++
++#include "base/component_export.h"
++#include "base/values.h"
++
++class PrefService;
++
++namespace helium_persona {
++
++struct COMPONENT_EXPORT(HELIUM_PERSONA) PersonaSnapshot {
++  std::string id;
++  std::string name;
++  std::string device;
++  std::string os;
++  std::string user_agent;
++  std::string platform;
++  bool passthrough = false;
++
++  std::string ua_ch_platform;
++  std::string ua_ch_platform_version;
++  std::string ua_ch_architecture;
++  std::string ua_ch_bitness;
++  std::string ua_ch_model;
++  bool ua_ch_mobile = false;
++
++  std::string timezone;
++  std::string locale;
++  std::string accept_language;
++  std::vector<std::string> navigator_languages;
++
++  std::string gpu_vendor;
++  std::string gpu_renderer;
++  std::string webgpu_adapter;
++  std::string gpu_driver;
++
++  int screen_width = 0;
++  int screen_height = 0;
++  int avail_width = 0;
++  int avail_height = 0;
++  double device_scale_factor = 0;
++  int color_depth = 0;
++  int pixel_depth = 0;
++  int refresh_rate = 0;
++
++  int hardware_concurrency = 0;
++  double device_memory = 0;
++  bool touch_enabled = false;
++  int max_touch_points = 0;
++
++  std::string font_pack_id;
++  std::string font_pack_name;
++  std::vector<std::string> font_families;
++  std::vector<std::string> font_aliases;
++
++  bool client_hints_enabled = true;
++  bool reduce_system_info = false;
++  bool canvas_noise = true;
++  bool audio_noise = true;
++  bool font_metric_noise = true;
++};
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++PersonaSnapshot MakePersonaSnapshot(const PrefService& pref_service);
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++PersonaSnapshot MakePersonaSnapshot(const base::Value::Dict& persona);
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++base::Value::Dict PersonaSnapshotToValue(const PersonaSnapshot& snapshot);
++
++}  // namespace helium_persona
++
++#endif  // COMPONENTS_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
+--- /dev/null
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -0,0 +1,225 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "components/helium_persona/persona_snapshot.h"
++
++#include <optional>
++
++#include "components/helium_persona/persona_prefs.h"
++#include "components/prefs/pref_service.h"
++
++namespace helium_persona {
++
++namespace {
++
++std::string GetString(const base::Value::Dict& dict, const char* key) {
++  const std::string* value = dict.FindString(key);
++  return value ? *value : std::string();
++}
++
++std::string GetNestedString(const base::Value::Dict& dict,
++                            const char* object_key,
++                            const char* key) {
++  const base::Value::Dict* object = dict.FindDict(object_key);
++  return object ? GetString(*object, key) : std::string();
++}
++
++int GetNestedInt(const base::Value::Dict& dict,
++                 const char* object_key,
++                 const char* key) {
++  const base::Value::Dict* object = dict.FindDict(object_key);
++  return object ? object->FindInt(key).value_or(0) : 0;
++}
++
++double GetNestedDouble(const base::Value::Dict& dict,
++                       const char* object_key,
++                       const char* key) {
++  const base::Value::Dict* object = dict.FindDict(object_key);
++  if (!object) {
++    return 0;
++  }
++  if (std::optional<double> value = object->FindDouble(key)) {
++    return *value;
++  }
++  return object->FindInt(key).value_or(0);
++}
++
++bool GetNestedBool(const base::Value::Dict& dict,
++                   const char* object_key,
++                   const char* key,
++                   bool default_value) {
++  const base::Value::Dict* object = dict.FindDict(object_key);
++  if (!object) {
++    return default_value;
++  }
++  return object->FindBool(key).value_or(default_value);
++}
++
++std::vector<std::string> GetStringList(const base::Value::Dict& dict,
++                                       const char* object_key,
++                                       const char* key) {
++  std::vector<std::string> output;
++  const base::Value::Dict* object = dict.FindDict(object_key);
++  const base::Value::List* list = object ? object->FindList(key) : nullptr;
++  if (!list) {
++    return output;
++  }
++  for (const base::Value& value : *list) {
++    if (const std::string* item = value.GetIfString()) {
++      output.push_back(*item);
++    }
++  }
++  return output;
++}
++
++base::Value::List MakeStringList(const std::vector<std::string>& values) {
++  base::Value::List output;
++  for (const std::string& value : values) {
++    output.Append(value);
++  }
++  return output;
++}
++
++}  // namespace
++
++PersonaSnapshot MakePersonaSnapshot(const PrefService& pref_service) {
++  return MakePersonaSnapshot(GetActivePersona(pref_service));
++}
++
++PersonaSnapshot MakePersonaSnapshot(const base::Value::Dict& persona) {
++  PersonaSnapshot snapshot;
++  snapshot.id = GetString(persona, "id");
++  snapshot.name = GetString(persona, "name");
++  snapshot.device = GetString(persona, "device");
++  snapshot.os = GetString(persona, "os");
++  snapshot.user_agent = GetString(persona, "userAgent");
++  snapshot.platform = GetString(persona, "platform");
++  snapshot.passthrough = persona.FindBool("passthrough").value_or(false);
++
++  snapshot.ua_ch_platform = GetNestedString(persona, "uaCh", "platform");
++  snapshot.ua_ch_platform_version =
++      GetNestedString(persona, "uaCh", "platformVersion");
++  snapshot.ua_ch_architecture =
++      GetNestedString(persona, "uaCh", "architecture");
++  snapshot.ua_ch_bitness = GetNestedString(persona, "uaCh", "bitness");
++  snapshot.ua_ch_model = GetNestedString(persona, "uaCh", "model");
++  snapshot.ua_ch_mobile = GetNestedBool(persona, "uaCh", "mobile", false);
++
++  snapshot.timezone = GetNestedString(persona, "region", "timezone");
++  snapshot.locale = GetNestedString(persona, "region", "locale");
++  snapshot.accept_language =
++      GetNestedString(persona, "region", "acceptLanguage");
++  snapshot.navigator_languages =
++      GetStringList(persona, "region", "navigatorLanguages");
++
++  snapshot.gpu_vendor = GetNestedString(persona, "gpu", "vendor");
++  snapshot.gpu_renderer = GetNestedString(persona, "gpu", "renderer");
++  snapshot.webgpu_adapter = GetNestedString(persona, "gpu", "webgpuAdapter");
++  snapshot.gpu_driver = GetNestedString(persona, "gpu", "driver");
++
++  snapshot.screen_width = GetNestedInt(persona, "screen", "width");
++  snapshot.screen_height = GetNestedInt(persona, "screen", "height");
++  snapshot.avail_width = GetNestedInt(persona, "screen", "availWidth");
++  snapshot.avail_height = GetNestedInt(persona, "screen", "availHeight");
++  snapshot.device_scale_factor =
++      GetNestedDouble(persona, "screen", "deviceScaleFactor");
++  snapshot.color_depth = GetNestedInt(persona, "screen", "colorDepth");
++  snapshot.pixel_depth = GetNestedInt(persona, "screen", "pixelDepth");
++  snapshot.refresh_rate = GetNestedInt(persona, "screen", "refreshRate");
++
++  snapshot.hardware_concurrency =
++      GetNestedInt(persona, "hardware", "hardwareConcurrency");
++  snapshot.device_memory = GetNestedDouble(persona, "hardware", "deviceMemory");
++  snapshot.touch_enabled =
++      GetNestedBool(persona, "hardware", "touchEnabled", false);
++  snapshot.max_touch_points =
++      GetNestedInt(persona, "hardware", "maxTouchPoints");
++
++  snapshot.font_pack_id = GetNestedString(persona, "fonts", "id");
++  snapshot.font_pack_name = GetNestedString(persona, "fonts", "displayName");
++  snapshot.font_families = GetStringList(persona, "fonts", "families");
++  snapshot.font_aliases = GetStringList(persona, "fonts", "aliases");
++
++  snapshot.client_hints_enabled =
++      GetNestedBool(persona, "advanced", "clientHintsEnabled", true);
++  snapshot.reduce_system_info =
++      GetNestedBool(persona, "advanced", "reduceSystemInfo", false);
++  snapshot.canvas_noise =
++      GetNestedBool(persona, "advanced", "canvasNoise", true);
++  snapshot.audio_noise =
++      GetNestedBool(persona, "advanced", "audioNoise", true);
++  snapshot.font_metric_noise =
++      GetNestedBool(persona, "advanced", "fontMetricNoise", true);
++  return snapshot;
++}
++
++base::Value::Dict PersonaSnapshotToValue(const PersonaSnapshot& snapshot) {
++  base::Value::Dict value;
++  value.Set("id", snapshot.id);
++  value.Set("name", snapshot.name);
++  value.Set("device", snapshot.device);
++  value.Set("os", snapshot.os);
++  value.Set("userAgent", snapshot.user_agent);
++  value.Set("platform", snapshot.platform);
++  value.Set("passthrough", snapshot.passthrough);
++
++  base::Value::Dict ua_ch;
++  ua_ch.Set("platform", snapshot.ua_ch_platform);
++  ua_ch.Set("platformVersion", snapshot.ua_ch_platform_version);
++  ua_ch.Set("architecture", snapshot.ua_ch_architecture);
++  ua_ch.Set("bitness", snapshot.ua_ch_bitness);
++  ua_ch.Set("model", snapshot.ua_ch_model);
++  ua_ch.Set("mobile", snapshot.ua_ch_mobile);
++  value.Set("uaCh", std::move(ua_ch));
++
++  base::Value::Dict region;
++  region.Set("timezone", snapshot.timezone);
++  region.Set("locale", snapshot.locale);
++  region.Set("acceptLanguage", snapshot.accept_language);
++  region.Set("navigatorLanguages", MakeStringList(snapshot.navigator_languages));
++  value.Set("region", std::move(region));
++
++  base::Value::Dict gpu;
++  gpu.Set("vendor", snapshot.gpu_vendor);
++  gpu.Set("renderer", snapshot.gpu_renderer);
++  gpu.Set("webgpuAdapter", snapshot.webgpu_adapter);
++  gpu.Set("driver", snapshot.gpu_driver);
++  value.Set("gpu", std::move(gpu));
++
++  base::Value::Dict screen;
++  screen.Set("width", snapshot.screen_width);
++  screen.Set("height", snapshot.screen_height);
++  screen.Set("availWidth", snapshot.avail_width);
++  screen.Set("availHeight", snapshot.avail_height);
++  screen.Set("deviceScaleFactor", snapshot.device_scale_factor);
++  screen.Set("colorDepth", snapshot.color_depth);
++  screen.Set("pixelDepth", snapshot.pixel_depth);
++  screen.Set("refreshRate", snapshot.refresh_rate);
++  value.Set("screen", std::move(screen));
++
++  base::Value::Dict hardware;
++  hardware.Set("hardwareConcurrency", snapshot.hardware_concurrency);
++  hardware.Set("deviceMemory", snapshot.device_memory);
++  hardware.Set("touchEnabled", snapshot.touch_enabled);
++  hardware.Set("maxTouchPoints", snapshot.max_touch_points);
++  value.Set("hardware", std::move(hardware));
++
++  base::Value::Dict fonts;
++  fonts.Set("id", snapshot.font_pack_id);
++  fonts.Set("displayName", snapshot.font_pack_name);
++  fonts.Set("families", MakeStringList(snapshot.font_families));
++  fonts.Set("aliases", MakeStringList(snapshot.font_aliases));
++  value.Set("fonts", std::move(fonts));
++
++  base::Value::Dict advanced;
++  advanced.Set("clientHintsEnabled", snapshot.client_hints_enabled);
++  advanced.Set("reduceSystemInfo", snapshot.reduce_system_info);
++  advanced.Set("canvasNoise", snapshot.canvas_noise);
++  advanced.Set("audioNoise", snapshot.audio_noise);
++  advanced.Set("fontMetricNoise", snapshot.font_metric_noise);
++  value.Set("advanced", std::move(advanced));
++  return value;
++}
++
++}  // namespace helium_persona
+--- /dev/null
++++ b/components/helium_persona/persona_presets.cc
+@@ -0,0 +1,305 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "components/helium_persona/persona_presets.h"
++
++#include <string_view>
++
++#include "base/values.h"
++
++namespace helium_persona {
++
++namespace {
++
++base::Value::Dict MakeUaCh(std::string_view platform,
++                           std::string_view platform_version,
++                           std::string_view architecture,
++                           std::string_view bitness,
++                           std::string_view model,
++                           bool mobile) {
++  base::Value::Dict ua_ch;
++  ua_ch.Set("platform", platform);
++  ua_ch.Set("platformVersion", platform_version);
++  ua_ch.Set("architecture", architecture);
++  ua_ch.Set("bitness", bitness);
++  ua_ch.Set("model", model);
++  ua_ch.Set("mobile", mobile);
++
++  base::Value::List brands;
++  base::Value::Dict chromium_brand;
++  chromium_brand.Set("brand", "Chromium");
++  chromium_brand.Set("version", "149");
++  brands.Append(std::move(chromium_brand));
++  base::Value::Dict chrome_brand;
++  chrome_brand.Set("brand", "Google Chrome");
++  chrome_brand.Set("version", "149");
++  brands.Append(std::move(chrome_brand));
++  base::Value::Dict grease_brand;
++  grease_brand.Set("brand", "Not_A Brand");
++  grease_brand.Set("version", "24");
++  brands.Append(std::move(grease_brand));
++  ua_ch.Set("brands", std::move(brands));
++  ua_ch.Set("fullVersion", "149.0.7827.114");
++  return ua_ch;
++}
++
++base::Value::Dict MakeRegion(std::string_view timezone,
++                             std::string_view locale,
++                             std::string_view accept_language,
++                             std::initializer_list<std::string_view> languages) {
++  base::Value::Dict region;
++  region.Set("timezone", timezone);
++  region.Set("locale", locale);
++  region.Set("acceptLanguage", accept_language);
++
++  base::Value::List navigator_languages;
++  for (std::string_view language : languages) {
++    navigator_languages.Append(language);
++  }
++  region.Set("navigatorLanguages", std::move(navigator_languages));
++  return region;
++}
++
++base::Value::Dict MakeGpu(std::string_view vendor,
++                          std::string_view renderer,
++                          std::string_view webgpu_adapter,
++                          std::string_view driver) {
++  base::Value::Dict gpu;
++  gpu.Set("vendor", vendor);
++  gpu.Set("renderer", renderer);
++  gpu.Set("webgpuAdapter", webgpu_adapter);
++  gpu.Set("driver", driver);
++  return gpu;
++}
++
++base::Value::Dict MakeScreen(int width,
++                             int height,
++                             int avail_width,
++                             int avail_height,
++                             double dpr,
++                             int color_depth,
++                             int refresh_rate) {
++  base::Value::Dict screen;
++  screen.Set("width", width);
++  screen.Set("height", height);
++  screen.Set("availWidth", avail_width);
++  screen.Set("availHeight", avail_height);
++  screen.Set("deviceScaleFactor", dpr);
++  screen.Set("colorDepth", color_depth);
++  screen.Set("pixelDepth", color_depth);
++  screen.Set("refreshRate", refresh_rate);
++  return screen;
++}
++
++base::Value::Dict MakeHardware(int cores,
++                               double memory_gb,
++                               bool touch,
++                               int max_touch_points) {
++  base::Value::Dict hardware;
++  hardware.Set("hardwareConcurrency", cores);
++  hardware.Set("deviceMemory", memory_gb);
++  hardware.Set("touchEnabled", touch);
++  hardware.Set("maxTouchPoints", max_touch_points);
++  return hardware;
++}
++
++base::Value::Dict MakeFontPack(std::string_view id,
++                               std::string_view display_name,
++                               std::initializer_list<std::string_view> families,
++                               std::initializer_list<std::string_view> aliases) {
++  base::Value::Dict font_pack;
++  font_pack.Set("id", id);
++  font_pack.Set("displayName", display_name);
++
++  base::Value::List family_list;
++  for (std::string_view family : families) {
++    family_list.Append(family);
++  }
++  font_pack.Set("families", std::move(family_list));
++
++  base::Value::List alias_list;
++  for (std::string_view alias : aliases) {
++    alias_list.Append(alias);
++  }
++  font_pack.Set("aliases", std::move(alias_list));
++  return font_pack;
++}
++
++base::Value::Dict MakeAdvanced(bool client_hints_enabled,
++                               bool reduce_system_info,
++                               bool canvas_noise,
++                               bool audio_noise,
++                               bool font_metric_noise) {
++  base::Value::Dict advanced;
++  advanced.Set("clientHintsEnabled", client_hints_enabled);
++  advanced.Set("reduceSystemInfo", reduce_system_info);
++  advanced.Set("canvasNoise", canvas_noise);
++  advanced.Set("audioNoise", audio_noise);
++  advanced.Set("fontMetricNoise", font_metric_noise);
++  return advanced;
++}
++
++base::Value::Dict MakePreset(std::string_view id,
++                             std::string_view name,
++                             std::string_view source,
++                             std::string_view device,
++                             std::string_view os,
++                             std::string_view ua,
++                             std::string_view platform,
++                             base::Value::Dict ua_ch,
++                             base::Value::Dict region,
++                             base::Value::Dict gpu,
++                             base::Value::Dict screen,
++                             base::Value::Dict hardware,
++                             base::Value::Dict fonts,
++                             base::Value::Dict advanced) {
++  base::Value::Dict preset;
++  preset.Set("id", id);
++  preset.Set("name", name);
++  preset.Set("source", source);
++  preset.Set("device", device);
++  preset.Set("os", os);
++  preset.Set("userAgent", ua);
++  preset.Set("platform", platform);
++  preset.Set("uaCh", std::move(ua_ch));
++  preset.Set("region", std::move(region));
++  preset.Set("gpu", std::move(gpu));
++  preset.Set("screen", std::move(screen));
++  preset.Set("hardware", std::move(hardware));
++  preset.Set("fonts", std::move(fonts));
++  preset.Set("advanced", std::move(advanced));
++  preset.Set("builtin", true);
++  preset.Set("modified", false);
++  return preset;
++}
++
++}  // namespace
++
++base::Value::Dict MakeCurrentSystemPreset() {
++  base::Value::Dict preset = MakePreset(
++      kDefaultPresetId,
++      "Current device passthrough",
++      "builtin",
++      "No spoofed device",
++      "No spoofed OS",
++      "",
++      "",
++      MakeUaCh("", "", "", "", "", false),
++      MakeRegion("", "", "", {}),
++      MakeGpu("", "", "", ""),
++      MakeScreen(0, 0, 0, 0, 0, 0, 0),
++      MakeHardware(0, 0, false, 0),
++      MakeFontPack("current-system", "Current installed fonts", {}, {}),
++      MakeAdvanced(true, false, true, true, true));
++  preset.Set("passthrough", true);
++  return preset;
++}
++
++base::Value::List GetBuiltinPersonaPresets() {
++  base::Value::List presets;
++  presets.Append(MakeCurrentSystemPreset());
++
++  presets.Append(MakePreset(
++      "preset-windows-11-en-us-new-york",
++      "Windows 11 / en-US / America/New_York",
++      "builtin",
++      "Desktop PC",
++      "Windows 11",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Win32",
++      MakeUaCh("Windows", "19.0.0", "x86", "64", "", false),
++      MakeRegion("America/New_York", "en-US",
++                 "en-US,en;q=0.9", {"en-US", "en"}),
++      MakeGpu("Intel Inc.",
++              "ANGLE (Intel, Intel(R) UHD Graphics 770 Direct3D11 vs_5_0 "
++              "ps_5_0, D3D11)",
++              "Intel UHD Graphics 770", "D3D11"),
++      MakeScreen(1920, 1080, 1920, 1032, 1.0, 24, 60),
++      MakeHardware(8, 8, false, 0),
++      MakeFontPack("windows-11-core", "Windows 11 core fonts",
++                   {"Arial", "Calibri", "Cambria", "Candara", "Consolas",
++                    "Georgia", "Segoe UI", "Times New Roman", "Verdana"},
++                   {"sans-serif=Arial", "serif=Times New Roman",
++                    "monospace=Consolas", "system-ui=Segoe UI"}),
++      MakeAdvanced(true, false, true, true, true)));
++
++  presets.Append(MakePreset(
++      "preset-macos-en-au-melbourne",
++      "macOS / en-AU / Australia/Melbourne",
++      "builtin",
++      "MacBook Pro",
++      "macOS 15",
++      "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_6) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "MacIntel",
++      MakeUaCh("macOS", "15.6.0", "arm", "64", "", false),
++      MakeRegion("Australia/Melbourne", "en-AU",
++                 "en-AU,en;q=0.9", {"en-AU", "en"}),
++      MakeGpu("Apple Inc.",
++              "ANGLE (Apple, Apple M3, Metal)", "Apple M3", "Metal"),
++      MakeScreen(1728, 1117, 1728, 1079, 2.0, 24, 120),
++      MakeHardware(8, 8, false, 0),
++      MakeFontPack("macos-core", "macOS core fonts",
++                   {"Arial", "Helvetica", "Helvetica Neue", "Menlo", "Monaco",
++                    "New York", "SF Pro Display", "SF Pro Text", "Times"},
++                   {"sans-serif=Helvetica", "serif=Times",
++                    "monospace=Menlo", "system-ui=SF Pro Text"}),
++      MakeAdvanced(true, false, true, true, true)));
++
++  presets.Append(MakePreset(
++      "preset-windows-11-zh-cn-shanghai",
++      "Windows 11 / zh-CN / Asia/Shanghai",
++      "builtin",
++      "Desktop PC",
++      "Windows 11",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Win32",
++      MakeUaCh("Windows", "19.0.0", "x86", "64", "", false),
++      MakeRegion("Asia/Shanghai", "zh-CN",
++                 "zh-CN,zh;q=0.9,en;q=0.8", {"zh-CN", "zh", "en"}),
++      MakeGpu("NVIDIA Corporation",
++              "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 "
++              "ps_5_0, D3D11)",
++              "NVIDIA GeForce RTX 3060", "D3D11"),
++      MakeScreen(2560, 1440, 2560, 1392, 1.25, 24, 144),
++      MakeHardware(12, 8, false, 0),
++      MakeFontPack("windows-zh-cn", "Windows Simplified Chinese fonts",
++                   {"Arial", "Microsoft YaHei", "SimSun", "NSimSun",
++                    "DengXian", "KaiTi", "FangSong", "Consolas",
++                    "Times New Roman"},
++                   {"sans-serif=Microsoft YaHei", "serif=SimSun",
++                    "monospace=Consolas", "system-ui=Microsoft YaHei"}),
++      MakeAdvanced(true, false, true, true, true)));
++
++  presets.Append(MakePreset(
++      "preset-linux-de-de-berlin",
++      "Linux / de-DE / Europe/Berlin",
++      "builtin",
++      "Linux workstation",
++      "Linux x86_64",
++      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Linux x86_64",
++      MakeUaCh("Linux", "", "x86", "64", "", false),
++      MakeRegion("Europe/Berlin", "de-DE",
++                 "de-DE,de;q=0.9,en;q=0.8", {"de-DE", "de", "en"}),
++      MakeGpu("Mesa",
++              "Mesa Intel(R) Graphics (RPL-S)", "Mesa Intel Graphics",
++              "Mesa"),
++      MakeScreen(1920, 1200, 1920, 1160, 1.0, 24, 60),
++      MakeHardware(8, 8, false, 0),
++      MakeFontPack("linux-core", "Linux desktop fonts",
++                   {"Arial", "Cantarell", "DejaVu Sans", "DejaVu Serif",
++                    "Liberation Mono", "Liberation Sans", "Noto Sans",
++                    "Noto Serif", "Ubuntu"},
++                   {"sans-serif=Noto Sans", "serif=Noto Serif",
++                    "monospace=Liberation Mono", "system-ui=Noto Sans"}),
++      MakeAdvanced(true, false, true, true, true)));
++
++  return presets;
++}
++
++}  // namespace helium_persona
+--- /dev/null
++++ b/components/helium_persona/persona_validation.h
+@@ -0,0 +1,21 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef COMPONENTS_HELIUM_PERSONA_PERSONA_VALIDATION_H_
++#define COMPONENTS_HELIUM_PERSONA_PERSONA_VALIDATION_H_
++
++#include "base/component_export.h"
++#include "base/values.h"
++
++namespace helium_persona {
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++base::Value::List ValidatePersona(const base::Value::Dict& persona);
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++bool PersonaHasRequiredFields(const base::Value::Dict& persona);
++
++}  // namespace helium_persona
++
++#endif  // COMPONENTS_HELIUM_PERSONA_PERSONA_VALIDATION_H_
+--- /dev/null
++++ b/components/helium_persona/persona_validation.cc
+@@ -0,0 +1,380 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "components/helium_persona/persona_validation.h"
++
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/strings/string_util.h"
++#include "base/values.h"
++#include "components/helium_persona/persona_presets.h"
++
++namespace helium_persona {
++
++namespace {
++
++std::string_view GetString(const base::Value::Dict& dict,
++                           std::string_view key) {
++  const std::string* value = dict.FindString(key);
++  return value ? std::string_view(*value) : std::string_view();
++}
++
++std::string_view GetNestedString(const base::Value::Dict& dict,
++                                 std::string_view dict_key,
++                                 std::string_view key) {
++  const base::Value::Dict* nested = dict.FindDict(dict_key);
++  if (!nested) {
++    return std::string_view();
++  }
++  return GetString(*nested, key);
++}
++
++bool HasString(const base::Value::Dict& dict, std::string_view key) {
++  const std::string* value = dict.FindString(key);
++  return value && !value->empty();
++}
++
++bool HasNestedString(const base::Value::Dict& dict,
++                     std::string_view dict_key,
++                     std::string_view key) {
++  const base::Value::Dict* nested = dict.FindDict(dict_key);
++  return nested && HasString(*nested, key);
++}
++
++int GetNestedInt(const base::Value::Dict& dict,
++                 std::string_view dict_key,
++                 std::string_view key) {
++  const base::Value::Dict* nested = dict.FindDict(dict_key);
++  if (!nested) {
++    return 0;
++  }
++  return nested->FindInt(key).value_or(0);
++}
++
++double GetNestedDouble(const base::Value::Dict& dict,
++                       std::string_view dict_key,
++                       std::string_view key) {
++  const base::Value::Dict* nested = dict.FindDict(dict_key);
++  if (!nested) {
++    return 0;
++  }
++  if (std::optional<double> value = nested->FindDouble(key)) {
++    return *value;
++  }
++  return nested->FindInt(key).value_or(0);
++}
++
++bool GetNestedBool(const base::Value::Dict& dict,
++                   std::string_view dict_key,
++                   std::string_view key) {
++  const base::Value::Dict* nested = dict.FindDict(dict_key);
++  return nested ? nested->FindBool(key).value_or(false) : false;
++}
++
++std::vector<std::string> GetNestedStringList(const base::Value::Dict& dict,
++                                             std::string_view dict_key,
++                                             std::string_view key) {
++  std::vector<std::string> output;
++  const base::Value::Dict* nested = dict.FindDict(dict_key);
++  const base::Value::List* list = nested ? nested->FindList(key) : nullptr;
++  if (!list) {
++    return output;
++  }
++  for (const base::Value& value : *list) {
++    if (const std::string* item = value.GetIfString(); item && !item->empty()) {
++      output.push_back(*item);
++    }
++  }
++  return output;
++}
++
++bool HasNestedStringList(const base::Value::Dict& dict,
++                         std::string_view dict_key,
++                         std::string_view key) {
++  return !GetNestedStringList(dict, dict_key, key).empty();
++}
++
++bool HasNestedPositiveInt(const base::Value::Dict& dict,
++                          std::string_view dict_key,
++                          std::string_view key) {
++  return GetNestedInt(dict, dict_key, key) > 0;
++}
++
++bool HasNestedPositiveDouble(const base::Value::Dict& dict,
++                             std::string_view dict_key,
++                             std::string_view key) {
++  return GetNestedDouble(dict, dict_key, key) > 0;
++}
++
++bool IsPassthroughPersona(const base::Value::Dict& persona) {
++  const std::string* id = persona.FindString("id");
++  return persona.FindBool("passthrough").value_or(false) ||
++         (id && *id == kDefaultPresetId);
++}
++
++bool Contains(std::string_view value, std::string_view needle) {
++  return base::ToLowerASCII(std::string(value))
++             .find(base::ToLowerASCII(std::string(needle))) !=
++         std::string::npos;
++}
++
++bool StartsWithInsensitive(std::string_view value, std::string_view prefix) {
++  return base::StartsWith(base::ToLowerASCII(std::string(value)),
++                          base::ToLowerASCII(std::string(prefix)));
++}
++
++bool EqualsInsensitive(std::string_view lhs, std::string_view rhs) {
++  return base::ToLowerASCII(std::string(lhs)) ==
++         base::ToLowerASCII(std::string(rhs));
++}
++
++bool IsDeviceMemoryBucket(double value) {
++  constexpr double kBuckets[] = {0.25, 0.5, 1, 2, 4, 8};
++  for (double bucket : kBuckets) {
++    if (value == bucket) {
++      return true;
++    }
++  }
++  return false;
++}
++
++void AddWarning(base::Value::List& warnings, std::string_view warning) {
++  warnings.Append(std::string(warning));
++}
++
++}  // namespace
++
++bool PersonaHasRequiredFields(const base::Value::Dict& persona) {
++  const bool has_base_shape =
++      HasString(persona, "id") && HasString(persona, "name") &&
++      HasString(persona, "device") && HasString(persona, "os") &&
++      persona.FindDict("uaCh") && persona.FindDict("region") &&
++      persona.FindDict("gpu") && persona.FindDict("screen") &&
++      persona.FindDict("hardware") && persona.FindDict("fonts") &&
++      persona.FindDict("advanced");
++  if (!has_base_shape || IsPassthroughPersona(persona)) {
++    return has_base_shape;
++  }
++
++  return HasString(persona, "userAgent") && HasString(persona, "platform") &&
++         HasNestedString(persona, "uaCh", "platform") &&
++         HasNestedString(persona, "uaCh", "architecture") &&
++         HasNestedString(persona, "uaCh", "bitness") &&
++         HasNestedString(persona, "region", "timezone") &&
++         HasNestedString(persona, "region", "locale") &&
++         HasNestedString(persona, "region", "acceptLanguage") &&
++         HasNestedStringList(persona, "region", "navigatorLanguages") &&
++         HasNestedString(persona, "gpu", "vendor") &&
++         HasNestedString(persona, "gpu", "renderer") &&
++         HasNestedString(persona, "gpu", "driver") &&
++         HasNestedPositiveInt(persona, "screen", "width") &&
++         HasNestedPositiveInt(persona, "screen", "height") &&
++         HasNestedPositiveInt(persona, "screen", "availWidth") &&
++         HasNestedPositiveInt(persona, "screen", "availHeight") &&
++         HasNestedPositiveDouble(persona, "screen", "deviceScaleFactor") &&
++         HasNestedPositiveInt(persona, "screen", "colorDepth") &&
++         HasNestedPositiveInt(persona, "screen", "pixelDepth") &&
++         HasNestedPositiveInt(persona, "screen", "refreshRate") &&
++         HasNestedPositiveInt(persona, "hardware", "hardwareConcurrency") &&
++         HasNestedPositiveDouble(persona, "hardware", "deviceMemory") &&
++         HasNestedString(persona, "fonts", "id") &&
++         HasNestedString(persona, "fonts", "displayName") &&
++         HasNestedStringList(persona, "fonts", "families") &&
++         HasNestedStringList(persona, "fonts", "aliases");
++}
++
++base::Value::List ValidatePersona(const base::Value::Dict& persona) {
++  base::Value::List warnings;
++  if (!PersonaHasRequiredFields(persona)) {
++    AddWarning(warnings, "This persona is missing one or more required fields.");
++    return warnings;
++  }
++  if (IsPassthroughPersona(persona)) {
++    return warnings;
++  }
++
++  const std::string_view os = GetString(persona, "os");
++  const std::string_view ua = GetString(persona, "userAgent");
++  const std::string_view platform = GetString(persona, "platform");
++  const std::string_view ua_ch_platform =
++      GetNestedString(persona, "uaCh", "platform");
++  const std::string_view ua_ch_platform_version =
++      GetNestedString(persona, "uaCh", "platformVersion");
++  const std::string_view ua_ch_architecture =
++      GetNestedString(persona, "uaCh", "architecture");
++  const bool ua_ch_mobile = GetNestedBool(persona, "uaCh", "mobile");
++  const std::string_view timezone =
++      GetNestedString(persona, "region", "timezone");
++  const std::string_view locale = GetNestedString(persona, "region", "locale");
++  const std::string_view accept_language =
++      GetNestedString(persona, "region", "acceptLanguage");
++  const std::vector<std::string> navigator_languages =
++      GetNestedStringList(persona, "region", "navigatorLanguages");
++  const std::string_view gpu_vendor = GetNestedString(persona, "gpu", "vendor");
++  const std::string_view gpu_renderer =
++      GetNestedString(persona, "gpu", "renderer");
++  const std::string_view gpu_driver = GetNestedString(persona, "gpu", "driver");
++  const int width = GetNestedInt(persona, "screen", "width");
++  const int height = GetNestedInt(persona, "screen", "height");
++  const int avail_width = GetNestedInt(persona, "screen", "availWidth");
++  const int avail_height = GetNestedInt(persona, "screen", "availHeight");
++  const double device_scale_factor =
++      GetNestedDouble(persona, "screen", "deviceScaleFactor");
++  const int color_depth = GetNestedInt(persona, "screen", "colorDepth");
++  const int pixel_depth = GetNestedInt(persona, "screen", "pixelDepth");
++  const int cores = GetNestedInt(persona, "hardware", "hardwareConcurrency");
++  const double device_memory =
++      GetNestedDouble(persona, "hardware", "deviceMemory");
++  const bool touch_enabled =
++      GetNestedBool(persona, "hardware", "touchEnabled");
++  const int max_touch_points =
++      GetNestedInt(persona, "hardware", "maxTouchPoints");
++
++  if (Contains(os, "windows") &&
++      (!Contains(ua, "windows nt") || !Contains(platform, "win"))) {
++    AddWarning(warnings,
++               "Windows personas should use a Windows UA and Win32 platform.");
++  }
++  if (Contains(os, "windows") && !Contains(ua_ch_platform, "windows")) {
++    AddWarning(warnings,
++               "Windows personas should use Windows UA-CH platform metadata.");
++  }
++
++  if (Contains(os, "macos") &&
++      (!Contains(ua, "macintosh") || !Contains(platform, "mac"))) {
++    AddWarning(warnings,
++               "macOS personas should use a Macintosh UA and MacIntel platform.");
++  }
++  if (Contains(os, "macos") && !Contains(ua_ch_platform, "macos")) {
++    AddWarning(warnings,
++               "macOS personas should use macOS UA-CH platform metadata.");
++  }
++  if (Contains(os, "macos") && Contains(gpu_renderer, "apple m") &&
++      Contains(ua_ch_architecture, "x86")) {
++    AddWarning(warnings,
++               "Apple Silicon macOS personas should not expose x86 UA-CH architecture.");
++  }
++
++  if (Contains(os, "linux") &&
++      (!Contains(ua, "linux") || !Contains(platform, "linux"))) {
++    AddWarning(warnings,
++               "Linux personas should use a Linux UA and Linux platform.");
++  }
++  if (Contains(os, "linux") && !Contains(ua_ch_platform, "linux")) {
++    AddWarning(warnings,
++               "Linux personas should use Linux UA-CH platform metadata.");
++  }
++  if (Contains(os, "linux") && !ua_ch_platform_version.empty()) {
++    AddWarning(warnings,
++               "Linux UA-CH platformVersion is usually blank or very coarse.");
++  }
++
++  if (Contains(os, "macos") &&
++      (Contains(gpu_vendor, "nvidia") || Contains(gpu_vendor, "mesa"))) {
++    AddWarning(warnings,
++               "macOS presets usually pair best with Apple GPU or AMD GPU data.");
++  }
++  if (Contains(os, "windows") &&
++      (Contains(gpu_driver, "metal") || Contains(gpu_driver, "mesa") ||
++       Contains(gpu_renderer, "metal"))) {
++    AddWarning(warnings,
++               "Windows GPU data should normally use a Direct3D/ANGLE renderer.");
++  }
++  if (Contains(os, "macos") &&
++      (Contains(gpu_driver, "d3d") || Contains(gpu_renderer, "direct3d"))) {
++    AddWarning(warnings,
++               "macOS GPU data should not expose Direct3D renderer strings.");
++  }
++  if (Contains(os, "linux") &&
++      (Contains(gpu_driver, "d3d") || Contains(gpu_driver, "metal") ||
++       Contains(gpu_renderer, "direct3d"))) {
++    AddWarning(warnings,
++               "Linux GPU data should normally use Mesa/Vulkan/OpenGL-style renderer data.");
++  }
++
++  if (Contains(locale, "zh") && !Contains(timezone, "asia")) {
++    AddWarning(warnings,
++               "Chinese language profiles commonly pair with an Asia/* timezone.");
++  }
++
++  if ((Contains(locale, "en-us") || Contains(locale, "es-us")) &&
++      !(Contains(timezone, "america") || timezone.empty())) {
++    AddWarning(warnings,
++               "US language profiles commonly pair with an America/* timezone.");
++  }
++  if (Contains(locale, "en-au") && !Contains(timezone, "australia")) {
++    AddWarning(warnings,
++               "Australian English profiles commonly pair with an Australia/* timezone.");
++  }
++  if (Contains(locale, "de-de") && !Contains(timezone, "europe")) {
++    AddWarning(warnings,
++               "German profiles commonly pair with a Europe/* timezone.");
++  }
++  if (!accept_language.empty() &&
++      !StartsWithInsensitive(accept_language, locale)) {
++    AddWarning(warnings,
++               "Accept-Language should begin with the persona locale.");
++  }
++  if (!navigator_languages.empty() &&
++      !EqualsInsensitive(navigator_languages.front(), locale)) {
++    AddWarning(warnings,
++               "navigator.languages[0] should match the persona locale.");
++  }
++
++  if (width > 0 && height > 0 && (width < 1024 || height < 720)) {
++    AddWarning(warnings,
++               "The selected screen size looks mobile; v1 personas are desktop-only.");
++  }
++  if ((width > 0 && avail_width > width) ||
++      (height > 0 && avail_height > height)) {
++    AddWarning(warnings,
++               "Available screen dimensions should not exceed total screen size.");
++  }
++  if (device_scale_factor > 0 &&
++      (device_scale_factor < 1.0 || device_scale_factor > 3.0)) {
++    AddWarning(warnings,
++               "Desktop device scale factor should usually stay between 1 and 3.");
++  }
++  if (color_depth > 0 && pixel_depth > 0 && color_depth != pixel_depth) {
++    AddWarning(warnings,
++               "screen.colorDepth and screen.pixelDepth should usually match.");
++  }
++  if (color_depth > 0 && color_depth != 24 && color_depth != 30) {
++    AddWarning(warnings,
++               "screen.colorDepth should usually be 24 or 30.");
++  }
++
++  if (cores > 0 && cores % 2 != 0) {
++    AddWarning(warnings,
++               "Odd CPU core counts are uncommon on desktop fingerprint sets.");
++  }
++  if (device_memory > 0 && !IsDeviceMemoryBucket(device_memory)) {
++    AddWarning(warnings,
++               "navigator.deviceMemory should use Chromium bucket values up to 8 GB.");
++  }
++
++  if (!touch_enabled && max_touch_points > 0) {
++    AddWarning(warnings,
++               "maxTouchPoints should be 0 when touch capability is disabled.");
++  }
++  if (touch_enabled && max_touch_points == 0) {
++    AddWarning(warnings,
++               "Touch-enabled personas should expose at least one touch point.");
++  }
++  if (touch_enabled || max_touch_points > 0) {
++    AddWarning(warnings,
++               "Touch-enabled desktop personas are less common and may stand out.");
++  }
++  if (ua_ch_mobile && width >= 1024 && height >= 720) {
++    AddWarning(warnings,
++               "Mobile UA-CH metadata does not match a desktop screen size.");
++  }
++
++  return warnings;
++}
++
++}  // namespace helium_persona
+--- /dev/null
++++ b/components/helium_persona/persona_prefs.h
+@@ -0,0 +1,47 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef COMPONENTS_HELIUM_PERSONA_PERSONA_PREFS_H_
++#define COMPONENTS_HELIUM_PERSONA_PERSONA_PREFS_H_
++
++#include <string_view>
++
++#include "base/component_export.h"
++#include "base/values.h"
++
++class PrefService;
++namespace user_prefs {
++class PrefRegistrySyncable;
++}  // namespace user_prefs
++
++namespace helium_persona {
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++base::Value::Dict GetPersonaState(const PrefService& pref_service);
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++base::Value::Dict GetActivePersona(const PrefService& pref_service);
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++base::Value::Dict ClonePresetIntoProfile(PrefService& pref_service,
++                                         std::string_view preset_id);
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++bool SetActivePersona(PrefService& pref_service, std::string_view persona_id);
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++bool SavePersona(PrefService& pref_service, base::Value::Dict persona);
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++bool DeletePersona(PrefService& pref_service, std::string_view persona_id);
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++base::Value::Dict MakeRuntimeSnapshot(const PrefService& pref_service);
++
++}  // namespace helium_persona
++
++#endif  // COMPONENTS_HELIUM_PERSONA_PERSONA_PREFS_H_
+--- /dev/null
++++ b/components/helium_persona/persona_prefs.cc
+@@ -0,0 +1,265 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "components/helium_persona/persona_prefs.h"
++
++#include <cstdint>
++#include <string>
++#include <string_view>
++
++#include "base/rand_util.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/stringprintf.h"
++#include "base/time/time.h"
++#include "base/values.h"
++#include "components/helium_persona/persona_presets.h"
++#include "components/helium_persona/persona_validation.h"
++#include "components/helium_persona/pref_names.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_service.h"
++
++namespace helium_persona {
++
++namespace {
++
++std::string MakeCustomPersonaId() {
++  uint64_t token = base::RandUint64();
++  return base::StringPrintf("persona-%s",
++                            base::NumberToString(token).c_str());
++}
++
++std::string GetPersonaId(const base::Value::Dict& persona) {
++  const std::string* id = persona.FindString("id");
++  return id ? *id : std::string();
++}
++
++bool IsPassthroughPersona(const base::Value::Dict& persona) {
++  return persona.FindBool("passthrough").value_or(false);
++}
++
++base::Value::Dict* FindPersonaInList(base::Value::List& personas,
++                                     std::string_view persona_id) {
++  for (base::Value& entry : personas) {
++    base::Value::Dict* dict = entry.GetIfDict();
++    if (!dict) {
++      continue;
++    }
++    const std::string* id = dict->FindString("id");
++    if (id && *id == persona_id) {
++      return dict;
++    }
++  }
++  return nullptr;
++}
++
++const base::Value::Dict* FindPersonaInList(const base::Value::List& personas,
++                                           std::string_view persona_id) {
++  for (const base::Value& entry : personas) {
++    const base::Value::Dict* dict = entry.GetIfDict();
++    if (!dict) {
++      continue;
++    }
++    const std::string* id = dict->FindString("id");
++    if (id && *id == persona_id) {
++      return dict;
++    }
++  }
++  return nullptr;
++}
++
++base::Value::Dict MakeEditablePersona(base::Value::Dict persona) {
++  persona.Set("id", MakeCustomPersonaId());
++  persona.Set("source", "custom");
++  persona.Set("builtin", false);
++  persona.Set("modified", false);
++  persona.Set("created", base::Time::Now().InMillisecondsFSinceUnixEpoch());
++  persona.Set("updated", base::Time::Now().InMillisecondsFSinceUnixEpoch());
++
++  const std::string* preset_name = persona.FindString("name");
++  persona.Set("name", preset_name ? base::StringPrintf("%s copy", preset_name->c_str())
++                                  : "Custom persona");
++  return persona;
++}
++
++base::Value::List CloneUserPersonas(const PrefService& pref_service) {
++  return pref_service.GetList(prefs::kHeliumPersonaRecords).Clone();
++}
++
++base::Value::Dict FindBuiltinPersona(std::string_view persona_id) {
++  base::Value::List presets = GetBuiltinPersonaPresets();
++  const base::Value::Dict* preset = FindPersonaInList(presets, persona_id);
++  return preset ? preset->Clone() : base::Value::Dict();
++}
++
++bool PersonaExists(const PrefService& pref_service, std::string_view persona_id) {
++  if (persona_id == kDefaultPresetId) {
++    return true;
++  }
++
++  base::Value::List presets = GetBuiltinPersonaPresets();
++  if (FindPersonaInList(presets, persona_id)) {
++    return true;
++  }
++
++  const base::Value::List& personas =
++      pref_service.GetList(prefs::kHeliumPersonaRecords);
++  return FindPersonaInList(personas, persona_id) != nullptr;
++}
++
++base::Value::Dict MakeSnapshotFromPersona(base::Value::Dict persona) {
++  // Runtime consumers should read this single normalized snapshot rather than
++  // reinterpreting presets and custom records independently.
++  persona.Set("snapshotVersion", 1);
++  persona.Set("warnings", ValidatePersona(persona));
++  return persona;
++}
++
++}  // namespace
++
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterStringPref(prefs::kHeliumActivePersonaId,
++                               kDefaultPresetId);
++  registry->RegisterListPref(prefs::kHeliumPersonaRecords);
++  registry->RegisterIntegerPref(prefs::kHeliumPersonaRevision, 1);
++  registry->RegisterBooleanPref(prefs::kHeliumPersonaLegacyFlagsMigrated,
++                                false);
++}
++
++base::Value::Dict GetActivePersona(const PrefService& pref_service) {
++  std::string active_id = pref_service.GetString(prefs::kHeliumActivePersonaId);
++
++  const base::Value::List& user_personas =
++      pref_service.GetList(prefs::kHeliumPersonaRecords);
++  if (const base::Value::Dict* persona =
++          FindPersonaInList(user_personas, active_id)) {
++    return persona->Clone();
++  }
++
++  if (base::Value::Dict preset = FindBuiltinPersona(active_id); !preset.empty()) {
++    return preset;
++  }
++
++  return MakeCurrentSystemPreset();
++}
++
++base::Value::Dict GetPersonaState(const PrefService& pref_service) {
++  base::Value::Dict state;
++  state.Set("activePersonaId",
++            pref_service.GetString(prefs::kHeliumActivePersonaId));
++  state.Set("presets", GetBuiltinPersonaPresets());
++  state.Set("personas", CloneUserPersonas(pref_service));
++
++  base::Value::Dict active = GetActivePersona(pref_service);
++  state.Set("activePersona", active.Clone());
++  state.Set("warnings", ValidatePersona(active));
++  state.Set("revision", pref_service.GetInteger(prefs::kHeliumPersonaRevision));
++  return state;
++}
++
++base::Value::Dict ClonePresetIntoProfile(PrefService& pref_service,
++                                         std::string_view preset_id) {
++  base::Value::Dict preset = FindBuiltinPersona(preset_id);
++  if (preset.empty() || IsPassthroughPersona(preset)) {
++    return base::Value::Dict();
++  }
++
++  base::Value::Dict persona = MakeEditablePersona(std::move(preset));
++  std::string persona_id = GetPersonaId(persona);
++
++  base::Value::List personas = CloneUserPersonas(pref_service);
++  personas.Append(persona.Clone());
++  pref_service.SetList(prefs::kHeliumPersonaRecords, std::move(personas));
++  pref_service.SetString(prefs::kHeliumActivePersonaId, persona_id);
++  pref_service.SetInteger(
++      prefs::kHeliumPersonaRevision,
++      pref_service.GetInteger(prefs::kHeliumPersonaRevision) + 1);
++
++  return persona;
++}
++
++bool SetActivePersona(PrefService& pref_service, std::string_view persona_id) {
++  if (!PersonaExists(pref_service, persona_id)) {
++    return false;
++  }
++
++  pref_service.SetString(prefs::kHeliumActivePersonaId,
++                         std::string(persona_id));
++  pref_service.SetInteger(
++      prefs::kHeliumPersonaRevision,
++      pref_service.GetInteger(prefs::kHeliumPersonaRevision) + 1);
++  return true;
++}
++
++bool SavePersona(PrefService& pref_service, base::Value::Dict persona) {
++  if (!PersonaHasRequiredFields(persona) || IsPassthroughPersona(persona)) {
++    return false;
++  }
++
++  std::string id = GetPersonaId(persona);
++  if (id.empty()) {
++    id = MakeCustomPersonaId();
++    persona.Set("id", id);
++  }
++
++  if (FindBuiltinPersona(id).empty() == false) {
++    // Built-in presets are immutable. Saving a built-in id creates a copy.
++    persona.Set("id", MakeCustomPersonaId());
++    id = GetPersonaId(persona);
++  }
++
++  persona.Set("source", "custom");
++  persona.Set("builtin", false);
++  persona.Set("modified", true);
++  persona.Set("updated", base::Time::Now().InMillisecondsFSinceUnixEpoch());
++  persona.Set("warnings", ValidatePersona(persona));
++
++  base::Value::List personas = CloneUserPersonas(pref_service);
++  if (base::Value::Dict* existing = FindPersonaInList(personas, id)) {
++    *existing = std::move(persona);
++  } else {
++    personas.Append(std::move(persona));
++  }
++
++  pref_service.SetList(prefs::kHeliumPersonaRecords, std::move(personas));
++  pref_service.SetString(prefs::kHeliumActivePersonaId, id);
++  pref_service.SetInteger(
++      prefs::kHeliumPersonaRevision,
++      pref_service.GetInteger(prefs::kHeliumPersonaRevision) + 1);
++  return true;
++}
++
++bool DeletePersona(PrefService& pref_service, std::string_view persona_id) {
++  base::Value::List personas = CloneUserPersonas(pref_service);
++  bool removed = false;
++
++  for (auto it = personas.begin(); it != personas.end();) {
++    const base::Value::Dict* dict = it->GetIfDict();
++    const std::string* id = dict ? dict->FindString("id") : nullptr;
++    if (id && *id == persona_id) {
++      it = personas.erase(it);
++      removed = true;
++    } else {
++      ++it;
++    }
++  }
++
++  if (!removed) {
++    return false;
++  }
++
++  pref_service.SetList(prefs::kHeliumPersonaRecords, std::move(personas));
++  if (pref_service.GetString(prefs::kHeliumActivePersonaId) == persona_id) {
++    pref_service.SetString(prefs::kHeliumActivePersonaId, kDefaultPresetId);
++  }
++  pref_service.SetInteger(
++      prefs::kHeliumPersonaRevision,
++      pref_service.GetInteger(prefs::kHeliumPersonaRevision) + 1);
++  return true;
++}
++
++base::Value::Dict MakeRuntimeSnapshot(const PrefService& pref_service) {
++  return MakeSnapshotFromPersona(GetActivePersona(pref_service));
++}
++
++}  // namespace helium_persona
