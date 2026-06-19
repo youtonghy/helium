@@ -190,4 +190,4 @@
    EXPECT_TRUE(ProfilesContainId(rendering_profiles, "generic-grayscale"));
  
    const base::Value::Dict& current = DictAt(presets, 0);
-
+ 

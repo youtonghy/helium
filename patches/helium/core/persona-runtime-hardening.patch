@@ -226,7 +226,7 @@
    SetUpFontUniqueLookupIfNecessary();
  
    FontDescription description;
-
+ 
 --- a/third_party/blink/renderer/modules/screen_details/window_screen_details.cc	2026-06-15 00:19:01
 +++ b/third_party/blink/renderer/modules/screen_details/window_screen_details.cc	2026-06-15 00:21:09
 @@ -7,6 +7,7 @@

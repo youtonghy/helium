@@ -15,7 +15,7 @@
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
 @@ -125,4 +125,6 @@ void RegisterBrowserUserPrefs(user_prefs
    registry->RegisterBooleanPref(prefs::kNewTabNextToActive, false);
-
+ 
 +  registry->RegisterBooleanPref(prefs::kTabCyclingMRU, false);
 +
    registry->RegisterBooleanPref(prefs::kShowHomeButton, false,

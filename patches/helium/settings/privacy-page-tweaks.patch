@@ -70,13 +70,13 @@
          sub-label="$i18n{heliumServicesDescription}"
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
-@@ -250,3 +250,3 @@ export class SettingsPrivacyPageElement
+@@ -250,4 +250,4 @@ export class SettingsPrivacyPageElement
      if (routes.COOKIES) {
 -      map.set(routes.COOKIES.path, '#thirdPartyCookiesLinkRow');
 +      map.set(routes.COOKIES.path, '#siteSettingsLinkRow');
      }
-
-@@ -283,9 +283,7 @@ export class SettingsPrivacyPageElement
+ 
+@@ -283,10 +283,8 @@ export class SettingsPrivacyPageElement
 -      case 'cookies':
 -        triggerId = 'thirdPartyCookiesLinkRow';
 -        break;

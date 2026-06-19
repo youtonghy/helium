@@ -14,9 +14,9 @@
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
 @@ -126,6 +126,8 @@ void RegisterBrowserUserPrefs(user_prefs
-
+ 
    registry->RegisterBooleanPref(prefs::kTabCyclingMRU, false);
-
+ 
 +  registry->RegisterBooleanPref(prefs::kHeliumRoundedFrame, true);
 +
    registry->RegisterBooleanPref(prefs::kShowHomeButton, false,

@@ -14,9 +14,9 @@
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
 @@ -130,6 +130,8 @@ void RegisterBrowserUserPrefs(user_prefs
-
+ 
    registry->RegisterBooleanPref(prefs::kHeliumCenteredLocationBar, false);
-
+ 
 +  registry->RegisterBooleanPref(prefs::kHeliumMinimalLocationBar, false);
 +
    registry->RegisterBooleanPref(prefs::kShowHomeButton, false,

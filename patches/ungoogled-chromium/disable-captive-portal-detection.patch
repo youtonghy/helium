@@ -4,7 +4,7 @@
 +++ b/components/captive_portal/core/captive_portal_detector.cc
 @@ -43,16 +43,11 @@
  }
-
+ 
  void CaptivePortalDetector::DetectCaptivePortal(
 -    const GURL& url,
 +    const GURL&,

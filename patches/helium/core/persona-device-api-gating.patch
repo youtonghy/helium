@@ -812,14 +812,6 @@ diff --git a/third_party/blink/renderer/modules/webusb/usb.cc b/third_party/blin
    if (!LocalFrame::HasTransientUserActivation(DomWindow()->GetFrame())) {
      exception_state.ThrowSecurityError(
          "Must be handling a user gesture to show a permission request.");
-@@ -235,6 +242,7 @@
-   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<USBDevice>>(
-       script_state, exception_state.GetContext());
-   auto promise = resolver->Promise();
-+
-   auto mojo_options = mojom::blink::WebUsbRequestDeviceOptions::New();
-   if (options->hasFilters()) {
-     mojo_options->filters.reserve(options->filters().size());
 @@ -258,6 +266,13 @@
    DCHECK(options->filters().size() == mojo_options->filters.size());
    DCHECK(options->exclusionFilters().size() ==

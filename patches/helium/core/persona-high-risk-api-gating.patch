@@ -58,11 +58,6 @@ index f15724c..ab77f0a 100644
      "+third_party/blink/renderer/modules/compute_pressure",
      "+third_party/blink/renderer/modules/document_picture_in_picture",
      "+third_party/blink/renderer/modules/modules_export.h",
-@@ -10,4 +11,3 @@ specific_include_rules = {
-     "+base/run_loop.h",
-   ],
- }
--
 diff --git a/third_party/blink/renderer/modules/compute_pressure/pressure_observer.cc b/third_party/blink/renderer/modules/compute_pressure/pressure_observer.cc
 index ea2db8e..bd7a85f 100644
 --- a/third_party/blink/renderer/modules/compute_pressure/pressure_observer.cc
