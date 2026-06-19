@@ -1,6 +1,7 @@
 # Python files
 __pycache__/
 *.py[cod]
+.venv311/
 
 # Python testing files
 .coverage
