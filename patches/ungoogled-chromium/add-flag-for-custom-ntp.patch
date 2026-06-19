@@ -18,10 +18,10 @@
    }
 --- a/chrome/browser/ungoogled_flag_entries.h
 +++ b/chrome/browser/ungoogled_flag_entries.h
-@@ -64,4 +64,8 @@
-      "Close Confirmation",
-      "Show a warning prompt when closing the browser window. ungoogled-chromium flag",
-      kOsDesktop, MULTI_VALUE_TYPE(kCloseConfirmation)},
+@@ -60,4 +60,8 @@
+      "Keep old history",
+      "Keep history older than 3 months. ungoogled-chromium flag",
+      kOsAll, SINGLE_VALUE_TYPE("keep-old-history")},
 +    {"custom-ntp",
 +     "Custom New Tab Page",
 +     "Allows setting a custom URL for the new tab page. Value can be internal (e.g. `about:blank` or `chrome://new-tab-page`), external (e.g. `example.com`), or local (e.g. `file:///tmp/startpage.html`). This applies for incognito windows as well when not set to a `chrome://` internal page. ungoogled-chromium flag",
