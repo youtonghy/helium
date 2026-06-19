@@ -33,7 +33,7 @@
  inline constexpr char kGeminiSettings[] = "browser.gemini_settings";
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -139,6 +139,13 @@ void RegisterBrowserUserPrefs(user_prefs
+@@ -140,6 +140,13 @@ void RegisterBrowserUserPrefs(user_prefs
    registry->RegisterBooleanPref(prefs::kPinSplitTabButton, false,
                                  pref_registration_flags);
  

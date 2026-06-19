@@ -9,14 +9,14 @@
        "webui/settings/services_schema_handler.cc",
        "webui/settings/services_schema_handler.h",
        "webui/settings/settings_clear_browsing_data_handler.cc",
-@@ -1701,6 +1703,7 @@ static_library("ui") {
-     "//components/feature_engagement/public",
-     "//components/feedback",
-     "//components/favicon/content",
+@@ -547,6 +547,7 @@ static_library("ui") {
+     "//components/favicon/core",
+     "//components/feature_engagement",
+     "//components/feature_engagement/public:feature_constants",
 +    "//components/helium_persona",
-     "//components/helium_services",
-     "//components/history/core/browser",
-     "//components/image_fetcher/core",
+     "//components/feed:feature_list",
+     "//components/feedback",
+     "//components/feedback/content",
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
 @@ -16,5 +16,6 @@
@@ -37,16 +37,15 @@
        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -79,5 +79,6 @@
- #include "chrome/browser/ui/webui/settings/password_manager_handler.h"
+@@ -76,4 +76,5 @@
  #include "chrome/browser/ui/webui/settings/performance_handler.h"
 +#include "chrome/browser/ui/webui/settings/persona_handler.h"
+ #include "chrome/browser/ui/webui/settings/privacy_sandbox_handler.h"
  #include "chrome/browser/ui/webui/settings/profile_info_handler.h"
- #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
- #include "chrome/browser/ui/webui/settings/safety_check_handler.h"
-@@ -271,6 +272,7 @@ SettingsUI::SettingsUI(content::WebUI* w
-   AddSettingsPageUIHandler(std::make_unique<PeopleHandler>(profile));
-   AddSettingsPageUIHandler(std::make_unique<PerformanceHandler>(profile));
+ #include "chrome/browser/ui/webui/settings/protocol_handlers_handler.h"
+@@ -272,6 +273,7 @@ SettingsUI::SettingsUI(content::WebUI* w
+   AddSettingsPageUIHandler(std::make_unique<ProfileInfoHandler>(profile));
+   AddSettingsPageUIHandler(std::make_unique<ProtocolHandlersHandler>(profile));
    AddSettingsPageUIHandler(std::make_unique<PrivacySandboxHandler>());
 +  AddSettingsPageUIHandler(std::make_unique<HeliumPersonaHandler>(profile));
    AddSettingsPageUIHandler(std::make_unique<SearchEnginesHandler>(profile));
@@ -197,7 +196,7 @@
      if (routes.COOKIES) {
        map.set(routes.COOKIES.path, '#thirdPartyCookiesLinkRow');
      }
-@@ -268,6 +278,9 @@ export class SettingsPrivacyPageElement
+@@ -277,6 +277,9 @@ export class SettingsPrivacyPageElement
        case 'heliumServices':
          triggerId = 'heliumServicesLinkRow';
          break;
@@ -205,8 +204,8 @@
 +        triggerId = 'heliumPersonaLinkRow';
 +        break;
        case 'cookies':
-       case 'siteSettings':
-       case 'siteSettingsAds':
+         triggerId = 'thirdPartyCookiesLinkRow';
+         break;
 --- a/chrome/browser/resources/settings/router.ts
 +++ b/chrome/browser/resources/settings/router.ts
 @@ -35,6 +35,7 @@ export interface SettingsRoutes {
@@ -219,13 +218,11 @@
    MANAGE_PROFILE: Route;
 --- a/chrome/browser/resources/settings/route.ts
 +++ b/chrome/browser/resources/settings/route.ts
-@@ -20,6 +20,7 @@ function addPrivacyChildRoutes(r: Partia
+@@ -19,4 +19,5 @@ function addPrivacyChildRoutes(r: Partia
    r.CLEAR_BROWSER_DATA.isNavigableDialog = true;
  
    r.HELIUM_SERVICES = r.PRIVACY.createChild('services');
 +  r.HELIUM_PERSONA = r.PRIVACY.createChild('persona');
- 
-   const visibility = pageVisibility || {};
  
 --- a/chrome/browser/resources/settings/BUILD.gn
 +++ b/chrome/browser/resources/settings/BUILD.gn
@@ -237,7 +234,7 @@
      "privacy_page/services_page.ts",
      "privacy_sandbox/privacy_sandbox_ad_measurement_subpage.ts",
      "privacy_sandbox/privacy_sandbox_fledge_subpage.ts",
-@@ -395,6 +396,7 @@ build_webui("build") {
+@@ -396,6 +397,7 @@ build_webui("build") {
        "languages_page/languages_util.ts",
        "people_page/import_data_browser_proxy.ts",
        "people_page/manage_profile_browser_proxy.ts",
@@ -247,7 +244,7 @@
      ]
 --- a/chrome/browser/resources/settings/lazy_load.ts
 +++ b/chrome/browser/resources/settings/lazy_load.ts
-@@ -26,6 +26,7 @@ import './privacy_page/privacy_guide/pri
+@@ -27,6 +27,7 @@ import './privacy_page/privacy_guide/pri
  import './privacy_page/security/security_keys_subpage.js';
  import './privacy_page/security/security_page_v2.js';
  import './privacy_page/security/security_page.js';
@@ -255,7 +252,7 @@
  import './privacy_page/services_page.js';
  import './privacy_sandbox/privacy_sandbox_ad_measurement_subpage.js';
  import './privacy_sandbox/privacy_sandbox_fledge_subpage.js';
-@@ -271,6 +272,7 @@ export {SecurityKeysSubpageElement} from
+@@ -272,6 +273,7 @@ export {SecurityKeysSubpageElement} from
  export {HttpsFirstModeSetting, SettingsSecurityPageElement} from './privacy_page/security/security_page.js';
  export {SecurityPageFeatureRowElement} from './privacy_page/security/security_page_feature_row.js';
  export {SecuritySettingsBundleSetting, SettingsSecurityPageV2Element} from './privacy_page/security/security_page_v2.js';

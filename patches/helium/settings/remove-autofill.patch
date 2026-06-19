@@ -19,9 +19,7 @@
              class="cr-nav-menu-item">
 --- a/chrome/browser/resources/settings/route.ts
 +++ b/chrome/browser/resources/settings/route.ts
-@@ -242,7 +242,7 @@ function createRoutes(): SettingsRoutes
-       r.PASSKEYS = r.YOUR_SAVED_INFO.createChild('/passkeys');
-       // </if>
+@@ -245,4 +245,4 @@ function createRoutes(): SettingsRoutes
      }
 -  } else if (visibility.autofill !== false) {
 +  } else if (visibility.autofill = false) {

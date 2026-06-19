@@ -14,15 +14,15 @@
  inline constexpr char kShowHomeButton[] = "browser.show_home_button";
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -125,6 +125,8 @@ void RegisterBrowserUserPrefs(user_prefs
- 
+@@ -128,6 +128,8 @@ void RegisterBrowserUserPrefs(user_prefs
+
    registry->RegisterBooleanPref(prefs::kHeliumRoundedFrame, true);
- 
+
 +  registry->RegisterBooleanPref(prefs::kHeliumCenteredLocationBar, false);
 +
-   registry->RegisterBooleanPref(prefs::kHomePageIsNewTabPage, true,
-                                 pref_registration_flags);
    registry->RegisterBooleanPref(prefs::kShowHomeButton, false,
+                                 pref_registration_flags);
+   registry->RegisterBooleanPref(prefs::kSplitViewDragAndDropEnabled, true,
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.h
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
 @@ -343,6 +343,11 @@ class ToolbarView : public views::Access

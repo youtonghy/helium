@@ -118,7 +118,7 @@
    (*s_allowlist)[::prefs::kHeliumServicesConsented] =
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -226,6 +226,7 @@ void RegisterBrowserUserPrefs(user_prefs
+@@ -227,6 +227,7 @@ void RegisterBrowserUserPrefs(user_prefs
      registry->RegisterBooleanPref(prefs::kHeliumServicesEnabled, true);
      registry->RegisterBooleanPref(prefs::kHeliumBangsEnabled, true);
      registry->RegisterBooleanPref(prefs::kHeliumExtProxyEnabled, true);

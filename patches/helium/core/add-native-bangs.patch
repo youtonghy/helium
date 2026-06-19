@@ -766,7 +766,7 @@
      </template>
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -224,6 +224,7 @@ void RegisterBrowserUserPrefs(user_prefs
+@@ -225,6 +225,7 @@ void RegisterBrowserUserPrefs(user_prefs
      registry->RegisterIntegerPref(prefs::kHeliumSchemaVersion, 0);
      registry->RegisterBooleanPref(prefs::kHeliumDisableSchemaAlerts, false);
      registry->RegisterBooleanPref(prefs::kHeliumServicesEnabled, true);

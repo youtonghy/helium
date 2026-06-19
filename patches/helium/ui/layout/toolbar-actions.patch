@@ -19,7 +19,7 @@
  inline constexpr char kGeminiSettings[] = "browser.gemini_settings";
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -151,6 +151,8 @@ void RegisterBrowserUserPrefs(user_prefs
+@@ -152,6 +152,8 @@ void RegisterBrowserUserPrefs(user_prefs
    registry->RegisterBooleanPref(prefs::kShowExtensionsButton, true);
    registry->RegisterBooleanPref(prefs::kShowMenuButton, true);
    registry->RegisterBooleanPref(prefs::kShowMediaButton, true);

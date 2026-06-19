@@ -29,7 +29,7 @@
  // asking the user to set up automatic updates when Keystone promotion is
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -162,6 +162,8 @@ void RegisterBrowserUserPrefs(user_prefs
+@@ -163,6 +163,8 @@ void RegisterBrowserUserPrefs(user_prefs
        prefs::kWebRTCDiagnosticLogCollectionAllowedForOrigins,
        base::ListValue());
  
@@ -230,7 +230,7 @@
    // Accounts / Users / People.
 --- a/chrome/app/settings_strings.grdp
 +++ b/chrome/app/settings_strings.grdp
-@@ -4721,6 +4721,16 @@
+@@ -4774,6 +4774,16 @@
        </message>
  
    </if>

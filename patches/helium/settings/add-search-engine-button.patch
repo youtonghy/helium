@@ -1,6 +1,6 @@
 --- a/chrome/app/settings_strings.grdp
 +++ b/chrome/app/settings_strings.grdp
-@@ -2521,6 +2521,9 @@
+@@ -2574,6 +2574,9 @@
      <message name="IDS_SETTINGS_SEARCH_ENGINES_ADD_SITE_SEARCH" desc="Title for a dialog that allows adding a new site search engine.">
        Add site search
      </message>
@@ -32,7 +32,7 @@
        {"advancedPageTitle", IDS_SETTINGS_ADVANCED},
        {"back", IDS_ACCNAME_BACK},
        {"basicPageTitle", IDS_SETTINGS_BASIC},
-@@ -2933,6 +2934,8 @@ void AddSearchEnginesStrings(content::We
+@@ -2950,5 +2951,7 @@ void AddSearchEnginesStrings(content::We
         IDS_SETTINGS_SEARCH_ENGINES_PAGE_EXPLANATION},
        {"searchEnginesAddSiteSearch",
         IDS_SETTINGS_SEARCH_ENGINES_ADD_SITE_SEARCH},

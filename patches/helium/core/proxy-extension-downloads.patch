@@ -163,12 +163,11 @@
    static bool UpdatesFromGallery(const Extension* extension);
 --- a/chrome/browser/extensions/updater/chrome_extension_downloader_factory.cc
 +++ b/chrome/browser/extensions/updater/chrome_extension_downloader_factory.cc
-@@ -53,7 +53,7 @@ ChromeExtensionDownloaderFactory::Create
+@@ -53,7 +53,6 @@ ChromeExtensionDownloaderFactory::Create
      manifest_query_params += "&testrequest=1";
    }
    downloader->set_manifest_query_params(manifest_query_params);
 -  downloader->set_ping_enabled_domain("google.com");
-+  downloader->set_ping_enabled_domain("helium.computer");
    return downloader;
  }
  
@@ -185,7 +184,7 @@
    (*s_allowlist)[::prefs::kHeliumServicesConsented] =
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -224,6 +224,7 @@ void RegisterBrowserUserPrefs(user_prefs
+@@ -225,6 +225,7 @@ void RegisterBrowserUserPrefs(user_prefs
      registry->RegisterIntegerPref(prefs::kHeliumSchemaVersion, 0);
      registry->RegisterBooleanPref(prefs::kHeliumDisableSchemaAlerts, false);
      registry->RegisterBooleanPref(prefs::kHeliumServicesEnabled, true);

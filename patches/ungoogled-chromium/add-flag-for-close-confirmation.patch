@@ -179,10 +179,10 @@
  #endif  // CHROME_BROWSER_UNGOOGLED_FLAG_CHOICES_H_
 --- a/chrome/browser/ungoogled_flag_entries.h
 +++ b/chrome/browser/ungoogled_flag_entries.h
-@@ -60,4 +60,8 @@
-      "Clear data on exit",
-      "Clears all browsing data on exit. ungoogled-chromium flag",
-      kOsDesktop, FEATURE_VALUE_TYPE(features::kClearDataOnExit)},
+@@ -44,4 +44,8 @@
+      "Close window with last tab",
+      "Determines whether a window should close once the last tab is closed. ungoogled-chromium flag.",
+      kOsDesktop, MULTI_VALUE_TYPE(kCloseWindowWithLastTab)},
 +    {"close-confirmation",
 +     "Close Confirmation",
 +     "Show a warning prompt when closing the browser window. ungoogled-chromium flag",

@@ -1,6 +1,6 @@
 --- a/chrome/app/settings_strings.grdp
 +++ b/chrome/app/settings_strings.grdp
-@@ -4002,6 +4002,21 @@
+@@ -3885,6 +4055,21 @@
        <message name="IDS_SETTINGS_PICK_AN_AVATAR" desc="Title of the edit avatar selection section on the manage profile page.">
          Pick an avatar
        </message>

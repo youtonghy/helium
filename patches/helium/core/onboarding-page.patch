@@ -24,6 +24,7 @@
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
 @@ -221,6 +221,8 @@ void RegisterBrowserUserPrefs(user_prefs
+     registry->RegisterIntegerPref(prefs::kHeliumSchemaVersion, 0);
      registry->RegisterBooleanPref(prefs::kHeliumDisableSchemaAlerts, false);
      registry->RegisterBooleanPref(prefs::kHeliumServicesEnabled, true);
      registry->RegisterStringPref(prefs::kHeliumServicesOrigin, "");
@@ -31,7 +32,7 @@
 +    registry->RegisterBooleanPref(prefs::kHeliumServicesConsented, false);
    }
  
-   registry->RegisterBooleanPref(
+   helium_persona::RegisterProfilePrefs(registry);
 --- a/chrome/browser/ui/startup/startup_browser_creator_impl.cc
 +++ b/chrome/browser/ui/startup/startup_browser_creator_impl.cc
 @@ -59,6 +59,7 @@

@@ -13,15 +13,15 @@
  inline constexpr char kShowHomeButton[] = "browser.show_home_button";
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -127,6 +127,8 @@ void RegisterBrowserUserPrefs(user_prefs
- 
+@@ -130,6 +130,8 @@ void RegisterBrowserUserPrefs(user_prefs
+
    registry->RegisterBooleanPref(prefs::kHeliumCenteredLocationBar, false);
- 
+
 +  registry->RegisterBooleanPref(prefs::kHeliumMinimalLocationBar, false);
 +
-   registry->RegisterBooleanPref(prefs::kHomePageIsNewTabPage, true,
-                                 pref_registration_flags);
    registry->RegisterBooleanPref(prefs::kShowHomeButton, false,
+                                 pref_registration_flags);
+   registry->RegisterBooleanPref(prefs::kSplitViewDragAndDropEnabled, true,
 --- a/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
 +++ b/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
 @@ -66,6 +66,7 @@

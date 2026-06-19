@@ -14,15 +14,13 @@
  inline constexpr char kShowHomeButton[] = "browser.show_home_button";
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -119,6 +119,8 @@ void RegisterBrowserUserPrefs(user_prefs
-   registry->RegisterIntegerPref(prefs::kSessionRestoreInfoBarTimesShown, 0);
- #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
- 
-+  registry->RegisterBooleanPref(prefs::kNewTabNextToActive, false);
-+
+@@ -123,4 +123,6 @@ void RegisterBrowserUserPrefs(user_prefs
    registry->RegisterBooleanPref(prefs::kHomePageIsNewTabPage, true,
                                  pref_registration_flags);
++  registry->RegisterBooleanPref(prefs::kNewTabNextToActive, false);
++
    registry->RegisterBooleanPref(prefs::kShowHomeButton, false,
+                                 pref_registration_flags);
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
 @@ -84,12 +84,14 @@

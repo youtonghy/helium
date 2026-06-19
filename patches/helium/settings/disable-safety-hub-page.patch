@@ -11,10 +11,9 @@
  
 --- a/chrome/browser/resources/settings/route.ts
 +++ b/chrome/browser/resources/settings/route.ts
-@@ -22,7 +22,7 @@ function addPrivacyChildRoutes(r: Partia
- 
+@@ -24,5 +24,5 @@ function addPrivacyChildRoutes(r: Partia
    const visibility = pageVisibility || {};
- 
+
 -  if (visibility.safetyHub !== false) {
 +  if (visibility.safetyHub = false) {
      r.SAFETY_HUB = r.PRIVACY.createChild('/safetyCheck');

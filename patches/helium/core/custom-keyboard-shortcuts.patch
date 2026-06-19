@@ -1552,7 +1552,8 @@
 +#endif  // CHROME_BROWSER_UI_BROWSER_SHORTCUTS_BROWSER_SHORTCUT_SERVICE_FACTORY_H_
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1261,6 +1261,16 @@ static_library("ui") {
+@@ -1261,7 +1261,17 @@ static_library("ui") {
+       "accelerator_table.cc",
        "accelerator_table.h",
        "breadcrumb_manager_browser_agent.cc",
        "breadcrumb_manager_browser_agent.h",
@@ -1569,7 +1570,7 @@
        "browser.cc",
        "browser.h",
        "browser_action_prefs_listener.cc",
-@@ -1642,6 +1652,8 @@ static_library("ui") {
+@@ -1645,6 +1655,8 @@ static_library("ui") {
  
      if (is_mac) {
        sources += [

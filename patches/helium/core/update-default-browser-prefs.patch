@@ -1,6 +1,6 @@
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -69,7 +69,7 @@ void RegisterBrowserPrefs(PrefRegistrySi
+@@ -70,7 +70,7 @@ void RegisterBrowserPrefs(PrefRegistrySi
  
    registry->RegisterBooleanPref(prefs::kHoverCardImagesEnabled, true);
  
@@ -9,7 +9,7 @@
  
    registry->RegisterBooleanPref(
        prefs::kHoverCardMemoryUsageDisableMigrationComplete, false);
-@@ -166,7 +166,7 @@ void RegisterBrowserUserPrefs(user_prefs
+@@ -167,7 +167,7 @@ void RegisterBrowserUserPrefs(user_prefs
  
    // We need to register the type of these preferences in order to query
    // them even though they're only typically controlled via policy.

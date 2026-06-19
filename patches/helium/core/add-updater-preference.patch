@@ -3,7 +3,7 @@
 @@ -33,6 +33,9 @@ inline constexpr char kHeliumExtProxyEna
  inline constexpr char kHeliumBangsEnabled[] =
      "helium.services.bangs";
- 
+
 +inline constexpr char kHeliumUpdateFetchingEnabled[] =
 +    "helium.services.browser_updates";
 +
@@ -141,14 +141,13 @@
    (*s_allowlist)[::prefs::kHeliumServicesConsented] =
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -230,6 +230,7 @@ void RegisterBrowserUserPrefs(user_prefs
+@@ -231,5 +231,6 @@ void RegisterBrowserUserPrefs(user_prefs
      registry->RegisterStringPref(prefs::kHeliumServicesOrigin, "");
      registry->RegisterBooleanPref(prefs::kHeliumDidOnboarding, false);
      registry->RegisterBooleanPref(prefs::kHeliumServicesConsented, false);
 +    registry->RegisterBooleanPref(prefs::kHeliumUpdateFetchingEnabled, true);
    }
  
-   registry->RegisterBooleanPref(
 --- a/chrome/app/settings_strings.grdp
 +++ b/chrome/app/settings_strings.grdp
 @@ -1760,6 +1760,22 @@

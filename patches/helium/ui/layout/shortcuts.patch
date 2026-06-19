@@ -14,7 +14,7 @@
  // asking the user to set up automatic updates when Keystone promotion is
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -178,6 +178,7 @@ void RegisterBrowserUserPrefs(user_prefs
+@@ -179,6 +179,7 @@ void RegisterBrowserUserPrefs(user_prefs
        base::ListValue());
  
    registry->RegisterBooleanPref(prefs::kCopyPageUrlShortcut, true);
@@ -166,7 +166,7 @@
      VK_NEXT,        IDC_MOVE_TAB_NEXT,          VIRTKEY, CONTROL, SHIFT
 --- a/chrome/app/settings_strings.grdp
 +++ b/chrome/app/settings_strings.grdp
-@@ -4873,6 +4873,16 @@
+@@ -4926,6 +4926,16 @@
        Enable quick page link copying with Ctrl+Shift+C
      </message>
    </if>
