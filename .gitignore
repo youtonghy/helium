@@ -16,3 +16,23 @@ __pycache__/
 # Ignore generated resources
 /resources/generated
 /devutils/i18n-data
+
+# Ignore local design / validation artifacts
+/codex_tmp/
+/tmp_persona_*/
+/playwright-report/
+/test-results/
+/validation-results/
+/visual-diffs/
+/screenshots/
+/*.trace.zip
+/*.har
+/.codex/tmp/
+/.codex/validation/
+/.codex/screenshots/
+
+# Ignore local CI/source validation artifacts
+/chromium_src/
+/chromium_download_cache/
+/pruning.list.gen
+/domain_substitution.list.gen
