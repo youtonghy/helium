@@ -456,8 +456,7 @@ def check_series_duplicates(patches_dir, series_path=Path('series')):
     return False
 
 
-def _collect_persona_patch_text(patches_dir, series_path=Path('series'),
-                                include_patch=None):
+def _collect_persona_patch_text(patches_dir, series_path=Path('series'), include_patch=None):
     """Return the concatenated text of persona patches referenced by series."""
     patch_text_parts = []
     for patch_path in _read_series_file(patches_dir, series_path, join_dir=True):
@@ -475,24 +474,22 @@ def _collect_persona_patch_text(patches_dir, series_path=Path('series'),
     return '\n'.join(patch_text_parts)
 
 
-def _check_persona_token_groups(patches_dir, group_label, groups,
+def _check_persona_token_groups(patches_dir,
+                                group_label,
+                                groups,
                                 series_path=Path('series'),
                                 include_patch=None):
     """Check that persona patches contain each token group."""
-    patch_text = _collect_persona_patch_text(
-        patches_dir, series_path, include_patch)
+    patch_text = _collect_persona_patch_text(patches_dir, series_path, include_patch)
     if not patch_text:
         return False
 
     warnings = False
     for group_name, required_tokens in groups.items():
-        missing_tokens = [
-            token for token in required_tokens if token not in patch_text
-        ]
+        missing_tokens = [token for token in required_tokens if token not in patch_text]
         if missing_tokens:
-            get_logger().warning(
-                'Persona %s group missing %s token(s): %s',
-                group_label, group_name, ', '.join(missing_tokens))
+            get_logger().warning('Persona %s group missing %s token(s): %s', group_label,
+                                 group_name, ', '.join(missing_tokens))
             warnings = True
     return warnings
 
@@ -508,41 +505,39 @@ def check_persona_runtime_hook_coverage(patches_dir, series_path=Path('series'))
 
     Returns True if required hook tokens are missing; False otherwise.
     """
-    return _check_persona_token_groups(
-        patches_dir, 'runtime hook', _PERSONA_RUNTIME_HOOK_GROUPS,
-        series_path)
+    return _check_persona_token_groups(patches_dir, 'runtime hook', _PERSONA_RUNTIME_HOOK_GROUPS,
+                                       series_path)
 
 
 def check_persona_contract_coverage(patches_dir, series_path=Path('series')):
     """Check that persona snapshot/schema/propagation still share one contract."""
-    return _check_persona_token_groups(
-        patches_dir, 'contract', _PERSONA_CONTRACT_GROUPS, series_path)
+    return _check_persona_token_groups(patches_dir, 'contract', _PERSONA_CONTRACT_GROUPS,
+                                       series_path)
 
 
-def check_persona_randomization_coverage(patches_dir,
-                                         series_path=Path('series')):
+def check_persona_randomization_coverage(patches_dir, series_path=Path('series')):
     """
     Checks that the settings randomize flow still touches the full persona
     snapshot surface rather than only rotating a device label or UA version.
 
     Returns True if required randomization tokens are missing; False otherwise.
     """
-    return _check_persona_token_groups(
-        patches_dir, 'randomization', _PERSONA_RANDOMIZATION_FIELD_GROUPS,
-        series_path, include_patch=_is_persona_randomization_patch)
+    return _check_persona_token_groups(patches_dir,
+                                       'randomization',
+                                       _PERSONA_RANDOMIZATION_FIELD_GROUPS,
+                                       series_path,
+                                       include_patch=_is_persona_randomization_patch)
 
 
-def check_persona_settings_manual_field_coverage(patches_dir,
-                                                 series_path=Path('series')):
+def check_persona_settings_manual_field_coverage(patches_dir, series_path=Path('series')):
     """
     Checks that settings still exposes manual controls for high-entropy persona
     field groups.
 
     Returns True if required settings tokens are missing; False otherwise.
     """
-    return _check_persona_token_groups(
-        patches_dir, 'settings manual fields',
-        _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS, series_path)
+    return _check_persona_token_groups(patches_dir, 'settings manual fields',
+                                       _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS, series_path)
 
 
 def main():

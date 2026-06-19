@@ -2,9 +2,15 @@
 
 --- a/components/captive_portal/core/captive_portal_detector.cc
 +++ b/components/captive_portal/core/captive_portal_detector.cc
-@@ -45,12 +45,7 @@ void CaptivePortalDetector::DetectCaptivePortal(
+@@ -43,16 +43,11 @@
+ }
+
+ void CaptivePortalDetector::DetectCaptivePortal(
+-    const GURL& url,
++    const GURL&,
      DetectionCallback detection_callback,
-     const net::NetworkTrafficAnnotationTag& traffic_annotation) {
+-    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
++    const net::NetworkTrafficAnnotationTag&) {
    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 -  DCHECK(!FetchingURL());
    DCHECK(!detection_callback.is_null());

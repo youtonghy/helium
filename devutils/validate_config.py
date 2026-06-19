@@ -27,8 +27,7 @@ from pathlib import Path
 
 from check_downloads_ini import check_downloads_ini
 from check_gn_flags import check_gn_flags
-from check_patch_files import (check_patch_readability,
-                               check_persona_randomization_coverage,
+from check_patch_files import (check_patch_readability, check_persona_randomization_coverage,
                                check_persona_runtime_hook_coverage,
                                check_persona_settings_manual_field_coverage,
                                check_series_duplicates, check_unused_patches)
