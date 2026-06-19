@@ -1,0 +1,759 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+index 8a083215..7731727a 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+@@ -34,6 +34,8 @@ export interface PersonaState {
+   activePersona: PersonaRecord;
+   presets: PersonaRecord[];
+   personas: PersonaRecord[];
++  fontPackProfiles: Array<Record<string, unknown>>;
++  customFontPackProfiles: Array<Record<string, unknown>>;
+   fontRenderingProfiles: Array<Record<string, unknown>>;
+   customFontRenderingProfiles: Array<Record<string, unknown>>;
+   warnings: string[];
+@@ -46,6 +48,8 @@ export interface HeliumPersonaBrowserProxy {
+   clonePreset(presetId: string): Promise<PersonaRecord>;
+   savePersona(persona: PersonaRecord): Promise<boolean>;
+   deletePersona(personaId: string): Promise<boolean>;
++  saveFontPackProfile(profile: Record<string, unknown>): Promise<boolean>;
++  deleteFontPackProfile(profileId: string): Promise<boolean>;
+   saveFontRenderingProfile(profile: Record<string, unknown>): Promise<boolean>;
+   deleteFontRenderingProfile(profileId: string): Promise<boolean>;
+ }
+@@ -72,6 +76,14 @@ export class HeliumPersonaBrowserProxyImpl implements
+     return sendWithPromise<boolean>('deleteHeliumPersona', personaId);
+   }
+ 
++  saveFontPackProfile(profile: Record<string, unknown>) {
++    return sendWithPromise<boolean>('saveHeliumFontPackProfile', profile);
++  }
++
++  deleteFontPackProfile(profileId: string) {
++    return sendWithPromise<boolean>('deleteHeliumFontPackProfile', profileId);
++  }
++
+   saveFontRenderingProfile(profile: Record<string, unknown>) {
+     return sendWithPromise<boolean>('saveHeliumFontRenderingProfile', profile);
+   }
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.html b/chrome/browser/resources/settings/privacy_page/persona_page.html
+index ccbdbd9a..670bea67 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -408,25 +408,23 @@
+   </div>
+ 
+   <div class="persona-section-title">$i18n{heliumPersonaFonts}</div>
+-  <template is="dom-repeat" items="[[fontRenderingProfiles_]]" as="profile">
++  <template is="dom-repeat" items="[[fontPackProfiles_]]" as="profile">
+     <div class="cr-row persona-card">
+       <div class="persona-main cr-padded-text">
+         <div class="persona-name">[[profile.displayName]]</div>
+-        <div class="persona-detail">
+-          [[profile.engine]] / [[profile.hinting]]
+-        </div>
++        <div class="persona-detail">[[profile.id]]</div>
+       </div>
+       <div class="persona-actions">
+-        <cr-button on-click="onApplyFontRenderingClick_">Apply</cr-button>
+-        <cr-button on-click="onCopyFontRenderingClick_">Copy</cr-button>
++        <cr-button on-click="onApplyFontPackClick_">Apply</cr-button>
++        <cr-button on-click="onCopyFontPackClick_">Copy</cr-button>
+         <cr-button disabled="[[profile.builtin]]"
+-            on-click="onDeleteFontRenderingClick_">Delete</cr-button>
++            on-click="onDeleteFontPackClick_">Delete</cr-button>
+       </div>
+     </div>
+   </template>
+   <div class="actions-row">
+-    <cr-button on-click="onSaveFontRenderingClick_">
+-      Save rendering profile
++    <cr-button on-click="onSaveFontPackClick_">
++      Save font pack
+     </cr-button>
+   </div>
+   <div class="editor-grid">
+@@ -440,6 +438,30 @@
+     <cr-input class="wide" label="Aliases"
+         value="{{fontAliasesText_}}"
+         on-change="onFontAliasesChanged_"></cr-input>
++  </div>
++
++  <template is="dom-repeat" items="[[fontRenderingProfiles_]]" as="profile">
++    <div class="cr-row persona-card">
++      <div class="persona-main cr-padded-text">
++        <div class="persona-name">[[profile.displayName]]</div>
++        <div class="persona-detail">
++          [[profile.engine]] / [[profile.hinting]]
++        </div>
++      </div>
++      <div class="persona-actions">
++        <cr-button on-click="onApplyFontRenderingClick_">Apply</cr-button>
++        <cr-button on-click="onCopyFontRenderingClick_">Copy</cr-button>
++        <cr-button disabled="[[profile.builtin]]"
++            on-click="onDeleteFontRenderingClick_">Delete</cr-button>
++      </div>
++    </div>
++  </template>
++  <div class="actions-row">
++    <cr-button on-click="onSaveFontRenderingClick_">
++      Save rendering profile
++    </cr-button>
++  </div>
++  <div class="editor-grid">
+     <cr-input label="Rendering profile id"
+         value="{{editablePersona_.fontRendering.id}}"></cr-input>
+     <cr-input label="Rendering profile"
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 32e30569..7d444cba 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -28,6 +28,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       presets_: Array,
+       personas_: Array,
+       personaOptions_: Array,
++      fontPackProfiles_: Array,
+       fontRenderingProfiles_: Array,
+       editablePersona_: Object,
+       activePersonaId_: String,
+@@ -46,6 +47,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+   declare private presets_: PersonaRecord[];
+   declare private personas_: PersonaRecord[];
+   declare private personaOptions_: PersonaRecord[];
++  declare private fontPackProfiles_: Array<Record<string, unknown>>;
+   declare private fontRenderingProfiles_: Array<Record<string, unknown>>;
+   declare private editablePersona_: PersonaRecord;
+   declare private activePersonaId_: string;
+@@ -74,6 +76,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     this.presets_ = state.presets || [];
+     this.personas_ = state.personas || [];
+     this.personaOptions_ = [...this.presets_, ...this.personas_];
++    this.fontPackProfiles_ = state.fontPackProfiles || [];
+     this.fontRenderingProfiles_ = state.fontRenderingProfiles || [];
+     this.activePersonaId_ = state.activePersonaId || state.activePersona?.id || '';
+     this.editablePersona_ = this.clonePersona_(state.activePersona);
+@@ -284,6 +287,20 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     await this.loadState_();
+   }
+ 
++  private onApplyFontPackClick_(event: Event) {
++    const model = (event as CustomEvent).model;
++    const profile = model.profile as Record<string, unknown>;
++    this.set('editablePersona_.fonts', JSON.parse(JSON.stringify(profile)));
++    this.syncTextFields_();
++  }
++
++  private onCopyFontPackClick_(event: Event) {
++    const model = (event as CustomEvent).model;
++    const profile = model.profile as Record<string, unknown>;
++    this.set('editablePersona_.fonts', this.makeCustomFontPackProfile_(profile));
++    this.syncTextFields_();
++  }
++
+   private onApplyFontRenderingClick_(event: Event) {
+     const model = (event as CustomEvent).model;
+     const profile = model.profile as Record<string, unknown>;
+@@ -298,14 +315,15 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+         this.makeCustomFontRenderingProfile_(profile));
+   }
+ 
+-  private makeCustomFontRenderingId_(sourceId: string): string {
+-    const slug = (sourceId || 'rendering')
++  private makeCustomProfileId_(
++      sourceId: string, prefix: string,
++      profiles: Array<Record<string, unknown>>): string {
++    const slug = (sourceId || prefix)
+         .toLowerCase()
+         .replace(/[^a-z0-9]+/g, '-')
+-        .replace(/^-+|-+$/g, '') || 'rendering';
++        .replace(/^-+|-+$/g, '') || prefix;
+     const usedIds = new Set(
+-        (this.fontRenderingProfiles_ || [])
+-            .map(profile => String(profile['id'] || '')));
++        (profiles || []).map(profile => String(profile['id'] || '')));
+     let candidate = `custom-${slug}`;
+     let suffix = 2;
+     while (usedIds.has(candidate)) {
+@@ -314,11 +332,39 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     return candidate;
+   }
+ 
++  private makeCustomFontPackId_(sourceId: string): string {
++    return this.makeCustomProfileId_(
++        sourceId, 'font-pack', this.fontPackProfiles_ || []);
++  }
++
++  private makeCustomFontRenderingId_(sourceId: string): string {
++    return this.makeCustomProfileId_(
++        sourceId, 'rendering', this.fontRenderingProfiles_ || []);
++  }
++
++  private isBuiltinFontPackId_(profileId: string): boolean {
++    return (this.fontPackProfiles_ || []).some(profile =>
++        Boolean(profile['builtin']) && String(profile['id'] || '') === profileId);
++  }
++
+   private isBuiltinFontRenderingId_(profileId: string): boolean {
+     return (this.fontRenderingProfiles_ || []).some(profile =>
+         Boolean(profile['builtin']) && String(profile['id'] || '') === profileId);
+   }
+ 
++  private makeCustomFontPackProfile_(
++      sourceProfile: Record<string, unknown>): Record<string, unknown> {
++    const profile = JSON.parse(JSON.stringify(sourceProfile || {}));
++    const sourceId = String(profile['id'] || 'font-pack');
++    profile['id'] = this.makeCustomFontPackId_(sourceId);
++    const displayName = String(profile['displayName'] || sourceId || 'Font pack');
++    profile['displayName'] = displayName.endsWith(' copy') ?
++        displayName : `${displayName} copy`;
++    profile['builtin'] = false;
++    profile['modified'] = true;
++    return profile;
++  }
++
+   private makeCustomFontRenderingProfile_(
+       sourceProfile: Record<string, unknown>): Record<string, unknown> {
+     const profile = JSON.parse(JSON.stringify(sourceProfile || {}));
+@@ -332,6 +378,24 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     return profile;
+   }
+ 
++  private normalizeFontPackProfile_(profile: Record<string, unknown>) {
++    profile['families'] = (profile['families'] as string[] || [])
++        .map(family => String(family).trim())
++        .filter(family => family.length > 0);
++    profile['aliases'] = (profile['aliases'] as string[] || [])
++        .map(alias => String(alias).trim())
++        .filter(alias => alias.length > 0);
++    profile['builtin'] = false;
++    profile['modified'] = true;
++    if (!profile['id'] || this.isBuiltinFontPackId_(String(profile['id']))) {
++      profile['id'] = this.makeCustomFontPackId_(
++          String(profile['id'] || 'font-pack'));
++      const displayName = String(profile['displayName'] || profile['id']);
++      profile['displayName'] = displayName.endsWith(' copy') ?
++          displayName : `${displayName} copy`;
++    }
++  }
++
+   private normalizeFontRenderingProfile_(profile: Record<string, unknown>) {
+     profile['textGamma'] = Number(profile['textGamma'] || 0);
+     profile['textContrast'] = Number(profile['textContrast'] || 0);
+@@ -356,6 +420,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     this.presets_ = state.presets || [];
+     this.personas_ = state.personas || [];
+     this.personaOptions_ = [...this.presets_, ...this.personas_];
++    this.fontPackProfiles_ = state.fontPackProfiles || [];
+     this.fontRenderingProfiles_ = state.fontRenderingProfiles || [];
+     this.activePersonaId_ = state.activePersonaId || state.activePersona?.id || '';
+     this.editablePersona_ = this.clonePersona_(editablePersona);
+@@ -375,6 +440,27 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     await this.reloadStateKeepingEditor_(editablePersona);
+   }
+ 
++  private async onSaveFontPackClick_() {
++    this.flushTextFieldsToEditablePersona_();
++    this.ensureEditableShape_(this.editablePersona_);
++    const profile = JSON.parse(JSON.stringify(this.editablePersona_.fonts));
++    this.normalizeFontPackProfile_(profile);
++    const editablePersona = this.clonePersona_(this.editablePersona_);
++    editablePersona.fonts = JSON.parse(JSON.stringify(profile));
++    await this.browserProxy_.saveFontPackProfile(profile);
++    await this.reloadStateKeepingEditor_(editablePersona);
++  }
++
++  private async onDeleteFontPackClick_(event: Event) {
++    const model = (event as CustomEvent).model;
++    const profile = model.profile as Record<string, unknown>;
++    if (profile['builtin']) {
++      return;
++    }
++    await this.browserProxy_.deleteFontPackProfile(String(profile['id'] || ''));
++    await this.loadState_();
++  }
++
+   private async onDeleteFontRenderingClick_(event: Event) {
+     const model = (event as CustomEvent).model;
+     const profile = model.profile as Record<string, unknown>;
+diff --git a/chrome/browser/ui/webui/settings/persona_handler.cc b/chrome/browser/ui/webui/settings/persona_handler.cc
+index 3396433e..c36d9758 100644
+--- a/chrome/browser/ui/webui/settings/persona_handler.cc
++++ b/chrome/browser/ui/webui/settings/persona_handler.cc
+@@ -45,6 +45,14 @@ void HeliumPersonaHandler::RegisterMessages() {
+       "deleteHeliumPersona",
+       base::BindRepeating(&HeliumPersonaHandler::HandleDeletePersona,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "saveHeliumFontPackProfile",
++      base::BindRepeating(&HeliumPersonaHandler::HandleSaveFontPackProfile,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "deleteHeliumFontPackProfile",
++      base::BindRepeating(&HeliumPersonaHandler::HandleDeleteFontPackProfile,
++                          base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
+       "saveHeliumFontRenderingProfile",
+       base::BindRepeating(
+@@ -133,6 +141,41 @@ void HeliumPersonaHandler::HandleDeletePersona(const base::ListValue& args) {
+   ResolveJavascriptCallback(base::Value(callback_id), base::Value(success));
+ }
+ 
++void HeliumPersonaHandler::HandleSaveFontPackProfile(
++    const base::ListValue& args) {
++  CHECK_EQ(2U, args.size());
++  const std::string& callback_id = args[0].GetString();
++  const base::Value::Dict* profile = args[1].GetIfDict();
++  if (!profile) {
++    AllowJavascript();
++    ResolveJavascriptCallback(base::Value(callback_id), base::Value(false));
++    return;
++  }
++
++  const bool success =
++      helium_persona::SaveFontPackProfile(*pref_service_, profile->Clone());
++  if (success) {
++    BroadcastActivePersonaSnapshot();
++  }
++  AllowJavascript();
++  ResolveJavascriptCallback(base::Value(callback_id), base::Value(success));
++}
++
++void HeliumPersonaHandler::HandleDeleteFontPackProfile(
++    const base::ListValue& args) {
++  CHECK_EQ(2U, args.size());
++  const std::string& callback_id = args[0].GetString();
++  const std::string& profile_id = args[1].GetString();
++
++  const bool success =
++      helium_persona::DeleteFontPackProfile(*pref_service_, profile_id);
++  if (success) {
++    BroadcastActivePersonaSnapshot();
++  }
++  AllowJavascript();
++  ResolveJavascriptCallback(base::Value(callback_id), base::Value(success));
++}
++
+ void HeliumPersonaHandler::HandleSaveFontRenderingProfile(
+     const base::ListValue& args) {
+   CHECK_EQ(2U, args.size());
+diff --git a/chrome/browser/ui/webui/settings/persona_handler.h b/chrome/browser/ui/webui/settings/persona_handler.h
+index ac1b13fb..cb754415 100644
+--- a/chrome/browser/ui/webui/settings/persona_handler.h
++++ b/chrome/browser/ui/webui/settings/persona_handler.h
+@@ -27,6 +27,8 @@ class HeliumPersonaHandler : public content::WebUIMessageHandler {
+   void HandleClonePreset(const base::ListValue& args);
+   void HandleSavePersona(const base::ListValue& args);
+   void HandleDeletePersona(const base::ListValue& args);
++  void HandleSaveFontPackProfile(const base::ListValue& args);
++  void HandleDeleteFontPackProfile(const base::ListValue& args);
+   void HandleSaveFontRenderingProfile(const base::ListValue& args);
+   void HandleDeleteFontRenderingProfile(const base::ListValue& args);
+   void BroadcastActivePersonaSnapshot();
+diff --git a/components/helium_persona/persona_prefs.cc b/components/helium_persona/persona_prefs.cc
+index daa228b2..032579a3 100644
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -264,6 +264,18 @@ base::Value::List CloneCustomFontRenderingProfiles(
+       prefs::kHeliumCustomFontRenderingProfiles).Clone();
+ }
+ 
++base::Value::List CloneCustomFontPackProfiles(
++    const PrefService& pref_service) {
++  return pref_service.GetList(prefs::kHeliumCustomFontPackProfiles).Clone();
++}
++
++bool CustomFontPackProfileIdExists(const PrefService& pref_service,
++                                   std::string_view profile_id) {
++  const base::Value::List& profiles =
++      pref_service.GetList(prefs::kHeliumCustomFontPackProfiles);
++  return FindPersonaInList(profiles, profile_id) != nullptr;
++}
++
+ bool CustomFontRenderingProfileIdExists(const PrefService& pref_service,
+                                         std::string_view profile_id) {
+   const base::Value::List& profiles =
+@@ -271,11 +283,29 @@ bool CustomFontRenderingProfileIdExists(const PrefService& pref_service,
+   return FindPersonaInList(profiles, profile_id) != nullptr;
+ }
+ 
++bool IsBuiltinFontPackProfileId(std::string_view profile_id) {
++  base::Value::List profiles = GetBuiltinFontPackProfiles();
++  return FindPersonaInList(profiles, profile_id) != nullptr;
++}
++
+ bool IsBuiltinFontRenderingProfileId(std::string_view profile_id) {
+   base::Value::List profiles = GetBuiltinFontRenderingProfiles();
+   return FindPersonaInList(profiles, profile_id) != nullptr;
+ }
+ 
++std::string MakeCustomFontPackProfileId(const PrefService& pref_service,
++                                        std::string_view profile_id) {
++  std::string base_id =
++      profile_id.empty() ? "font-pack" : std::string(profile_id);
++  std::string candidate = base::StringPrintf("custom-%s", base_id.c_str());
++  int suffix = 2;
++  while (IsBuiltinFontPackProfileId(candidate) ||
++         CustomFontPackProfileIdExists(pref_service, candidate)) {
++    candidate = base::StringPrintf("custom-%s-%d", base_id.c_str(), suffix++);
++  }
++  return candidate;
++}
++
+ std::string MakeCustomFontRenderingProfileId(const PrefService& pref_service,
+                                              std::string_view profile_id) {
+   std::string base_id = profile_id.empty() ? "rendering" : std::string(profile_id);
+@@ -288,6 +318,40 @@ std::string MakeCustomFontRenderingProfileId(const PrefService& pref_service,
+   return candidate;
+ }
+ 
++base::Value::List GetAllFontPackProfiles(const PrefService& pref_service) {
++  base::Value::List profiles;
++  for (const base::Value& value : GetBuiltinFontPackProfiles()) {
++    const base::Value::Dict* dict = value.GetIfDict();
++    if (!dict) {
++      continue;
++    }
++    base::Value::Dict profile = dict->Clone();
++    profile.Set("builtin", true);
++    profiles.Append(std::move(profile));
++  }
++  for (const base::Value& value :
++       pref_service.GetList(prefs::kHeliumCustomFontPackProfiles)) {
++    const base::Value::Dict* dict = value.GetIfDict();
++    if (!dict) {
++      continue;
++    }
++    const std::string id = GetProfileId(*dict);
++    if (id.empty()) {
++      continue;
++    }
++    base::Value::Dict custom = dict->Clone();
++    custom.Set("builtin", false);
++    custom.Set("modified", true);
++    base::Value::Dict* existing = FindPersonaInList(profiles, id);
++    if (existing && !IsBuiltinFontPackProfileId(id)) {
++      *existing = std::move(custom);
++    } else {
++      profiles.Append(std::move(custom));
++    }
++  }
++  return profiles;
++}
++
+ base::Value::List GetAllFontRenderingProfiles(const PrefService& pref_service) {
+   base::Value::List profiles;
+   for (const base::Value& value : GetBuiltinFontRenderingProfiles()) {
+@@ -327,6 +391,11 @@ bool HasProfileString(const base::Value::Dict& profile, const char* key) {
+   return value && !value->empty();
+ }
+ 
++bool HasProfileStringList(const base::Value::Dict& profile, const char* key) {
++  const base::Value::List* values = profile.FindList(key);
++  return values && !values->empty();
++}
++
+ bool FontRenderingProfileHasRequiredFields(const base::Value::Dict& profile) {
+   return HasProfileString(profile, "id") &&
+          HasProfileString(profile, "displayName") &&
+@@ -380,6 +449,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterStringPref(prefs::kHeliumActivePersonaId,
+                                kDefaultPresetId);
+   registry->RegisterListPref(prefs::kHeliumPersonaRecords);
++  registry->RegisterListPref(prefs::kHeliumCustomFontPackProfiles);
+   registry->RegisterListPref(prefs::kHeliumCustomFontRenderingProfiles);
+   registry->RegisterIntegerPref(prefs::kHeliumPersonaRevision, 1);
+   registry->RegisterBooleanPref(prefs::kHeliumPersonaLegacyFlagsMigrated,
+@@ -411,6 +481,9 @@ base::Value::Dict GetPersonaState(const PrefService& pref_service) {
+             pref_service.GetString(prefs::kHeliumActivePersonaId));
+   state.Set("presets", GetCompatibleBuiltinPersonaPresets());
+   state.Set("personas", CloneUserPersonas(pref_service));
++  state.Set("fontPackProfiles", GetAllFontPackProfiles(pref_service));
++  state.Set("customFontPackProfiles",
++            CloneCustomFontPackProfiles(pref_service));
+   state.Set("fontRenderingProfiles", GetAllFontRenderingProfiles(pref_service));
+   state.Set("customFontRenderingProfiles",
+             CloneCustomFontRenderingProfiles(pref_service));
+@@ -507,6 +580,72 @@ bool SavePersona(PrefService& pref_service, base::Value::Dict persona) {
+   return true;
+ }
+ 
++bool SaveFontPackProfile(PrefService& pref_service,
++                         base::Value::Dict profile) {
++  if (!HasProfileString(profile, "displayName") ||
++      !HasProfileStringList(profile, "families")) {
++    return false;
++  }
++
++  std::string id = GetProfileId(profile);
++  if (id.empty() || IsBuiltinFontPackProfileId(id)) {
++    id = MakeCustomFontPackProfileId(pref_service, id);
++    profile.Set("id", id);
++  }
++  if (!profile.FindList("aliases")) {
++    profile.Set("aliases", base::Value::List());
++  }
++  profile.Set("builtin", false);
++  profile.Set("modified", true);
++  profile.Set("updated", base::Time::Now().InMillisecondsFSinceUnixEpoch());
++
++  base::Value::List profiles = CloneCustomFontPackProfiles(pref_service);
++  bool replaced = false;
++  for (base::Value& entry : profiles) {
++    base::Value::Dict* dict = entry.GetIfDict();
++    if (dict && GetProfileId(*dict) == id) {
++      *dict = profile.Clone();
++      replaced = true;
++      break;
++    }
++  }
++  if (!replaced) {
++    profiles.Append(std::move(profile));
++  }
++
++  pref_service.SetList(prefs::kHeliumCustomFontPackProfiles,
++                       std::move(profiles));
++  pref_service.SetInteger(
++      prefs::kHeliumPersonaRevision,
++      pref_service.GetInteger(prefs::kHeliumPersonaRevision) + 1);
++  return true;
++}
++
++bool DeleteFontPackProfile(PrefService& pref_service,
++                           std::string_view profile_id) {
++  base::Value::List profiles = CloneCustomFontPackProfiles(pref_service);
++  bool removed = false;
++  for (auto it = profiles.begin(); it != profiles.end();) {
++    const base::Value::Dict* dict = it->GetIfDict();
++    const std::string* id = dict ? dict->FindString("id") : nullptr;
++    if (id && *id == profile_id) {
++      it = profiles.erase(it);
++      removed = true;
++    } else {
++      ++it;
++    }
++  }
++  if (!removed) {
++    return false;
++  }
++  pref_service.SetList(prefs::kHeliumCustomFontPackProfiles,
++                       std::move(profiles));
++  pref_service.SetInteger(
++      prefs::kHeliumPersonaRevision,
++      pref_service.GetInteger(prefs::kHeliumPersonaRevision) + 1);
++  return true;
++}
++
+ bool SaveFontRenderingProfile(PrefService& pref_service,
+                               base::Value::Dict profile) {
+   if (!HasProfileString(profile, "displayName") ||
+diff --git a/components/helium_persona/persona_prefs.h b/components/helium_persona/persona_prefs.h
+index bab0a69a..7f33f00b 100644
+--- a/components/helium_persona/persona_prefs.h
++++ b/components/helium_persona/persona_prefs.h
+@@ -39,6 +39,14 @@ bool SavePersona(PrefService& pref_service, base::Value::Dict persona);
+ COMPONENT_EXPORT(HELIUM_PERSONA)
+ bool DeletePersona(PrefService& pref_service, std::string_view persona_id);
+ 
++COMPONENT_EXPORT(HELIUM_PERSONA)
++bool SaveFontPackProfile(PrefService& pref_service,
++                         base::Value::Dict profile);
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
++bool DeleteFontPackProfile(PrefService& pref_service,
++                           std::string_view profile_id);
++
+ COMPONENT_EXPORT(HELIUM_PERSONA)
+ bool SaveFontRenderingProfile(PrefService& pref_service,
+                               base::Value::Dict profile);
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index 81d7b4c1..f2b56e5d 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -338,6 +338,78 @@ TEST(HeliumPersonaPrefsTest, SaveFontRenderingProfileCreatesIdWhenEmpty) {
+                                 "custom-rendering"));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, StateIncludesIndependentFontPackProfiles) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict state = GetPersonaState(prefs);
++  const base::Value::List* profiles = state.FindList("fontPackProfiles");
++  ASSERT_TRUE(profiles);
++  const size_t builtin_profile_count = GetBuiltinFontPackProfiles().size();
++  ASSERT_EQ(builtin_profile_count, profiles->size());
++  EXPECT_TRUE(ProfilesContainId(*profiles, "windows-11-core"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "macos-core"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "linux-core"));
++  ASSERT_TRUE(DictAt(*profiles, 0).FindBool("builtin").value_or(false));
++
++  base::Value::Dict custom;
++  custom.Set("id", "custom-cjk");
++  custom.Set("displayName", "Custom CJK fonts");
++  base::Value::List families;
++  families.Append("Noto Sans");
++  families.Append("Noto Sans CJK SC");
++  custom.Set("families", std::move(families));
++  base::Value::List aliases;
++  aliases.Append("sans-serif=Noto Sans");
++  aliases.Append("system-ui=Noto Sans CJK SC");
++  custom.Set("aliases", std::move(aliases));
++  EXPECT_TRUE(SaveFontPackProfile(prefs, std::move(custom)));
++
++  state = GetPersonaState(prefs);
++  profiles = state.FindList("fontPackProfiles");
++  ASSERT_TRUE(profiles);
++  ASSERT_EQ(builtin_profile_count + 1, profiles->size());
++  const base::Value::Dict& custom_profile =
++      DictAt(*profiles, builtin_profile_count);
++  EXPECT_EQ("custom-cjk", *custom_profile.FindString("id"));
++  EXPECT_FALSE(custom_profile.FindBool("builtin").value_or(true));
++
++  base::Value::Dict copied_builtin = DictAt(*profiles, 0).Clone();
++  copied_builtin.Set("displayName", "Copied Windows fonts");
++  EXPECT_TRUE(SaveFontPackProfile(prefs, std::move(copied_builtin)));
++  state = GetPersonaState(prefs);
++  profiles = state.FindList("fontPackProfiles");
++  ASSERT_TRUE(profiles);
++  ASSERT_EQ(builtin_profile_count + 2, profiles->size());
++  EXPECT_EQ("windows-11-core", *DictAt(*profiles, 0).FindString("id"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "custom-windows-11-core"));
++
++  EXPECT_TRUE(DeleteFontPackProfile(prefs, "custom-cjk"));
++  state = GetPersonaState(prefs);
++  profiles = state.FindList("fontPackProfiles");
++  ASSERT_TRUE(profiles);
++  EXPECT_EQ(builtin_profile_count + 1, profiles->size());
++  EXPECT_TRUE(ProfilesContainId(*profiles, "custom-windows-11-core"));
++  EXPECT_FALSE(ProfilesContainId(*profiles, "custom-cjk"));
++}
++
++TEST(HeliumPersonaPrefsTest, SaveFontPackProfileCreatesIdWhenEmpty) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict custom;
++  custom.Set("id", "");
++  custom.Set("displayName", "Manual font pack");
++  base::Value::List families;
++  families.Append("Arial");
++  custom.Set("families", std::move(families));
++  EXPECT_TRUE(SaveFontPackProfile(prefs, std::move(custom)));
++
++  base::Value::Dict state = GetPersonaState(prefs);
++  EXPECT_TRUE(ProfilesContainId(*state.FindList("fontPackProfiles"),
++                                "custom-font-pack"));
++}
++
+ TEST(HeliumPersonaPrefsTest, ValidationWarnsButAllowsConflicts) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);
+diff --git a/components/helium_persona/persona_presets.cc b/components/helium_persona/persona_presets.cc
+index 949e30b9..e27613be 100644
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -431,6 +431,77 @@ base::Value::Dict MakeGenericGrayRendering() {
+ 
+ }  // namespace
+ 
++base::Value::List GetBuiltinFontPackProfiles() {
++  base::Value::List profiles;
++  profiles.Append(MakeFontPack("windows-11-core", "Windows 11 core fonts",
++                               {"Arial", "Calibri", "Cambria", "Candara",
++                                "Consolas", "Georgia", "Segoe UI",
++                                "Times New Roman", "Verdana"},
++                               {"sans-serif=Arial",
++                                "serif=Times New Roman",
++                                "monospace=Consolas",
++                                "system-ui=Segoe UI"}));
++  profiles.Append(MakeFontPack(
++      "windows-zh-cn", "Windows Simplified Chinese fonts",
++      {"Arial", "Microsoft YaHei", "SimSun", "NSimSun", "DengXian",
++       "KaiTi", "FangSong", "Consolas", "Times New Roman"},
++      {"sans-serif=Microsoft YaHei", "serif=SimSun",
++       "monospace=Consolas", "system-ui=Microsoft YaHei"}));
++  profiles.Append(MakeFontPack("windows-ja-jp", "Windows Japanese fonts",
++                               {"Arial", "BIZ UD Gothic", "Consolas",
++                                "Meiryo", "MS Gothic", "MS Mincho",
++                                "Segoe UI", "Yu Gothic", "Yu Mincho"},
++                               {"sans-serif=Meiryo", "serif=Yu Mincho",
++                                "monospace=Consolas",
++                                "system-ui=Yu Gothic"}));
++  profiles.Append(MakeFontPack(
++      "windows-11-en-in", "Windows 11 Indian English fonts",
++      {"Arial", "Calibri", "Cambria", "Consolas", "Georgia", "Mangal",
++       "Nirmala UI", "Segoe UI", "Times New Roman", "Verdana"},
++      {"sans-serif=Arial", "serif=Times New Roman",
++       "monospace=Consolas", "system-ui=Segoe UI"}));
++  profiles.Append(MakeFontPack(
++      "macos-core", "macOS core fonts",
++      {"Arial", "Helvetica", "Helvetica Neue", "Menlo", "Monaco",
++       "New York", "SF Pro Display", "SF Pro Text", "Times"},
++      {"sans-serif=Helvetica", "serif=Times", "monospace=Menlo",
++       "system-ui=SF Pro Text"}));
++  profiles.Append(MakeFontPack(
++      "macos-zh-tw", "macOS Traditional Chinese fonts",
++      {"Arial", "Helvetica", "Helvetica Neue", "Menlo", "PingFang TC",
++       "SF Pro Display", "SF Pro Text", "Times"},
++      {"sans-serif=PingFang TC", "serif=Times", "monospace=Menlo",
++       "system-ui=PingFang TC"}));
++  profiles.Append(MakeFontPack(
++      "macos-ja-jp", "macOS Japanese fonts",
++      {"Arial", "Hiragino Kaku Gothic ProN", "Hiragino Mincho ProN",
++       "Helvetica", "Menlo", "SF Pro Text", "Times"},
++      {"sans-serif=Hiragino Kaku Gothic ProN",
++       "serif=Hiragino Mincho ProN", "monospace=Menlo",
++       "system-ui=SF Pro Text"}));
++  profiles.Append(MakeFontPack(
++      "linux-core", "Linux desktop fonts",
++      {"Arial", "Cantarell", "DejaVu Sans", "DejaVu Serif",
++       "Liberation Mono", "Liberation Sans", "Noto Sans", "Noto Serif",
++       "Ubuntu"},
++      {"sans-serif=Noto Sans", "serif=Noto Serif",
++       "monospace=Liberation Mono", "system-ui=Noto Sans"}));
++  profiles.Append(MakeFontPack(
++      "linux-noto", "Linux Noto fonts",
++      {"Cantarell", "DejaVu Sans", "DejaVu Serif", "Liberation Mono",
++       "Noto Color Emoji", "Noto Sans", "Noto Sans CJK SC",
++       "Noto Sans CJK TC", "Noto Serif", "Ubuntu"},
++      {"sans-serif=Noto Sans", "serif=Noto Serif",
++       "monospace=Liberation Mono", "system-ui=Noto Sans"}));
++  profiles.Append(MakeFontPack(
++      "linux-liberation", "Linux Liberation fonts",
++      {"DejaVu Sans", "DejaVu Serif", "Liberation Mono",
++       "Liberation Sans", "Liberation Serif", "Noto Sans"},
++      {"sans-serif=Liberation Sans", "serif=Liberation Serif",
++       "monospace=Liberation Mono", "system-ui=Noto Sans"}));
++  return profiles;
++}
++
+ base::Value::List GetBuiltinFontRenderingProfiles() {
+   base::Value::List profiles;
+   profiles.Append(MakeWindowsClearTypeRendering());
+diff --git a/components/helium_persona/persona_presets.h b/components/helium_persona/persona_presets.h
+index 14c04feb..a0acc0cd 100644
+--- a/components/helium_persona/persona_presets.h
++++ b/components/helium_persona/persona_presets.h
+@@ -15,6 +15,9 @@ inline constexpr char kDefaultPresetId[] = "preset-current-system";
+ COMPONENT_EXPORT(HELIUM_PERSONA)
+ base::Value::List GetBuiltinPersonaPresets();
+ 
++COMPONENT_EXPORT(HELIUM_PERSONA)
++base::Value::List GetBuiltinFontPackProfiles();
++
+ COMPONENT_EXPORT(HELIUM_PERSONA)
+ base::Value::List GetBuiltinFontRenderingProfiles();
+ 
+diff --git a/components/helium_persona/pref_names.h b/components/helium_persona/pref_names.h
+index c2662d13..d0f1cc6b 100644
+--- a/components/helium_persona/pref_names.h
++++ b/components/helium_persona/pref_names.h
+@@ -13,6 +13,9 @@ inline constexpr char kHeliumActivePersonaId[] =
+ inline constexpr char kHeliumPersonaRecords[] =
+     "helium.persona.records";
+ 
++inline constexpr char kHeliumCustomFontPackProfiles[] =
++    "helium.persona.custom_font_pack_profiles";
++
+ inline constexpr char kHeliumCustomFontRenderingProfiles[] =
+     "helium.persona.custom_font_rendering_profiles";
+ 

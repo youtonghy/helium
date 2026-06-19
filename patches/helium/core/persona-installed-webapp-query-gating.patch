@@ -1,0 +1,29 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 8a0c9b4a..6366242c 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -1017,6 +1017,13 @@ bool HeliumPersonaAllowsClipboard(content::BrowserContext* browser_context) {
+   return !snapshot.IsEnabled() || snapshot.allow_clipboard;
+ }
+ 
++bool HeliumPersonaAllowsInstalledAppQueries(
++    content::BrowserContext* browser_context) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshotForBrowserContext(browser_context);
++  return !snapshot.IsEnabled() || snapshot.allow_installed_apps;
++}
++
+ #if BUILDFLAG(IS_MAC)
+ constexpr char kSecurePaymentConfirmationKeychainAccessGroup[] =
+     MAC_TEAM_IDENTIFIER_STRING "." MAC_BUNDLE_IDENTIFIER_STRING
+@@ -9216,6 +9223,10 @@ void ChromeContentBrowserClient::QueryInstalledWebAppsByManifestId(
+         callback) {
+   Profile* profile = Profile::FromBrowserContext(browser_context);
+ 
++  if (!HeliumPersonaAllowsInstalledAppQueries(browser_context)) {
++    return std::move(callback).Run(std::nullopt);
++  }
++
+   if (!web_app::AreWebAppsEnabled(profile)) {
+     return std::move(callback).Run(std::nullopt);
+   }

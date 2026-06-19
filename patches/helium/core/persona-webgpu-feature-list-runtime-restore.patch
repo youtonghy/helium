@@ -1,0 +1,145 @@
+diff --git a/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc b/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
+index ba44a568..b3c5006e 100644
+--- a/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
++++ b/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
+@@ -34,12 +34,52 @@ namespace blink {
+ 
+ namespace {
+ 
++std::optional<V8GPUFeatureName::Enum> PersonaWebGPUFeatureEnum(
++    const String& feature) {
++  if (DeprecatedEqualIgnoringCase(feature, "depth32float-stencil8")) {
++    return V8GPUFeatureName::Enum::kDepth32FloatStencil8;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "texture-compression-bc")) {
++    return V8GPUFeatureName::Enum::kTextureCompressionBc;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "texture-compression-etc2")) {
++    return V8GPUFeatureName::Enum::kTextureCompressionEtc2;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "texture-compression-astc")) {
++    return V8GPUFeatureName::Enum::kTextureCompressionAstc;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "timestamp-query")) {
++    return V8GPUFeatureName::Enum::kTimestampQuery;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "texture-formats-tier1")) {
++    return V8GPUFeatureName::Enum::kTextureFormatsTier1;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "dual-source-blending")) {
++    return V8GPUFeatureName::Enum::kDualSourceBlending;
++  }
++  return std::nullopt;
++}
++
+ GPUSupportedFeatures* MakePersonaFeatureNameSet(
+-    const ExecutionContext* execution_context) {
++    const ExecutionContext* execution_context,
++    wgpu::Adapter adapter) {
+   GPUSupportedFeatures* features = MakeGarbageCollected<GPUSupportedFeatures>();
+-  if (!PersonaSpoofingHelper::Get(execution_context)) {
++  const HeliumPersonaSnapshot* snapshot =
++      PersonaSpoofingHelper::Get(execution_context);
++  if (!snapshot) {
+     return features;
+   }
++  for (const std::string& feature_name : snapshot->webgpu_features) {
++    auto feature_name_enum =
++        PersonaWebGPUFeatureEnum(String::FromUtf8(feature_name));
++    if (!feature_name_enum) {
++      continue;
++    }
++    V8GPUFeatureName feature(feature_name_enum.value());
++    if (adapter.HasFeature(AsDawnEnum(feature))) {
++      features->AddFeatureName(feature);
++    }
++  }
+   return features;
+ }
+ 
+@@ -140,7 +180,7 @@ GPUAdapter::GPUAdapter(
+   const bool use_persona_profile =
+       PersonaSpoofingHelper::IsEnabled(execution_context);
+   if (use_persona_profile) {
+-    features_ = MakePersonaFeatureNameSet(execution_context);
++    features_ = MakePersonaFeatureNameSet(execution_context, GetHandle());
+     subgroup_min_size_ = 0;
+     subgroup_max_size_ = 0;
+   } else {
+diff --git a/third_party/blink/renderer/modules/webgpu/gpu_device.cc b/third_party/blink/renderer/modules/webgpu/gpu_device.cc
+index a3013fc8..11bee410 100644
+--- a/third_party/blink/renderer/modules/webgpu/gpu_device.cc
++++ b/third_party/blink/renderer/modules/webgpu/gpu_device.cc
+@@ -55,12 +55,61 @@ namespace blink {
+ 
+ namespace {
+ 
++std::optional<V8GPUFeatureName::Enum> PersonaWebGPUFeatureEnum(
++    const String& feature) {
++  if (DeprecatedEqualIgnoringCase(feature, "depth32float-stencil8")) {
++    return V8GPUFeatureName::Enum::kDepth32FloatStencil8;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "texture-compression-bc")) {
++    return V8GPUFeatureName::Enum::kTextureCompressionBc;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "texture-compression-etc2")) {
++    return V8GPUFeatureName::Enum::kTextureCompressionEtc2;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "texture-compression-astc")) {
++    return V8GPUFeatureName::Enum::kTextureCompressionAstc;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "timestamp-query")) {
++    return V8GPUFeatureName::Enum::kTimestampQuery;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "texture-formats-tier1")) {
++    return V8GPUFeatureName::Enum::kTextureFormatsTier1;
++  }
++  if (DeprecatedEqualIgnoringCase(feature, "dual-source-blending")) {
++    return V8GPUFeatureName::Enum::kDualSourceBlending;
++  }
++  return std::nullopt;
++}
++
+ GPUSupportedFeatures* MakePersonaFeatureNameSet(
+-    const ExecutionContext* execution_context) {
++    const ExecutionContext* execution_context,
++    wgpu::Device device) {
+   GPUSupportedFeatures* features = MakeGarbageCollected<GPUSupportedFeatures>();
+-  if (!PersonaSpoofingHelper::Get(execution_context)) {
++  const HeliumPersonaSnapshot* snapshot =
++      PersonaSpoofingHelper::Get(execution_context);
++  if (!snapshot) {
+     return features;
+   }
++  wgpu::SupportedFeatures supported_features;
++  device.GetFeatures(&supported_features);
++  const auto supported_features_span =
++      UNSAFE_BUFFERS(base::span<const wgpu::FeatureName>(
++          supported_features.features, supported_features.featureCount));
++  for (const std::string& feature_name : snapshot->webgpu_features) {
++    auto feature_name_enum =
++        PersonaWebGPUFeatureEnum(String::FromUtf8(feature_name));
++    if (!feature_name_enum) {
++      continue;
++    }
++    V8GPUFeatureName feature(feature_name_enum.value());
++    const wgpu::FeatureName dawn_feature = AsDawnEnum(feature);
++    for (const wgpu::FeatureName supported_feature : supported_features_span) {
++      if (supported_feature == dawn_feature) {
++        features->AddFeatureName(feature);
++        break;
++      }
++    }
++  }
+   return features;
+ }
+ 
+@@ -199,7 +248,7 @@ void GPUDevice::Initialize(wgpu::Device handle,
+   const bool use_persona_profile =
+       PersonaSpoofingHelper::IsEnabled(GetExecutionContext());
+   if (use_persona_profile) {
+-    features_ = MakePersonaFeatureNameSet(GetExecutionContext());
++    features_ = MakePersonaFeatureNameSet(GetExecutionContext(), GetHandle());
+   } else {
+     wgpu::SupportedFeatures features;
+     GetHandle().GetFeatures(&features);

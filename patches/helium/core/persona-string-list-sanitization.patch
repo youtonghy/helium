@@ -1,0 +1,259 @@
+diff --git a/components/helium_persona/persona_prefs.cc b/components/helium_persona/persona_prefs.cc
+index 4467def6..dd92edaf 100644
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -282,35 +282,86 @@ bool HasNumericValue(const base::Value::Dict& dict, std::string_view key) {
+   return dict.FindDouble(key).has_value() || dict.FindInt(key).has_value();
+ }
+ 
+-bool HasStringListValue(const base::Value::Dict& dict, std::string_view key) {
++bool IsPersonaAsciiWhitespace(char value) {
++  return value == ' ' || value == '\t' || value == '\n' ||
++         value == '\r' || value == '\f' || value == '\v';
++}
++
++std::string TrimPersonaString(std::string_view value) {
++  size_t begin = 0;
++  while (begin < value.size() && IsPersonaAsciiWhitespace(value[begin])) {
++    ++begin;
++  }
++  size_t end = value.size();
++  while (end > begin && IsPersonaAsciiWhitespace(value[end - 1])) {
++    --end;
++  }
++  return std::string(value.substr(begin, end - begin));
++}
++
++base::Value::List CleanStringListValue(const base::Value::Dict& dict,
++                                       std::string_view key) {
++  base::Value::List clean;
+   const base::Value::List* list = dict.FindList(key);
+   if (!list) {
+-    return false;
++    return clean;
+   }
+   for (const base::Value& value : *list) {
+     const std::string* item = value.GetIfString();
+-    if (item && !item->empty()) {
+-      return true;
++    if (!item) {
++      continue;
++    }
++    std::string trimmed = TrimPersonaString(*item);
++    if (!trimmed.empty()) {
++      clean.Append(std::move(trimmed));
+     }
+   }
+-  return false;
++  return clean;
+ }
+ 
+-bool HasUaChBrandListValue(const base::Value::Dict& ua_ch) {
+-  const base::Value::List* brands = ua_ch.FindList("brands");
+-  if (!brands || brands->empty()) {
++bool CleanStringListField(base::Value::Dict& dict, std::string_view key) {
++  base::Value::List clean = CleanStringListValue(dict, key);
++  if (clean.empty()) {
+     return false;
+   }
++  dict.Set(key, std::move(clean));
++  return true;
++}
++
++base::Value::List CleanUaChBrandListValue(const base::Value::Dict& ua_ch) {
++  base::Value::List clean;
++  const base::Value::List* brands = ua_ch.FindList("brands");
++  if (!brands) {
++    return clean;
++  }
+   for (const base::Value& value : *brands) {
+     const base::Value::Dict* brand = value.GetIfDict();
+     const std::string* brand_name =
+         brand ? brand->FindString("brand") : nullptr;
+     const std::string* version =
+         brand ? brand->FindString("version") : nullptr;
+-    if (!brand_name || brand_name->empty() || !version || version->empty()) {
+-      return false;
++    if (!brand_name || !version) {
++      continue;
+     }
++    std::string clean_brand = TrimPersonaString(*brand_name);
++    std::string clean_version = TrimPersonaString(*version);
++    if (clean_brand.empty() || clean_version.empty()) {
++      continue;
++    }
++    base::Value::Dict clean_entry;
++    clean_entry.Set("brand", std::move(clean_brand));
++    clean_entry.Set("version", std::move(clean_version));
++    clean.Append(std::move(clean_entry));
++  }
++  return clean;
++}
++
++bool CleanUaChBrandListField(base::Value::Dict& ua_ch) {
++  base::Value::List clean = CleanUaChBrandListValue(ua_ch);
++  if (clean.empty()) {
++    return false;
+   }
++  ua_ch.Set("brands", std::move(clean));
+   return true;
+ }
+ 
+@@ -474,12 +525,12 @@ void EnsureUaChCompatibilityFields(base::Value::Dict& persona) {
+   EnsureString(*ua_ch, "architecture", "x86");
+   EnsureString(*ua_ch, "bitness", "64");
+   EnsureString(*ua_ch, "model", "");
+-  if (!HasUaChBrandListValue(*ua_ch)) {
++  if (!CleanUaChBrandListField(*ua_ch)) {
+     ua_ch->Set("brands", MakeDefaultUaChBrands());
+   }
+   EnsureString(*ua_ch, "fullVersion", "149.0.7827.114");
+   EnsureBool(*ua_ch, "wow64", false);
+-  if (!HasStringListValue(*ua_ch, "formFactors")) {
++  if (!CleanStringListField(*ua_ch, "formFactors")) {
+     ua_ch->Set("formFactors", MakeDefaultUaChFormFactors());
+   }
+   EnsureBool(*ua_ch, "mobile", false);
+@@ -495,7 +546,7 @@ void EnsureRegionCompatibilityFields(base::Value::Dict& persona) {
+   EnsureString(*region, "timezone", "America/New_York");
+   EnsureString(*region, "locale", "en-US");
+   EnsureString(*region, "acceptLanguage", "en-US,en;q=0.9");
+-  if (!HasStringListValue(*region, "navigatorLanguages")) {
++  if (!CleanStringListField(*region, "navigatorLanguages")) {
+     region->Set("navigatorLanguages", MakeDefaultNavigatorLanguages());
+   }
+ }
+@@ -529,10 +580,10 @@ void EnsureFontPackCompatibilityFields(base::Value::Dict& persona) {
+   }
+   EnsureString(*fonts, "id", "windows-11-core");
+   EnsureString(*fonts, "displayName", "Windows 11 core fonts");
+-  if (!HasStringListValue(*fonts, "families")) {
++  if (!CleanStringListField(*fonts, "families")) {
+     fonts->Set("families", MakeDefaultFontFamilies());
+   }
+-  if (!fonts->FindList("aliases")) {
++  if (!CleanStringListField(*fonts, "aliases")) {
+     fonts->Set("aliases", base::Value::List());
+   }
+ }
+@@ -697,7 +748,7 @@ void EnsureGpuCompatibilityFields(base::Value::Dict& persona) {
+   if (!gpu->FindDict("webgpuProfile")) {
+     gpu->Set("webgpuProfile", MakeDefaultWebGPUProfile());
+   }
+-  if (!HasStringListValue(*gpu, "webgpuFeatures")) {
++  if (!CleanStringListField(*gpu, "webgpuFeatures")) {
+     gpu->Set("webgpuFeatures", MakeDefaultWebGPUFeatures());
+   }
+ }
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index 9d16f75c..d1aa5e75 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -1003,6 +1003,107 @@ TEST(HeliumPersonaPrefsTest, SnapshotRoundTripsCompleteFields) {
+                   .value_or(false));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, SavePersonaSanitizesStringLists) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict persona = ClonePresetIntoProfile(
++      prefs, "preset-windows-11-en-us-new-york");
++  ASSERT_FALSE(persona.empty());
++
++  base::Value::Dict* ua_ch = persona.FindDict("uaCh");
++  ASSERT_TRUE(ua_ch);
++  base::Value::List brands;
++  base::Value::Dict chromium_brand;
++  chromium_brand.Set("brand", " Chromium ");
++  chromium_brand.Set("version", " 149 ");
++  brands.Append(std::move(chromium_brand));
++  base::Value::Dict bad_brand;
++  bad_brand.Set("brand", " ");
++  bad_brand.Set("version", "149");
++  brands.Append(std::move(bad_brand));
++  brands.Append(false);
++  ua_ch->Set("brands", std::move(brands));
++  base::Value::List form_factors;
++  form_factors.Append(" Desktop ");
++  form_factors.Append("");
++  form_factors.Append(17);
++  ua_ch->Set("formFactors", std::move(form_factors));
++
++  base::Value::Dict* region = persona.FindDict("region");
++  ASSERT_TRUE(region);
++  base::Value::List languages;
++  languages.Append(" en-US ");
++  languages.Append(" ");
++  languages.Append(false);
++  languages.Append("en");
++  region->Set("navigatorLanguages", std::move(languages));
++
++  base::Value::Dict* gpu = persona.FindDict("gpu");
++  ASSERT_TRUE(gpu);
++  base::Value::List features;
++  features.Append(" texture-compression-bc ");
++  features.Append("");
++  features.Append(3);
++  gpu->Set("webgpuFeatures", std::move(features));
++
++  base::Value::Dict* fonts = persona.FindDict("fonts");
++  ASSERT_TRUE(fonts);
++  base::Value::List families;
++  families.Append(" Arial ");
++  families.Append(" ");
++  families.Append(false);
++  families.Append("Segoe UI");
++  fonts->Set("families", std::move(families));
++  base::Value::List aliases;
++  aliases.Append(" sans-serif=Arial ");
++  aliases.Append("");
++  aliases.Append(false);
++  fonts->Set("aliases", std::move(aliases));
++
++  EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
++  base::Value::Dict active = GetActivePersona(prefs);
++
++  const base::Value::List* saved_brands =
++      active.FindDict("uaCh")->FindList("brands");
++  ASSERT_TRUE(saved_brands);
++  ASSERT_EQ(1u, saved_brands->size());
++  EXPECT_EQ("Chromium", *DictAt(*saved_brands, 0).FindString("brand"));
++  EXPECT_EQ("149", *DictAt(*saved_brands, 0).FindString("version"));
++
++  const base::Value::List* saved_form_factors =
++      active.FindDict("uaCh")->FindList("formFactors");
++  ASSERT_TRUE(saved_form_factors);
++  ASSERT_EQ(1u, saved_form_factors->size());
++  EXPECT_EQ("Desktop", (*saved_form_factors)[0].GetString());
++
++  const base::Value::List* saved_languages =
++      active.FindDict("region")->FindList("navigatorLanguages");
++  ASSERT_TRUE(saved_languages);
++  ASSERT_EQ(2u, saved_languages->size());
++  EXPECT_EQ("en-US", (*saved_languages)[0].GetString());
++  EXPECT_EQ("en", (*saved_languages)[1].GetString());
++
++  const base::Value::List* saved_features =
++      active.FindDict("gpu")->FindList("webgpuFeatures");
++  ASSERT_TRUE(saved_features);
++  ASSERT_EQ(1u, saved_features->size());
++  EXPECT_EQ("texture-compression-bc", (*saved_features)[0].GetString());
++
++  const base::Value::List* saved_families =
++      active.FindDict("fonts")->FindList("families");
++  ASSERT_TRUE(saved_families);
++  ASSERT_EQ(2u, saved_families->size());
++  EXPECT_EQ("Arial", (*saved_families)[0].GetString());
++  EXPECT_EQ("Segoe UI", (*saved_families)[1].GetString());
++
++  const base::Value::List* saved_aliases =
++      active.FindDict("fonts")->FindList("aliases");
++  ASSERT_TRUE(saved_aliases);
++  ASSERT_EQ(1u, saved_aliases->size());
++  EXPECT_EQ("sans-serif=Arial", (*saved_aliases)[0].GetString());
++}
++
+ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);

@@ -1,0 +1,26 @@
+diff --git a/third_party/blink/renderer/core/loader/frame_fetch_context.cc b/third_party/blink/renderer/core/loader/frame_fetch_context.cc
+index 8606f70..0f2a3a1 100644
+--- a/third_party/blink/renderer/core/loader/frame_fetch_context.cc
++++ b/third_party/blink/renderer/core/loader/frame_fetch_context.cc
+@@ -1509,6 +1509,21 @@ String FrameFetchContext::GetReducedAcceptLanguage() const {
+   String override_accept_language;
+   probe::ApplyAcceptLanguageOverride(Probe(), &override_accept_language);
+   if (override_accept_language.empty()) {
++    if (const HeliumPersonaSnapshot* snapshot =
++            PersonaSpoofingHelper::Get(GetExecutionContext())) {
++      if (!snapshot->accept_language.empty()) {
++        return String::FromUtf8(snapshot->accept_language);
++      }
++      if (!snapshot->navigator_languages.empty()) {
++        return network_utils::GenerateAcceptLanguageHeader(String::FromUtf8(
++            base::JoinString(snapshot->navigator_languages, ",")));
++      }
++      if (!snapshot->locale.empty()) {
++        return network_utils::GenerateAcceptLanguageHeader(
++            String::FromUtf8(snapshot->locale));
++      }
++    }
++
+     String expanded_language = network_utils::ExpandLanguageList(
+         frame->GetReducedAcceptLanguage().GetString());
+     return network_utils::GenerateAcceptLanguageHeader(expanded_language);

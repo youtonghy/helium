@@ -1,0 +1,49 @@
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
+@@ -72,6 +72,8 @@
+       const ExecutionContext* context);
+   static std::optional<unsigned> ScreenPixelDepth(
+       const ExecutionContext* context);
++  static std::optional<float> ScreenRefreshRate(
++      const ExecutionContext* context);
+ 
+   static std::optional<String> WebGLVendor(const ExecutionContext* context);
+   static std::optional<String> WebGLRenderer(const ExecutionContext* context);
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
+@@ -427,6 +427,15 @@
+   return snapshot ? PositiveUnsigned(snapshot->pixel_depth) : std::nullopt;
+ }
+ 
++std::optional<float> PersonaSpoofingHelper::ScreenRefreshRate(
++    const ExecutionContext* context) {
++  const HeliumPersonaSnapshot* snapshot = Get(context);
++  if (!snapshot || snapshot->refresh_rate <= 0) {
++    return std::nullopt;
++  }
++  return static_cast<float>(snapshot->refresh_rate);
++}
++
+ std::optional<String> PersonaSpoofingHelper::WebGLVendor(
+     const ExecutionContext* context) {
+   const HeliumPersonaSnapshot* snapshot = Get(context);
+--- a/third_party/blink/renderer/modules/screen_details/screen_details.cc
++++ b/third_party/blink/renderer/modules/screen_details/screen_details.cc
+@@ -41,6 +41,8 @@
+       PersonaSpoofingHelper::DeviceScaleFactor(window).value_or(1.0);
+   const unsigned color_depth =
+       PersonaSpoofingHelper::ScreenColorDepth(window).value_or(24u);
++  const float refresh_rate =
++      PersonaSpoofingHelper::ScreenRefreshRate(window).value_or(0.f);
+ 
+   info.display_id = display::kDefaultDisplayId;
+   info.rect = gfx::Rect(0, 0, width, height);
+@@ -53,7 +55,7 @@
+   info.is_primary = true;
+   info.is_internal = false;
+   info.label.clear();
+-  info.display_frequency = 0.f;
++  info.display_frequency = refresh_rate;
+ 
+   display::ScreenInfos persona_infos(info);
+   persona_infos.current_display_id = info.display_id;

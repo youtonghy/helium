@@ -1,0 +1,27 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -3459,6 +3459,9 @@
+   blink::HeliumPersonaSnapshot snapshot =
+       GetHeliumPersonaSnapshotForBrowserContext(context);
+   if (snapshot.IsEnabled()) {
++    if (!snapshot.accept_language.empty()) {
++      return snapshot.accept_language;
++    }
+     if (!snapshot.navigator_languages.empty()) {
+       return base::JoinString(snapshot.navigator_languages, ",");
+     }
+diff --git a/chrome/browser/renderer_preferences_util.cc b/chrome/browser/renderer_preferences_util.cc
+--- a/chrome/browser/renderer_preferences_util.cc
++++ b/chrome/browser/renderer_preferences_util.cc
+@@ -252,7 +252,9 @@
+     prefs->webrtc_ip_handling_urls.clear();
+     prefs->webrtc_local_ips_allowed_urls.clear();
+ 
+-    if (!persona_snapshot.navigator_languages.empty()) {
++    if (!persona_snapshot.accept_language.empty()) {
++      prefs->accept_languages = persona_snapshot.accept_language;
++    } else if (!persona_snapshot.navigator_languages.empty()) {
+       prefs->accept_languages =
+           base::JoinString(persona_snapshot.navigator_languages, ",");
+     } else if (!persona_snapshot.locale.empty()) {

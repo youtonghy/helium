@@ -1,0 +1,108 @@
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
+@@ -53,7 +53,8 @@
+   static std::optional<String> WebGPUAdapter(const ExecutionContext* context);
+   static std::optional<String> GPUDriver(const ExecutionContext* context);
+   static Vector<String> FontFamilies(const ExecutionContext* context);
+-  static bool IsVirtualFontPostscriptName(const String& postscript_name);
++  static bool IsVirtualFontPostscriptName(const ExecutionContext* context,
++                                          const String& postscript_name);
+ };
+ 
+ }  // namespace blink
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
+@@ -30,6 +30,33 @@
+   return static_cast<unsigned>(value);
+ }
+ 
++std::string MakePersonaPostscriptName(const std::string& family) {
++  std::string postscript_name;
++  for (char c : family) {
++    switch (c) {
++      case ' ':
++      case '-':
++      case '_':
++      case '.':
++      case ',':
++      case '(':
++      case ')':
++      case '[':
++      case ']':
++      case '{':
++      case '}':
++        break;
++      default:
++        postscript_name.push_back(c);
++        break;
++    }
++  }
++  if (postscript_name.empty()) {
++    return "SystemRegular";
++  }
++  return postscript_name + "-Regular";
++}
++
+ }  // namespace
+ 
+ const HeliumPersonaSnapshot* PersonaSpoofingHelper::Get(
+@@ -244,8 +271,20 @@
+ }
+ 
+ bool PersonaSpoofingHelper::IsVirtualFontPostscriptName(
++    const ExecutionContext* context,
+     const String& postscript_name) {
+-  return postscript_name.starts_with("HeliumPersona-");
++  const HeliumPersonaSnapshot* snapshot = Get(context);
++  if (!snapshot || postscript_name.empty()) {
++    return false;
++  }
++
++  const std::string target = postscript_name.Utf8();
++  for (const std::string& family : snapshot->font_families) {
++    if (!family.empty() && MakePersonaPostscriptName(family) == target) {
++      return true;
++    }
++  }
++  return false;
+ }
+ 
+ }  // namespace blink
+--- a/third_party/blink/renderer/modules/font_access/DEPS
++++ b/third_party/blink/renderer/modules/font_access/DEPS
+@@ -3,6 +3,7 @@
+     "+base/big_endian.h",
+     "+base/memory/read_only_shared_memory_region.h",
+     "+third_party/blink/renderer/modules/event_target_modules.h",
++    "+third_party/blink/renderer/core/helium_persona",
+     "+third_party/blink/renderer/modules/font_access",
+     "+third_party/blink/renderer/modules/modules_export.h",
+ ]
+--- a/third_party/blink/renderer/modules/font_access/font_metadata.cc
++++ b/third_party/blink/renderer/modules/font_access/font_metadata.cc
+@@ -11,7 +11,9 @@
+ #include "base/numerics/safe_conversions.h"
+ #include "build/build_config.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/fileapi/blob.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/platform/bindings/script_state.h"
+ #include "third_party/blink/renderer/platform/fonts/font_cache.h"
+ #include "third_party/blink/renderer/platform/fonts/font_global_context.h"
+@@ -72,6 +74,15 @@
+   if (!resolver->GetScriptState()->ContextIsValid())
+     return;
+ 
++  if (PersonaSpoofingHelper::IsVirtualFontPostscriptName(
++          ExecutionContext::From(resolver->GetScriptState()), postscriptName)) {
++    ScriptState::Scope scope(resolver->GetScriptState());
++    resolver->Reject(V8ThrowException::CreateTypeError(
++        resolver->GetScriptState()->GetIsolate(),
++        "Font data is unavailable for virtual persona fonts."));
++    return;
++  }
++
+   SetUpFontUniqueLookupIfNecessary();
+ 
+   FontDescription description;

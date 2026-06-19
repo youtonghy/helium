@@ -1,0 +1,158 @@
+--- a/content/public/browser/web_contents.h
++++ b/content/public/browser/web_contents.h
+@@ -82,6 +82,7 @@
+ struct Impression;
+ struct UserAgentOverride;
+ struct RendererPreferences;
++struct HeliumPersonaSnapshot;
+ }  // namespace blink
+ 
+ namespace cc {
+@@ -497,6 +498,12 @@
+   // See docs/frame_trees.md for more details.
+   virtual const RenderFrameHost* GetPrimaryMainFrame() const = 0;
+   virtual RenderFrameHost* GetPrimaryMainFrame() = 0;
++
++  // Pushes a refreshed Helium persona snapshot into all renderer-side Page
++  // objects for this tab. Used after settings changes so already-open pages do
++  // not keep stale web-exposed persona values until the next navigation.
++  virtual void UpdateHeliumPersonaSnapshot(
++      const blink::HeliumPersonaSnapshot& snapshot) = 0;
+ 
+   // Returns the current page in the primary frame tree of this WebContents.
+   // If this WebContents is associated with an omnibox, usually the URL of the
+--- a/content/browser/web_contents/web_contents_impl.h
++++ b/content/browser/web_contents/web_contents_impl.h
+@@ -408,6 +408,8 @@
+   const RenderFrameHostImpl* GetPrimaryMainFrame() const override;
+   RenderFrameHostImpl* GetPrimaryMainFrame() override;
+   PageImpl& GetPrimaryPage() override;
++  void UpdateHeliumPersonaSnapshot(
++      const blink::HeliumPersonaSnapshot& snapshot) override;
+   RenderFrameHostImpl* GetFocusedFrame() override;
+   bool IsPrerenderedFrame(FrameTreeNodeId frame_tree_node_id) override;
+   RenderFrameHostImpl* UnsafeFindFrameByFrameTreeNodeId(
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -197,6 +197,7 @@
+ #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
+ #include "third_party/blink/public/common/custom_handlers/protocol_handler_utils.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/loader/resource_type_util.h"
+ #include "third_party/blink/public/common/mime_util/mime_util.h"
+ #include "third_party/blink/public/common/page/content_to_visible_time_request.h"
+@@ -2119,6 +2120,20 @@
+   return GetPrimaryPage().background_color();
+ }
+ 
++void WebContentsImpl::UpdateHeliumPersonaSnapshot(
++    const blink::HeliumPersonaSnapshot& snapshot) {
++  ForEachFrameTree([&snapshot](FrameTree& frame_tree) {
++    frame_tree.root()->current_frame_host()->GetPage().set_persona_snapshot(
++        snapshot);
++    frame_tree.root()->render_manager()->ExecutePageBroadcastMethod(
++        [&snapshot](RenderViewHostImpl* rvh) {
++          if (auto& broadcast = rvh->GetAssociatedPageBroadcast()) {
++            broadcast->UpdateHeliumPersonaSnapshot(snapshot);
++          }
++        });
++  });
++}
++
+ void WebContentsImpl::SetPageBaseBackgroundColor(std::optional<SkColor> color) {
+   if (page_base_background_color_ == color) {
+     return;
+--- a/chrome/browser/ui/webui/settings/persona_handler.h
++++ b/chrome/browser/ui/webui/settings/persona_handler.h
+@@ -27,7 +27,9 @@
+   void HandleClonePreset(const base::ListValue& args);
+   void HandleSavePersona(const base::ListValue& args);
+   void HandleDeletePersona(const base::ListValue& args);
++  void BroadcastActivePersonaSnapshot();
+ 
++  raw_ptr<Profile> profile_ = nullptr;
+   raw_ptr<PrefService> pref_service_ = nullptr;
+ };
+ 
+--- a/chrome/browser/ui/webui/settings/persona_handler.cc
++++ b/chrome/browser/ui/webui/settings/persona_handler.cc
+@@ -10,11 +10,17 @@
+ #include "base/functional/bind.h"
+ #include "base/values.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
+ #include "components/helium_persona/persona_prefs.h"
+ #include "components/prefs/pref_service.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/content_browser_client.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/common/content_client.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ 
+ HeliumPersonaHandler::HeliumPersonaHandler(Profile* profile)
+-    : pref_service_(profile->GetPrefs()) {}
++    : profile_(profile), pref_service_(profile->GetPrefs()) {}
+ 
+ HeliumPersonaHandler::~HeliumPersonaHandler() = default;
+ 
+@@ -58,6 +64,10 @@
+ 
+   const bool success =
+       helium_persona::SetActivePersona(*pref_service_, persona_id);
++  if (success) {
++    BroadcastActivePersonaSnapshot();
++  }
++
+   AllowJavascript();
+   ResolveJavascriptCallback(base::Value(callback_id), base::Value(success));
+ }
+@@ -69,6 +79,10 @@
+ 
+   base::Value::Dict persona =
+       helium_persona::ClonePresetIntoProfile(*pref_service_, preset_id);
++  if (!persona.empty()) {
++    BroadcastActivePersonaSnapshot();
++  }
++
+   AllowJavascript();
+   ResolveJavascriptCallback(base::Value(callback_id),
+                             base::Value(std::move(persona)));
+@@ -86,6 +100,10 @@
+ 
+   const bool success =
+       helium_persona::SavePersona(*pref_service_, persona->Clone());
++  if (success) {
++    BroadcastActivePersonaSnapshot();
++  }
++
+   AllowJavascript();
+   ResolveJavascriptCallback(base::Value(callback_id), base::Value(success));
+ }
+@@ -97,6 +115,26 @@
+ 
+   const bool success =
+       helium_persona::DeletePersona(*pref_service_, persona_id);
++  if (success) {
++    BroadcastActivePersonaSnapshot();
++  }
++
+   AllowJavascript();
+   ResolveJavascriptCallback(base::Value(callback_id), base::Value(success));
+ }
++
++void HeliumPersonaHandler::BroadcastActivePersonaSnapshot() {
++  blink::HeliumPersonaSnapshot snapshot =
++      content::GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++          profile_);
++
++  tabs::ForEachTabInterface([this, &snapshot](tabs::TabInterface* tab) {
++    if (tab->GetProfile() != profile_) {
++      return true;
++    }
++    if (content::WebContents* contents = tab->GetContents()) {
++      contents->UpdateHeliumPersonaSnapshot(snapshot);
++    }
++    return true;
++  });
++}

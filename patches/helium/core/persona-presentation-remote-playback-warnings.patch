@@ -1,0 +1,80 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -363,6 +363,8 @@ export class SettingsPersonaPageElement extends SettingsPersonaPageElementBase {
+     const allowShapeDetection = Boolean(advanced['allowShapeDetection']);
+     const allowWebSockets = Boolean(advanced['allowWebSockets']);
+     const allowWebTransport = Boolean(advanced['allowWebTransport']);
++    const allowPresentationApis = Boolean(advanced['allowPresentationApis']);
++    const allowRemotePlayback = Boolean(advanced['allowRemotePlayback']);
+     const speechVoiceName = String(advanced['speechVoiceName'] || '');
+     const speechVoiceLang = String(advanced['speechVoiceLang'] || '');
+     const speechVoiceUri = String(advanced['speechVoiceUri'] || '');
+@@ -881,7 +883,17 @@ export class SettingsPersonaPageElement extends SettingsPersonaPageElementBase {
+       this.addDraftWarning_(
+           warnings,
+           'allowShapeDetection exposes barcode, face, and text detection service bindings.');
++    }
++    if (allowPresentationApis) {
++      this.addDraftWarning_(
++          warnings,
++          'allowPresentationApis exposes presentation display discovery and remote display session APIs.');
+     }
++    if (allowRemotePlayback) {
++      this.addDraftWarning_(
++          warnings,
++          'allowRemotePlayback exposes remote media playback device discovery and session APIs.');
++    }
+     if (!allowWebSockets) {
+       this.addDraftWarning_(
+           warnings,
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -1307,6 +1307,8 @@ TEST(PersonaPrefsTest, ValidationWarnsOnInconsistentManualProfiles) {
+   EXPECT_TRUE(WarningsContain(warnings, "allowLocalNetworkApis exposes"));
+   EXPECT_TRUE(WarningsContain(warnings, "allowWebNfc exposes"));
+   EXPECT_TRUE(WarningsContain(warnings, "allowWindowManagement exposes"));
++  EXPECT_TRUE(WarningsContain(warnings, "allowPresentationApis exposes"));
++  EXPECT_TRUE(WarningsContain(warnings, "allowRemotePlayback exposes"));
+   EXPECT_TRUE(WarningsContain(warnings, "allowInstalledApps exposes"));
+   EXPECT_TRUE(WarningsContain(warnings, "allowManagedDevice exposes"));
+   EXPECT_TRUE(WarningsContain(warnings, "allowPaymentHandler exposes"));
+@@ -1340,7 +1342,6 @@ TEST(PersonaPrefsTest, ValidationWarnsOnInconsistentManualProfiles) {
+   EXPECT_TRUE(WarningsContain(warnings, "allowShapeDetection exposes"));
+   EXPECT_TRUE(WarningsContain(warnings, "Disabling allowWebSockets"));
+   EXPECT_TRUE(WarningsContain(warnings, "Disabling allowWebTransport"));
+-  EXPECT_TRUE(WarningsContain(warnings, "Remote Playback reuses"));
+   EXPECT_TRUE(WarningsContain(warnings, "maxTouchPoints should be 0"));
+   EXPECT_TRUE(WarningsContain(warnings, "CoreText font rendering"));
+   EXPECT_FALSE(WarningsContain(warnings, "Retina macOS personas"));
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -713,6 +713,10 @@ std::vector<ValidationIssue> ValidatePersona(const base::Value::Dict& persona) {
+       GetNestedBool(persona, "advanced", "allowWebNfc");
+   const bool allow_window_management =
+       GetNestedBool(persona, "advanced", "allowWindowManagement");
++  const bool allow_presentation_apis =
++      GetNestedBool(persona, "advanced", "allowPresentationApis");
++  const bool allow_remote_playback =
++      GetNestedBool(persona, "advanced", "allowRemotePlayback");
+   const bool allow_installed_apps =
+       GetNestedBool(persona, "advanced", "allowInstalledApps");
+   const bool allow_managed_device =
+@@ -1209,7 +1213,15 @@ std::vector<ValidationIssue> ValidatePersona(const base::Value::Dict& persona) {
+   if (allow_window_management) {
+     AddWarning(warnings,
+                "allowWindowManagement exposes multi-screen and window placement APIs.");
++  }
++  if (allow_presentation_apis) {
++    AddWarning(warnings,
++               "allowPresentationApis exposes presentation display discovery and remote display session APIs.");
+   }
++  if (allow_remote_playback) {
++    AddWarning(warnings,
++               "allowRemotePlayback exposes remote media playback device discovery and session APIs.");
++  }
+   if (allow_installed_apps) {
+     AddWarning(warnings,
+                "allowInstalledApps exposes installed app discovery service bindings.");

@@ -1,0 +1,465 @@
+diff --git a/content/browser/renderer_host/navigation_request.cc b/content/browser/renderer_host/navigation_request.cc
+index 29e5b43..6f3270c 100644
+--- a/content/browser/renderer_host/navigation_request.cc
++++ b/content/browser/renderer_host/navigation_request.cc
+@@ -150,6 +150,7 @@
+ #include "content/public/common/origin_util.h"
+ #include "content/public/common/url_constants.h"
+ #include "content/public/common/url_utils.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/system/data_pipe.h"
+ #include "net/base/features.h"
+@@ -1007,6 +1008,15 @@ network::mojom::WebSandboxFlags GetSandboxFlagsInitiator(
+ bool IsSharedStorageWritableEligibleForNavigationRequest(
+     FrameTreeNode* frame_tree_node,
+     const GURL& url) {
++  BrowserContext* browser_context =
++      frame_tree_node->navigator().controller().GetBrowserContext();
++  blink::HeliumPersonaSnapshot persona_snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
++  if (persona_snapshot.IsEnabled() &&
++      !persona_snapshot.allow_privacy_sandbox_apis) {
++    return false;
++  }
++
+   // False if the <iframe> does not have the "sharedstoragewritable" opt-in
+   // attribute.
+   if (!frame_tree_node->shared_storage_writable_opted_in()) {
+diff --git a/content/browser/renderer_host/render_frame_host_impl.cc b/content/browser/renderer_host/render_frame_host_impl.cc
+index 476edd0..0d9f090 100644
+--- a/content/browser/renderer_host/render_frame_host_impl.cc
++++ b/content/browser/renderer_host/render_frame_host_impl.cc
+@@ -238,6 +238,7 @@
+ #include "content/public/common/referrer_type_converters.h"
+ #include "content/public/common/url_constants.h"
+ #include "content/public/common/url_utils.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "ipc/constants.mojom.h"
+ #include "media/base/media_switches.h"
+ #include "media/media_buildflags.h"
+@@ -943,6 +944,13 @@ bool IsWindowManagementGranted(RenderFrameHost* host) {
+              host) == blink::mojom::PermissionStatus::GRANTED;
+ }
+ 
++bool HeliumPersonaAllowsPrivacySandboxApis(RenderFrameHostImpl* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++          host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_privacy_sandbox_apis;
++}
++
+ bool IsOpenGraphMetadataValid(const blink::mojom::OpenGraphMetadata* metadata) {
+   return !metadata->image || metadata->image->SchemeIsHTTPOrHTTPS();
+ }
+@@ -10462,6 +10470,10 @@ void RenderFrameHostImpl::SendLegacyTechEvent(
+ 
+ void RenderFrameHostImpl::SendPrivateAggregationRequestsForFencedFrameEvent(
+     const std::string& event_type) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(this)) {
++    return;
++  }
++
+   if (!base::FeatureList::IsEnabled(blink::features::kPrivateAggregationApi) ||
+       !blink::features::kPrivateAggregationApiEnabledInProtectedAudience
+            .Get()) {
+@@ -10564,6 +10576,10 @@ void RenderFrameHostImpl::CreateFencedFrame(
+     blink::mojom::RemoteFrameInterfacesFromRendererPtr remote_frame_interfaces,
+     const blink::RemoteFrameToken& frame_token,
+     const base::UnguessableToken& devtools_frame_token) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(this)) {
++    return;
++  }
++
+   // We should defer fenced frame creation during prerendering, so creation at
+   // this point is an error.
+   if (GetLifecycleState() == RenderFrameHost::LifecycleState::kPrerendering) {
+@@ -10633,6 +10649,10 @@ void RenderFrameHostImpl::SendFencedFrameReportingBeacon(
+     const std::string& event_type,
+     const std::vector<blink::FencedFrame::ReportingDestination>& destinations,
+     bool cross_origin_exposed) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(this)) {
++    return;
++  }
++
+   if (!IsFencedFrameReportingFromRendererAllowed(cross_origin_exposed)) {
+     return;
+   }
+@@ -10663,6 +10683,10 @@ void RenderFrameHostImpl::SendFencedFrameReportingBeacon(
+ void RenderFrameHostImpl::SendFencedFrameReportingBeaconToCustomURL(
+     const GURL& destination_url,
+     bool cross_origin_exposed) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(this)) {
++    return;
++  }
++
+   if (!destination_url.is_valid() ||
+       !destination_url.SchemeIs(url::kHttpsScheme)) {
+     mojo::ReportBadMessage(
+@@ -10683,6 +10707,10 @@ void RenderFrameHostImpl::SendFencedFrameReportingBeaconToCustomURL(
+ void RenderFrameHostImpl::MaybeSendFencedFrameAutomaticReportingBeacon(
+     NavigationRequest& navigation_request,
+     blink::mojom::AutomaticBeaconType event_type) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(this)) {
++    return;
++  }
++
+   if (!blink::features::IsFencedFramesEnabled()) {
+     return;
+   }
+@@ -10895,6 +10923,10 @@ void RenderFrameHostImpl::SetFencedFrameAutomaticBeaconReportEventData(
+     const std::vector<blink::FencedFrame::ReportingDestination>& destinations,
+     bool once,
+     bool cross_origin_exposed) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(this)) {
++    return;
++  }
++
+   if (!blink::features::IsFencedFramesEnabled()) {
+     mojo::ReportBadMessage(
+         "SetFencedFrameAutomaticBeaconReportEventData() received while "
+diff --git a/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc b/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc
+index 72baffb..405764c 100644
+--- a/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc
++++ b/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc
+@@ -42,6 +42,7 @@
+ #include "services/service_manager/public/mojom/interface_provider.mojom.h"
+ #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/mojom/blob/blob_url_store.mojom.h"
+ #include "third_party/blink/public/mojom/blob/file_backed_blob_factory.mojom.h"
+ #include "third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom.h"
+@@ -55,6 +56,13 @@ namespace content {
+ 
+ namespace {
+ 
++bool HeliumPersonaAllowsPrivacySandboxApis(RenderFrameHostImpl* impl) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++          impl ? impl->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_privacy_sandbox_apis;
++}
++
+ // This class is used to chain multiple mojo::MessageFilter. Messages will be
+ // processed by the filters in the same order as the filters are added with the
+ // Add() method. WillDispatch() might not be called for all filters or might see
+@@ -221,6 +229,9 @@ void RenderFrameHostImpl::SetUpMojoConnection() {
+         [](RenderFrameHostImpl* impl,
+            mojo::PendingAssociatedReceiver<
+                blink::mojom::SharedStorageDocumentService> receiver) {
++          if (!HeliumPersonaAllowsPrivacySandboxApis(impl)) {
++            return;
++          }
+           if (SharedStorageDocumentServiceImpl::GetForCurrentDocument(impl)) {
+             // TODO(crbug.com/401559926): The renderer somehow requested two
+             // SharedStorageDocumentServiceImpl associated with the same
+@@ -322,6 +333,9 @@ void RenderFrameHostImpl::SetUpMojoConnection() {
+           [](RenderFrameHostImpl* impl,
+              mojo::PendingAssociatedReceiver<blink::mojom::AttributionHost>
+                  receiver) {
++            if (!HeliumPersonaAllowsPrivacySandboxApis(impl)) {
++              return;
++            }
+             AttributionHost::BindReceiver(std::move(receiver), impl);
+           },
+           base::Unretained(this)));
+diff --git a/content/browser/shared_storage/shared_storage_document_service_impl.cc b/content/browser/shared_storage/shared_storage_document_service_impl.cc
+index 6cc6782..863433d 100644
+--- a/content/browser/shared_storage/shared_storage_document_service_impl.cc
++++ b/content/browser/shared_storage/shared_storage_document_service_impl.cc
+@@ -27,6 +27,7 @@
+ #include "services/network/public/mojom/shared_storage.mojom.h"
+ #include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/shared_storage/shared_storage_utils.h"
+ #include "url/url_constants.h"
+ 
+@@ -65,6 +66,13 @@ using AccessMethod =
+ using OperationResult = storage::SharedStorageManager::OperationResult;
+ using GetResult = storage::SharedStorageManager::GetResult;
+ 
++bool HeliumPersonaAllowsPrivacySandboxApis(RenderFrameHost& frame) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++          frame.GetBrowserContext());
++  return !snapshot.IsEnabled() || snapshot.allow_privacy_sandbox_apis;
++}
++
+ }  // namespace
+ 
+ const char kSharedStorageDisabledMessage[] = "sharedStorage is disabled";
+@@ -118,6 +126,12 @@ void SharedStorageDocumentServiceImpl::CreateWorklet(
+     mojo::PendingAssociatedReceiver<blink::mojom::SharedStorageWorkletHost>
+         worklet_host,
+     CreateWorkletCallback callback) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(render_frame_host())) {
++    std::move(callback).Run(/*success=*/false,
++                            kSharedStorageAddModuleDisabledMessage);
++    return;
++  }
++
+   create_worklet_called_ = true;
+   bool is_same_origin =
+       render_frame_host().GetLastCommittedOrigin().IsSameOriginWith(
+@@ -164,6 +178,11 @@ void SharedStorageDocumentServiceImpl::SharedStorageUpdate(
+     network::mojom::SharedStorageModifierMethodWithOptionsPtr
+         method_with_options,
+     SharedStorageUpdateCallback callback) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(render_frame_host())) {
++    std::move(callback).Run(kSharedStorageDisabledMessage);
++    return;
++  }
++
+   if (render_frame_host().GetLastCommittedOrigin().opaque()) {
+     receiver_.ReportBadMessage(
+         "Attempted to call SharedStorageUpdate() from an opaque origin "
+@@ -202,6 +221,11 @@ void SharedStorageDocumentServiceImpl::SharedStorageBatchUpdate(
+         methods_with_options,
+     const std::optional<std::string>& with_lock,
+     SharedStorageBatchUpdateCallback callback) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(render_frame_host())) {
++    std::move(callback).Run(kSharedStorageDisabledMessage);
++    return;
++  }
++
+   if (render_frame_host().GetLastCommittedOrigin().opaque()) {
+     receiver_.ReportBadMessage(
+         "Attempted to call SharedStorageBatchUpdate() from an opaque origin "
+@@ -307,6 +331,16 @@ SharedStorageDocumentServiceImpl::GetSharedStorageRuntimeManager() {
+ bool SharedStorageDocumentServiceImpl::IsSharedStorageAllowed(
+     std::string* out_debug_message,
+     bool* out_block_is_site_setting_specific) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(render_frame_host())) {
++    if (out_debug_message) {
++      *out_debug_message = kSharedStorageDisabledMessage;
++    }
++    if (out_block_is_site_setting_specific) {
++      *out_block_is_site_setting_specific = false;
++    }
++    return false;
++  }
++
+   // Will trigger a call to
+   // `content_settings::PageSpecificContentSettings::BrowsingDataAccessed()` for
+   // reporting purposes.
+diff --git a/content/browser/shared_storage/shared_storage_worklet_host.cc b/content/browser/shared_storage/shared_storage_worklet_host.cc
+index f5bfb61..f48ac4a 100644
+--- a/content/browser/shared_storage/shared_storage_worklet_host.cc
++++ b/content/browser/shared_storage/shared_storage_worklet_host.cc
+@@ -55,6 +55,7 @@
+ #include "storage/browser/blob/blob_url_loader_factory.h"
+ #include "storage/browser/blob/blob_url_registry.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/mime_util/mime_util.h"
+ #include "third_party/blink/public/common/shared_storage/shared_storage_utils.h"
+ #include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom.h"
+@@ -85,6 +86,12 @@ using SharedStorageURNMappingResult =
+ using OperationResult = storage::SharedStorageManager::OperationResult;
+ using GetResult = storage::SharedStorageManager::GetResult;
+ 
++bool HeliumPersonaAllowsPrivacySandboxApis(BrowserContext* browser_context) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
++  return !snapshot.IsEnabled() || snapshot.allow_privacy_sandbox_apis;
++}
++
+ net::NetworkTrafficAnnotationTag CreateDataOptInNetworkAnnotationTag() {
+   return net::DefineNetworkTrafficAnnotation("shared_storage_worklet_host", R"(
+     semantics {
+@@ -601,6 +608,14 @@ void SharedStorageWorkletHost::SelectURL(
+     const std::u16string& saved_query_name,
+     base::TimeTicks start_time,
+     SelectURLCallback callback) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    std::move(callback).Run(
++        /*success=*/false,
++        /*error_message=*/kSharedStorageSelectURLDisabledMessage,
++        /*result_config=*/std::nullopt);
++    return;
++  }
++
+   CHECK(private_aggregation_config);
+   // `page_` can be null. See test
+   // MainFrameDocumentAssociatedDataChangesOnSameSiteNavigation in
+@@ -880,6 +895,12 @@ void SharedStorageWorkletHost::Run(
+     blink::mojom::PrivateAggregationConfigPtr private_aggregation_config,
+     base::TimeTicks start_time,
+     RunCallback callback) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    std::move(callback).Run(/*success=*/false,
++                            /*error_message=*/kSharedStorageDisabledMessage);
++    return;
++  }
++
+   CHECK(private_aggregation_config);
+   // `page_` can be null. See test
+   // MainFrameDocumentAssociatedDataChangesOnSameSiteNavigation in
+@@ -1030,6 +1051,11 @@ void SharedStorageWorkletHost::SharedStorageUpdate(
+     network::mojom::SharedStorageModifierMethodWithOptionsPtr
+         method_with_options,
+     SharedStorageUpdateCallback callback) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    std::move(callback).Run(kSharedStorageDisabledMessage);
++    return;
++  }
++
+   std::string debug_message;
+   if (!IsSharedStorageAllowed(&debug_message)) {
+     std::move(callback).Run(GetSharedStorageErrorMessage(
+@@ -1048,6 +1074,11 @@ void SharedStorageWorkletHost::SharedStorageBatchUpdate(
+         methods_with_options,
+     const std::optional<std::string>& with_lock,
+     SharedStorageBatchUpdateCallback callback) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    std::move(callback).Run(kSharedStorageDisabledMessage);
++    return;
++  }
++
+   std::string debug_message;
+   if (!IsSharedStorageAllowed(&debug_message)) {
+     std::move(callback).Run(GetSharedStorageErrorMessage(
+@@ -1064,6 +1095,13 @@ void SharedStorageWorkletHost::SharedStorageBatchUpdate(
+ void SharedStorageWorkletHost::SharedStorageGet(
+     const std::u16string& key,
+     SharedStorageGetCallback callback) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    std::move(callback).Run(blink::mojom::SharedStorageGetStatus::kError,
++                            kSharedStorageDisabledMessage,
++                            /*value=*/{});
++    return;
++  }
++
+   std::string debug_message;
+   if (!IsSharedStorageAllowed(&debug_message)) {
+     std::move(callback).Run(blink::mojom::SharedStorageGetStatus::kError,
+@@ -1114,6 +1152,15 @@ void SharedStorageWorkletHost::SharedStorageGet(
+ void SharedStorageWorkletHost::SharedStorageKeys(
+     mojo::PendingRemote<blink::mojom::SharedStorageEntriesListener>
+         pending_listener) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    mojo::Remote<blink::mojom::SharedStorageEntriesListener> listener(
++        std::move(pending_listener));
++    listener->DidReadEntries(
++        /*success=*/false, kSharedStorageDisabledMessage,
++        /*entries=*/{}, /*has_more_entries=*/false, /*total_queued_to_send=*/0);
++    return;
++  }
++
+   std::string debug_message;
+   if (!IsSharedStorageAllowed(&debug_message)) {
+     mojo::Remote<blink::mojom::SharedStorageEntriesListener> listener(
+@@ -1142,6 +1189,15 @@ void SharedStorageWorkletHost::SharedStorageEntries(
+     mojo::PendingRemote<blink::mojom::SharedStorageEntriesListener>
+         pending_listener,
+     bool values_only) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    mojo::Remote<blink::mojom::SharedStorageEntriesListener> listener(
++        std::move(pending_listener));
++    listener->DidReadEntries(
++        /*success=*/false, kSharedStorageDisabledMessage,
++        /*entries=*/{}, /*has_more_entries=*/false, /*total_queued_to_send=*/0);
++    return;
++  }
++
+   std::string debug_message;
+   if (!IsSharedStorageAllowed(&debug_message)) {
+     mojo::Remote<blink::mojom::SharedStorageEntriesListener> listener(
+@@ -1169,6 +1225,12 @@ void SharedStorageWorkletHost::SharedStorageEntries(
+ 
+ void SharedStorageWorkletHost::SharedStorageLength(
+     SharedStorageLengthCallback callback) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    std::move(callback).Run(/*success=*/false, kSharedStorageDisabledMessage,
++                            /*length=*/0);
++    return;
++  }
++
+   std::string debug_message;
+   if (!IsSharedStorageAllowed(&debug_message)) {
+     std::move(callback).Run(
+@@ -1212,6 +1274,12 @@ void SharedStorageWorkletHost::SharedStorageLength(
+ 
+ void SharedStorageWorkletHost::SharedStorageRemainingBudget(
+     SharedStorageRemainingBudgetCallback callback) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    std::move(callback).Run(/*success=*/false, kSharedStorageDisabledMessage,
++                            /*bits=*/0.0);
++    return;
++  }
++
+   std::string debug_message;
+   if (!IsSharedStorageAllowed(&debug_message)) {
+     std::move(callback).Run(
+@@ -1254,6 +1322,13 @@ void SharedStorageWorkletHost::SharedStorageRemainingBudget(
+ 
+ void SharedStorageWorkletHost::GetInterestGroups(
+     GetInterestGroupsCallback callback) {
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    std::move(callback).Run(
++        blink::mojom::GetInterestGroupsResult::NewErrorMessage(
++            "interestGroups() is not allowed."));
++    return;
++  }
++
+   InterestGroupManagerImpl* interest_group_manager =
+       static_cast<InterestGroupManagerImpl*>(
+           storage_partition_->GetInterestGroupManager());
+@@ -1768,6 +1843,10 @@ SharedStorageWorkletHost::MaybeConstructPrivateAggregationOperationDetails(
+     return nullptr;
+   }
+ 
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    return nullptr;
++  }
++
+   PrivateAggregationManager* private_aggregation_manager =
+       PrivateAggregationManager::GetManager(*browser_context_);
+   CHECK(private_aggregation_manager);
+@@ -1815,6 +1894,16 @@ bool SharedStorageWorkletHost::IsSharedStorageAllowed(
+     return false;
+   }
+ 
++  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
++    if (out_debug_message) {
++      *out_debug_message = kSharedStorageDisabledMessage;
++    }
++    if (out_block_is_site_setting_specific) {
++      *out_block_is_site_setting_specific = false;
++    }
++    return false;
++  }
++
+   RenderFrameHost* rfh =
+       document_service_ ? &(document_service_->render_frame_host()) : nullptr;
+   return GetContentClient()->browser()->IsSharedStorageAllowed(
+diff --git a/content/browser/storage_partition_impl.cc b/content/browser/storage_partition_impl.cc
+index ea8aefc..6c99ff4 100644
+--- a/content/browser/storage_partition_impl.cc
++++ b/content/browser/storage_partition_impl.cc
+@@ -162,6 +162,7 @@
+ #include "storage/browser/quota/quota_manager_impl.h"
+ #include "storage/browser/quota/quota_settings.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/navigation/preloading_headers.h"
+ #include "third_party/blink/public/common/permissions/permission_utils.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+@@ -2541,6 +2542,15 @@ void StoragePartitionImpl::OnSharedStorageHeaderReceived(
+         methods_with_options,
+     const std::optional<std::string>& with_lock,
+     OnSharedStorageHeaderReceivedCallback callback) {
++  blink::HeliumPersonaSnapshot persona_snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++          browser_context());
++  if (persona_snapshot.IsEnabled() &&
++      !persona_snapshot.allow_privacy_sandbox_apis) {
++    std::move(callback).Run();
++    return;
++  }
++
+   if (!shared_storage_header_observer_) {
+     std::move(callback).Run();
+     return;

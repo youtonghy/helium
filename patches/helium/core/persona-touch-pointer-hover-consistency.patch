@@ -1,0 +1,76 @@
+--- a/third_party/blink/renderer/core/exported/web_view_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
+@@ -63,6 +63,7 @@
+ #include "third_party/blink/public/mojom/page/draggable_region.mojom-blink.h"
+ #include "third_party/blink/public/mojom/page/prerender_page_param.mojom.h"
+ #include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
++#include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom-blink.h"
+ #include "third_party/blink/public/mojom/window_features/window_features.mojom-blink.h"
+ #include "third_party/blink/public/platform/interface_registry.h"
+ #include "third_party/blink/public/platform/platform.h"
+@@ -489,6 +490,38 @@
+   }
+ }
+ 
++void ApplyHeliumPersonaInputDeviceSettings(
++    Page* page,
++    const HeliumPersonaSnapshot& snapshot) {
++  if (!page || !snapshot.IsEnabled()) {
++    return;
++  }
++
++  Settings& settings = page->GetSettings();
++  if (snapshot.touch_enabled) {
++    const int max_touch_points = std::max(1, snapshot.max_touch_points);
++    settings.SetForceTouchEventFeatureDetectionForInspector(true);
++    settings.SetMaxTouchPoints(max_touch_points);
++    settings.SetAvailablePointerTypes(
++        static_cast<int>(mojom::blink::PointerType::kPointerCoarseType));
++    settings.SetPrimaryPointerType(
++        mojom::blink::PointerType::kPointerCoarseType);
++    settings.SetAvailableHoverTypes(
++        static_cast<int>(mojom::blink::HoverType::kHoverNone));
++    settings.SetPrimaryHoverType(mojom::blink::HoverType::kHoverNone);
++    return;
++  }
++
++  settings.SetForceTouchEventFeatureDetectionForInspector(false);
++  settings.SetMaxTouchPoints(0);
++  settings.SetAvailablePointerTypes(
++      static_cast<int>(mojom::blink::PointerType::kPointerFineType));
++  settings.SetPrimaryPointerType(mojom::blink::PointerType::kPointerFineType);
++  settings.SetAvailableHoverTypes(
++      static_cast<int>(mojom::blink::HoverType::kHoverHoverType));
++  settings.SetPrimaryHoverType(mojom::blink::HoverType::kHoverHoverType);
++}
++
+ void MaybePreloadSystemFonts(Page* page) {
+   static bool is_first_run = true;
+   if (!is_first_run) {
+@@ -745,6 +778,7 @@
+       noise_tokens,
+       persona_snapshot);
+   ApplyHeliumPersonaRuntimeOverride(persona_snapshot);
++  ApplyHeliumPersonaInputDeviceSettings(page_.Get(), persona_snapshot);
+   CoreInitializer::GetInstance().ProvideModulesToPage(
+       *page_, session_storage_namespace_id_);
+ 
+@@ -1808,6 +1842,10 @@
+   settings->SetPrimaryPointerType(prefs.primary_pointer_type);
+   settings->SetAvailableHoverTypes(prefs.available_hover_types);
+   settings->SetPrimaryHoverType(prefs.primary_hover_type);
++  if (Page* page = web_view_impl->GetPage()) {
++    ApplyHeliumPersonaInputDeviceSettings(page,
++                                          page->GetHeliumPersonaSnapshot());
++  }
+   settings->SetOutputDeviceUpdateAbilityType(
+       prefs.output_device_update_ability_type);
+   settings->SetBarrelButtonForDragEnabled(prefs.barrel_button_for_drag_enabled);
+@@ -3571,6 +3609,7 @@
+     const HeliumPersonaSnapshot& snapshot) {
+   page_->SetHeliumPersonaSnapshot(snapshot);
+   ApplyHeliumPersonaRuntimeOverride(snapshot);
++  ApplyHeliumPersonaInputDeviceSettings(page_.Get(), snapshot);
+ }
+ 
+ void WebViewImpl::ApplyHeliumPersonaRuntimeOverride(

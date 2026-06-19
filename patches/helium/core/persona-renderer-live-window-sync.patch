@@ -1,0 +1,46 @@
+--- a/third_party/blink/renderer/core/exported/web_view_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
+@@ -522,6 +522,29 @@ void ApplyHeliumPersonaInputDeviceSettings(
+   settings.SetPrimaryHoverType(mojom::blink::HoverType::kHoverHoverType);
+ }
+ 
++void UpdateHeliumPersonaExecutionContexts(
++    Page* page,
++    const HeliumNoiseTokenMap* noise_tokens,
++    const HeliumPersonaSnapshot* snapshot) {
++  if (!page || !page->MainFrame()) {
++    return;
++  }
++
++  for (Frame* frame = page->MainFrame(); frame;
++       frame = frame->Tree().TraverseNext()) {
++    auto* local_frame = DynamicTo<LocalFrame>(frame);
++    if (!local_frame || !local_frame->DomWindow()) {
++      continue;
++    }
++    if (noise_tokens) {
++      local_frame->DomWindow()->SetHeliumNoiseTokens(*noise_tokens);
++    }
++    if (snapshot) {
++      local_frame->DomWindow()->SetHeliumPersonaSnapshot(*snapshot);
++    }
++  }
++}
++
+ void MaybePreloadSystemFonts(Page* page) {
+   static bool is_first_run = true;
+   if (!is_first_run) {
+@@ -3618,11 +3641,13 @@ void WebViewImpl::UpdateHeliumNoiseTokens(
+   }
+ 
+   page_->SetHeliumNoiseTokens(flat_map_tokens);
++  UpdateHeliumPersonaExecutionContexts(page_, &flat_map_tokens, nullptr);
+ }
+ 
+ void WebViewImpl::UpdateHeliumPersonaSnapshot(
+     const HeliumPersonaSnapshot& snapshot) {
+   page_->SetHeliumPersonaSnapshot(snapshot);
++  UpdateHeliumPersonaExecutionContexts(page_, nullptr, &snapshot);
+   ApplyHeliumPersonaRuntimeOverride(snapshot);
+   ApplyHeliumPersonaInputDeviceSettings(page_.Get(), snapshot);
+ }

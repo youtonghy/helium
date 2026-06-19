@@ -1,0 +1,32 @@
+--- a/third_party/blink/renderer/modules/mediastream/media_devices.cc
++++ b/third_party/blink/renderer/modules/mediastream/media_devices.cc
+@@ -192,8 +192,11 @@ MakePersonaAudioInputCapabilities(ExecutionContext* context) {
+ 
+   const int sample_rate = PersonaSpoofingHelper::MediaAudioSampleRate(context);
+   const int channels = PersonaSpoofingHelper::MediaAudioChannelCount(context);
++  const media::ChannelLayoutConfig channel_layout =
++      channels == 1 ? media::ChannelLayoutConfig::Mono() :
++                      media::ChannelLayoutConfig::Stereo();
+   media::AudioParameters parameters(
+       media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
+-      media::ChannelLayoutConfig::Stereo(), sample_rate, sample_rate / 100);
++      channel_layout, sample_rate, sample_rate / 100);
+   capabilities.push_back(mojom::blink::AudioInputDeviceCapabilities::New(
+       PersonaSpoofingHelper::MediaAudioInputDeviceId(context),
+       PersonaSpoofingHelper::MediaInputGroupId(context), parameters,
+--- a/third_party/blink/renderer/modules/mediastream/user_media_processor.cc
++++ b/third_party/blink/renderer/modules/mediastream/user_media_processor.cc
+@@ -113,8 +113,11 @@ MakePersonaAudioInputCapabilities(ExecutionContext* context) {
+ MakePersonaAudioInputCapabilities(ExecutionContext* context) {
+   const int sample_rate = PersonaSpoofingHelper::MediaAudioSampleRate(context);
+   const int channels = PersonaSpoofingHelper::MediaAudioChannelCount(context);
++  const media::ChannelLayoutConfig channel_layout =
++      channels == 1 ? media::ChannelLayoutConfig::Mono() :
++                      media::ChannelLayoutConfig::Stereo();
+   media::AudioParameters parameters(
+       media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
+-      media::ChannelLayoutConfig::Stereo(), sample_rate, sample_rate / 100);
++      channel_layout, sample_rate, sample_rate / 100);
+   Vector<mojom::blink::AudioInputDeviceCapabilitiesPtr> capabilities;
+   capabilities.push_back(mojom::blink::AudioInputDeviceCapabilities::New(
+       PersonaSpoofingHelper::MediaAudioInputDeviceId(context),

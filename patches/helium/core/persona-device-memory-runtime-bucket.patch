@@ -1,0 +1,149 @@
+diff --git a/components/helium_persona/persona_snapshot.cc b/components/helium_persona/persona_snapshot.cc
+index d297e385..4ca72376 100644
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -52,6 +52,28 @@ double GetNestedDouble(const base::Value::Dict& dict,
+   return object->FindInt(key).value_or(0);
+ }
+ 
++double DeviceMemoryBucket(double value) {
++  if (value <= 0) {
++    return 0;
++  }
++  if (value <= 0.25) {
++    return 0.25;
++  }
++  if (value <= 0.5) {
++    return 0.5;
++  }
++  if (value <= 1) {
++    return 1;
++  }
++  if (value <= 2) {
++    return 2;
++  }
++  if (value <= 4) {
++    return 4;
++  }
++  return 8;
++}
++
+ int GetNestedProfileInt(const base::Value::Dict& dict,
+                         const char* object_key,
+                         const char* profile_key,
+@@ -378,7 +400,8 @@ PersonaSnapshot MakePersonaSnapshot(const base::Value::Dict& persona) {
+ 
+   snapshot.hardware_concurrency =
+       GetNestedInt(persona, "hardware", "hardwareConcurrency");
+-  snapshot.device_memory = GetNestedDouble(persona, "hardware", "deviceMemory");
++  snapshot.device_memory =
++      DeviceMemoryBucket(GetNestedDouble(persona, "hardware", "deviceMemory"));
+   snapshot.touch_enabled =
+       GetNestedBool(persona, "hardware", "touchEnabled", false);
+   snapshot.max_touch_points =
+diff --git a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
+index b598548d..ffaa7486 100644
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
+@@ -82,6 +82,28 @@ bool PersonaBoolOrDefault(const ExecutionContext* context,
+   return snapshot->*member;
+ }
+ 
++float DeviceMemoryBucket(double value) {
++  if (value <= 0) {
++    return 0;
++  }
++  if (value <= 0.25) {
++    return 0.25f;
++  }
++  if (value <= 0.5) {
++    return 0.5f;
++  }
++  if (value <= 1) {
++    return 1;
++  }
++  if (value <= 2) {
++    return 2;
++  }
++  if (value <= 4) {
++    return 4;
++  }
++  return 8;
++}
++
+ std::optional<int> PositiveInt(int value) {
+   if (value <= 0) {
+     return std::nullopt;
+@@ -658,7 +680,7 @@ std::optional<float> PersonaSpoofingHelper::DeviceMemory(
+   if (!snapshot || snapshot->device_memory <= 0) {
+     return std::nullopt;
+   }
+-  return static_cast<float>(snapshot->device_memory);
++  return DeviceMemoryBucket(snapshot->device_memory);
+ }
+ 
+ std::optional<int> PersonaSpoofingHelper::MaxTouchPoints(
+diff --git a/content/browser/client_hints/client_hints.cc b/content/browser/client_hints/client_hints.cc
+index 5e92611f..cfeb929e 100644
+--- a/content/browser/client_hints/client_hints.cc
++++ b/content/browser/client_hints/client_hints.cc
+@@ -342,6 +342,28 @@ void RemoveClientHintHeader(WebClientHintsType client_hint_type,
+   headers->RemoveHeader(network::GetClientHintToNameMap().at(client_hint_type));
+ }
+ 
++double DeviceMemoryBucket(double value) {
++  if (value <= 0) {
++    return 0;
++  }
++  if (value <= 0.25) {
++    return 0.25;
++  }
++  if (value <= 0.5) {
++    return 0.5;
++  }
++  if (value <= 1) {
++    return 1;
++  }
++  if (value <= 2) {
++    return 2;
++  }
++  if (value <= 4) {
++    return 4;
++  }
++  return 8;
++}
++
+ void AddDeviceMemoryHeader(net::HttpRequestHeaders* headers,
+                            bool use_deprecated_version = false) {
+   DCHECK(headers);
+@@ -505,7 +527,8 @@ void AddPersonaDeviceMemoryHeader(
+       use_deprecated_version ? WebClientHintsType::kDeviceMemory_DEPRECATED
+                              : WebClientHintsType::kDeviceMemory;
+   if (persona_snapshot.device_memory > 0) {
+-    SetHeaderToDouble(headers, header, persona_snapshot.device_memory);
++    SetHeaderToDouble(headers, header,
++                      DeviceMemoryBucket(persona_snapshot.device_memory));
+     return;
+   }
+   if (persona_snapshot.reduce_system_info) {
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index aa68a503..cc155943 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -2410,6 +2410,8 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   EXPECT_EQ(6, runtime.FindDict("hardware")
+                    ->FindInt("hardwareConcurrency")
+                    .value_or(0));
++  EXPECT_EQ(8.0,
++            runtime.FindDict("hardware")->FindDouble("deviceMemory").value_or(0));
+   EXPECT_EQ("manual-font-pack", *runtime.FindDict("fonts")->FindString("id"));
+   const base::Value::Dict* runtime_advanced = runtime.FindDict("advanced");
+   ASSERT_TRUE(runtime_advanced);
+@@ -2536,6 +2538,7 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   EXPECT_EQ("high", snapshot.dynamic_range);
+   EXPECT_EQ(0, snapshot.monochrome_depth);
+   EXPECT_EQ(6, snapshot.hardware_concurrency);
++  EXPECT_EQ(8.0, snapshot.device_memory);
+   EXPECT_EQ(5, snapshot.max_touch_points);
+   EXPECT_EQ(4096, snapshot.webgl_max_texture_size);
+   EXPECT_EQ(512, snapshot.webgl2_max_array_texture_layers);

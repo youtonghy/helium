@@ -1,0 +1,121 @@
+diff --git a/content/browser/client_hints/client_hints.cc b/content/browser/client_hints/client_hints.cc
+index 9347496..f5184f8 100644
+--- a/content/browser/client_hints/client_hints.cc
++++ b/content/browser/client_hints/client_hints.cc
+@@ -358,10 +358,18 @@ void AddDPRHeader(net::HttpRequestHeaders* headers,
+ }
+ 
+ void AddSaveDataHeader(net::HttpRequestHeaders* headers,
+-                       BrowserContext* context) {
++                       BrowserContext* context,
++                       const blink::HeliumPersonaSnapshot& persona_snapshot) {
+   DCHECK(headers);
+   DCHECK(context);
+   // Unlike other client hints, this one is only sent when it has a value.
++  if (persona_snapshot.IsEnabled()) {
++    if (persona_snapshot.network_save_data) {
++      SetHeaderToString(headers, WebClientHintsType::kSaveData, "on");
++    }
++    return;
++  }
++
+   if (GetContentClient()->browser()->IsDataSaverEnabled(context))
+     SetHeaderToString(headers, WebClientHintsType::kSaveData, "on");
+ }
+@@ -515,9 +558,16 @@ void AddPersonaDPRHeader(net::HttpRequestHeaders* headers,
+ 
+ void AddRttHeader(net::HttpRequestHeaders* headers,
+                   network::NetworkQualityTracker* network_quality_tracker,
+-                  const GURL& url) {
++                  const GURL& url,
++                  const blink::HeliumPersonaSnapshot& persona_snapshot) {
+   DCHECK(headers);
+ 
++  if (persona_snapshot.IsEnabled() && persona_snapshot.network_rtt > 0) {
++    SetHeaderToInt(headers, WebClientHintsType::kRtt_DEPRECATED,
++                   persona_snapshot.network_rtt);
++    return;
++  }
++
+   std::optional<net::EffectiveConnectionType> web_holdback_ect =
+       GetWebHoldbackEffectiveConnectionType();
+ 
+@@ -537,8 +587,16 @@ void AddRttHeader(net::HttpRequestHeaders* headers,
+ 
+ void AddDownlinkHeader(net::HttpRequestHeaders* headers,
+                        network::NetworkQualityTracker* network_quality_tracker,
+-                       const GURL& url) {
++                       const GURL& url,
++                       const blink::HeliumPersonaSnapshot& persona_snapshot) {
+   DCHECK(headers);
++
++  if (persona_snapshot.IsEnabled() && persona_snapshot.network_downlink > 0) {
++    SetHeaderToDouble(headers, WebClientHintsType::kDownlink_DEPRECATED,
++                      persona_snapshot.network_downlink);
++    return;
++  }
++
+   std::optional<net::EffectiveConnectionType> web_holdback_ect =
+       GetWebHoldbackEffectiveConnectionType();
+ 
+@@ -563,9 +621,17 @@ void AddDownlinkHeader(net::HttpRequestHeaders* headers,
+ 
+ void AddEctHeader(net::HttpRequestHeaders* headers,
+                   network::NetworkQualityTracker* network_quality_tracker,
+-                  const GURL& url) {
++                  const GURL& url,
++                  const blink::HeliumPersonaSnapshot& persona_snapshot) {
+   DCHECK(headers);
+ 
++  if (persona_snapshot.IsEnabled() &&
++      !persona_snapshot.network_effective_type.empty()) {
++    SetHeaderToString(headers, WebClientHintsType::kEct_DEPRECATED,
++                      persona_snapshot.network_effective_type);
++    return;
++  }
++
+   std::optional<net::EffectiveConnectionType> web_holdback_ect =
+       GetWebHoldbackEffectiveConnectionType();
+ 
+@@ -1073,13 +1142,13 @@ void AddRequestClientHintsHeaders(
+   network::NetworkQualityTracker* network_quality_tracker =
+       delegate->GetNetworkQualityTracker();
+   if (ShouldAddClientHint(data, WebClientHintsType::kRtt_DEPRECATED)) {
+-    AddRttHeader(headers, network_quality_tracker, url);
++    AddRttHeader(headers, network_quality_tracker, url, persona_snapshot);
+   }
+   if (ShouldAddClientHint(data, WebClientHintsType::kDownlink_DEPRECATED)) {
+-    AddDownlinkHeader(headers, network_quality_tracker, url);
++    AddDownlinkHeader(headers, network_quality_tracker, url, persona_snapshot);
+   }
+   if (ShouldAddClientHint(data, WebClientHintsType::kEct_DEPRECATED)) {
+-    AddEctHeader(headers, network_quality_tracker, url);
++    AddEctHeader(headers, network_quality_tracker, url, persona_snapshot);
+   }
+ 
+   UpdateNavigationRequestClientUaHeadersImpl(
+@@ -1102,7 +1171,7 @@ void AddRequestClientHintsHeaders(
+   }
+ 
+   if (ShouldAddClientHint(data, WebClientHintsType::kSaveData))
+-    AddSaveDataHeader(headers, context);
++    AddSaveDataHeader(headers, context, persona_snapshot);
+ 
+   // Static assert that triggers if a new client hint header is added. If a
+   // new client hint header is added, the following assertion should be updated.
+diff --git a/third_party/blink/renderer/core/loader/worker_fetch_context.cc b/third_party/blink/renderer/core/loader/worker_fetch_context.cc
+index 3cd6dba..2558ee3 100644
+--- a/third_party/blink/renderer/core/loader/worker_fetch_context.cc
++++ b/third_party/blink/renderer/core/loader/worker_fetch_context.cc
+@@ -240,7 +245,10 @@ void WorkerFetchContext::AddAdditionalRequestHeaders(ResourceRequest& request) {
+   // Save-Data was previously included in hints for workers, thus we cannot
+   // remove it for the time being. If you're reading this, consider building
+   // permissions policies for workers and/or deprecating this inclusion.
+-  bool save_data_enabled = save_data_enabled_;
++  bool save_data_enabled = PersonaSpoofingHelper::IsEnabled(global_scope_.Get())
++                               ? PersonaSpoofingHelper::NetworkSaveData(
++                                     global_scope_.Get())
++                               : save_data_enabled_;
+   probe::ApplyDataSaverOverride(Probe(), save_data_enabled);
+   if (save_data_enabled) {
+     request.SetHttpHeaderField(http_names::kSaveData, AtomicString("on"));

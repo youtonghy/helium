@@ -1,0 +1,314 @@
+--- a/third_party/blink/renderer/core/frame/screen.cc
++++ b/third_party/blink/renderer/core/frame/screen.cc
+@@ -172,6 +172,9 @@ bool Screen::isExtended() const {
+   if (!DomWindow()) {
+     return false;
+   }
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return false;
++  }
+   auto* context = GetExecutionContext();
+   if (!context->IsFeatureEnabled(
+           network::mojom::PermissionsPolicyFeature::kWindowManagement)) {
+--- a/third_party/blink/renderer/modules/screen_details/DEPS
++++ b/third_party/blink/renderer/modules/screen_details/DEPS
+@@ -1,3 +1,4 @@
+ include_rules = [
++  "+third_party/blink/renderer/core/helium_persona",
+   "+ui/display/mojom/display.mojom-blink.h",
+ ]
+--- a/third_party/blink/renderer/modules/screen_details/screen_detailed.cc
++++ b/third_party/blink/renderer/modules/screen_details/screen_detailed.cc
+@@ -9,6 +9,7 @@
+ #include "base/numerics/safe_conversions.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/frame/settings.h"
+ #include "third_party/blink/renderer/core/page/chrome_client.h"
+ #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+@@ -19,6 +20,20 @@
+ 
+ namespace blink {
+ 
++namespace {
++
++constexpr float kPersonaSdrHeadroom = 1.0f;
++constexpr float kPersonaRedPrimaryX = 0.64f;
++constexpr float kPersonaRedPrimaryY = 0.33f;
++constexpr float kPersonaGreenPrimaryX = 0.30f;
++constexpr float kPersonaGreenPrimaryY = 0.60f;
++constexpr float kPersonaBluePrimaryX = 0.15f;
++constexpr float kPersonaBluePrimaryY = 0.06f;
++constexpr float kPersonaWhitePointX = 0.3127f;
++constexpr float kPersonaWhitePointY = 0.3290f;
++
++}  // namespace
++
+ ScreenDetailed::ScreenDetailed(LocalDOMWindow* window, int64_t display_id)
+     : Screen(window, display_id) {}
+ 
+@@ -104,78 +119,129 @@
+ int ScreenDetailed::left() const {
+   if (!DomWindow())
+     return 0;
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return 0;
++  }
+   return GetRect(/*available=*/false).x();
+ }
+ 
+ int ScreenDetailed::top() const {
+   if (!DomWindow())
+     return 0;
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return 0;
++  }
+   return GetRect(/*available=*/false).y();
+ }
+ 
+ bool ScreenDetailed::isPrimary() const {
+   if (!DomWindow())
+     return false;
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return true;
++  }
+   return GetScreenInfo().is_primary;
+ }
+ 
+ bool ScreenDetailed::isInternal() const {
+   if (!DomWindow())
+     return false;
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return false;
++  }
+   return GetScreenInfo().is_internal;
+ }
+ 
+ float ScreenDetailed::devicePixelRatio() const {
+   if (!DomWindow())
+     return 0.f;
++  if (auto value =
++          PersonaSpoofingHelper::DeviceScaleFactor(GetExecutionContext())) {
++    return static_cast<float>(*value);
++  }
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return 1.f;
+   return GetScreenInfo().device_scale_factor;
+ }
+ 
+ String ScreenDetailed::label() const {
+   if (!DomWindow())
+     return String();
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return String();
++  }
+   return String::FromUtf8(GetScreenInfo().label);
+ }
+ 
+ float ScreenDetailed::hdrHeadroom() const {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return 0.f;
++  }
+   return std::log2(std::max(
+       GetScreenInfo().display_color_spaces.GetHDRMaxLuminanceRelative(),
+       1.f));
+ }
+ 
+ float ScreenDetailed::highDynamicRangeHeadroom() const {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return kPersonaSdrHeadroom;
++  }
+   return GetScreenInfo().display_color_spaces.GetHDRMaxLuminanceRelative();
+ }
+ 
+ float ScreenDetailed::redPrimaryX() const {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return kPersonaRedPrimaryX;
++  }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fRX;
+ }
+ 
+ float ScreenDetailed::redPrimaryY() const {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return kPersonaRedPrimaryY;
++  }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fRY;
+ }
+ 
+ float ScreenDetailed::greenPrimaryX() const {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return kPersonaGreenPrimaryX;
++  }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fGX;
+ }
+ 
+ float ScreenDetailed::greenPrimaryY() const {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return kPersonaGreenPrimaryY;
++  }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fGY;
+ }
+ 
+ float ScreenDetailed::bluePrimaryX() const {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return kPersonaBluePrimaryX;
++  }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fBX;
+ }
+ 
+ float ScreenDetailed::bluePrimaryY() const {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return kPersonaBluePrimaryY;
++  }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fBY;
+ }
+ 
+ float ScreenDetailed::whitePointX() const {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return kPersonaWhitePointX;
++  }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fWX;
+ }
+ 
+ float ScreenDetailed::whitePointY() const {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return kPersonaWhitePointY;
++  }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fWY;
+ }
+ 
+--- a/third_party/blink/renderer/modules/screen_details/screen_details.cc
++++ b/third_party/blink/renderer/modules/screen_details/screen_details.cc
+@@ -9,6 +9,7 @@
+ #include "third_party/blink/renderer/core/dom/events/event.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/page/chrome_client.h"
+ #include "third_party/blink/renderer/modules/event_target_modules.h"
+ #include "third_party/blink/renderer/modules/screen_details/screen_detailed.h"
+@@ -16,21 +17,74 @@
+ 
+ namespace blink {
+ 
++namespace {
++
++display::ScreenInfos PersonaScreenInfosFor(
++    LocalDOMWindow* window,
++    const display::ScreenInfos& source_infos) {
++  if (!PersonaSpoofingHelper::IsEnabled(window)) {
++    return source_infos;
++  }
++
++  display::ScreenInfo info = source_infos.screen_infos.empty()
++                                 ? display::ScreenInfo()
++                                 : source_infos.current();
++  const int width = PersonaSpoofingHelper::ScreenWidth(window).value_or(
++      std::max(1, info.rect.width()));
++  const int height = PersonaSpoofingHelper::ScreenHeight(window).value_or(
++      std::max(1, info.rect.height()));
++  const int avail_width =
++      PersonaSpoofingHelper::ScreenAvailWidth(window).value_or(width);
++  const int avail_height =
++      PersonaSpoofingHelper::ScreenAvailHeight(window).value_or(height);
++  const double device_scale_factor =
++      PersonaSpoofingHelper::DeviceScaleFactor(window).value_or(1.0);
++  const unsigned color_depth =
++      PersonaSpoofingHelper::ScreenColorDepth(window).value_or(24u);
++
++  info.display_id = display::kDefaultDisplayId;
++  info.rect = gfx::Rect(0, 0, width, height);
++  info.available_rect = gfx::Rect(0, 0, avail_width, avail_height);
++  info.device_scale_factor = static_cast<float>(device_scale_factor);
++  info.depth = static_cast<int>(color_depth);
++  info.depth_per_component = 8;
++  info.is_monochrome = false;
++  info.is_extended = false;
++  info.is_primary = true;
++  info.is_internal = false;
++  info.label.clear();
++  info.display_frequency = 0.f;
++
++  display::ScreenInfos persona_infos(info);
++  persona_infos.current_display_id = info.display_id;
++  return persona_infos;
++}
++
++}  // namespace
++
+ ScreenDetails::ScreenDetails(LocalDOMWindow* window)
+     : ExecutionContextLifecycleObserver(window) {
+   LocalFrame* frame = window->GetFrame();
+-  const auto& screen_infos = frame->GetChromeClient().GetScreenInfos(*frame);
++  const display::ScreenInfos screen_infos =
++      PersonaScreenInfosFor(window,
++                            frame->GetChromeClient().GetScreenInfos(*frame));
+   // Do not dispatch change events during class initialization.
+   UpdateScreenInfosImpl(window, screen_infos, /*dispatch_events=*/false);
+ }
+ 
+ const HeapVector<Member<ScreenDetailed>>& ScreenDetails::screens() const {
++  if (DomWindow()) {
++    const_cast<ScreenDetails*>(this)->RefreshPersonaScreenInfosIfNeeded(
++        DomWindow(), /*dispatch_events=*/false);
++  }
+   return screens_;
+ }
+ 
+ ScreenDetailed* ScreenDetails::currentScreen() const {
+   if (!DomWindow())
+     return nullptr;
++  const_cast<ScreenDetails*>(this)->RefreshPersonaScreenInfosIfNeeded(
++      DomWindow(), /*dispatch_events=*/false);
+ 
+   if (screens_.empty())
+     return nullptr;
+@@ -61,7 +115,34 @@
+ 
+ void ScreenDetails::UpdateScreenInfos(LocalDOMWindow* window,
+                                       const display::ScreenInfos& new_infos) {
+-  UpdateScreenInfosImpl(window, new_infos, /*dispatch_events=*/true);
++  UpdateScreenInfosImpl(window, PersonaScreenInfosFor(window, new_infos),
++                        /*dispatch_events=*/true);
++}
++
++void ScreenDetails::RefreshPersonaScreenInfosIfNeeded(
++    LocalDOMWindow* window,
++    bool dispatch_events) {
++  if (!PersonaSpoofingHelper::IsEnabled(window)) {
++    return;
++  }
++
++  display::ScreenInfos source_infos = prev_screen_infos_;
++  if (source_infos.screen_infos.empty()) {
++    LocalFrame* frame = window->GetFrame();
++    if (!frame) {
++      return;
++    }
++    source_infos = frame->GetChromeClient().GetScreenInfos(*frame);
++  }
++
++  const display::ScreenInfos persona_infos =
++      PersonaScreenInfosFor(window, source_infos);
++  if (screens_.size() == 1 && prev_screen_infos_ == persona_infos &&
++      current_display_id_ == persona_infos.current_display_id) {
++    return;
++  }
++
++  UpdateScreenInfosImpl(window, persona_infos, dispatch_events);
+ }
+ 
+ void ScreenDetails::UpdateScreenInfosImpl(LocalDOMWindow* window,
+--- a/third_party/blink/renderer/modules/screen_details/screen_details.h
++++ b/third_party/blink/renderer/modules/screen_details/screen_details.h
+@@ -48,6 +48,9 @@
+                          const display::ScreenInfos& new_infos);
+ 
+  private:
++  void RefreshPersonaScreenInfosIfNeeded(LocalDOMWindow* window,
++                                         bool dispatch_events);
++
+   // Update web-exposed data structures on screen information changes.
+   // Enqueues events for dispatch if `dispatch_events` is true.
+   void UpdateScreenInfosImpl(LocalDOMWindow* window,

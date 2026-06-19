@@ -1,0 +1,25 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 0710ec98..0ee31348 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -3171,6 +3171,20 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+   }
+ 
+   private ensureEditableShape_(persona: PersonaRecord) {
++    if (!String(persona.device || '').trim()) {
++      persona.device = 'Desktop PC';
++    }
++    if (!String(persona.os || '').trim()) {
++      persona.os = 'Windows 11';
++    }
++    if (!String(persona.platform || '').trim()) {
++      persona.platform = 'Win32';
++    }
++    if (!String(persona.userAgent || '').trim()) {
++      persona.userAgent =
++          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
++          '(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
++    }
+     persona.uaCh = this.ensureObjectDefaults_(persona.uaCh, {
+       platform: 'Windows',
+       architecture: 'x86',

@@ -1,0 +1,148 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index a6da7d1..9e03cd7 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -291,6 +291,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const ua = String(persona.userAgent || '');
+     const platform = String(persona.platform || '');
+     const uaChPlatform = String(uaCh['platform'] || '');
++    const uaChArchitecture = String(uaCh['architecture'] || '');
+     const locale = String(region['locale'] || '');
+     const timezone = String(region['timezone'] || '');
+     const acceptLanguage = String(region['acceptLanguage'] || '');
+@@ -394,6 +395,10 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const gpuVendor = String(gpu['vendor'] || '');
+     const gpuRenderer = String(gpu['renderer'] || '');
+     const gpuDriver = String(gpu['driver'] || '');
++    const macosAppleGpu =
++        this.contains_(gpuVendor, 'apple') ||
++        this.contains_(gpuRenderer, 'apple m') ||
++        this.contains_(gpuRenderer, 'apple gpu');
+     const webglProfile =
+         (gpu['webglProfile'] as Record<string, unknown>|undefined) || {};
+     const webglMaxTextureSize =
+@@ -429,6 +434,18 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+           warnings,
+           'macOS personas should use macOS UA-CH platform metadata.');
+     }
++    if (this.contains_(os, 'macos') && macosAppleGpu &&
++        !this.contains_(uaChArchitecture, 'arm')) {
++      this.addDraftWarning_(
++          warnings,
++          'Apple Silicon macOS personas should expose arm UA-CH architecture while keeping MacIntel navigator.platform.');
++    }
++    if (this.contains_(os, 'macos') && !macosAppleGpu &&
++        this.contains_(uaChArchitecture, 'arm')) {
++      this.addDraftWarning_(
++          warnings,
++          'Intel or AMD macOS personas should not expose arm UA-CH architecture.');
++    }
+     if (this.contains_(os, 'linux') &&
+         (!this.contains_(ua, 'linux') ||
+          !this.contains_(platform, 'linux'))) {
+@@ -519,6 +536,12 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+           warnings,
+           'macOS presets usually pair best with Apple GPU or AMD GPU data.');
+     }
++    if (this.contains_(os, 'macos') && macosAppleGpu &&
++        !this.contains_(gpuDriver, 'metal')) {
++      this.addDraftWarning_(
++          warnings,
++          'Apple Silicon macOS GPU data should normally expose a Metal renderer.');
++    }
+     if (this.contains_(os, 'windows') &&
+         (this.contains_(gpuDriver, 'metal') ||
+          this.contains_(gpuDriver, 'mesa') ||
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index bed9b78..e1b1abf 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -398,6 +398,9 @@ TEST(HeliumPersonaPrefsTest, BuiltinPresetsContainCompleteSystemImage) {
+             *macos.FindDict("uaCh")->FindString("fullVersion"));
+   ASSERT_TRUE(macos.FindDict("uaCh")->FindList("brands"));
+   EXPECT_EQ(24, macos.FindDict("screen")->FindInt("colorDepth").value_or(0));
++  base::Value::List macos_warnings = ValidatePersona(macos);
++  EXPECT_FALSE(WarningsContain(macos_warnings, "Apple Silicon macOS personas"));
++  EXPECT_FALSE(WarningsContain(macos_warnings, "Intel or AMD macOS personas"));
+ 
+   const base::Value::Dict& zh_cn = DictAt(presets, 3);
+   EXPECT_EQ(
+@@ -454,6 +457,33 @@ TEST(HeliumPersonaPrefsTest, BuiltinPresetsCoverCoreDeviceRegionPersonas) {
+   }
+ }
+ 
++TEST(HeliumPersonaPrefsTest, ValidationWarnsForInconsistentMacArchitecture) {
++  base::Value::List presets = GetBuiltinPersonaPresets();
++  base::Value::Dict persona = DictAt(presets, 2).Clone();
++  base::Value::Dict* ua_ch = persona.FindDict("uaCh");
++  ASSERT_TRUE(ua_ch);
++  ua_ch->Set("architecture", "x86");
++
++  base::Value::List warnings = ValidatePersona(persona);
++  EXPECT_TRUE(WarningsContain(warnings, "Apple Silicon macOS personas"));
++
++  ua_ch->Set("architecture", "arm");
++  base::Value::Dict* gpu = persona.FindDict("gpu");
++  ASSERT_TRUE(gpu);
++  gpu->Set("vendor", "AMD");
++  gpu->Set("renderer", "ANGLE (AMD, AMD Radeon Pro 5500M, Metal)");
++  gpu->Set("driver", "Metal");
++
++  warnings = ValidatePersona(persona);
++  EXPECT_TRUE(WarningsContain(warnings, "Intel or AMD macOS personas"));
++
++  gpu->Set("vendor", "Apple Inc.");
++  gpu->Set("renderer", "ANGLE (Apple, Apple M3, OpenGL)");
++  gpu->Set("driver", "OpenGL");
++  warnings = ValidatePersona(persona);
++  EXPECT_TRUE(WarningsContain(warnings, "Apple Silicon macOS GPU data"));
++}
++
+ TEST(HeliumPersonaPrefsTest, BuiltinFontRenderingProfilesStayComplete) {
+   base::Value::List rendering_profiles = GetBuiltinFontRenderingProfiles();
+   ASSERT_EQ(17u, rendering_profiles.size());
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index ea06fa3..df9a75c 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -645,6 +645,9 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+   const std::string_view gpu_renderer =
+       GetNestedString(persona, "gpu", "renderer");
+   const std::string_view gpu_driver = GetNestedString(persona, "gpu", "driver");
++  const bool macos_apple_gpu =
++      Contains(gpu_vendor, "apple") || Contains(gpu_renderer, "apple m") ||
++      Contains(gpu_renderer, "apple gpu");
+   const int webgl_max_texture_size =
+       GetNestedProfileInt(persona, "gpu", "webglProfile", "maxTextureSize");
+   const int webgl_max_viewport_width =
+@@ -895,10 +898,15 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+     AddWarning(warnings,
+                "macOS personas should use macOS UA-CH platform metadata.");
+   }
+-  if (Contains(os, "macos") && Contains(gpu_renderer, "apple m") &&
+-      Contains(ua_ch_architecture, "x86")) {
++  if (Contains(os, "macos") && macos_apple_gpu &&
++      !Contains(ua_ch_architecture, "arm")) {
+     AddWarning(warnings,
+-               "Apple Silicon macOS personas should not expose x86 UA-CH architecture.");
++               "Apple Silicon macOS personas should expose arm UA-CH architecture while keeping MacIntel navigator.platform.");
++  }
++  if (Contains(os, "macos") && !macos_apple_gpu &&
++      Contains(ua_ch_architecture, "arm")) {
++    AddWarning(warnings,
++               "Intel or AMD macOS personas should not expose arm UA-CH architecture.");
+   }
+ 
+   if (Contains(os, "linux") &&
+@@ -967,6 +975,11 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+     AddWarning(warnings,
+                "macOS presets usually pair best with Apple GPU or AMD GPU data.");
+   }
++  if (Contains(os, "macos") && macos_apple_gpu &&
++      !Contains(gpu_driver, "metal")) {
++    AddWarning(warnings,
++               "Apple Silicon macOS GPU data should normally expose a Metal renderer.");
++  }
+   if (Contains(os, "windows") &&
+       (Contains(gpu_driver, "metal") || Contains(gpu_driver, "mesa") ||
+        Contains(gpu_renderer, "metal"))) {

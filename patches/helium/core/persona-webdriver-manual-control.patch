@@ -1,0 +1,287 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -953,6 +953,7 @@
+   target.font_metric_noise = source.font_metric_noise;
+   target.pdf_viewer_enabled = source.pdf_viewer_enabled;
+   target.cookie_enabled = source.cookie_enabled;
++  target.webdriver_enabled = source.webdriver_enabled;
+   target.storage_quota_gb = source.storage_quota_gb;
+   target.do_not_track_enabled = source.do_not_track_enabled;
+   target.speech_voice_name = source.speech_voice_name;
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.html b/chrome/browser/resources/settings/privacy_page/persona_page.html
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -565,6 +565,9 @@
+     <cr-checkbox checked="{{editablePersona_.advanced.cookieEnabled}}">
+       navigator.cookieEnabled
+     </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.webdriverEnabled}}">
++      navigator.webdriver
++    </cr-checkbox>
+     <cr-input label="Storage quota (GB, 0 = auto)"
+         value="{{editablePersona_.advanced.storageQuotaGb}}"
+         type="number"></cr-input>
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -239,6 +239,7 @@
+     const touchEnabled = Boolean(hardware['touchEnabled']);
+     const maxTouchPoints = this.numberValue_(hardware['maxTouchPoints']);
+     const storageQuota = this.numberValue_(advanced['storageQuotaGb']);
++    const webdriverEnabled = Boolean(advanced['webdriverEnabled']);
+     const allowGeolocation = Boolean(advanced['allowGeolocation']);
+     const allowMediaCapture = Boolean(advanced['allowMediaCapture']);
+     const allowProtectedMediaIdentifier =
+@@ -611,6 +612,10 @@
+       this.addDraftWarning_(
+           warnings,
+           'Storage quota above 2 TB is unusual for desktop browser profiles.');
++    }
++    if (webdriverEnabled) {
++      this.addDraftWarning_(
++          warnings, 'navigator.webdriver=true exposes browser automation.');
+     }
+     if (allowMediaCapture) {
+       this.addDraftWarning_(
+@@ -1788,6 +1793,7 @@
+       fontMetricNoise: true,
+       pdfViewerEnabled: chance(98),
+       cookieEnabled: true,
++      webdriverEnabled: false,
+       speechVoiceLocalService: true,
+       speechVoiceDefault: true,
+       allowGeolocation: false,
+@@ -2328,6 +2334,7 @@
+       fontMetricNoise: true,
+       pdfViewerEnabled: true,
+       cookieEnabled: true,
++      webdriverEnabled: false,
+       speechVoiceLocalService: true,
+       doNotTrackEnabled: false,
+       speechVoiceDefault: true,
+@@ -2507,7 +2514,7 @@
+     const booleanAdvancedKeys = [
+       'clientHintsEnabled', 'reduceSystemInfo', 'canvasNoise',
+       'audioNoise', 'fontMetricNoise', 'pdfViewerEnabled', 'cookieEnabled',
+-      'speechVoiceLocalService', 'speechVoiceDefault', 'doNotTrackEnabled', 'allowGeolocation',
++      'webdriverEnabled', 'speechVoiceLocalService', 'speechVoiceDefault', 'doNotTrackEnabled', 'allowGeolocation',
+       'allowMediaCapture', 'virtualMediaDevices', 'allowDisplayCapture',
+       'allowDeviceApis', 'allowGamepads', 'allowSensorApis', 'allowMidi',
+       'allowLocalNetworkApis', 'allowWebNfc', 'allowWindowManagement',
+diff --git a/components/helium_persona/persona_prefs.cc b/components/helium_persona/persona_prefs.cc
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -444,6 +444,7 @@
+   advanced.Set("fontMetricNoise", true);
+   advanced.Set("pdfViewerEnabled", true);
+   advanced.Set("cookieEnabled", true);
++  advanced.Set("webdriverEnabled", false);
+   advanced.Set("storageQuotaGb", 0.0);
+   advanced.Set("doNotTrackEnabled", false);
+   advanced.Set("speechVoiceName", "");
+@@ -614,6 +615,7 @@
+   EnsureBool(*advanced, "fontMetricNoise", true);
+   EnsureBool(*advanced, "pdfViewerEnabled", true);
+   EnsureBool(*advanced, "cookieEnabled", true);
++  EnsureBool(*advanced, "webdriverEnabled", false);
+   EnsureNumeric(*advanced, "storageQuotaGb", 0.0);
+   EnsureBool(*advanced, "doNotTrackEnabled", false);
+   EnsureString(*advanced, "speechVoiceName", "");
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -104,6 +104,7 @@
+       "fontMetricNoise",
+       "pdfViewerEnabled",
+       "cookieEnabled",
++      "webdriverEnabled",
+       "doNotTrackEnabled",
+       "speechVoiceLocalService",
+       "speechVoiceDefault",
+@@ -572,6 +573,7 @@
+   base::Value::Dict* advanced = persona.FindDict("advanced");
+   ASSERT_TRUE(advanced);
+   advanced->Remove("cookieEnabled");
++  advanced->Remove("webdriverEnabled");
+   advanced->Remove("storageQuotaGb");
+   advanced->Remove("allowWebPrinting");
+   advanced->Remove("allowFileSystemAccess");
+@@ -1266,6 +1268,7 @@
+   base::Value::Dict* advanced = persona.FindDict("advanced");
+   ASSERT_TRUE(advanced);
+   advanced->Remove("cookieEnabled");
++  advanced->Remove("webdriverEnabled");
+   advanced->Remove("storageQuotaGb");
+   advanced->Remove("allowWebPrinting");
+   advanced->Remove("allowFileSystemAccess");
+@@ -1625,6 +1628,7 @@
+   advanced->Set("fontMetricNoise", false);
+   advanced->Set("pdfViewerEnabled", false);
+   advanced->Set("cookieEnabled", false);
++  advanced->Set("webdriverEnabled", true);
+   advanced->Set("storageQuotaGb", 42.0);
+   advanced->Set("doNotTrackEnabled", true);
+   advanced->Set("speechVoiceName", "Manual Voice");
+@@ -1740,6 +1744,9 @@
+   EXPECT_FALSE(runtime.FindDict("advanced")
+                    ->FindBool("cookieEnabled")
+                    .value_or(true));
++  EXPECT_TRUE(runtime.FindDict("advanced")
++                  ->FindBool("webdriverEnabled")
++                  .value_or(false));
+   EXPECT_EQ(42.0, runtime.FindDict("advanced")
+                       ->FindDouble("storageQuotaGb")
+                       .value_or(0));
+@@ -1816,6 +1823,7 @@
+   EXPECT_TRUE(snapshot.reduce_system_info);
+   EXPECT_FALSE(snapshot.pdf_viewer_enabled);
+   EXPECT_FALSE(snapshot.cookie_enabled);
++  EXPECT_TRUE(snapshot.webdriver_enabled);
+   EXPECT_EQ(42.0, snapshot.storage_quota_gb);
+   EXPECT_TRUE(snapshot.do_not_track_enabled);
+   EXPECT_EQ("Manual Voice", snapshot.speech_voice_name);
+diff --git a/components/helium_persona/persona_presets.cc b/components/helium_persona/persona_presets.cc
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -283,6 +283,7 @@
+   advanced.Set("fontMetricNoise", font_metric_noise);
+   advanced.Set("pdfViewerEnabled", true);
+   advanced.Set("cookieEnabled", true);
++  advanced.Set("webdriverEnabled", false);
+   advanced.Set("storageQuotaGb", 0);
+   advanced.Set("doNotTrackEnabled", false);
+   advanced.Set("speechVoiceName", "");
+diff --git a/components/helium_persona/persona_snapshot.cc b/components/helium_persona/persona_snapshot.cc
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -375,6 +375,8 @@
+       GetNestedBool(persona, "advanced", "pdfViewerEnabled", true);
+   snapshot.cookie_enabled =
+       GetNestedBool(persona, "advanced", "cookieEnabled", true);
++  snapshot.webdriver_enabled =
++      GetNestedBool(persona, "advanced", "webdriverEnabled", false);
+   snapshot.storage_quota_gb =
+       GetNestedDouble(persona, "advanced", "storageQuotaGb");
+   snapshot.do_not_track_enabled =
+@@ -674,6 +676,7 @@
+   advanced.Set("fontMetricNoise", snapshot.font_metric_noise);
+   advanced.Set("pdfViewerEnabled", snapshot.pdf_viewer_enabled);
+   advanced.Set("cookieEnabled", snapshot.cookie_enabled);
++  advanced.Set("webdriverEnabled", snapshot.webdriver_enabled);
+   advanced.Set("storageQuotaGb", snapshot.storage_quota_gb);
+   advanced.Set("doNotTrackEnabled", snapshot.do_not_track_enabled);
+   advanced.Set("speechVoiceName", snapshot.speech_voice_name);
+diff --git a/components/helium_persona/persona_snapshot.h b/components/helium_persona/persona_snapshot.h
+--- a/components/helium_persona/persona_snapshot.h
++++ b/components/helium_persona/persona_snapshot.h
+@@ -157,6 +157,7 @@
+   bool font_metric_noise = true;
+   bool pdf_viewer_enabled = true;
+   bool cookie_enabled = true;
++  bool webdriver_enabled = false;
+   double storage_quota_gb = 0;
+   bool do_not_track_enabled = false;
+   std::string speech_voice_name;
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -524,6 +524,7 @@
+          HasNestedBool(persona, "advanced", "fontMetricNoise") &&
+          HasNestedBool(persona, "advanced", "pdfViewerEnabled") &&
+          HasNestedBool(persona, "advanced", "cookieEnabled") &&
++         HasNestedBool(persona, "advanced", "webdriverEnabled") &&
+          HasNestedDoubleValue(persona, "advanced", "storageQuotaGb") &&
+          HasNestedBool(persona, "advanced", "doNotTrackEnabled") &&
+          HasNestedStringValue(persona, "advanced", "speechVoiceName") &&
+@@ -687,6 +688,8 @@
+       GetNestedInt(persona, "hardware", "maxTouchPoints");
+   const double storage_quota_gb =
+       GetNestedDouble(persona, "advanced", "storageQuotaGb");
++  const bool webdriver_enabled =
++      GetNestedBool(persona, "advanced", "webdriverEnabled");
+   const bool allow_geolocation =
+       GetNestedBool(persona, "advanced", "allowGeolocation");
+   const bool allow_media_capture =
+@@ -1157,6 +1160,10 @@
+     AddWarning(warnings,
+                "Storage quota above 2 TB is unusual for desktop browser profiles.");
+   }
++  if (webdriver_enabled) {
++    AddWarning(warnings,
++               "navigator.webdriver=true exposes browser automation.");
++  }
+   if (allow_media_capture) {
+     AddWarning(warnings,
+                "allowMediaCapture exposes real camera, microphone, screen speech recognition, and on-device speech recognition service bindings.");
+diff --git a/content/browser/helium_noise/noise_token_data.cc b/content/browser/helium_noise/noise_token_data.cc
+--- a/content/browser/helium_noise/noise_token_data.cc
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -235,6 +235,7 @@
+   AppendSaltPart(salt, persona_snapshot.font_metric_noise);
+   AppendSaltPart(salt, persona_snapshot.pdf_viewer_enabled);
+   AppendSaltPart(salt, persona_snapshot.cookie_enabled);
++  AppendSaltPart(salt, persona_snapshot.webdriver_enabled);
+   AppendSaltPart(salt, persona_snapshot.storage_quota_gb);
+   AppendSaltPart(salt, persona_snapshot.do_not_track_enabled);
+   AppendSaltPart(salt, persona_snapshot.speech_voice_name);
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot.h b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -157,6 +157,7 @@
+   bool font_metric_noise = true;
+   bool pdf_viewer_enabled = true;
+   bool cookie_enabled = true;
++  bool webdriver_enabled = false;
+   double storage_quota_gb = 0;
+   bool do_not_track_enabled = false;
+   std::string speech_voice_name;
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -515,6 +515,10 @@
+   }
+   static bool cookie_enabled(const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.cookie_enabled;
++  }
++  static bool webdriver_enabled(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.webdriver_enabled;
+   }
+   static double storage_quota_gb(
+       const blink::HeliumPersonaSnapshot& snapshot) {
+@@ -840,6 +844,7 @@
+   out->font_metric_noise = data.font_metric_noise();
+   out->pdf_viewer_enabled = data.pdf_viewer_enabled();
+   out->cookie_enabled = data.cookie_enabled();
++  out->webdriver_enabled = data.webdriver_enabled();
+   out->storage_quota_gb = data.storage_quota_gb();
+   out->do_not_track_enabled = data.do_not_track_enabled();
+   out->speech_voice_local_service = data.speech_voice_local_service();
+diff --git a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -147,6 +147,7 @@
+   bool font_metric_noise;
+   bool pdf_viewer_enabled;
+   bool cookie_enabled;
++  bool webdriver_enabled;
+   double storage_quota_gb;
+   bool do_not_track_enabled;
+   string speech_voice_name;
+diff --git a/third_party/blink/renderer/core/frame/navigator.cc b/third_party/blink/renderer/core/frame/navigator.cc
+--- a/third_party/blink/renderer/core/frame/navigator.cc
++++ b/third_party/blink/renderer/core/frame/navigator.cc
+@@ -120,8 +120,10 @@
+ }
+ 
+ bool Navigator::webdriver() const {
+-  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
+-    return false;
++  if (const HeliumPersonaSnapshot* snapshot =
++          PersonaSpoofingHelper::Get(GetExecutionContext())) {
++    return snapshot->webdriver_enabled;
++  }
+ 
+   if (RuntimeEnabledFeatures::AutomationControlledEnabled())
+     return true;

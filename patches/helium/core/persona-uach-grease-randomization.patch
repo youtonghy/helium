@@ -1,0 +1,90 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 6e0fdd34..692036c2 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -774,6 +774,20 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     return `${major}.0.0.0`;
+   }
+ 
++  private makeRandomUaChGreaseBrand_(): Record<string, string> {
++    const brands = [
++      'Not_A Brand',
++      'Not A(Brand',
++      'Not;A Brand',
++      'Not)A;Brand',
++    ];
++    const versions = ['8', '24', '99'];
++    return {
++      brand: this.randomFrom_(brands, brands[0]),
++      version: this.randomFrom_(versions, versions[0]),
++    };
++  }
++
+   private applyRandomUaVersion_(persona: PersonaRecord) {
+     persona.uaCh = persona.uaCh || {};
+     const major = this.chromeMajorVersion_(persona);
+@@ -794,17 +808,18 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+         brandNames.some(name => this.contains_(name, 'chrome'));
+     const hasChromiumBrand =
+         brandNames.some(name => this.contains_(name, 'chromium'));
+-    const hasGreaseBrand = brandNames.some(name => this.contains_(name, 'brand'));
++    const hasGreaseBrand = brandNames.some(name =>
++        this.contains_(name, 'not') && this.contains_(name, 'brand'));
+     const brands = [
+       ...(hasChromiumBrand ? [{brand: 'Chromium', version: majorVersion}] : []),
+       ...(hasChromeBrand ? [{brand: 'Google Chrome', version: majorVersion}] : []),
+-      ...(hasGreaseBrand ? [{brand: 'Not_A Brand', version: '24'}] : []),
++      ...(hasGreaseBrand ? [this.makeRandomUaChGreaseBrand_()] : []),
+     ];
+     persona.uaCh['brands'] = this.shuffled_(
+         brands.length ? brands : [
+           {brand: 'Chromium', version: majorVersion},
+           {brand: 'Google Chrome', version: majorVersion},
+-          {brand: 'Not_A Brand', version: '24'},
++          this.makeRandomUaChGreaseBrand_(),
+         ]);
+   }
+ 
+diff --git a/third_party/blink/renderer/core/frame/navigator_ua.cc b/third_party/blink/renderer/core/frame/navigator_ua.cc
+index e4578b77..ed5cf4f1 100644
+--- a/third_party/blink/renderer/core/frame/navigator_ua.cc
++++ b/third_party/blink/renderer/core/frame/navigator_ua.cc
+@@ -5,6 +5,7 @@
+ #include "third_party/blink/renderer/core/frame/navigator_ua.h"
+ 
+ #include "base/compiler_specific.h"
++#include "base/strings/string_util.h"
+ #include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ #include "third_party/blink/renderer/core/frame/navigator_ua_data.h"
+@@ -15,6 +16,12 @@ namespace blink {
+ 
+ namespace {
+ 
++bool IsHeliumPersonaGreaseBrand(const std::string& brand) {
++  std::string lower = base::ToLowerASCII(brand);
++  return lower.find("not") != std::string::npos &&
++         lower.find("brand") != std::string::npos;
++}
++
+ UserAgentBrandList ToUserAgentBrandList(
+     const std::vector<HeliumPersonaUaChBrand>& brands,
+     bool use_full_version,
+@@ -25,7 +32,7 @@ UserAgentBrandList ToUserAgentBrandList(
+       continue;
+     }
+     std::string version = brand.version;
+-    if (use_full_version && brand.brand != "Not_A Brand" &&
++    if (use_full_version && !IsHeliumPersonaGreaseBrand(brand.brand) &&
+         !full_version.empty()) {
+       version = full_version;
+     }
+@@ -73,7 +80,7 @@ NavigatorUAData* NavigatorUA::userAgentData() {
+                                      persona->ua_ch_full_version)
+               : metadata.brand_version_list;
+       for (auto& brand_version : metadata.brand_full_version_list) {
+-        if (brand_version.brand != "Not_A Brand")
++        if (!IsHeliumPersonaGreaseBrand(brand_version.brand))
+           brand_version.version = persona->ua_ch_full_version;
+       }
+     }

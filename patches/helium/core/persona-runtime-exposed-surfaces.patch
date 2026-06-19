@@ -1,0 +1,455 @@
+--- a/third_party/blink/renderer/modules/plugins/dom_plugin_array.cc
++++ b/third_party/blink/renderer/modules/plugins/dom_plugin_array.cc
+@@ -26,6 +26,7 @@
+ #include "third_party/blink/renderer/core/frame/navigator.h"
+ #include "third_party/blink/renderer/core/page/page.h"
+ #include "third_party/blink/renderer/core/page/plugin_data.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/modules/plugins/dom_mime_type_array.h"
+ #include "third_party/blink/renderer/modules/plugins/navigator_plugins.h"
+ #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+@@ -53,7 +54,7 @@
+ }  // namespace
+ 
+ DOMPluginArray::DOMPluginArray(LocalDOMWindow* window) : window_(window) {
+-  if (IsPdfViewerAvailable()) {
++  if (PersonaSpoofingHelper::IsEnabled(window) || IsPdfViewerAvailable()) {
+     // See crbug.com/1164635 and https://github.com/whatwg/html/pull/6738.
+     // To reduce fingerprinting and make plugins/mimetypes more
+     // interoperable, this is the spec'd, hard-coded list of plugins:
+@@ -135,6 +136,8 @@
+ }
+ 
+ bool DOMPluginArray::IsPdfViewerAvailable() {
++  if (PersonaSpoofingHelper::IsEnabled(window_))
++    return true;
+   auto* data = GetPluginData();
+   if (!data)
+     return false;
+--- a/third_party/blink/renderer/modules/plugins/navigator_plugins.cc
++++ b/third_party/blink/renderer/modules/plugins/navigator_plugins.cc
+@@ -8,6 +8,7 @@
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/navigator.h"
+ #include "third_party/blink/renderer/core/frame/settings.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/modules/plugins/dom_mime_type.h"
+ #include "third_party/blink/renderer/modules/plugins/dom_mime_type_array.h"
+ #include "third_party/blink/renderer/modules/plugins/dom_plugin_array.h"
+@@ -73,6 +74,8 @@
+ }
+ 
+ bool NavigatorPlugins::pdfViewerEnabled(LocalDOMWindow* window) const {
++  if (PersonaSpoofingHelper::IsEnabled(window))
++    return true;
+   return plugins(window)->IsPdfViewerAvailable();
+ }
+ 
+--- a/third_party/blink/renderer/modules/speech/DEPS
++++ b/third_party/blink/renderer/modules/speech/DEPS
+@@ -3,6 +3,7 @@
+     "-third_party/blink/renderer/modules",
+     "+third_party/blink/renderer/modules/event_modules.h",
+     "+third_party/blink/renderer/modules/event_target_modules.h",
++    "+third_party/blink/renderer/core/helium_persona",
+     "+third_party/blink/renderer/modules/modules_export.h",
+     "+third_party/blink/renderer/modules/mediastream",
+     "+third_party/blink/renderer/modules/speech",
+--- a/third_party/blink/renderer/modules/speech/speech_synthesis.cc
++++ b/third_party/blink/renderer/modules/speech/speech_synthesis.cc
+@@ -37,6 +37,7 @@
+ #include "third_party/blink/renderer/core/frame/deprecation/deprecation.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/html/media/autoplay_policy.h"
+ #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
+ #include "third_party/blink/renderer/core/timing/performance.h"
+@@ -48,6 +49,111 @@
+ namespace blink {
+ 
+ const char SpeechSynthesis::kSupplementName[] = "SpeechSynthesis";
++
++namespace {
++
++constexpr char kPersonaSpeechVoiceUriPrefix[] = "urn:helium:persona:speech:";
++
++String PersonaSpeechLocale(ExecutionContext* context) {
++  if (const HeliumPersonaSnapshot* snapshot =
++          PersonaSpoofingHelper::Get(context)) {
++    if (!snapshot->locale.empty())
++      return String::FromUTF8(snapshot->locale);
++    if (!snapshot->navigator_languages.empty())
++      return String::FromUTF8(snapshot->navigator_languages.front());
++  }
++  return "en-US";
++}
++
++bool PersonaOsContains(ExecutionContext* context, const char* token) {
++  const HeliumPersonaSnapshot* snapshot = PersonaSpoofingHelper::Get(context);
++  if (!snapshot)
++    return false;
++  return String::FromUTF8(snapshot->os).DeprecatedLower().Find(token) !=
++         kNotFound;
++}
++
++String PersonaSpeechVoiceName(ExecutionContext* context,
++                              const String& locale) {
++  const String lower_locale = locale.DeprecatedLower();
++  const bool is_windows = PersonaOsContains(context, "windows");
++  const bool is_macos =
++      PersonaOsContains(context, "macos") || PersonaOsContains(context, "mac");
++
++  if (lower_locale.starts_with("zh")) {
++    if (is_windows)
++      return "Microsoft Huihui Desktop";
++    if (is_macos)
++      return "Ting-Ting";
++    return "Helium Chinese";
++  }
++  if (lower_locale.starts_with("de")) {
++    if (is_windows)
++      return "Microsoft Hedda Desktop";
++    if (is_macos)
++      return "Anna";
++    return "Helium Deutsch";
++  }
++  if (lower_locale.starts_with("en-au")) {
++    if (is_windows)
++      return "Microsoft Catherine Desktop";
++    if (is_macos)
++      return "Karen";
++    return "Helium English Australia";
++  }
++  if (lower_locale.starts_with("en-gb")) {
++    if (is_windows)
++      return "Microsoft Hazel Desktop";
++    if (is_macos)
++      return "Daniel";
++    return "Helium English UK";
++  }
++  if (is_windows)
++    return "Microsoft David Desktop";
++  if (is_macos)
++    return "Samantha";
++  return "Helium English";
++}
++
++mojom::blink::SpeechSynthesisVoicePtr MakePersonaSpeechVoice(
++    ExecutionContext* context) {
++  String locale = PersonaSpeechLocale(context);
++  auto voice = mojom::blink::SpeechSynthesisVoice::New();
++  voice->voice_uri =
++      String(kPersonaSpeechVoiceUriPrefix) + locale.DeprecatedLower();
++  voice->name = PersonaSpeechVoiceName(context, locale);
++  voice->lang = locale;
++  voice->is_local_service = true;
++  voice->is_default = true;
++  return voice;
++}
++
++bool HasPersonaSpeechVoiceList(
++    const HeapVector<Member<SpeechSynthesisVoice>>& voices,
++    ExecutionContext* context) {
++  const String expected_voice_uri =
++      String(kPersonaSpeechVoiceUriPrefix) +
++      PersonaSpeechLocale(context).DeprecatedLower();
++  return !voices.empty() &&
++         voices.front()->voiceURI() == expected_voice_uri;
++}
++
++bool HasAnyPersonaSpeechVoiceList(
++    const HeapVector<Member<SpeechSynthesisVoice>>& voices) {
++  return !voices.empty() &&
++         voices.front()->voiceURI().starts_with(kPersonaSpeechVoiceUriPrefix);
++}
++
++void SetPersonaSpeechVoiceList(
++    HeapVector<Member<SpeechSynthesisVoice>>& voice_list,
++    ExecutionContext* context) {
++  voice_list.clear();
++  voice_list.push_back(
++      MakeGarbageCollected<SpeechSynthesisVoice>(
++          MakePersonaSpeechVoice(context)));
++}
++
++}  // namespace
+ 
+ 
+ SpeechSynthesis* SpeechSynthesis::speechSynthesis(LocalDOMWindow& window) {
+@@ -84,6 +190,13 @@
+ 
+ void SpeechSynthesis::OnSetVoiceList(
+     Vector<mojom::blink::SpeechSynthesisVoicePtr> mojom_voices) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    if (!HasPersonaSpeechVoiceList(voice_list_, GetExecutionContext())) {
++      SetPersonaSpeechVoiceList(voice_list_, GetExecutionContext());
++      VoicesDidChange();
++    }
++    return;
++  }
+   voice_list_.clear();
+   for (auto& mojom_voice : mojom_voices) {
+     voice_list_.push_back(
+@@ -93,6 +206,16 @@
+ }
+ 
+ const HeapVector<Member<SpeechSynthesisVoice>>& SpeechSynthesis::getVoices() {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    if (!HasPersonaSpeechVoiceList(voice_list_, GetExecutionContext()))
++      SetPersonaSpeechVoiceList(voice_list_, GetExecutionContext());
++    return voice_list_;
++  }
++  if (HasAnyPersonaSpeechVoiceList(voice_list_)) {
++    voice_list_.clear();
++    receiver_.reset();
++    mojom_synthesis_.reset();
++  }
+   // Kick off initialization here to ensure voice list gets populated.
+   std::ignore = TryEnsureMojomSynthesis();
+   return voice_list_;
+--- a/third_party/blink/renderer/modules/speech/speech_synthesis_utterance.cc
++++ b/third_party/blink/renderer/modules/speech/speech_synthesis_utterance.cc
+@@ -27,12 +27,34 @@
+ 
+ #include "base/task/single_thread_task_runner.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/modules/speech/speech_synthesis.h"
+ #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+ #include "third_party/blink/renderer/platform/heap/persistent.h"
+ #include "third_party/blink/renderer/platform/wtf/functional.h"
+ 
+ namespace blink {
++
++namespace {
++
++constexpr char kPersonaSpeechVoiceUriPrefix[] = "urn:helium:persona:speech:";
++
++String PersonaSpeechLocale(ExecutionContext* context) {
++  if (const HeliumPersonaSnapshot* snapshot =
++          PersonaSpoofingHelper::Get(context)) {
++    if (!snapshot->locale.empty())
++      return String::FromUTF8(snapshot->locale);
++    if (!snapshot->navigator_languages.empty())
++      return String::FromUTF8(snapshot->navigator_languages.front());
++  }
++  return "en-US";
++}
++
++bool IsPersonaSpeechVoice(const SpeechSynthesisVoice* voice) {
++  return voice && voice->voiceURI().starts_with(kPersonaSpeechVoiceUriPrefix);
++}
++
++}  // namespace
+ 
+ SpeechSynthesisUtterance* SpeechSynthesisUtterance::Create(
+     ExecutionContext* context) {
+@@ -160,6 +182,14 @@
+     mojom_utterance_to_send->voice = g_empty_string;
+   if (mojom_utterance_to_send->text.IsNull())
+     mojom_utterance_to_send->text = g_empty_string;
++  if (PersonaSpoofingHelper::IsEnabled(context)) {
++    if (IsPersonaSpeechVoice(voice_.Get()))
++      mojom_utterance_to_send->voice = g_empty_string;
++    if (mojom_utterance_to_send->lang.IsNull() ||
++        mojom_utterance_to_send->lang.empty()) {
++      mojom_utterance_to_send->lang = PersonaSpeechLocale(context);
++    }
++  }
+ 
+   receiver_.reset();
+ 
+--- a/third_party/blink/renderer/modules/quota/DEPS
++++ b/third_party/blink/renderer/modules/quota/DEPS
+@@ -1,5 +1,6 @@
+ include_rules = [
+     "+mojo/public",
++    "+third_party/blink/renderer/core/helium_persona",
+     "-third_party/blink/renderer/modules",
+     "+third_party/blink/renderer/modules/modules_export.h",
+     # Can modules/permissions be removed when https://crbug.com/510948 is fixed?
+--- a/third_party/blink/renderer/modules/quota/storage_manager.cc
++++ b/third_party/blink/renderer/modules/quota/storage_manager.cc
+@@ -19,6 +19,7 @@
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/modules/permissions/permission_utils.h"
+ #include "third_party/blink/renderer/modules/quota/quota_utils.h"
+ #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
+@@ -41,7 +42,56 @@
+     "Internal error when calculating storage usage.";
+ const char kAbortErrorMessage[] = "The operation was aborted due to shutdown.";
+ 
++constexpr int64_t kPersonaMiB = 1024 * 1024;
++constexpr int64_t kPersonaGiB = 1024 * kPersonaMiB;
++
++int64_t RoundPersonaStorageUsage(int64_t usage_in_bytes) {
++  if (usage_in_bytes <= 0)
++    return 0;
++  return ((usage_in_bytes + kPersonaMiB - 1) / kPersonaMiB) * kPersonaMiB;
++}
++
++int64_t PersonaStorageQuota(ExecutionContext* context, int64_t fallback_quota) {
++  const HeliumPersonaSnapshot* snapshot = PersonaSpoofingHelper::Get(context);
++  if (!snapshot)
++    return fallback_quota;
++
++  if (snapshot->device_memory >= 8)
++    return 120 * kPersonaGiB;
++  if (snapshot->device_memory >= 4)
++    return 80 * kPersonaGiB;
++  if (snapshot->device_memory >= 2)
++    return 40 * kPersonaGiB;
++  return 20 * kPersonaGiB;
++}
++
++void ApplyPersonaStorageEstimate(ExecutionContext* context,
++                                 int64_t* usage_in_bytes,
++                                 int64_t* quota_in_bytes,
++                                 UsageBreakdownPtr& usage_breakdown) {
++  if (!PersonaSpoofingHelper::IsEnabled(context))
++    return;
++
++  *usage_in_bytes = RoundPersonaStorageUsage(*usage_in_bytes);
++  *quota_in_bytes = PersonaStorageQuota(context, *quota_in_bytes);
++
++  if (!usage_breakdown)
++    usage_breakdown = mojom::blink::UsageBreakdown::New();
++
++  usage_breakdown->indexedDatabase =
++      RoundPersonaStorageUsage(usage_breakdown->indexedDatabase);
++  usage_breakdown->serviceWorkerCache =
++      RoundPersonaStorageUsage(usage_breakdown->serviceWorkerCache);
++  usage_breakdown->serviceWorker =
++      RoundPersonaStorageUsage(usage_breakdown->serviceWorker);
++  usage_breakdown->fileSystem =
++      RoundPersonaStorageUsage(usage_breakdown->fileSystem);
++  usage_breakdown->webSql = 0;
++  usage_breakdown->backgroundFetch = 0;
++}
++
+ void QueryStorageUsageAndQuotaCallback(
++    ExecutionContext* execution_context,
+     ScriptPromiseResolver<StorageEstimate>* resolver,
+     mojom::blink::QuotaStatusCode status_code,
+     int64_t usage_in_bytes,
+@@ -68,6 +118,9 @@
+     return;
+   }
+ 
++  ApplyPersonaStorageEstimate(execution_context, &usage_in_bytes,
++                              &quota_in_bytes, usage_breakdown);
++
+   StorageEstimate* estimate = StorageEstimate::Create();
+   estimate->setUsage(usage_in_bytes);
+   estimate->setQuota(quota_in_bytes);
+@@ -170,7 +223,8 @@
+   auto promise = resolver->Promise();
+ 
+   auto callback = resolver->WrapCallbackInScriptScope(
+-      BindOnce(&QueryStorageUsageAndQuotaCallback));
++      BindOnce(&QueryStorageUsageAndQuotaCallback,
++               WrapPersistent(execution_context)));
+   GetQuotaHost(execution_context)
+       ->QueryStorageUsageAndQuota(mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+           std::move(callback), mojom::blink::QuotaStatusCode::kErrorAbort, 0, 0,
+--- a/third_party/blink/renderer/modules/quota/deprecated_storage_quota.cc
++++ b/third_party/blink/renderer/modules/quota/deprecated_storage_quota.cc
+@@ -43,6 +43,7 @@
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_storage_usage_callback.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/modules/quota/dom_error.h"
+ #include "third_party/blink/renderer/modules/quota/quota_utils.h"
+ #include "third_party/blink/renderer/platform/bindings/script_state.h"
+@@ -57,7 +58,40 @@
+ 
+ namespace {
+ 
++constexpr int64_t kPersonaMiB = 1024 * 1024;
++constexpr int64_t kPersonaGiB = 1024 * kPersonaMiB;
++
++int64_t RoundPersonaStorageUsage(int64_t usage_in_bytes) {
++  if (usage_in_bytes <= 0)
++    return 0;
++  return ((usage_in_bytes + kPersonaMiB - 1) / kPersonaMiB) * kPersonaMiB;
++}
++
++int64_t PersonaStorageQuota(ExecutionContext* context, int64_t fallback_quota) {
++  const HeliumPersonaSnapshot* snapshot = PersonaSpoofingHelper::Get(context);
++  if (!snapshot)
++    return fallback_quota;
++
++  if (snapshot->device_memory >= 8)
++    return 120 * kPersonaGiB;
++  if (snapshot->device_memory >= 4)
++    return 80 * kPersonaGiB;
++  if (snapshot->device_memory >= 2)
++    return 40 * kPersonaGiB;
++  return 20 * kPersonaGiB;
++}
++
++void ApplyPersonaStorageEstimate(ExecutionContext* context,
++                                 int64_t* usage_in_bytes,
++                                 int64_t* quota_in_bytes) {
++  if (!PersonaSpoofingHelper::IsEnabled(context))
++    return;
++  *usage_in_bytes = RoundPersonaStorageUsage(*usage_in_bytes);
++  *quota_in_bytes = PersonaStorageQuota(context, *quota_in_bytes);
++}
++
+ void DeprecatedQueryStorageUsageAndQuotaCallback(
++    ExecutionContext* execution_context,
+     V8StorageUsageCallback* success_callback,
+     V8StorageErrorCallback* error_callback,
+     mojom::blink::QuotaStatusCode status_code,
+@@ -72,6 +106,9 @@
+     return;
+   }
+ 
++  ApplyPersonaStorageEstimate(execution_context, &usage_in_bytes,
++                              &quota_in_bytes);
++
+   if (success_callback) {
+     success_callback->InvokeAndReportException(nullptr, usage_in_bytes,
+                                                quota_in_bytes);
+@@ -80,6 +117,7 @@
+ 
+ void RequestStorageQuotaCallback(V8StorageQuotaCallback* success_callback,
+                                  V8StorageErrorCallback* error_callback,
++                                 ExecutionContext* execution_context,
+                                  uint64_t requested_quota_in_bytes,
+                                  mojom::blink::QuotaStatusCode status_code,
+                                  int64_t usage_in_bytes,
+@@ -93,6 +131,9 @@
+     return;
+   }
+ 
++  ApplyPersonaStorageEstimate(execution_context, &usage_in_bytes,
++                              &quota_in_bytes);
++
+   if (success_callback) {
+     success_callback->InvokeAndReportException(
+         nullptr,
+@@ -142,6 +183,7 @@
+   }
+ 
+   auto callback = BindOnce(&DeprecatedQueryStorageUsageAndQuotaCallback,
++                           WrapPersistent(execution_context),
+                            WrapPersistent(success_callback),
+                            WrapPersistent(error_callback));
+   GetQuotaHost(execution_context)
+@@ -162,7 +204,8 @@
+ 
+   auto callback =
+       BindOnce(&RequestStorageQuotaCallback, WrapPersistent(success_callback),
+-               WrapPersistent(error_callback), new_quota_in_bytes);
++               WrapPersistent(error_callback), WrapPersistent(execution_context),
++               new_quota_in_bytes);
+ 
+   if (execution_context->GetSecurityOrigin()->IsOpaque()) {
+     // Unique origins cannot store persistent state.

@@ -1,0 +1,117 @@
+--- a/chrome/browser/net/profile_network_context_service.cc
++++ b/chrome/browser/net/profile_network_context_service.cc
+@@ -64,6 +64,7 @@
+ #include "components/embedder_support/pref_names.h"
+ #include "components/embedder_support/switches.h"
+ #include "components/enterprise/buildflags/buildflags.h"
+ #include "components/enterprise/connectors/core/connectors_prefs.h"
++#include "components/helium_persona/persona_snapshot.h"
+ #include "components/language/core/browser/language_prefs.h"
+ #include "components/language/core/browser/pref_names.h"
+@@ -681,6 +681,21 @@ void ProfileNetworkContextService::OnThirdPartyCookieBlockingChanged(
+ }
+ 
+ std::string ProfileNetworkContextService::ComputeAcceptLanguage() const {
++  helium_persona::PersonaSnapshot persona_snapshot =
++      helium_persona::MakePersonaSnapshot(*profile_->GetPrefs());
++  if (!persona_snapshot.passthrough) {
++    if (!persona_snapshot.accept_language.empty()) {
++      return persona_snapshot.accept_language;
++    }
++    if (!persona_snapshot.navigator_languages.empty()) {
++      return ComputeAcceptLanguageFromPref(
++          base::JoinString(persona_snapshot.navigator_languages, ","));
++    }
++    if (!persona_snapshot.locale.empty()) {
++      return ComputeAcceptLanguageFromPref(persona_snapshot.locale);
++    }
++  }
++
+   // TODO:(https://crbug.com/40224802) Return only single language without
+   // expanding the language list if the DisableReduceAcceptLanguage deprecation
+   // trial ends.
+--- a/chrome/browser/renderer_preferences_util.cc
++++ b/chrome/browser/renderer_preferences_util.cc
+@@ -155,7 +155,8 @@ void UpdateFromSystemSettings(blink::RendererPreferences* prefs,
+       pref_service->GetBoolean(prefs::kEnableDoNotTrack);
+   helium_persona::PersonaSnapshot persona_snapshot =
+       helium_persona::MakePersonaSnapshot(*pref_service);
+-  if (!persona_snapshot.passthrough)
++  const bool persona_enabled = !persona_snapshot.passthrough;
++  if (persona_enabled)
+     prefs->enable_do_not_track = persona_snapshot.do_not_track_enabled;
+   prefs->enable_encrypted_media =
+       pref_service->GetBoolean(prefs::kEnableEncryptedMedia);
+@@ -197,8 +198,24 @@ void UpdateFromSystemSettings(blink::RendererPreferences* prefs,
+                  &prefs->webrtc_udp_min_port, &prefs->webrtc_udp_max_port);
+   prefs->webrtc_local_ips_allowed_urls = GetLocalIpsAllowedUrls(
+       pref_service->GetList(prefs::kWebRtcLocalIpsAllowedUrls));
+   prefs->accept_languages = GetLanguageListForProfile(
+       profile, pref_service->GetString(language::prefs::kAcceptLanguages));
++  if (persona_enabled) {
++    if (pref_service->GetString(prefs::kWebRTCIPHandlingPolicy) !=
++        "disable_non_proxied_udp") {
++      prefs->webrtc_ip_handling_policy = blink::ToWebRTCIPHandlingPolicy(
++          blink::kWebRTCIPHandlingDefaultPublicInterfaceOnly);
++    }
++    prefs->webrtc_ip_handling_urls.clear();
++    prefs->webrtc_local_ips_allowed_urls.clear();
++
++    if (!persona_snapshot.navigator_languages.empty()) {
++      prefs->accept_languages =
++          base::JoinString(persona_snapshot.navigator_languages, ",");
++    } else if (!persona_snapshot.locale.empty()) {
++      prefs->accept_languages = persona_snapshot.locale;
++    }
++  }
+ #if !BUILDFLAG(IS_MAC)
+   prefs->plugin_fullscreen_allowed =
+       pref_service->GetBoolean(prefs::kFullscreenAllowed);
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -3380,11 +3380,16 @@ std::string ChromeContentBrowserClient::GetApplicationLocale() {
+ 
+ std::string ChromeContentBrowserClient::GetAcceptLangs(
+     content::BrowserContext* context) {
+   Profile* profile = Profile::FromBrowserContext(context);
+   blink::HeliumPersonaSnapshot snapshot =
+       GetHeliumPersonaSnapshotForBrowserContext(context);
+-  if (snapshot.IsEnabled() && !snapshot.accept_language.empty()) {
+-    return snapshot.accept_language;
++  if (snapshot.IsEnabled()) {
++    if (!snapshot.navigator_languages.empty()) {
++      return base::JoinString(snapshot.navigator_languages, ",");
++    }
++    if (!snapshot.locale.empty()) {
++      return snapshot.locale;
++    }
+   }
+   return profile->GetPrefs()->GetString(language::prefs::kAcceptLanguages);
+ }
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -628,5 +628,12 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   EXPECT_EQ("ManualUA/149.0", *runtime.FindString("userAgent"));
+   EXPECT_EQ("fr-FR", *runtime.FindDict("region")->FindString("locale"));
++  EXPECT_EQ("fr-FR,fr;q=0.9,en;q=0.8",
++            *runtime.FindDict("region")->FindString("acceptLanguage"));
++  const base::Value::List* runtime_languages =
++      runtime.FindDict("region")->FindList("navigatorLanguages");
++  ASSERT_TRUE(runtime_languages);
++  ASSERT_EQ(3u, runtime_languages->size());
++  EXPECT_EQ("fr-FR", (*runtime_languages)[0].GetString());
+   EXPECT_EQ("wifi", *runtime.FindDict("network")->FindString("type"));
+   EXPECT_EQ("3g",
+             *runtime.FindDict("network")->FindString("effectiveType"));
+@@ -682,6 +689,11 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   PersonaSnapshot snapshot = MakePersonaSnapshot(runtime);
+   EXPECT_EQ("manual-runtime-seed", snapshot.noise_seed);
+   EXPECT_EQ("Europe/Paris", snapshot.timezone);
++  EXPECT_EQ("fr-FR", snapshot.locale);
++  EXPECT_EQ("fr-FR,fr;q=0.9,en;q=0.8", snapshot.accept_language);
++  ASSERT_EQ(3u, snapshot.navigator_languages.size());
++  EXPECT_EQ("fr-FR", snapshot.navigator_languages[0]);
++  EXPECT_EQ("fr", snapshot.navigator_languages[1]);
+   EXPECT_EQ("wifi", snapshot.network_type);
+   EXPECT_EQ("3g", snapshot.network_effective_type);
+   EXPECT_EQ(125, snapshot.network_rtt);

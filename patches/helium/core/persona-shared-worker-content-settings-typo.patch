@@ -1,0 +1,11 @@
+--- a/third_party/blink/renderer/core/exported/web_shared_worker_impl.h
++++ b/third_party/blink/renderer/core/exported/web_shared_worker_impl.h
+@@ -123,7 +123,7 @@
+       const base::UnguessableToken& devtools_worker_token,
+       CrossVariantMojoRemote<
+           mojom::blink::WorkerContentSettingsProxyInterfaceBase>
+-          ontent_settings,
++          content_settings,
+       CrossVariantMojoRemote<mojom::blink::BrowserInterfaceBrokerInterfaceBase>
+           browser_interface_broker,
+       bool pause_worker_context_on_start,

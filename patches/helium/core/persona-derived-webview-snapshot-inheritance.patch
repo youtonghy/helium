@@ -1,0 +1,132 @@
+diff --git a/third_party/blink/public/web/web_view.h b/third_party/blink/public/web/web_view.h
+--- a/third_party/blink/public/web/web_view.h
++++ b/third_party/blink/public/web/web_view.h
+@@ -431,6 +431,8 @@ class BLINK_EXPORT WebView {
+       const RendererPreferences& preferences) = 0;
+   virtual const RendererPreferences& GetRendererPreferences() const = 0;
+ 
++  virtual const HeliumPersonaSnapshot& GetHeliumPersonaSnapshot() const = 0;
++
+   // Web preferences ---------------------------------------------------
+ 
+   // Applies blink related preferences to this view.
+diff --git a/third_party/blink/renderer/core/exported/web_view_impl.h b/third_party/blink/renderer/core/exported/web_view_impl.h
+--- a/third_party/blink/renderer/core/exported/web_view_impl.h
++++ b/third_party/blink/renderer/core/exported/web_view_impl.h
+@@ -219,5 +219,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
+   void SetRendererPreferences(const RendererPreferences& preferences) override;
+   const RendererPreferences& GetRendererPreferences() const override;
++  const HeliumPersonaSnapshot& GetHeliumPersonaSnapshot() const override;
++
+   void SetWebPreferences(const web_pref::WebPreferences& preferences) override;
+   const web_pref::WebPreferences& GetWebPreferences() override;
+   void SetHistoryListFromNavigation(
+diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_party/blink/renderer/core/exported/web_view_impl.cc
+--- a/third_party/blink/renderer/core/exported/web_view_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
+@@ -3934,6 +3934,10 @@ const RendererPreferences& WebViewImpl::GetRendererPreferences() const {
+   return renderer_preferences_;
+ }
+ 
++const HeliumPersonaSnapshot& WebViewImpl::GetHeliumPersonaSnapshot() const {
++  return page_->GetHeliumPersonaSnapshot();
++}
++
+ void WebViewImpl::UpdateRendererPreferences(
+     const RendererPreferences& preferences) {
+   std::string old_accept_languages = renderer_preferences_.accept_languages;
+diff --git a/components/printing/renderer/print_render_frame_helper.cc b/components/printing/renderer/print_render_frame_helper.cc
+--- a/components/printing/renderer/print_render_frame_helper.cc
++++ b/components/printing/renderer/print_render_frame_helper.cc
+@@ -671,6 +671,9 @@ class HeaderAndFooterContext {
+  private:
+   static blink::WebView* CreateWebView(
+       const blink::WebLocalFrame& source_frame) {
++    const blink::HeliumPersonaSnapshot persona_snapshot =
++        source_frame.View() ? source_frame.View()->GetHeliumPersonaSnapshot()
++                            : blink::HeliumPersonaSnapshot();
+     auto* view = blink::WebView::Create(
+         /*client=*/nullptr,
+         /*is_hidden=*/false,
+@@ -684,7 +687,7 @@ class HeaderAndFooterContext {
+         /*history_index=*/-1,
+         /*history_length=*/0,
+         /*noise_tokens=*/blink::HeliumNoiseTokenMap(),
+-        /*persona_snapshot=*/blink::HeliumPersonaSnapshot());
++        /*persona_snapshot=*/persona_snapshot);
+     view->GetSettings()->SetJavaScriptEnabled(true);
+     return view;
+   }
+@@ -962,6 +965,9 @@ void PrepareFrameAndViewForPrint::CopySelection(
+   // on the page).
+   WebPreferences prefs = preferences;
+   prefs.javascript_enabled = false;
++  const blink::HeliumPersonaSnapshot persona_snapshot =
++      frame()->View() ? frame()->View()->GetHeliumPersonaSnapshot()
++                      : blink::HeliumPersonaSnapshot();
+ 
+   blink::WebView* web_view = blink::WebView::Create(
+       /*client=*/this,
+@@ -979,7 +985,7 @@ void PrepareFrameAndViewForPrint::CopySelection(
+       /*history_index=*/-1,
+       /*history_length=*/0,
+       /*noise_tokens=*/blink::HeliumNoiseTokenMap(),
+-      /*persona_snapshot=*/blink::HeliumPersonaSnapshot());
++      /*persona_snapshot=*/persona_snapshot);
+   blink::WebView::ApplyWebPreferences(prefs, web_view);
+   blink::WebLocalFrame* main_frame = blink::WebLocalFrame::CreateMainFrame(
+       web_view, this, nullptr, mojo::NullRemote(), blink::LocalFrameToken(),
+diff --git a/components/plugins/renderer/webview_plugin.h b/components/plugins/renderer/webview_plugin.h
+--- a/components/plugins/renderer/webview_plugin.h
++++ b/components/plugins/renderer/webview_plugin.h
+@@ -31,6 +31,7 @@ namespace web_pref {
+ struct WebPreferences;
+ }  // namespace web_pref
+ struct RendererPreferences;
++struct HeliumPersonaSnapshot;
+ class WebLocalFrame;
+ class WebMouseEvent;
+ }
+@@ -170,7 +171,8 @@ class WebViewPlugin : public blink::WebPlugin, public blink::WebViewObserver {
+     WebViewHelper(
+         WebViewPlugin* plugin,
+         const blink::web_pref::WebPreferences& parent_web_preferences,
+-        const blink::RendererPreferences& parent_renderer_preferences);
++        const blink::RendererPreferences& parent_renderer_preferences,
++        const blink::HeliumPersonaSnapshot& parent_persona_snapshot);
+     ~WebViewHelper() override;
+ 
+     blink::WebView* web_view() { return web_view_; }
+diff --git a/components/plugins/renderer/webview_plugin.cc b/components/plugins/renderer/webview_plugin.cc
+--- a/components/plugins/renderer/webview_plugin.cc
++++ b/components/plugins/renderer/webview_plugin.cc
+@@ -57,8 +57,9 @@ WebViewPlugin::WebViewPlugin(WebView* web_view,
+       finished_loading_(false),
+       focused_(false),
+       is_painting_(false),
+-      is_resizing_(false),
+-      web_view_helper_(this, preferences, web_view->GetRendererPreferences()) {}
++      is_resizing_(false),
++      web_view_helper_(this, preferences, web_view->GetRendererPreferences(),
++                       web_view->GetHeliumPersonaSnapshot()) {}
+ 
+ // static
+ WebViewPlugin* WebViewPlugin::Create(WebView* web_view,
+@@ -259,6 +260,7 @@ WebViewPlugin::WebViewHelper::WebViewHelper(
+     WebViewPlugin* plugin,
+     const WebPreferences& parent_web_preferences,
+-    const blink::RendererPreferences& parent_renderer_preferences)
++    const blink::RendererPreferences& parent_renderer_preferences,
++    const blink::HeliumPersonaSnapshot& parent_persona_snapshot)
+     : plugin_(plugin),
+       agent_group_scheduler_(
+           blink::scheduler::WebThreadScheduler::MainThreadScheduler()
+@@ -281,7 +283,7 @@ WebViewPlugin::WebViewHelper::WebViewHelper(
+       /*history_index=*/-1,
+       /*history_length=*/0,
+       /*noise_tokens=*/blink::HeliumNoiseTokenMap(),
+-      /*persona_snapshot=*/blink::HeliumPersonaSnapshot());
++      /*persona_snapshot=*/parent_persona_snapshot);
+   // ApplyWebPreferences before making a WebLocalFrame so that the frame sees a
+   // consistent view of our preferences.
+   blink::WebView::ApplyWebPreferences(parent_web_preferences, web_view_);

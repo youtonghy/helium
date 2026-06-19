@@ -1,0 +1,38 @@
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index c50d2c3d..eac779cb 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -614,21 +614,22 @@ void PopulateChromeFrameBinders(
+ #endif
+ 
+   map->Add<network_hints::mojom::NetworkHintsHandler>(&BindNetworkHintsHandler);
+-  map->Add<media::mojom::OnDeviceSpeechRecognition>(
+-      &BindOnDeviceSpeechRecognitionHandler);
+-
++  if (HeliumPersonaAllowsMediaCapture(render_frame_host)) {
++    map->Add<media::mojom::OnDeviceSpeechRecognition>(
++        &BindOnDeviceSpeechRecognitionHandler);
+ #if BUILDFLAG(ENABLE_SPEECH_SERVICE)
+-  map->Add<media::mojom::SpeechRecognitionContext>(
+-      &BindSpeechRecognitionContextHandler);
+-  map->Add<media::mojom::SpeechRecognitionClientBrowserInterface>(
+-      &BindSpeechRecognitionClientBrowserInterfaceHandler);
+-  map->Add<media::mojom::SpeechRecognitionRecognizerClient>(
+-      &BindSpeechRecognitionRecognizerClientHandler);
++    map->Add<media::mojom::SpeechRecognitionContext>(
++        &BindSpeechRecognitionContextHandler);
++    map->Add<media::mojom::SpeechRecognitionClientBrowserInterface>(
++        &BindSpeechRecognitionClientBrowserInterfaceHandler);
++    map->Add<media::mojom::SpeechRecognitionRecognizerClient>(
++        &BindSpeechRecognitionRecognizerClientHandler);
+ #if BUILDFLAG(IS_WIN)
+-  map->Add<media::mojom::MediaFoundationRendererNotifier>(
+-      &BindMediaFoundationRendererNotifierHandler);
++    map->Add<media::mojom::MediaFoundationRendererNotifier>(
++        &BindMediaFoundationRendererNotifierHandler);
+ #endif
+ #endif  // BUILDFLAG(ENABLE_SPEECH_SERVICE)
++  }
+ 
+ #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+     BUILDFLAG(IS_CHROMEOS)

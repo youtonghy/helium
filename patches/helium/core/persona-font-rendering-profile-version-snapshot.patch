@@ -1,0 +1,122 @@
+diff --git a/components/helium_persona/persona_snapshot.h b/components/helium_persona/persona_snapshot.h
+--- a/components/helium_persona/persona_snapshot.h
++++ b/components/helium_persona/persona_snapshot.h
+@@ -140,6 +140,7 @@ struct COMPONENT_EXPORT(HELIUM_PERSONA) PersonaSnapshot {
+ 
+   std::string font_rendering_id;
+   std::string font_rendering_name;
++  int font_rendering_profile_version = 1;
+   std::string font_rendering_engine;
+   std::string font_rendering_hinting;
+   bool font_antialiasing = true;
+diff --git a/components/helium_persona/persona_snapshot.cc b/components/helium_persona/persona_snapshot.cc
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -416,6 +416,11 @@ PersonaSnapshot MakePersonaSnapshot(const base::Value::Dict& persona) {
+       GetNestedString(persona, "fontRendering", "id");
+   snapshot.font_rendering_name =
+       GetNestedString(persona, "fontRendering", "displayName");
++  snapshot.font_rendering_profile_version =
++      GetNestedInt(persona, "fontRendering", "profileVersion");
++  if (snapshot.font_rendering_profile_version <= 0) {
++    snapshot.font_rendering_profile_version = 1;
++  }
+   snapshot.font_rendering_engine =
+       GetNestedString(persona, "fontRendering", "engine");
+   snapshot.font_rendering_hinting =
+@@ -790,6 +795,8 @@ base::Value::Dict PersonaSnapshotToValue(const PersonaSnapshot& snapshot) {
+   base::Value::Dict font_rendering;
+   font_rendering.Set("id", snapshot.font_rendering_id);
+   font_rendering.Set("displayName", snapshot.font_rendering_name);
++  font_rendering.Set("profileVersion",
++                     snapshot.font_rendering_profile_version);
+   font_rendering.Set("engine", snapshot.font_rendering_engine);
+   font_rendering.Set("hinting", snapshot.font_rendering_hinting);
+   font_rendering.Set("antialiasing", snapshot.font_antialiasing);
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -2365,5 +2365,6 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   font_rendering->Set("id", "manual-font-rendering");
+   font_rendering->Set("displayName", "Manual rendering");
++  font_rendering->Set("profileVersion", 7);
+   font_rendering->Set("engine", "FreeType");
+   font_rendering->Set("hinting", "none");
+   font_rendering->Set("antialiasing", true);
+@@ -2508,6 +2509,11 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   EXPECT_EQ(8.0,
+             runtime.FindDict("hardware")->FindDouble("deviceMemory").value_or(0));
+   EXPECT_EQ("manual-font-pack", *runtime.FindDict("fonts")->FindString("id"));
++  const base::Value::Dict* runtime_font_rendering =
++      runtime.FindDict("fontRendering");
++  ASSERT_TRUE(runtime_font_rendering);
++  EXPECT_EQ(7,
++            runtime_font_rendering->FindInt("profileVersion").value_or(0));
+   const base::Value::Dict* runtime_advanced = runtime.FindDict("advanced");
+   ASSERT_TRUE(runtime_advanced);
+ 
+@@ -2649,6 +2655,7 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoPersonaSnapshot) {
+   EXPECT_EQ("texture-compression-bc", snapshot.webgpu_features[1]);
+   EXPECT_EQ("manual-font-pack", snapshot.font_pack_id);
+   EXPECT_EQ("manual-font-rendering", snapshot.font_rendering_id);
++  EXPECT_EQ(7, snapshot.font_rendering_profile_version);
+   EXPECT_FALSE(snapshot.client_hints_enabled);
+   EXPECT_TRUE(snapshot.reduce_system_info);
+   EXPECT_FALSE(snapshot.canvas_noise);
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -937,6 +937,8 @@ blink::HeliumPersonaSnapshot ToBlinkPersonaSnapshot(
+   target.font_aliases = source.font_aliases;
+   target.font_rendering_id = source.font_rendering_id;
+   target.font_rendering_name = source.font_rendering_name;
++  target.font_rendering_profile_version =
++      source.font_rendering_profile_version;
+   target.font_rendering_engine = source.font_rendering_engine;
+   target.font_rendering_hinting = source.font_rendering_hinting;
+   target.font_antialiasing = source.font_antialiasing;
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot.h b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -142,6 +142,7 @@ struct BLINK_COMMON_EXPORT HeliumPersonaSnapshot {
+ 
+   std::string font_rendering_id;
+   std::string font_rendering_name;
++  int font_rendering_profile_version = 1;
+   std::string font_rendering_engine;
+   std::string font_rendering_hinting;
+   bool font_antialiasing = true;
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -457,6 +457,10 @@ struct BLINK_COMMON_EXPORT
+       const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.font_rendering_name;
+   }
++  static int font_rendering_profile_version(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.font_rendering_profile_version;
++  }
+   static const std::string& font_rendering_engine(
+       const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.font_rendering_engine;
+@@ -946,6 +950,8 @@ inline bool StructTraits<blink::mojom::HeliumPersonaSnapshotDataView,
+   out->font_lcd_text = data.font_lcd_text();
+   out->font_use_autohinter = data.font_use_autohinter();
+   out->font_use_bitmaps = data.font_use_bitmaps();
++  out->font_rendering_profile_version =
++      data.font_rendering_profile_version();
+   out->font_text_gamma = data.font_text_gamma();
+   out->font_text_contrast = data.font_text_contrast();
+ 
+diff --git a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -130,6 +130,7 @@ struct HeliumPersonaSnapshot {
+ 
+   string font_rendering_id;
+   string font_rendering_name;
++  int32 font_rendering_profile_version;
+   string font_rendering_engine;
+   string font_rendering_hinting;
+   bool font_antialiasing;

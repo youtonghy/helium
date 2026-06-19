@@ -1,0 +1,307 @@
+diff --git a/components/helium_persona/persona_prefs.cc b/components/helium_persona/persona_prefs.cc
+index fc9a4a95..4467def6 100644
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -5,6 +5,7 @@
+ #include "components/helium_persona/persona_prefs.h"
+ 
+ #include <cstdint>
++#include <optional>
+ #include <string>
+ #include <string_view>
+ 
+@@ -40,9 +41,26 @@ std::string GetPersonaId(const base::Value::Dict& persona) {
+   return id ? *id : std::string();
+ }
+ 
++bool IsProfileAsciiWhitespace(char value) {
++  return value == ' ' || value == '\t' || value == '\n' ||
++         value == '\r' || value == '\f' || value == '\v';
++}
++
++std::string TrimProfileString(std::string_view value) {
++  size_t begin = 0;
++  while (begin < value.size() && IsProfileAsciiWhitespace(value[begin])) {
++    ++begin;
++  }
++  size_t end = value.size();
++  while (end > begin && IsProfileAsciiWhitespace(value[end - 1])) {
++    --end;
++  }
++  return std::string(value.substr(begin, end - begin));
++}
++
+ std::string GetProfileId(const base::Value::Dict& profile) {
+   const std::string* id = profile.FindString("id");
+-  return id ? *id : std::string();
++  return id ? TrimProfileString(*id) : std::string();
+ }
+ 
+ bool IsPassthroughPersona(const base::Value::Dict& persona) {
+@@ -882,12 +900,21 @@ base::Value::List GetAllFontRenderingProfiles(const PrefService& pref_service) {
+ 
+ bool HasProfileString(const base::Value::Dict& profile, const char* key) {
+   const std::string* value = profile.FindString(key);
+-  return value && !value->empty();
++  return value && !TrimProfileString(*value).empty();
+ }
+ 
+ bool HasProfileStringList(const base::Value::Dict& profile, const char* key) {
+   const base::Value::List* values = profile.FindList(key);
+-  return values && !values->empty();
++  if (!values) {
++    return false;
++  }
++  for (const base::Value& value : *values) {
++    const std::string* item = value.GetIfString();
++    if (item && !TrimProfileString(*item).empty()) {
++      return true;
++    }
++  }
++  return false;
+ }
+ 
+ bool FontRenderingProfileHasRequiredFields(const base::Value::Dict& profile) {
+@@ -897,6 +924,88 @@ bool FontRenderingProfileHasRequiredFields(const base::Value::Dict& profile) {
+          HasProfileString(profile, "hinting");
+ }
+ 
++double GetProfileNumber(const base::Value::Dict& profile,
++                        const char* key,
++                        double default_value) {
++  if (std::optional<double> value = profile.FindDouble(key)) {
++    return *value;
++  }
++  if (std::optional<int> value = profile.FindInt(key)) {
++    return *value;
++  }
++  return default_value;
++}
++
++base::Value::List CopyStringListItems(const base::Value::Dict& profile,
++                                      const char* key) {
++  base::Value::List clean;
++  const base::Value::List* values = profile.FindList(key);
++  if (!values) {
++    return clean;
++  }
++  for (const base::Value& value : *values) {
++    const std::string* item = value.GetIfString();
++    if (item) {
++      std::string trimmed = TrimProfileString(*item);
++      if (!trimmed.empty()) {
++        clean.Append(std::move(trimmed));
++      }
++    }
++  }
++  return clean;
++}
++
++base::Value::Dict NormalizeFontPackProfileForStorage(
++    base::Value::Dict profile) {
++  base::Value::Dict normalized;
++  const std::string id = GetProfileId(profile);
++  if (!id.empty()) {
++    normalized.Set("id", id);
++  }
++  normalized.Set("displayName",
++                 TrimProfileString(*profile.FindString("displayName")));
++  normalized.Set("families", CopyStringListItems(profile, "families"));
++  normalized.Set("aliases", CopyStringListItems(profile, "aliases"));
++  return normalized;
++}
++
++base::Value::Dict NormalizeFontRenderingProfileForStorage(
++    base::Value::Dict profile) {
++  base::Value::Dict normalized;
++  const std::string id = GetProfileId(profile);
++  if (!id.empty()) {
++    normalized.Set("id", id);
++  }
++  normalized.Set("displayName",
++                 TrimProfileString(*profile.FindString("displayName")));
++  normalized.Set("engine", TrimProfileString(*profile.FindString("engine")));
++  normalized.Set("hinting", TrimProfileString(*profile.FindString("hinting")));
++  EnsureBool(normalized, "antialiasing",
++             profile.FindBool("antialiasing").value_or(true));
++  EnsureBool(normalized, "subpixelRendering",
++             profile.FindBool("subpixelRendering").value_or(false));
++  EnsureBool(normalized, "subpixelPositioning",
++             profile.FindBool("subpixelPositioning").value_or(false));
++  EnsureBool(normalized, "lcdText",
++             profile.FindBool("lcdText").value_or(false));
++  EnsureBool(normalized, "useAutohinter",
++             profile.FindBool("useAutohinter").value_or(false));
++  EnsureBool(normalized, "useBitmaps",
++             profile.FindBool("useBitmaps").value_or(false));
++  if (HasNumericValue(profile, "textGamma")) {
++    normalized.Set("textGamma", GetProfileNumber(profile, "textGamma", 1.4));
++  } else {
++    normalized.Set("textGamma", 1.4);
++  }
++  if (HasNumericValue(profile, "textContrast")) {
++    normalized.Set("textContrast",
++                   GetProfileNumber(profile, "textContrast", 0.0));
++  } else {
++    normalized.Set("textContrast", 0.0);
++  }
++  return normalized;
++}
++
+ base::Value::List GetCompatibleBuiltinPersonaPresets() {
+   base::Value::List presets = GetBuiltinPersonaPresets();
+   for (base::Value& value : presets) {
+@@ -1081,14 +1190,12 @@ bool SaveFontPackProfile(PrefService& pref_service,
+     return false;
+   }
+ 
++  profile = NormalizeFontPackProfileForStorage(std::move(profile));
+   std::string id = GetProfileId(profile);
+   if (id.empty() || IsBuiltinFontPackProfileId(id)) {
+     id = MakeCustomFontPackProfileId(pref_service, id);
+     profile.Set("id", id);
+   }
+-  if (!profile.FindList("aliases")) {
+-    profile.Set("aliases", base::Value::List());
+-  }
+   profile.Set("builtin", false);
+   profile.Set("modified", true);
+   profile.Set("updated", base::Time::Now().InMillisecondsFSinceUnixEpoch());
+@@ -1148,6 +1255,7 @@ bool SaveFontRenderingProfile(PrefService& pref_service,
+     return false;
+   }
+ 
++  profile = NormalizeFontRenderingProfileForStorage(std::move(profile));
+   std::string id = GetProfileId(profile);
+   if (id.empty() || IsBuiltinFontRenderingProfileId(id)) {
+     id = MakeCustomFontRenderingProfileId(pref_service, id);
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index 3f38e72b..9d16f75c 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -52,6 +52,18 @@ bool ProfilesContainId(const base::Value::List& profiles,
+   return false;
+ }
+ 
++const base::Value::Dict* FindProfileById(const base::Value::List& profiles,
++                                         std::string_view expected_id) {
++  for (const base::Value& profile : profiles) {
++    const base::Value::Dict* dict = profile.GetIfDict();
++    const std::string* id = dict ? dict->FindString("id") : nullptr;
++    if (id && *id == expected_id) {
++      return dict;
++    }
++  }
++  return nullptr;
++}
++
+ void ExpectFontRenderingProfileFields(const base::Value::Dict& font_rendering) {
+   EXPECT_TRUE(font_rendering.FindBool("antialiasing").has_value());
+   EXPECT_TRUE(font_rendering.FindBool("subpixelRendering").has_value());
+@@ -552,6 +564,40 @@ TEST(HeliumPersonaPrefsTest, SaveFontRenderingProfileCreatesIdWhenEmpty) {
+                                 "custom-rendering"));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, SaveFontRenderingProfileNormalizesStorageShape) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict custom;
++  custom.Set("id", " custom-minimal-rendering ");
++  custom.Set("displayName", " Minimal rendering ");
++  custom.Set("engine", " Skia ");
++  custom.Set("hinting", " slight ");
++  custom.Set("antialiasing", false);
++  custom.Set("subpixelRendering", "yes");
++  custom.Set("textGamma", "bad");
++  custom.Set("textContrast", 1);
++  custom.Set("unexpected", "drop me");
++  EXPECT_TRUE(SaveFontRenderingProfile(prefs, std::move(custom)));
++
++  base::Value::Dict state = GetPersonaState(prefs);
++  const base::Value::Dict* profile = FindProfileById(
++      *state.FindList("fontRenderingProfiles"), "custom-minimal-rendering");
++  ASSERT_TRUE(profile);
++  EXPECT_EQ("Minimal rendering", *profile->FindString("displayName"));
++  EXPECT_EQ("Skia", *profile->FindString("engine"));
++  EXPECT_EQ("slight", *profile->FindString("hinting"));
++  EXPECT_FALSE(profile->FindBool("antialiasing").value_or(true));
++  EXPECT_FALSE(profile->FindBool("subpixelRendering").value_or(true));
++  EXPECT_FALSE(profile->FindBool("subpixelPositioning").value_or(true));
++  EXPECT_FALSE(profile->FindBool("lcdText").value_or(true));
++  EXPECT_FALSE(profile->FindBool("useAutohinter").value_or(true));
++  EXPECT_FALSE(profile->FindBool("useBitmaps").value_or(true));
++  EXPECT_EQ(1.4, profile->FindDouble("textGamma").value_or(0));
++  EXPECT_EQ(1.0, profile->FindDouble("textContrast").value_or(0));
++  EXPECT_FALSE(profile->FindString("unexpected"));
++}
++
+ TEST(HeliumPersonaPrefsTest, StateIncludesIndependentFontPackProfiles) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);
+@@ -629,6 +675,65 @@ TEST(HeliumPersonaPrefsTest, SaveFontPackProfileCreatesIdWhenEmpty) {
+                                 "custom-font-pack"));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, SaveFontPackProfileNormalizesStorageShape) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict custom;
++  custom.Set("id", " custom-mixed-fonts ");
++  custom.Set("displayName", " Mixed fonts ");
++  base::Value::List families;
++  families.Append(" Arial ");
++  families.Append(false);
++  families.Append("   ");
++  families.Append("Noto Sans");
++  custom.Set("families", std::move(families));
++  base::Value::List aliases;
++  aliases.Append(" sans-serif=Arial ");
++  aliases.Append(17);
++  aliases.Append("");
++  aliases.Append("system-ui=Noto Sans");
++  custom.Set("aliases", std::move(aliases));
++  custom.Set("unexpected", "drop me");
++  EXPECT_TRUE(SaveFontPackProfile(prefs, std::move(custom)));
++
++  base::Value::Dict state = GetPersonaState(prefs);
++  const base::Value::Dict* profile =
++      FindProfileById(*state.FindList("fontPackProfiles"),
++                      "custom-mixed-fonts");
++  ASSERT_TRUE(profile);
++  EXPECT_EQ("Mixed fonts", *profile->FindString("displayName"));
++  const base::Value::List* saved_families = profile->FindList("families");
++  ASSERT_TRUE(saved_families);
++  ASSERT_EQ(2u, saved_families->size());
++  EXPECT_EQ("Arial", (*saved_families)[0].GetString());
++  EXPECT_EQ("Noto Sans", (*saved_families)[1].GetString());
++  const base::Value::List* saved_aliases = profile->FindList("aliases");
++  ASSERT_TRUE(saved_aliases);
++  ASSERT_EQ(2u, saved_aliases->size());
++  EXPECT_EQ("sans-serif=Arial", (*saved_aliases)[0].GetString());
++  EXPECT_EQ("system-ui=Noto Sans", (*saved_aliases)[1].GetString());
++  EXPECT_FALSE(profile->FindString("unexpected"));
++}
++
++TEST(HeliumPersonaPrefsTest, SaveFontPackProfileRejectsNonStringFamilies) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict custom;
++  custom.Set("id", "custom-bad-fonts");
++  custom.Set("displayName", "Bad fonts");
++  base::Value::List families;
++  families.Append(false);
++  families.Append("");
++  custom.Set("families", std::move(families));
++  EXPECT_FALSE(SaveFontPackProfile(prefs, std::move(custom)));
++
++  base::Value::Dict state = GetPersonaState(prefs);
++  EXPECT_FALSE(ProfilesContainId(*state.FindList("fontPackProfiles"),
++                                 "custom-bad-fonts"));
++}
++
+ TEST(HeliumPersonaPrefsTest, ValidationWarnsButAllowsConflicts) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);

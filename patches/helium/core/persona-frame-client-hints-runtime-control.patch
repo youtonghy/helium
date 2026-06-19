@@ -1,0 +1,222 @@
+diff --git a/third_party/blink/renderer/core/loader/frame_fetch_context.cc b/third_party/blink/renderer/core/loader/frame_fetch_context.cc
+index db4f1cb..4701626 100644
+--- a/third_party/blink/renderer/core/loader/frame_fetch_context.cc
++++ b/third_party/blink/renderer/core/loader/frame_fetch_context.cc
+@@ -81,6 +81,7 @@
+ #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+ #include "third_party/blink/renderer/core/frame/navigator.h"
+ #include "third_party/blink/renderer/core/frame/settings.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+ #include "third_party/blink/renderer/core/inspector/inspector_audits_issue.h"
+@@ -181,6 +182,26 @@ const AtomicString SerializeBoolHeader(const bool value) {
+   return false_value;
+ }
+ 
++AtomicString PersonaReducedPreferenceHeader(
++    const std::optional<String>& persona_value,
++    bool fallback_reduce) {
++  if (persona_value) {
++    return persona_value->LowerASCII() == "reduce" ? http_names::kReduce
++                                                   : http_names::kNoPreference;
++  }
++  return fallback_reduce ? http_names::kReduce : http_names::kNoPreference;
++}
++
++AtomicString PersonaColorSchemeHeader(
++    const std::optional<String>& persona_value,
++    bool fallback_dark) {
++  if (persona_value) {
++    return persona_value->LowerASCII() == "dark" ? http_names::kDark
++                                                 : http_names::kLight;
++  }
++  return fallback_dark ? http_names::kDark : http_names::kLight;
++}
++
+ mojom::FetchCacheMode DetermineFrameCacheMode(Frame* frame) {
+   if (!frame) {
+     return mojom::FetchCacheMode::kDefault;
+@@ -663,13 +684,18 @@ void FrameFetchContext::AddClientHintsIfNecessary(
+ 
+   using network::mojom::blink::WebClientHintsType;
+ 
++  ExecutionContext* execution_context = GetExecutionContext();
++  const std::optional<float> persona_device_memory =
++      PersonaSpoofingHelper::DeviceMemory(execution_context);
++
+   if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
+                            WebClientHintsType::kDeviceMemory_DEPRECATED,
+                            hints_preferences)) {
+     request.SetHttpHeaderField(
+         http_names::kDeviceMemory_DEPRECATED,
+         AtomicString(String::Number(
+-            ApproximatedDeviceMemory::GetApproximatedDeviceMemory())));
++            persona_device_memory.value_or(
++                ApproximatedDeviceMemory::GetApproximatedDeviceMemory()))));
+   }
+ 
+   if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
+@@ -678,52 +704,75 @@ void FrameFetchContext::AddClientHintsIfNecessary(
+     request.SetHttpHeaderField(
+         http_names::kDeviceMemory,
+         AtomicString(String::Number(
+-            ApproximatedDeviceMemory::GetApproximatedDeviceMemory())));
++            persona_device_memory.value_or(
++                ApproximatedDeviceMemory::GetApproximatedDeviceMemory()))));
+   }
+ 
+   if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
+                            WebClientHintsType::kRtt_DEPRECATED,
+                            hints_preferences)) {
+-    std::optional<base::TimeDelta> http_rtt =
+-        GetNetworkStateNotifier().GetWebHoldbackHttpRtt();
+-    if (!http_rtt) {
+-      http_rtt = GetNetworkStateNotifier().HttpRtt();
+-    }
++    std::optional<unsigned> persona_rtt =
++        PersonaSpoofingHelper::NetworkRtt(execution_context);
++    if (persona_rtt) {
++      request.SetHttpHeaderField(http_names::kRtt_DEPRECATED,
++                                 AtomicString(String::Number(*persona_rtt)));
++    } else {
++      std::optional<base::TimeDelta> http_rtt =
++          GetNetworkStateNotifier().GetWebHoldbackHttpRtt();
++      if (!http_rtt) {
++        http_rtt = GetNetworkStateNotifier().HttpRtt();
++      }
+ 
+-    uint32_t rtt = GetNetworkStateNotifier().RoundRtt(
+-        request.Url().Host().ToString(), http_rtt);
+-    request.SetHttpHeaderField(http_names::kRtt_DEPRECATED,
+-                               AtomicString(String::Number(rtt)));
++      uint32_t rtt = GetNetworkStateNotifier().RoundRtt(
++          request.Url().Host().ToString(), http_rtt);
++      request.SetHttpHeaderField(http_names::kRtt_DEPRECATED,
++                                 AtomicString(String::Number(rtt)));
++    }
+   }
+ 
+   if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
+                            WebClientHintsType::kDownlink_DEPRECATED,
+                            hints_preferences)) {
+-    std::optional<double> throughput_mbps =
+-        GetNetworkStateNotifier().GetWebHoldbackDownlinkThroughputMbps();
+-    if (!throughput_mbps) {
+-      throughput_mbps = GetNetworkStateNotifier().DownlinkThroughputMbps();
+-    }
++    std::optional<double> persona_downlink =
++        PersonaSpoofingHelper::NetworkDownlink(execution_context);
++    if (persona_downlink) {
++      request.SetHttpHeaderField(
++          http_names::kDownlink_DEPRECATED,
++          AtomicString(String::Number(*persona_downlink)));
++    } else {
++      std::optional<double> throughput_mbps =
++          GetNetworkStateNotifier().GetWebHoldbackDownlinkThroughputMbps();
++      if (!throughput_mbps) {
++        throughput_mbps = GetNetworkStateNotifier().DownlinkThroughputMbps();
++      }
+ 
+-    double mbps = GetNetworkStateNotifier().RoundMbps(
+-        request.Url().Host().ToString(), throughput_mbps);
+-    request.SetHttpHeaderField(http_names::kDownlink_DEPRECATED,
+-                               AtomicString(String::Number(mbps)));
++      double mbps = GetNetworkStateNotifier().RoundMbps(
++          request.Url().Host().ToString(), throughput_mbps);
++      request.SetHttpHeaderField(http_names::kDownlink_DEPRECATED,
++                                 AtomicString(String::Number(mbps)));
++    }
+   }
+ 
+   if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
+                            WebClientHintsType::kEct_DEPRECATED,
+                            hints_preferences)) {
+-    std::optional<WebEffectiveConnectionType> holdback_ect =
+-        GetNetworkStateNotifier().GetWebHoldbackEffectiveType();
+-    if (!holdback_ect) {
+-      holdback_ect = GetNetworkStateNotifier().EffectiveType();
+-    }
++    std::optional<String> persona_ect =
++        PersonaSpoofingHelper::NetworkEffectiveType(execution_context);
++    if (persona_ect) {
++      request.SetHttpHeaderField(http_names::kEct_DEPRECATED,
++                                 AtomicString(*persona_ect));
++    } else {
++      std::optional<WebEffectiveConnectionType> holdback_ect =
++          GetNetworkStateNotifier().GetWebHoldbackEffectiveType();
++      if (!holdback_ect) {
++        holdback_ect = GetNetworkStateNotifier().EffectiveType();
++      }
+ 
+-    request.SetHttpHeaderField(
+-        http_names::kEct_DEPRECATED,
+-        AtomicString(NetworkStateNotifier::EffectiveConnectionTypeToString(
+-            holdback_ect.value())));
++      request.SetHttpHeaderField(
++          http_names::kEct_DEPRECATED,
++          AtomicString(NetworkStateNotifier::EffectiveConnectionTypeToString(
++              holdback_ect.value())));
++    }
+   }
+ 
+   // Only send User Agent hints if the info is available
+@@ -816,7 +865,10 @@ void FrameFetchContext::AddClientHintsIfNecessary(
+     }
+   }
+ 
+-  bool save_data_enabled = GetNetworkStateNotifier().SaveDataEnabled();
++  bool save_data_enabled = PersonaSpoofingHelper::IsEnabled(execution_context)
++                               ? PersonaSpoofingHelper::NetworkSaveData(
++                                     execution_context)
++                               : GetNetworkStateNotifier().SaveDataEnabled();
+   probe::ApplyDataSaverOverride(Probe(), save_data_enabled);
+   if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
+                            WebClientHintsType::kSaveData, hints_preferences) &&
+@@ -827,19 +879,21 @@ void FrameFetchContext::AddClientHintsIfNecessary(
+   if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
+                            WebClientHintsType::kPrefersReducedTransparency,
+                            hints_preferences)) {
+-    request.SetHttpHeaderField(http_names::kPrefersReducedTransparency,
+-                               GetSettings()->GetPrefersReducedTransparency()
+-                                   ? http_names::kReduce
+-                                   : http_names::kNoPreference);
++    request.SetHttpHeaderField(
++        http_names::kPrefersReducedTransparency,
++        PersonaReducedPreferenceHeader(
++            PersonaSpoofingHelper::ReducedTransparency(execution_context),
++            GetSettings()->GetPrefersReducedTransparency()));
+   }
+ 
+   if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
+                            WebClientHintsType::kPrefersReducedMotion,
+                            hints_preferences)) {
+-    request.SetHttpHeaderField(http_names::kPrefersReducedMotion,
+-                               GetSettings()->GetPrefersReducedMotion()
+-                                   ? http_names::kReduce
+-                                   : http_names::kNoPreference);
++    request.SetHttpHeaderField(
++        http_names::kPrefersReducedMotion,
++        PersonaReducedPreferenceHeader(
++            PersonaSpoofingHelper::ReducedMotion(execution_context),
++            GetSettings()->GetPrefersReducedMotion()));
+   }
+ 
+   if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
+@@ -847,10 +901,14 @@ void FrameFetchContext::AddClientHintsIfNecessary(
+                            hints_preferences)) {
+     request.SetHttpHeaderField(
+         http_names::kPrefersColorScheme,
+-        document_->InDarkMode() ? http_names::kDark : http_names::kLight);
++        PersonaColorSchemeHeader(
++            PersonaSpoofingHelper::ColorScheme(execution_context),
++            document_->InDarkMode()));
+   }
+ 
+-  const float dpr = GetDevicePixelRatio();
++  const float dpr = static_cast<float>(
++      PersonaSpoofingHelper::DeviceScaleFactor(execution_context)
++          .value_or(GetDevicePixelRatio()));
+ 
+   if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
+                            WebClientHintsType::kDpr_DEPRECATED,

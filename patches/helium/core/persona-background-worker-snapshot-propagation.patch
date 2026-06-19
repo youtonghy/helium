@@ -1,0 +1,499 @@
+--- a/third_party/blink/public/mojom/worker/shared_worker_factory.mojom	2026-06-14 19:35:14
++++ b/third_party/blink/public/mojom/worker/shared_worker_factory.mojom	2026-06-15 13:28:20
+@@ -12,6 +12,7 @@
+ import "third_party/blink/public/mojom/frame/policy_container.mojom";
+ import "third_party/blink/public/mojom/frame/reporting_observer.mojom";
+ import "third_party/blink/public/mojom/fingerprinting_protection/noise_token.mojom";
++import "third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom";
+ import "third_party/blink/public/mojom/renderer_preferences.mojom";
+ import "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom";
+ import "third_party/blink/public/mojom/service_worker/service_worker_container.mojom";
+@@ -65,6 +66,7 @@
+ 
+       string user_agent,
+       UserAgentMetadata ua_metadata,
++      blink.mojom.HeliumPersonaSnapshot persona_snapshot,
+       bool pause_on_start,
+       mojo_base.mojom.UnguessableToken devtools_worker_token,
+       RendererPreferences renderer_preferences,
+--- a/content/browser/worker_host/shared_worker_host.cc	2026-06-14 19:35:09
++++ b/content/browser/worker_host/shared_worker_host.cc	2026-06-15 13:33:53
+@@ -5,7 +5,9 @@
+ #include "content/browser/worker_host/shared_worker_host.h"
+ 
+ #include <algorithm>
++#include <string>
+ #include <utility>
++#include <vector>
+ 
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+@@ -56,9 +58,11 @@
+ #include "services/network/public/mojom/ip_address_space.mojom-shared.h"
+ #include "storage/browser/blob/blob_url_store_impl.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
+ #include "third_party/blink/public/common/messaging/message_port_channel.h"
+ #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
++#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
+ #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
+ #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
+@@ -91,6 +95,77 @@
+                                 source);
+ }
+ 
++blink::UserAgentBrandList ToUserAgentBrandList(
++    const std::vector<blink::HeliumPersonaUaChBrand>& brands,
++    bool use_full_version,
++    const std::string& full_version) {
++  blink::UserAgentBrandList list;
++  for (const blink::HeliumPersonaUaChBrand& brand : brands) {
++    if (brand.brand.empty()) {
++      continue;
++    }
++    std::string version = brand.version;
++    if (use_full_version && brand.brand != "Not_A Brand" &&
++        !full_version.empty()) {
++      version = full_version;
++    }
++    list.emplace_back(brand.brand, version);
++  }
++  return list;
++}
++
++void ApplyPersonaUserAgentMetadata(
++    const blink::HeliumPersonaSnapshot& persona_snapshot,
++    blink::UserAgentMetadata* ua_metadata) {
++  if (!ua_metadata || !persona_snapshot.IsEnabled() ||
++      !persona_snapshot.client_hints_enabled) {
++    return;
++  }
++  ua_metadata->mobile = persona_snapshot.ua_ch_mobile;
++  if (!persona_snapshot.ua_ch_platform.empty()) {
++    ua_metadata->platform = persona_snapshot.ua_ch_platform;
++  }
++  if (!persona_snapshot.ua_ch_platform_version.empty()) {
++    ua_metadata->platform_version = persona_snapshot.ua_ch_platform_version;
++  }
++  if (!persona_snapshot.ua_ch_architecture.empty()) {
++    ua_metadata->architecture = persona_snapshot.ua_ch_architecture;
++  }
++  if (!persona_snapshot.ua_ch_model.empty()) {
++    ua_metadata->model = persona_snapshot.ua_ch_model;
++  }
++  if (!persona_snapshot.ua_ch_bitness.empty()) {
++    ua_metadata->bitness = persona_snapshot.ua_ch_bitness;
++  }
++  if (!persona_snapshot.ua_ch_brands.empty()) {
++    ua_metadata->brand_version_list = ToUserAgentBrandList(
++        persona_snapshot.ua_ch_brands, /*use_full_version=*/false,
++        persona_snapshot.ua_ch_full_version);
++  }
++  if (!persona_snapshot.ua_ch_full_version.empty()) {
++    ua_metadata->full_version = persona_snapshot.ua_ch_full_version;
++    ua_metadata->brand_full_version_list =
++        !persona_snapshot.ua_ch_brands.empty()
++            ? ToUserAgentBrandList(persona_snapshot.ua_ch_brands,
++                                   /*use_full_version=*/true,
++                                   persona_snapshot.ua_ch_full_version)
++            : ua_metadata->brand_version_list;
++    for (blink::UserAgentBrandVersion& brand_version :
++         ua_metadata->brand_full_version_list) {
++      if (brand_version.brand != "Not_A Brand") {
++        brand_version.version = persona_snapshot.ua_ch_full_version;
++      }
++    }
++  }
++  ua_metadata->wow64 = persona_snapshot.ua_ch_wow64;
++  if (!persona_snapshot.ua_ch_form_factors.empty()) {
++    ua_metadata->form_factors = persona_snapshot.ua_ch_form_factors;
++  } else {
++    ua_metadata->form_factors = {
++        persona_snapshot.ua_ch_mobile ? "Mobile" : "Desktop"};
++  }
++}
++
+ }  // namespace
+ 
+ namespace content {
+@@ -456,6 +531,19 @@
+                                    ->GetProcessLock()
+                                    .GetWebExposedIsolationInfo()
+                                    .is_isolated();
++
++  BrowserContext* browser_context = GetProcessHost()->GetBrowserContext();
++  blink::HeliumPersonaSnapshot persona_snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
++  std::string user_agent = GetContentClient()->browser()->GetUserAgent();
++  blink::UserAgentMetadata ua_metadata =
++      GetContentClient()->browser()->GetUserAgentMetadata();
++  if (persona_snapshot.IsEnabled()) {
++    if (!persona_snapshot.user_agent.empty()) {
++      user_agent = persona_snapshot.user_agent;
++    }
++    ApplyPersonaUserAgentMetadata(persona_snapshot, &ua_metadata);
++  }
+ 
+   // Send the CreateSharedWorker message.
+   factory_.Bind(std::move(factory));
+@@ -464,8 +552,7 @@
+       instance_.worker_storage_key().origin(),
+       creator_policy_container_host_ &&
+           creator_policy_container_host_->policies().is_web_secure_context,
+-      GetContentClient()->browser()->GetUserAgent(),
+-      GetContentClient()->browser()->GetUserAgentMetadata(),
++      user_agent, ua_metadata, persona_snapshot,
+       devtools_handle_->pause_on_start(), devtools_handle_->dev_tools_token(),
+       std::move(renderer_preferences), std::move(preference_watcher_receiver),
+       std::move(content_settings), std::move(container_info),
+--- a/content/renderer/worker/shared_worker_factory_impl.h	2026-06-14 19:35:09
++++ b/content/renderer/worker/shared_worker_factory_impl.h	2026-06-15 13:29:03
+@@ -8,6 +8,7 @@
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+ #include "third_party/blink/public/mojom/frame/reporting_observer.mojom.h"
+@@ -40,6 +41,7 @@
+       bool is_constructor_secure_context,
+       const std::string& user_agent,
+       const blink::UserAgentMetadata& ua_metadata,
++      const blink::HeliumPersonaSnapshot& persona_snapshot,
+       bool pause_on_start,
+       const base::UnguessableToken& devtools_worker_token,
+       const blink::RendererPreferences& renderer_preferences,
+--- a/content/renderer/worker/shared_worker_factory_impl.cc	2026-06-14 19:35:09
++++ b/content/renderer/worker/shared_worker_factory_impl.cc	2026-06-15 13:30:13
+@@ -30,6 +30,7 @@
+     bool is_constructor_secure_context,
+     const std::string& user_agent,
+     const blink::UserAgentMetadata& ua_metadata,
++    const blink::HeliumPersonaSnapshot& persona_snapshot,
+     bool pause_on_start,
+     const base::UnguessableToken& devtools_worker_token,
+     const blink::RendererPreferences& renderer_preferences,
+@@ -58,8 +59,8 @@
+   // Bound to the lifetime of the underlying blink::WebSharedWorker instance.
+   new EmbeddedSharedWorkerStub(
+       std::move(info), token, constructor_key, origin,
+-      is_constructor_secure_context, user_agent, ua_metadata, pause_on_start,
+-      devtools_worker_token, renderer_preferences,
++      is_constructor_secure_context, user_agent, ua_metadata, persona_snapshot,
++      pause_on_start, devtools_worker_token, renderer_preferences,
+       std::move(preference_watcher_receiver), std::move(content_settings),
+       std::move(service_worker_container_info),
+       std::move(main_script_load_params),
+--- a/content/renderer/worker/embedded_shared_worker_stub.h	2026-06-14 19:35:09
++++ b/content/renderer/worker/embedded_shared_worker_stub.h	2026-06-15 13:29:03
+@@ -16,6 +16,7 @@
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
+ #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+ #include "third_party/blink/public/common/tokens/tokens.h"
+@@ -64,6 +65,7 @@
+       bool is_constructor_secure_context,
+       const std::string& user_agent,
+       const blink::UserAgentMetadata& ua_metadata,
++      const blink::HeliumPersonaSnapshot& persona_snapshot,
+       bool pause_on_start,
+       const base::UnguessableToken& devtools_worker_token,
+       const blink::RendererPreferences& renderer_preferences,
+--- a/content/renderer/worker/embedded_shared_worker_stub.cc	2026-06-14 19:35:09
++++ b/content/renderer/worker/embedded_shared_worker_stub.cc	2026-06-15 13:29:03
+@@ -42,6 +42,7 @@
+     bool is_constructor_secure_context,
+     const std::string& user_agent,
+     const blink::UserAgentMetadata& ua_metadata,
++    const blink::HeliumPersonaSnapshot& persona_snapshot,
+     bool pause_on_start,
+     const base::UnguessableToken& devtools_worker_token,
+     const blink::RendererPreferences& renderer_preferences,
+@@ -131,6 +132,7 @@
+       blink::WebSecurityOrigin(constructor_key.origin()),
+       blink::WebSecurityOrigin(origin), is_constructor_secure_context,
+       blink::WebString::FromUtf8(user_agent), ua_metadata,
++      persona_snapshot,
+       ToWebContentSecurityPolicies(info->content_security_policies),
+       FetchClientSettingsObjectFromMojomToWeb(
+           info->outside_fetch_client_settings_object),
+--- a/third_party/blink/public/web/web_shared_worker.h	2026-06-14 19:35:14
++++ b/third_party/blink/public/web/web_shared_worker.h	2026-06-15 13:29:04
+@@ -38,6 +38,7 @@
+ #include "services/metrics/public/cpp/ukm_source_id.h"
+ #include "services/network/public/mojom/content_security_policy.mojom-shared.h"
+ #include "services/network/public/mojom/fetch_api.mojom-shared.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/tokens/tokens.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ #include "third_party/blink/public/mojom/browser_interface_broker.mojom-shared.h"
+@@ -82,6 +83,7 @@
+       bool is_constructor_secure_context,
+       const WebString& user_agent,
+       const UserAgentMetadata& ua_metadata,
++      const HeliumPersonaSnapshot& persona_snapshot,
+       const std::vector<WebContentSecurityPolicy>& content_security_policies,
+       const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
+       const base::UnguessableToken& devtools_worker_token,
+--- a/third_party/blink/renderer/core/exported/web_shared_worker_impl.h	2026-06-14 19:35:14
++++ b/third_party/blink/renderer/core/exported/web_shared_worker_impl.h	2026-06-15 13:29:04
+@@ -41,6 +41,7 @@
+ #include "services/network/public/mojom/content_security_policy.mojom-blink-forward.h"
+ #include "services/network/public/mojom/fetch_api.mojom-shared.h"
+ #include "services/network/public/mojom/source_location.mojom-blink.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
+ #include "third_party/blink/public/mojom/frame/reporting_observer.mojom-blink-forward.h"
+ #include "third_party/blink/public/mojom/script/script_type.mojom-blink.h"
+@@ -115,6 +116,7 @@
+       bool is_constructor_secure_context,
+       const WebString& user_agent,
+       const blink::UserAgentMetadata& ua_metadata,
++      const HeliumPersonaSnapshot& persona_snapshot,
+       const std::vector<WebContentSecurityPolicy>& content_security_policies,
+       const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
+       const base::UnguessableToken& devtools_worker_token,
+--- a/third_party/blink/renderer/core/exported/web_shared_worker_impl.cc	2026-06-14 19:35:14
++++ b/third_party/blink/renderer/core/exported/web_shared_worker_impl.cc	2026-06-15 13:29:04
+@@ -218,6 +218,7 @@
+     bool is_constructor_secure_context,
+     const WebString& user_agent,
+     const UserAgentMetadata& ua_metadata,
++    const HeliumPersonaSnapshot& persona_snapshot,
+     const std::vector<WebContentSecurityPolicy>& content_security_policies,
+     const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
+     const base::UnguessableToken& devtools_worker_token,
+@@ -305,6 +306,7 @@
+       blink::SecurityOrigin::CreateFromUrlOrigin(
+           url::Origin(origin_from_browser)),
+       std::move(coep_reporting_observer), std::move(dip_reporting_observer));
++  creation_params->persona_snapshot = persona_snapshot;
+ 
+   auto thread_startup_data = WorkerBackingThreadStartupData::CreateDefault();
+   thread_startup_data.atomics_wait_mode =
+@@ -371,6 +373,7 @@
+     bool is_constructor_secure_context,
+     const WebString& user_agent,
+     const UserAgentMetadata& ua_metadata,
++    const HeliumPersonaSnapshot& persona_snapshot,
+     const std::vector<WebContentSecurityPolicy>& content_security_policies,
+     const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
+     const base::UnguessableToken& devtools_worker_token,
+@@ -397,7 +400,7 @@
+   worker->StartWorkerContext(
+       script_request_url, script_type, credentials_mode, name,
+       constructor_origin, origin_from_browser, is_constructor_secure_context,
+-      user_agent, ua_metadata, content_security_policies,
++      user_agent, ua_metadata, persona_snapshot, content_security_policies,
+       outside_fetch_client_settings_object, devtools_worker_token,
+       std::move(content_settings), std::move(browser_interface_broker),
+       pause_worker_context_on_start, std::move(worker_main_script_load_params),
+--- a/content/browser/worker_host/mock_shared_worker.h	2026-06-14 19:35:09
++++ b/content/browser/worker_host/mock_shared_worker.h	2026-06-15 13:32:39
+@@ -19,6 +19,7 @@
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
+ #include "services/network/public/mojom/content_security_policy.mojom-forward.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/messaging/message_port_channel.h"
+ #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+@@ -104,6 +105,7 @@
+       bool is_constructor_secure_context,
+       const std::string& user_agent,
+       const blink::UserAgentMetadata& ua_metadata,
++      const blink::HeliumPersonaSnapshot& persona_snapshot,
+       bool pause_on_start,
+       const base::UnguessableToken& devtools_worker_token,
+       const blink::RendererPreferences& renderer_preferences,
+--- a/content/browser/worker_host/mock_shared_worker.cc	2026-06-14 19:35:09
++++ b/content/browser/worker_host/mock_shared_worker.cc	2026-06-15 13:32:39
+@@ -138,6 +138,7 @@
+     bool is_constructor_secure_context,
+     const std::string& user_agent,
+     const blink::UserAgentMetadata& ua_metadata,
++    const blink::HeliumPersonaSnapshot& persona_snapshot,
+     bool pause_on_start,
+     const base::UnguessableToken& devtools_worker_token,
+     const blink::RendererPreferences& renderer_preferences,
+--- a/third_party/blink/public/mojom/service_worker/embedded_worker.mojom	2026-06-14 19:35:14
++++ b/third_party/blink/public/mojom/service_worker/embedded_worker.mojom	2026-06-15 13:28:20
+@@ -13,6 +13,7 @@
+ import "third_party/blink/public/mojom/devtools/devtools_agent.mojom";
+ import "third_party/blink/public/mojom/frame/policy_container.mojom";
+ import "third_party/blink/public/mojom/frame/reporting_observer.mojom";
++import "third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom";
+ import "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom";
+ import "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom";
+ import "third_party/blink/public/mojom/renderer_preference_watcher.mojom";
+@@ -63,6 +64,9 @@
+   // The metadata for userAgentData and the UA-CH headers.
+   // See https://wicg.github.io/ua-client-hints/ for more details.
+   UserAgentMetadata ua_metadata;
++
++  // Full web-visible persona snapshot for this service worker.
++  blink.mojom.HeliumPersonaSnapshot persona_snapshot;
+ 
+   // The id this service worker uses as render_frame_id in
+   // network::ResourceRequests it makes.
+--- a/content/browser/service_worker/service_worker_version.cc	2026-06-14 19:35:09
++++ b/content/browser/service_worker/service_worker_version.cc	2026-06-15 13:33:54
+@@ -10,6 +10,7 @@
+ #include <map>
+ #include <optional>
+ #include <string>
++#include <vector>
+ 
+ #include "base/check.h"
+ #include "base/command_line.h"
+@@ -66,9 +67,11 @@
+ #include "net/cookies/site_for_cookies.h"
+ #include "net/http/http_response_headers.h"
+ #include "services/network/public/mojom/cross_origin_embedder_policy.mojom.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
+ #include "third_party/blink/public/common/service_worker/service_worker_type_converters.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
++#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ #include "third_party/blink/public/mojom/service_worker/service_worker.mojom.h"
+ 
+ namespace content {
+@@ -251,6 +254,77 @@
+   return control;
+ }
+ 
++blink::UserAgentBrandList ToUserAgentBrandList(
++    const std::vector<blink::HeliumPersonaUaChBrand>& brands,
++    bool use_full_version,
++    const std::string& full_version) {
++  blink::UserAgentBrandList list;
++  for (const blink::HeliumPersonaUaChBrand& brand : brands) {
++    if (brand.brand.empty()) {
++      continue;
++    }
++    std::string version = brand.version;
++    if (use_full_version && brand.brand != "Not_A Brand" &&
++        !full_version.empty()) {
++      version = full_version;
++    }
++    list.emplace_back(brand.brand, version);
++  }
++  return list;
++}
++
++void ApplyPersonaUserAgentMetadata(
++    const blink::HeliumPersonaSnapshot& persona_snapshot,
++    blink::UserAgentMetadata* ua_metadata) {
++  if (!ua_metadata || !persona_snapshot.IsEnabled() ||
++      !persona_snapshot.client_hints_enabled) {
++    return;
++  }
++  ua_metadata->mobile = persona_snapshot.ua_ch_mobile;
++  if (!persona_snapshot.ua_ch_platform.empty()) {
++    ua_metadata->platform = persona_snapshot.ua_ch_platform;
++  }
++  if (!persona_snapshot.ua_ch_platform_version.empty()) {
++    ua_metadata->platform_version = persona_snapshot.ua_ch_platform_version;
++  }
++  if (!persona_snapshot.ua_ch_architecture.empty()) {
++    ua_metadata->architecture = persona_snapshot.ua_ch_architecture;
++  }
++  if (!persona_snapshot.ua_ch_model.empty()) {
++    ua_metadata->model = persona_snapshot.ua_ch_model;
++  }
++  if (!persona_snapshot.ua_ch_bitness.empty()) {
++    ua_metadata->bitness = persona_snapshot.ua_ch_bitness;
++  }
++  if (!persona_snapshot.ua_ch_brands.empty()) {
++    ua_metadata->brand_version_list = ToUserAgentBrandList(
++        persona_snapshot.ua_ch_brands, /*use_full_version=*/false,
++        persona_snapshot.ua_ch_full_version);
++  }
++  if (!persona_snapshot.ua_ch_full_version.empty()) {
++    ua_metadata->full_version = persona_snapshot.ua_ch_full_version;
++    ua_metadata->brand_full_version_list =
++        !persona_snapshot.ua_ch_brands.empty()
++            ? ToUserAgentBrandList(persona_snapshot.ua_ch_brands,
++                                   /*use_full_version=*/true,
++                                   persona_snapshot.ua_ch_full_version)
++            : ua_metadata->brand_version_list;
++    for (blink::UserAgentBrandVersion& brand_version :
++         ua_metadata->brand_full_version_list) {
++      if (brand_version.brand != "Not_A Brand") {
++        brand_version.version = persona_snapshot.ua_ch_full_version;
++      }
++    }
++  }
++  ua_metadata->wow64 = persona_snapshot.ua_ch_wow64;
++  if (!persona_snapshot.ua_ch_form_factors.empty()) {
++    ua_metadata->form_factors = persona_snapshot.ua_ch_form_factors;
++  } else {
++    ua_metadata->form_factors = {
++        persona_snapshot.ua_ch_mobile ? "Mobile" : "Desktop"};
++  }
++}
++
+ }  // namespace
+ 
+ constexpr base::TimeDelta ServiceWorkerVersion::kTimeoutTimerDelay;
+@@ -2602,6 +2676,15 @@
+   ContentBrowserClient* browser_client = GetContentClient()->browser();
+   params->user_agent = browser_client->GetUserAgent();
+   params->ua_metadata = browser_client->GetUserAgentMetadata();
++  params->persona_snapshot = browser_client->GetHeliumPersonaSnapshot(
++      context_->wrapper()->browser_context());
++  if (params->persona_snapshot.IsEnabled()) {
++    if (!params->persona_snapshot.user_agent.empty()) {
++      params->user_agent = params->persona_snapshot.user_agent;
++    }
++    ApplyPersonaUserAgentMetadata(params->persona_snapshot,
++                                  &params->ua_metadata);
++  }
+   params->is_installed = IsInstalled(status_);
+   params->script_url_to_skip_throttling = updated_script_url_;
+   params->main_script_load_params = std::move(main_script_load_params_);
+--- a/content/renderer/service_worker/embedded_worker_instance_client_impl.cc	2026-06-14 19:35:09
++++ b/content/renderer/service_worker/embedded_worker_instance_client_impl.cc	2026-06-15 13:28:21
+@@ -196,6 +196,7 @@
+   start_data->script_url = params.script_url;
+   start_data->user_agent = blink::WebString::FromUtf8(params.user_agent);
+   start_data->ua_metadata = params.ua_metadata;
++  start_data->persona_snapshot = params.persona_snapshot;
+   start_data->script_type = params.script_type;
+   start_data->wait_for_debugger_mode =
+       params.wait_for_debugger
+--- a/third_party/blink/public/web/web_embedded_worker_start_data.h	2026-06-14 19:35:14
++++ b/third_party/blink/public/web/web_embedded_worker_start_data.h	2026-06-15 13:28:20
+@@ -34,6 +34,7 @@
+ #include "base/unguessable_token.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
+ #include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/loader/worker_main_script_load_parameters.h"
+ #include "third_party/blink/public/common/tokens/tokens.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+@@ -51,6 +52,7 @@
+   WebURL script_url;
+   WebString user_agent;
+   UserAgentMetadata ua_metadata;
++  HeliumPersonaSnapshot persona_snapshot;
+   mojom::ScriptType script_type;
+   // Whether to pause the initialization and wait for debugger to attach
+   // before proceeding. This technique allows debugging worker startup.
+--- a/third_party/blink/renderer/modules/exported/web_embedded_worker_impl.cc	2026-06-14 19:35:15
++++ b/third_party/blink/renderer/modules/exported/web_embedded_worker_impl.cc	2026-06-15 13:28:21
+@@ -244,6 +244,8 @@
+       /*require_cross_site_request_for_cookies=*/false,
+       /*origin_to_use=*/nullptr, std::move(coep_reporting_observer),
+       std::move(dip_reporting_observer));
++  global_scope_creation_params->persona_snapshot =
++      worker_start_data->persona_snapshot;
+ 
+   worker_thread_ = std::make_unique<ServiceWorkerThread>(
+       std::make_unique<ServiceWorkerGlobalScopeProxy>(

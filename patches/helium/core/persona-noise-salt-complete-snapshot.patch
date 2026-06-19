@@ -1,0 +1,239 @@
+--- a/content/browser/helium_noise/noise_token_data.cc
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -12,11 +12,11 @@
+ #include <memory>
+ #include <string>
+ #include <string_view>
++#include <vector>
+ 
+ #include "base/containers/span.h"
+ #include "base/hash/hash.h"
+ #include "base/numerics/byte_conversions.h"
+-#include "base/strings/strcat.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/supports_user_data.h"
+ #include "base/types/pass_key.h"
+@@ -40,43 +40,192 @@
+ constexpr uint64_t kFnvPrime = 0x00000100000001b3;
+ constexpr uint64_t kFnvOffset = 0xcbf29ce484222325;
+ 
++void AppendSaltPart(std::string& salt, std::string_view value) {
++  salt.append("|");
++  salt.append(base::NumberToString(static_cast<uint64_t>(value.size())));
++  salt.append(":");
++  salt.append(value);
++}
++
++void AppendSaltPart(std::string& salt, const std::string& value) {
++  AppendSaltPart(salt, std::string_view(value));
++}
++
++void AppendSaltPart(std::string& salt, const char* value) {
++  AppendSaltPart(salt, std::string_view(value));
++}
++
++void AppendSaltPart(std::string& salt, bool value) {
++  AppendSaltPart(salt, value ? "1" : "0");
++}
++
++void AppendSaltPart(std::string& salt, int value) {
++  AppendSaltPart(salt, base::NumberToString(value));
++}
++
++void AppendSaltPart(std::string& salt, double value) {
++  AppendSaltPart(salt, base::NumberToString(value));
++}
++
++void AppendSaltList(std::string& salt,
++                    const std::vector<std::string>& values) {
++  AppendSaltPart(salt, "[");
++  for (const std::string& value : values) {
++    AppendSaltPart(salt, value);
++  }
++  AppendSaltPart(salt, "]");
++}
++
++void AppendSaltUaChBrands(
++    std::string& salt,
++    const std::vector<blink::HeliumPersonaUaChBrand>& brands) {
++  AppendSaltPart(salt, "[");
++  for (const blink::HeliumPersonaUaChBrand& brand : brands) {
++    AppendSaltPart(salt, brand.brand);
++    AppendSaltPart(salt, brand.version);
++  }
++  AppendSaltPart(salt, "]");
++}
++
+ std::string PersonaNoiseSalt(
+     const blink::HeliumPersonaSnapshot& persona_snapshot) {
+   if (!persona_snapshot.IsEnabled()) {
+     return std::string();
+   }
+ 
+-  return base::StrCat({
+-      persona_snapshot.id,
+-      "|",
+-      persona_snapshot.name,
+-      "|",
+-      persona_snapshot.user_agent,
+-      "|",
+-      persona_snapshot.platform,
+-      "|",
+-      persona_snapshot.timezone,
+-      "|",
+-      persona_snapshot.locale,
+-      "|",
+-      persona_snapshot.gpu_vendor,
+-      "|",
+-      persona_snapshot.gpu_renderer,
+-      "|",
+-      persona_snapshot.font_pack_id,
+-      "|",
+-      persona_snapshot.font_rendering_id,
+-      "|",
+-      base::NumberToString(persona_snapshot.screen_width),
+-      "x",
+-      base::NumberToString(persona_snapshot.screen_height),
+-      "@",
+-      base::NumberToString(persona_snapshot.device_scale_factor),
+-      "|",
+-      base::NumberToString(persona_snapshot.hardware_concurrency),
+-      "|",
+-      base::NumberToString(persona_snapshot.device_memory),
+-  });
++  std::string salt;
++  AppendSaltPart(salt, persona_snapshot.id);
++  AppendSaltPart(salt, persona_snapshot.name);
++  AppendSaltPart(salt, persona_snapshot.device);
++  AppendSaltPart(salt, persona_snapshot.os);
++  AppendSaltPart(salt, persona_snapshot.user_agent);
++  AppendSaltPart(salt, persona_snapshot.platform);
++
++  AppendSaltPart(salt, persona_snapshot.ua_ch_platform);
++  AppendSaltPart(salt, persona_snapshot.ua_ch_platform_version);
++  AppendSaltPart(salt, persona_snapshot.ua_ch_architecture);
++  AppendSaltPart(salt, persona_snapshot.ua_ch_bitness);
++  AppendSaltPart(salt, persona_snapshot.ua_ch_model);
++  AppendSaltUaChBrands(salt, persona_snapshot.ua_ch_brands);
++  AppendSaltPart(salt, persona_snapshot.ua_ch_full_version);
++  AppendSaltPart(salt, persona_snapshot.ua_ch_wow64);
++  AppendSaltList(salt, persona_snapshot.ua_ch_form_factors);
++  AppendSaltPart(salt, persona_snapshot.ua_ch_mobile);
++
++  AppendSaltPart(salt, persona_snapshot.timezone);
++  AppendSaltPart(salt, persona_snapshot.locale);
++  AppendSaltPart(salt, persona_snapshot.accept_language);
++  AppendSaltList(salt, persona_snapshot.navigator_languages);
++
++  AppendSaltPart(salt, persona_snapshot.gpu_vendor);
++  AppendSaltPart(salt, persona_snapshot.gpu_renderer);
++  AppendSaltPart(salt, persona_snapshot.webgpu_adapter);
++  AppendSaltPart(salt, persona_snapshot.gpu_driver);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_texture_size);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_cube_map_texture_size);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_renderbuffer_size);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_viewport_width);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_viewport_height);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_texture_image_units);
++  AppendSaltPart(salt,
++                 persona_snapshot.webgl_max_combined_texture_image_units);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_vertex_attribs);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_vertex_texture_image_units);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_vertex_uniform_vectors);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_fragment_uniform_vectors);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_varying_vectors);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_samples);
++  AppendSaltPart(salt, persona_snapshot.webgl_max_anisotropy);
++  AppendSaltPart(salt, persona_snapshot.webgl2_max_3d_texture_size);
++  AppendSaltPart(salt, persona_snapshot.webgl2_max_array_texture_layers);
++  AppendSaltPart(salt, persona_snapshot.webgl2_max_color_attachments);
++  AppendSaltPart(salt, persona_snapshot.webgl2_max_draw_buffers);
++  AppendSaltPart(salt, persona_snapshot.webgl2_max_uniform_block_size);
++  AppendSaltPart(salt,
++                 persona_snapshot.webgl2_uniform_buffer_offset_alignment);
++  AppendSaltPart(salt, persona_snapshot.webgl2_max_texture_lod_bias);
++  AppendSaltPart(salt, persona_snapshot.webgl2_max_samples);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_texture_dimension_1d);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_texture_dimension_2d);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_texture_dimension_3d);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_texture_array_layers);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_bind_groups);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_bindings_per_bind_group);
++  AppendSaltPart(salt,
++                 persona_snapshot.webgpu_max_uniform_buffer_binding_size);
++  AppendSaltPart(salt,
++                 persona_snapshot.webgpu_max_storage_buffer_binding_size);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_buffer_size);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_vertex_buffers);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_vertex_attributes);
++  AppendSaltPart(salt,
++                 persona_snapshot.webgpu_max_compute_workgroup_storage_size);
++  AppendSaltPart(salt,
++                 persona_snapshot.webgpu_max_compute_invocations_per_workgroup);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_compute_workgroup_size_x);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_compute_workgroup_size_y);
++  AppendSaltPart(salt, persona_snapshot.webgpu_max_compute_workgroup_size_z);
++  AppendSaltPart(salt,
++                 persona_snapshot.webgpu_max_compute_workgroups_per_dimension);
++
++  AppendSaltPart(salt, persona_snapshot.screen_width);
++  AppendSaltPart(salt, persona_snapshot.screen_height);
++  AppendSaltPart(salt, persona_snapshot.avail_width);
++  AppendSaltPart(salt, persona_snapshot.avail_height);
++  AppendSaltPart(salt, persona_snapshot.device_scale_factor);
++  AppendSaltPart(salt, persona_snapshot.color_depth);
++  AppendSaltPart(salt, persona_snapshot.pixel_depth);
++  AppendSaltPart(salt, persona_snapshot.refresh_rate);
++
++  AppendSaltPart(salt, persona_snapshot.hardware_concurrency);
++  AppendSaltPart(salt, persona_snapshot.device_memory);
++  AppendSaltPart(salt, persona_snapshot.touch_enabled);
++  AppendSaltPart(salt, persona_snapshot.max_touch_points);
++
++  AppendSaltPart(salt, persona_snapshot.font_pack_id);
++  AppendSaltPart(salt, persona_snapshot.font_pack_name);
++  AppendSaltList(salt, persona_snapshot.font_families);
++  AppendSaltList(salt, persona_snapshot.font_aliases);
++  AppendSaltPart(salt, persona_snapshot.font_rendering_id);
++  AppendSaltPart(salt, persona_snapshot.font_rendering_name);
++  AppendSaltPart(salt, persona_snapshot.font_rendering_engine);
++  AppendSaltPart(salt, persona_snapshot.font_rendering_hinting);
++  AppendSaltPart(salt, persona_snapshot.font_antialiasing);
++  AppendSaltPart(salt, persona_snapshot.font_subpixel_rendering);
++  AppendSaltPart(salt, persona_snapshot.font_subpixel_positioning);
++  AppendSaltPart(salt, persona_snapshot.font_lcd_text);
++  AppendSaltPart(salt, persona_snapshot.font_use_autohinter);
++  AppendSaltPart(salt, persona_snapshot.font_use_bitmaps);
++  AppendSaltPart(salt, persona_snapshot.font_text_gamma);
++  AppendSaltPart(salt, persona_snapshot.font_text_contrast);
++
++  AppendSaltPart(salt, persona_snapshot.client_hints_enabled);
++  AppendSaltPart(salt, persona_snapshot.reduce_system_info);
++  AppendSaltPart(salt, persona_snapshot.canvas_noise);
++  AppendSaltPart(salt, persona_snapshot.audio_noise);
++  AppendSaltPart(salt, persona_snapshot.font_metric_noise);
++  AppendSaltPart(salt, persona_snapshot.allow_geolocation);
++  AppendSaltPart(salt, persona_snapshot.allow_media_capture);
++  AppendSaltPart(salt, persona_snapshot.virtual_media_devices);
++  AppendSaltPart(salt, persona_snapshot.allow_display_capture);
++  AppendSaltPart(salt, persona_snapshot.allow_device_apis);
++  AppendSaltPart(salt, persona_snapshot.allow_gamepads);
++  AppendSaltPart(salt, persona_snapshot.allow_sensor_apis);
++  AppendSaltPart(salt, persona_snapshot.allow_midi);
++  AppendSaltPart(salt, persona_snapshot.allow_local_network_apis);
++  AppendSaltPart(salt, persona_snapshot.allow_web_nfc);
++  AppendSaltPart(salt, persona_snapshot.allow_window_management);
++  AppendSaltPart(salt, persona_snapshot.allow_presentation_apis);
++  AppendSaltPart(salt, persona_snapshot.allow_remote_playback);
++  AppendSaltPart(salt, persona_snapshot.allow_web_xr);
++  AppendSaltPart(salt, persona_snapshot.allow_platform_credentials);
++  AppendSaltPart(salt, persona_snapshot.allow_keyboard_layout);
++  AppendSaltPart(salt, persona_snapshot.allow_real_battery_status);
++  AppendSaltPart(salt, persona_snapshot.allow_local_fonts);
++  AppendSaltPart(salt, persona_snapshot.allow_persistent_device_id);
++  AppendSaltPart(salt, persona_snapshot.allow_installed_apps);
++  AppendSaltPart(salt, persona_snapshot.allow_managed_device);
++  return salt;
+ }
+ 
+ // Derives a token by combining a browser context token with origin- and

@@ -1,0 +1,22 @@
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -256,6 +259,6 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const sourceName = persona.basePresetName || persona.name || 'Custom persona';
+     persona.id = '';
+-    persona.noiseSeed = '';
++    persona.noiseSeed = this.makeRandomNoiseSeed_();
+     persona.name = persona.name ? `${persona.name} copy` : 'Custom persona';
+     persona.source = 'custom';
+     persona.basePresetId = persona.basePresetId || basePresetId;
+@@ -386,8 +388,9 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+ 
+   private ensureEditableShape_(persona: PersonaRecord) {
+     persona.uaCh = persona.uaCh || {};
+-    if (persona.noiseSeed === undefined || persona.noiseSeed === null) {
+-      persona.noiseSeed = persona.id || '';
++    if (persona.noiseSeed === undefined || persona.noiseSeed === null ||
++        !String(persona.noiseSeed).trim()) {
++      persona.noiseSeed = persona.id || this.makeRandomNoiseSeed_();
+     }
+     persona.region = persona.region || {};
+     persona.network = persona.network || {};

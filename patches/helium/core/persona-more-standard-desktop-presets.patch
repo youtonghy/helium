@@ -1,0 +1,369 @@
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index aaa112bf..e0f69239 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -222,7 +222,7 @@ void ExpectPresetSpeechVoice(const base::Value::List& presets,
+ 
+ TEST(HeliumPersonaPrefsTest, BuiltinPresetsContainCompleteSystemImage) {
+   base::Value::List presets = GetBuiltinPersonaPresets();
+-  ASSERT_GE(presets.size(), 37u);
++  ASSERT_GE(presets.size(), 42u);
+   EXPECT_TRUE(ProfilesContainId(presets, "preset-windows-11-en-ca-toronto"));
+   EXPECT_TRUE(ProfilesContainId(presets, "preset-linux-it-it-rome"));
+   EXPECT_TRUE(ProfilesContainId(presets, "preset-windows-11-en-in-kolkata"));
+@@ -246,6 +246,11 @@ TEST(HeliumPersonaPrefsTest, BuiltinPresetsContainCompleteSystemImage) {
+   EXPECT_TRUE(ProfilesContainId(presets, "preset-macos-en-ca-vancouver"));
+   EXPECT_TRUE(ProfilesContainId(presets, "preset-linux-en-in-kolkata"));
+   EXPECT_TRUE(ProfilesContainId(presets, "preset-macos-ko-kr-seoul"));
++  EXPECT_TRUE(ProfilesContainId(presets, "preset-windows-11-de-de-berlin"));
++  EXPECT_TRUE(ProfilesContainId(presets, "preset-windows-11-en-au-sydney"));
++  EXPECT_TRUE(ProfilesContainId(presets, "preset-macos-fr-fr-paris"));
++  EXPECT_TRUE(ProfilesContainId(presets, "preset-macos-en-ca-toronto"));
++  EXPECT_TRUE(ProfilesContainId(presets, "preset-linux-en-au-melbourne"));
+ 
+   for (const base::Value& value : presets) {
+     const base::Value::Dict* preset = value.GetIfDict();
+@@ -311,6 +316,26 @@ TEST(HeliumPersonaPrefsTest, BuiltinPresetsContainCompleteSystemImage) {
+                           "Microsoft Caroline - French (Canada)", "fr-CA");
+   ExpectPresetSpeechVoice(presets, "preset-macos-pt-br-sao-paulo", "Luciana",
+                           "pt-BR");
++  ExpectPresetSpeechVoice(presets, "preset-windows-11-es-es-madrid",
++                          "Microsoft Helena Desktop - Spanish (Spain)",
++                          "es-ES");
++  ExpectPresetSpeechVoice(presets, "preset-macos-en-ca-vancouver",
++                          "Samantha", "en-CA");
++  ExpectPresetSpeechVoice(presets, "preset-linux-en-in-kolkata",
++                          "English India", "en-IN");
++  ExpectPresetSpeechVoice(presets, "preset-macos-ko-kr-seoul", "Yuna",
++                          "ko-KR");
++  ExpectPresetSpeechVoice(presets, "preset-windows-11-de-de-berlin",
++                          "Microsoft Hedda Desktop - German", "de-DE");
++  ExpectPresetSpeechVoice(presets, "preset-windows-11-en-au-sydney",
++                          "Microsoft Catherine - English (Australia)",
++                          "en-AU");
++  ExpectPresetSpeechVoice(presets, "preset-macos-fr-fr-paris", "Thomas",
++                          "fr-FR");
++  ExpectPresetSpeechVoice(presets, "preset-macos-en-ca-toronto", "Samantha",
++                          "en-CA");
++  ExpectPresetSpeechVoice(presets, "preset-linux-en-au-melbourne",
++                          "English Australia", "en-AU");
+ 
+   const base::Value::Dict& windows = DictAt(presets, 1);
+   EXPECT_TRUE(PersonaHasRequiredFields(windows));
+@@ -443,7 +468,25 @@ TEST(HeliumPersonaPrefsTest, BuiltinPresetsCoverCoreDeviceRegionPersonas) {
+       {"preset-linux-pt-pt-lisbon", "Linux x86_64", "Linux x86_64",
+        "Europe/Lisbon", "pt-PT", "pt-PT,pt;q=0.9,en;q=0.8"},
+       {"preset-windows-11-en-sg-singapore", "Windows 11", "Win32",
+-       "Asia/Singapore", "en-SG", "en-SG,en;q=0.9"},
++       "Asia/Singapore", "en-SG", "en-SG,en;q=0.9,zh-CN;q=0.7"},
++      {"preset-windows-11-es-es-madrid", "Windows 11", "Win32",
++       "Europe/Madrid", "es-ES", "es-ES,es;q=0.9,en;q=0.8"},
++      {"preset-macos-en-ca-vancouver", "macOS 15", "MacIntel",
++       "America/Vancouver", "en-CA", "en-CA,en;q=0.9,fr-CA;q=0.8"},
++      {"preset-linux-en-in-kolkata", "Ubuntu 24.04", "Linux x86_64",
++       "Asia/Kolkata", "en-IN", "en-IN,en;q=0.9,hi-IN;q=0.8"},
++      {"preset-macos-ko-kr-seoul", "macOS 15", "MacIntel",
++       "Asia/Seoul", "ko-KR", "ko-KR,ko;q=0.9,en-US;q=0.8"},
++      {"preset-windows-11-de-de-berlin", "Windows 11", "Win32",
++       "Europe/Berlin", "de-DE", "de-DE,de;q=0.9,en;q=0.8"},
++      {"preset-windows-11-en-au-sydney", "Windows 11", "Win32",
++       "Australia/Sydney", "en-AU", "en-AU,en;q=0.9"},
++      {"preset-macos-fr-fr-paris", "macOS 15", "MacIntel",
++       "Europe/Paris", "fr-FR", "fr-FR,fr;q=0.9,en;q=0.8"},
++      {"preset-macos-en-ca-toronto", "macOS 15", "MacIntel",
++       "America/Toronto", "en-CA", "en-CA,en;q=0.9,fr-CA;q=0.7"},
++      {"preset-linux-en-au-melbourne", "Linux x86_64", "Linux x86_64",
++       "Australia/Melbourne", "en-AU", "en-AU,en;q=0.9"},
+   };
+ 
+   for (const ExpectedPreset& expected : kExpectedPresets) {
+@@ -1088,6 +1131,9 @@ TEST(HeliumPersonaPrefsTest, StateIncludesIndependentFontPackProfiles) {
+   const size_t builtin_profile_count = GetBuiltinFontPackProfiles().size();
+   ASSERT_EQ(builtin_profile_count, profiles->size());
+   EXPECT_TRUE(ProfilesContainId(*profiles, "windows-11-core"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "windows-11-de-de"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "windows-11-en-au"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "windows-11-es-es"));
+   EXPECT_TRUE(ProfilesContainId(*profiles, "macos-core"));
+   EXPECT_TRUE(ProfilesContainId(*profiles, "linux-core"));
+   EXPECT_TRUE(ProfilesContainId(*profiles, "windows-11-fr-fr"));
+@@ -1104,8 +1150,13 @@ TEST(HeliumPersonaPrefsTest, StateIncludesIndependentFontPackProfiles) {
+   EXPECT_TRUE(ProfilesContainId(*profiles, "windows-11-es-us"));
+   EXPECT_TRUE(ProfilesContainId(*profiles, "windows-pt-br"));
+   EXPECT_TRUE(ProfilesContainId(*profiles, "macos-en-us"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "macos-en-ca"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "macos-fr-fr"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "macos-ko-kr"));
+   EXPECT_TRUE(ProfilesContainId(*profiles, "linux-en-gb"));
+   EXPECT_TRUE(ProfilesContainId(*profiles, "linux-en-us"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "linux-en-au"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "linux-en-in"));
+   EXPECT_TRUE(ProfilesContainId(*profiles, "linux-fr-fr"));
+   EXPECT_TRUE(ProfilesContainId(*profiles, "linux-it-it"));
+   ASSERT_TRUE(DictAt(*profiles, 0).FindBool("builtin").value_or(false));
+diff --git a/components/helium_persona/persona_presets.cc b/components/helium_persona/persona_presets.cc
+index ee58b37a..dff107aa 100644
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -384,6 +384,8 @@ std::string_view LocaleSpeechVoiceName(std::string_view os,
+       return "Thomas";
+     if (locale == "ja-JP")
+       return "Kyoko";
++    if (locale == "ko-KR")
++      return "Yuna";
+     if (locale == "pl-PL")
+       return "Zosia";
+     if (locale == "pt-BR")
+@@ -669,6 +671,24 @@ base::Value::List GetBuiltinFontPackProfiles() {
+                                 "serif=Times New Roman",
+                                 "monospace=Consolas",
+                                 "system-ui=Segoe UI"}));
++  profiles.Append(MakeFontPack(
++      "windows-11-de-de", "Windows 11 German fonts",
++      {"Arial", "Calibri", "Cambria", "Candara", "Consolas", "Georgia",
++       "Segoe UI", "Times New Roman", "Verdana"},
++      {"sans-serif=Arial", "serif=Times New Roman",
++       "monospace=Consolas", "system-ui=Segoe UI"}));
++  profiles.Append(MakeFontPack(
++      "windows-11-en-au", "Windows 11 Australian English fonts",
++      {"Arial", "Calibri", "Cambria", "Candara", "Consolas", "Georgia",
++       "Segoe UI", "Times New Roman", "Verdana"},
++      {"sans-serif=Arial", "serif=Times New Roman",
++       "monospace=Consolas", "system-ui=Segoe UI"}));
++  profiles.Append(MakeFontPack(
++      "windows-11-es-es", "Windows 11 Spanish fonts",
++      {"Arial", "Calibri", "Cambria", "Candara", "Consolas", "Georgia",
++       "Segoe UI", "Times New Roman", "Verdana"},
++      {"sans-serif=Arial", "serif=Times New Roman",
++       "monospace=Consolas", "system-ui=Segoe UI"}));
+   profiles.Append(MakeFontPack(
+       "windows-zh-cn", "Windows Simplified Chinese fonts",
+       {"Arial", "Microsoft YaHei", "SimSun", "NSimSun", "DengXian",
+@@ -742,6 +762,25 @@ base::Value::List GetBuiltinFontPackProfiles() {
+        "New York", "SF Pro Display", "SF Pro Text", "Times"},
+       {"sans-serif=Helvetica", "serif=Times", "monospace=Menlo",
+        "system-ui=SF Pro Text"}));
++  profiles.Append(MakeFontPack(
++      "macos-en-ca", "macOS Canadian English fonts",
++      {"Arial", "Helvetica", "Helvetica Neue", "Menlo", "Monaco",
++       "New York", "SF Pro Display", "SF Pro Text", "Times"},
++      {"sans-serif=Helvetica", "serif=Times", "monospace=Menlo",
++       "system-ui=SF Pro Text"}));
++  profiles.Append(MakeFontPack(
++      "macos-fr-fr", "macOS French fonts",
++      {"Arial", "Helvetica", "Helvetica Neue", "Menlo", "Monaco",
++       "New York", "SF Pro Display", "SF Pro Text", "Times"},
++      {"sans-serif=Helvetica", "serif=Times", "monospace=Menlo",
++       "system-ui=SF Pro Text"}));
++  profiles.Append(MakeFontPack(
++      "macos-ko-kr", "macOS Korean fonts",
++      {"Apple SD Gothic Neo", "Arial", "Helvetica", "Helvetica Neue",
++       "Menlo", "Monaco", "New York", "SF Pro Display", "SF Pro Text",
++       "Times"},
++      {"sans-serif=Apple SD Gothic Neo", "serif=Times",
++       "monospace=Menlo", "system-ui=Apple SD Gothic Neo"}));
+   profiles.Append(MakeFontPack(
+       "macos-zh-tw", "macOS Traditional Chinese fonts",
+       {"Arial", "Helvetica", "Helvetica Neue", "Menlo", "PingFang TC",
+@@ -800,6 +839,20 @@ base::Value::List GetBuiltinFontPackProfiles() {
+        "Ubuntu"},
+       {"sans-serif=Noto Sans", "serif=Noto Serif",
+        "monospace=Liberation Mono", "system-ui=Noto Sans"}));
++  profiles.Append(MakeFontPack(
++      "linux-en-au", "Linux Australian English fonts",
++      {"Cantarell", "DejaVu Sans", "DejaVu Serif", "Liberation Mono",
++       "Liberation Sans", "Noto Sans", "Noto Serif", "Ubuntu"},
++      {"sans-serif=Noto Sans", "serif=Noto Serif",
++       "monospace=Liberation Mono", "system-ui=Noto Sans"}));
++  profiles.Append(MakeFontPack(
++      "linux-en-in", "Linux Indian English fonts",
++      {"Cantarell", "DejaVu Sans", "DejaVu Serif", "Liberation Mono",
++       "Liberation Sans", "Lohit Devanagari", "Noto Sans",
++       "Noto Sans Devanagari", "Noto Serif", "Noto Serif Devanagari",
++       "Ubuntu"},
++      {"sans-serif=Noto Sans", "serif=Noto Serif",
++       "monospace=Liberation Mono", "system-ui=Noto Sans"}));
+   profiles.Append(MakeFontPack(
+       "linux-es-es", "Linux Spanish fonts",
+       {"Cantarell", "DejaVu Sans", "DejaVu Serif", "Liberation Mono",
+@@ -904,7 +957,7 @@ base::Value::List GetBuiltinPersonaPresets() {
+               "Intel UHD Graphics 770", "D3D11"),
+       MakeScreen(1920, 1080, 1920, 1032, 1.0, 24, 60),
+       MakeHardware(8, 8, false, 0),
+-      MakeFontPack("windows-11-core", "Windows 11 core fonts",
++      MakeFontPack("windows-11-es-es", "Windows 11 Spanish fonts",
+                    {"Arial", "Calibri", "Cambria", "Candara", "Consolas",
+                     "Georgia", "Segoe UI", "Times New Roman", "Verdana"},
+                    {"sans-serif=Arial", "serif=Times New Roman",
+@@ -1397,7 +1450,7 @@ base::Value::List GetBuiltinPersonaPresets() {
+               "ANGLE (Apple, Apple M3, Metal)", "Apple M3", "Metal"),
+       MakeScreen(1512, 982, 1512, 944, 2.0, 24, 120),
+       MakeHardware(8, 8, false, 0),
+-      MakeFontPack("macos-core", "macOS core fonts",
++      MakeFontPack("macos-en-ca", "macOS Canadian English fonts",
+                    {"Arial", "Helvetica", "Helvetica Neue", "Menlo",
+                     "Monaco", "New York", "SF Pro Display", "SF Pro Text",
+                     "Times"},
+@@ -1816,10 +1869,11 @@ base::Value::List GetBuiltinPersonaPresets() {
+               "Mesa Intel Iris Xe Graphics", "Mesa"),
+       MakeScreen(1920, 1080, 1920, 1040, 1.0, 24, 60),
+       MakeHardware(8, 16, false, 0),
+-      MakeFontPack("linux-core", "Linux desktop fonts",
++      MakeFontPack("linux-en-in", "Linux Indian English fonts",
+                    {"Cantarell", "DejaVu Sans", "DejaVu Serif",
+-                    "Liberation Mono", "Noto Color Emoji", "Noto Sans",
+-                    "Noto Serif", "Ubuntu"},
++                    "Liberation Mono", "Liberation Sans", "Lohit Devanagari",
++                    "Noto Sans", "Noto Sans Devanagari", "Noto Serif",
++                    "Noto Serif Devanagari", "Ubuntu"},
+                    {"sans-serif=Noto Sans", "serif=Noto Serif",
+                     "monospace=Liberation Mono", "system-ui=Noto Sans"}),
+       MakeLinuxUbuntuSubpixelRendering(),
+@@ -1842,15 +1896,145 @@ base::Value::List GetBuiltinPersonaPresets() {
+               "ANGLE (Apple, Apple M2, Metal)", "Apple M2", "Metal"),
+       MakeScreen(2560, 1440, 2560, 1398, 2.0, 24, 60),
+       MakeHardware(8, 16, false, 0),
+-      MakeFontPack("macos-core", "macOS core fonts",
++      MakeFontPack("macos-ko-kr", "macOS Korean fonts",
+                    {"Apple SD Gothic Neo", "Arial", "Helvetica",
+                     "Helvetica Neue", "Menlo", "Monaco", "New York",
+                     "SF Pro Display", "SF Pro Text", "Times"},
+                    {"sans-serif=Apple SD Gothic Neo", "serif=Times",
+-                    "monospace=Menlo", "system-ui=SF Pro Text"}),
++                    "monospace=Menlo", "system-ui=Apple SD Gothic Neo"}),
+       MakeMacCoreTextExternalRendering(),
+       MakeAdvanced(true, false, true, true, true)));
+ 
++  presets.Append(MakePreset(
++      "preset-windows-11-de-de-berlin",
++      "Windows 11 / de-DE / Europe/Berlin",
++      "builtin",
++      "Desktop PC",
++      "Windows 11",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Win32",
++      MakeUaCh("Windows", "19.0.0", "x86", "64", "", false),
++      MakeRegion("Europe/Berlin", "de-DE",
++                 "de-DE,de;q=0.9,en;q=0.8", {"de-DE", "de", "en"}),
++      MakeGpu("Intel Inc.",
++              "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 "
++              "ps_5_0, D3D11)",
++              "Intel Iris Xe Graphics", "D3D11"),
++      MakeScreen(1920, 1080, 1920, 1032, 1.0, 24, 60),
++      MakeHardware(8, 8, false, 0),
++      MakeFontPack("windows-11-de-de", "Windows 11 German fonts",
++                   {"Arial", "Calibri", "Cambria", "Candara", "Consolas",
++                    "Georgia", "Segoe UI", "Times New Roman", "Verdana"},
++                   {"sans-serif=Arial", "serif=Times New Roman",
++                    "monospace=Consolas", "system-ui=Segoe UI"}),
++      MakeWindowsDirectWriteLcdRendering(),
++      MakeAdvanced(true, false, true, true, true)));
++
++  presets.Append(MakePreset(
++      "preset-windows-11-en-au-sydney",
++      "Windows 11 / en-AU / Australia/Sydney",
++      "builtin",
++      "Desktop PC",
++      "Windows 11",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Win32",
++      MakeUaCh("Windows", "19.0.0", "x86", "64", "", false),
++      MakeRegion("Australia/Sydney", "en-AU",
++                 "en-AU,en;q=0.9", {"en-AU", "en"}),
++      MakeGpu("AMD",
++              "ANGLE (AMD, AMD Radeon RX 6600 Direct3D11 vs_5_0 ps_5_0, "
++              "D3D11)",
++              "AMD Radeon RX 6600", "D3D11"),
++      MakeScreen(2560, 1440, 2560, 1392, 1.25, 24, 75),
++      MakeHardware(8, 8, false, 0),
++      MakeFontPack("windows-11-en-au",
++                   "Windows 11 Australian English fonts",
++                   {"Arial", "Calibri", "Cambria", "Candara", "Consolas",
++                    "Georgia", "Segoe UI", "Times New Roman", "Verdana"},
++                   {"sans-serif=Arial", "serif=Times New Roman",
++                    "monospace=Consolas", "system-ui=Segoe UI"}),
++      MakeWindowsDirectWriteLcdRendering(),
++      MakeAdvanced(true, false, true, true, true)));
++
++  presets.Append(MakePreset(
++      "preset-macos-fr-fr-paris",
++      "macOS / fr-FR / Europe/Paris",
++      "builtin",
++      "MacBook Pro",
++      "macOS 15",
++      "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_6) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "MacIntel",
++      MakeUaCh("macOS", "15.6.0", "arm", "64", "", false),
++      MakeRegion("Europe/Paris", "fr-FR",
++                 "fr-FR,fr;q=0.9,en;q=0.8", {"fr-FR", "fr", "en"}),
++      MakeGpu("Apple Inc.",
++              "ANGLE (Apple, Apple M3, Metal)", "Apple M3", "Metal"),
++      MakeScreen(1512, 982, 1512, 944, 2.0, 24, 120),
++      MakeHardware(8, 8, false, 0),
++      MakeFontPack("macos-fr-fr", "macOS French fonts",
++                   {"Arial", "Helvetica", "Helvetica Neue", "Menlo",
++                    "Monaco", "New York", "SF Pro Display", "SF Pro Text",
++                    "Times"},
++                   {"sans-serif=Helvetica", "serif=Times",
++                    "monospace=Menlo", "system-ui=SF Pro Text"}),
++      MakeMacCoreTextRendering(),
++      MakeAdvanced(true, false, true, true, true)));
++
++  presets.Append(MakePreset(
++      "preset-macos-en-ca-toronto",
++      "macOS / en-CA / America/Toronto",
++      "builtin",
++      "MacBook Air",
++      "macOS 15",
++      "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_6) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "MacIntel",
++      MakeUaCh("macOS", "15.6.0", "arm", "64", "", false),
++      MakeRegion("America/Toronto", "en-CA",
++                 "en-CA,en;q=0.9,fr-CA;q=0.7",
++                 {"en-CA", "en", "fr-CA"}),
++      MakeGpu("Apple Inc.",
++              "ANGLE (Apple, Apple M2, Metal)", "Apple M2", "Metal"),
++      MakeScreen(1470, 956, 1470, 918, 2.0, 24, 60),
++      MakeHardware(8, 8, false, 0),
++      MakeFontPack("macos-en-ca", "macOS Canadian English fonts",
++                   {"Arial", "Helvetica", "Helvetica Neue", "Menlo",
++                    "Monaco", "New York", "SF Pro Display", "SF Pro Text",
++                    "Times"},
++                   {"sans-serif=Helvetica", "serif=Times",
++                    "monospace=Menlo", "system-ui=SF Pro Text"}),
++      MakeMacCoreTextRendering(),
++      MakeAdvanced(true, false, true, true, true)));
++
++  presets.Append(MakePreset(
++      "preset-linux-en-au-melbourne",
++      "Linux / en-AU / Australia/Melbourne",
++      "builtin",
++      "Linux workstation",
++      "Linux x86_64",
++      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Linux x86_64",
++      MakeUaCh("Linux", "", "x86", "64", "", false),
++      MakeRegion("Australia/Melbourne", "en-AU",
++                 "en-AU,en;q=0.9", {"en-AU", "en"}),
++      MakeGpu("Mesa",
++              "Mesa Intel(R) Iris(R) Xe Graphics (TGL GT2)",
++              "Mesa Intel Iris Xe Graphics", "Mesa"),
++      MakeScreen(1920, 1080, 1920, 1040, 1.0, 24, 60),
++      MakeHardware(8, 8, false, 0),
++      MakeFontPack("linux-en-au", "Linux Australian English fonts",
++                   {"Cantarell", "DejaVu Sans", "DejaVu Serif",
++                    "Liberation Mono", "Liberation Sans", "Noto Sans",
++                    "Noto Serif", "Ubuntu"},
++                   {"sans-serif=Noto Sans", "serif=Noto Serif",
++                    "monospace=Liberation Mono", "system-ui=Noto Sans"}),
++      MakeLinuxGnomeGrayscaleRendering(),
++      MakeAdvanced(true, false, true, true, true)));
++
+   return presets;
+ }
+ 

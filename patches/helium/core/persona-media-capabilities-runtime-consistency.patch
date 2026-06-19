@@ -1,0 +1,266 @@
+diff --git a/third_party/blink/renderer/modules/media_capabilities/DEPS b/third_party/blink/renderer/modules/media_capabilities/DEPS
+--- a/third_party/blink/renderer/modules/media_capabilities/DEPS
++++ b/third_party/blink/renderer/modules/media_capabilities/DEPS
+@@ -1,4 +1,5 @@
+ include_rules = [
++    "+third_party/blink/renderer/core/helium_persona",
+     "+media/base",
+     "+media/filters/stream_parser_factory.h",
+     "+media/mojo/mojom/media_types.mojom-blink.h",
+diff --git a/third_party/blink/renderer/modules/media_capabilities/media_capabilities.cc b/third_party/blink/renderer/modules/media_capabilities/media_capabilities.cc
+--- a/third_party/blink/renderer/modules/media_capabilities/media_capabilities.cc
++++ b/third_party/blink/renderer/modules/media_capabilities/media_capabilities.cc
+@@ -46,6 +46,7 @@
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+ #include "third_party/blink/renderer/modules/encryptedmedia/encrypted_media_utils.h"
+ #include "third_party/blink/renderer/modules/encryptedmedia/media_key_system_access.h"
+@@ -72,6 +73,7 @@
+ #include "third_party/blink/renderer/platform/webrtc/webrtc_video_utils.h"
+ #include "third_party/blink/renderer/platform/wtf/functional.h"
+ #include "third_party/blink/renderer/platform/wtf/text/strcat.h"
++#include "third_party/blink/renderer/platform/wtf/text/string_view.h"
+ #include "third_party/blink/renderer/platform/wtf/text/string_to_number.h"
+ #include "third_party/blink/renderer/platform/wtf/vector.h"
+ #include "third_party/webrtc/api/audio_codecs/audio_format.h"
+@@ -137,6 +138,130 @@ MediaCapabilitiesInfo* CreateEncodingInfoWith(bool value) {
+   return info;
+ }
+ 
++bool IsPersonaStableMediaCapabilitiesMimeType(const String& mime_type) {
++  const String type = mime_type.DeprecatedLower();
++  return type == "audio/webm" || type == "video/webm" ||
++         type == "audio/ogg" || type == "video/ogg" ||
++         type == "audio/mp4" || type == "video/mp4" ||
++         type == "application/mp4" || type == "audio/mpeg" ||
++         type == "audio/wav" || type == "audio/opus" ||
++         type == "audio/pcmu" || type == "audio/pcma" ||
++         type == "video/vp8" || type == "video/vp9" ||
++         type == "video/h264" || type == "video/av1";
++}
++
++bool IsPersonaStableMediaCapabilitiesCodecToken(StringView codec_token) {
++  const String codec = codec_token.StripWhiteSpace().ToString().ToAsciiLower();
++  return codec == "opus" || codec == "vorbis" || codec == "vp8" ||
++         codec == "vp9" || codec == "vp09" || codec == "h264" ||
++         codec == "av1" || codec == "mp3" ||
++         codec.StartsWithIgnoringAsciiCase("vp09.") ||
++         codec.StartsWithIgnoringAsciiCase("avc1") ||
++         codec.StartsWithIgnoringAsciiCase("avc3") ||
++         codec.StartsWithIgnoringAsciiCase("av01") ||
++         codec.StartsWithIgnoringAsciiCase("mp4a");
++}
++
++bool IsPersonaStableMediaCapabilitiesContentType(const String& content_type) {
++  ParsedContentType parsed_content_type(content_type);
++  if (!parsed_content_type.IsValid() ||
++      parsed_content_type.GetParameters().HasDuplicatedNames()) {
++    return false;
++  }
++
++  if (!IsPersonaStableMediaCapabilitiesMimeType(
++          parsed_content_type.MimeType())) {
++    return false;
++  }
++
++  const String codecs =
++      parsed_content_type.ParameterValueForName(kCodecsMimeTypeParam);
++  if (codecs.empty()) {
++    return true;
++  }
++
++  for (StringView codec : StringView(codecs).Split(',')) {
++    if (!IsPersonaStableMediaCapabilitiesCodecToken(codec)) {
++      return false;
++    }
++  }
++
++  return true;
++}
++
++bool IsPersonaStableMediaCapabilitiesVideoShape(
++    const VideoConfiguration* video) {
++  if (!video) {
++    return true;
++  }
++
++  if (video->hasWidth() && video->width() > 3840) {
++    return false;
++  }
++  if (video->hasHeight() && video->height() > 2160) {
++    return false;
++  }
++  if (video->hasFramerate() && video->framerate() > 120) {
++    return false;
++  }
++  if (video->hasHdrMetadataType()) {
++    return false;
++  }
++  if (video->hasTransferFunction() &&
++      video->transferFunction().AsEnum() != V8TransferFunction::Enum::kSRGB) {
++    return false;
++  }
++
++  return true;
++}
++
++bool IsPersonaStableMediaDecodingConfiguration(
++    const MediaDecodingConfiguration* configuration) {
++  if (configuration->hasKeySystemConfiguration()) {
++    return false;
++  }
++  if (configuration->hasAudio() &&
++      !IsPersonaStableMediaCapabilitiesContentType(
++          configuration->audio()->contentType())) {
++    return false;
++  }
++  if (configuration->hasVideo() &&
++      (!IsPersonaStableMediaCapabilitiesContentType(
++           configuration->video()->contentType()) ||
++       !IsPersonaStableMediaCapabilitiesVideoShape(configuration->video()))) {
++    return false;
++  }
++  return true;
++}
++
++bool IsPersonaStableMediaEncodingConfiguration(
++    const MediaEncodingConfiguration* configuration) {
++  if (configuration->hasAudio() &&
++      !IsPersonaStableMediaCapabilitiesContentType(
++          configuration->audio()->contentType())) {
++    return false;
++  }
++  if (configuration->hasVideo() &&
++      (!IsPersonaStableMediaCapabilitiesContentType(
++           configuration->video()->contentType()) ||
++       !IsPersonaStableMediaCapabilitiesVideoShape(configuration->video()))) {
++    return false;
++  }
++  return true;
++}
++
++void ApplyPersonaMediaCapabilitiesResult(ExecutionContext* execution_context,
++                                         bool supported,
++                                         MediaCapabilitiesInfo* info) {
++  if (!supported ||
++      !PersonaSpoofingHelper::ReduceSystemInfo(execution_context)) {
++    return;
++  }
++
++  info->setSmooth(true);
++  info->setPowerEfficient(false);
++}
++
+ ScriptPromise<MediaCapabilitiesDecodingInfo>
+ CreateResolvedPromiseToDecodingInfoWith(
+     bool value,
+@@ -144,5 +156,7 @@ CreateResolvedPromiseToDecodingInfoWith(
+     const MediaDecodingConfiguration* config) {
+   MediaCapabilitiesDecodingInfo* info = CreateDecodingInfoWith(value);
++  ApplyPersonaMediaCapabilitiesResult(ExecutionContext::From(script_state),
++                                      value, info);
+   return ToResolvedPromise<MediaCapabilitiesDecodingInfo>(script_state, info);
+ }
+ 
+@@ -434,6 +448,8 @@ void OnMediaCapabilitiesEncodingInfo(
+   info->setSupported(result->supported);
+   info->setSmooth(result->smooth);
+   info->setPowerEfficient(result->power_efficient);
++  ApplyPersonaMediaCapabilitiesResult(resolver->GetExecutionContext(),
++                                      result->supported, info);
+ 
+   resolver->Resolve(std::move(info));
+ }
+@@ -807,6 +937,12 @@ ScriptPromise<MediaCapabilitiesDecodingInfo> MediaCapabilities::decodingInfo(
+   // Validation errors should return above.
+   DCHECK(message.empty());
+ 
++  if (PersonaSpoofingHelper::ReduceSystemInfo(
++          ExecutionContext::From(script_state)) &&
++      !IsPersonaStableMediaDecodingConfiguration(config)) {
++    return CreateResolvedPromiseToDecodingInfoWith(false, script_state, config);
++  }
++
+   if (is_webrtc) {
+     UseCounter::Count(ExecutionContext::From(script_state),
+                       WebFeature::kMediaCapabilitiesDecodingInfoWebrtc);
+@@ -1041,6 +1177,13 @@ ScriptPromise<MediaCapabilitiesInfo> MediaCapabilities::encodingInfo(
+   // Validation errors should return above.
+   DCHECK(message.empty());
+ 
++  if (PersonaSpoofingHelper::ReduceSystemInfo(
++          ExecutionContext::From(script_state)) &&
++      !IsPersonaStableMediaEncodingConfiguration(config)) {
++    return ToResolvedPromise<MediaCapabilitiesInfo>(
++        script_state, CreateEncodingInfoWith(false));
++  }
++
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<MediaCapabilitiesInfo>>(
+           script_state, exception_state.GetContext());
+@@ -1205,6 +1221,7 @@ void MediaCapabilities::GetPerfInfo(
+     // Audio-only is always smooth and power efficient.
+     MediaCapabilitiesDecodingInfo* info = CreateDecodingInfoWith(true);
+     info->setKeySystemAccess(access);
++    ApplyPersonaMediaCapabilitiesResult(execution_context, true, info);
+     resolver->Resolve(info);
+     return;
+   }
+@@ -1223,6 +1240,7 @@ void MediaCapabilities::GetPerfInfo(
+ 
+   if (!EnsurePerfHistoryService(execution_context)) {
+     MediaCapabilitiesDecodingInfo* info = CreateDecodingInfoWith(true);
++    ApplyPersonaMediaCapabilitiesResult(execution_context, true, info);
+     resolver->Resolve(WrapPersistent(info));
+     return;
+   }
+@@ -1335,5 +1355,7 @@ void MediaCapabilities::ResolveCallbackIfReady(int callback_id) {
+ 
+   info->setSmooth(*pending_cb->db_is_smooth);
++  ApplyPersonaMediaCapabilitiesResult(execution_context, info->supported(),
++                                      info);
+ 
+   const base::TimeDelta process_time =
+       base::TimeTicks::Now() - pending_cb->request_time;
+@@ -1389,6 +1415,28 @@ void MediaCapabilities::OnWebrtcSupportInfo(
+   DCHECK(pending_cb_map_.Contains(callback_id));
+   PendingCallbackState* pending_cb = pending_cb_map_.at(callback_id);
+ 
++  ExecutionContext* execution_context =
++      pending_cb->resolver->GetExecutionContext();
++  if (execution_context && !execution_context->IsContextDestroyed() &&
++      PersonaSpoofingHelper::ReduceSystemInfo(execution_context)) {
++    MediaCapabilitiesDecodingInfo* info = CreateDecodingInfoWith(is_supported);
++    ApplyPersonaMediaCapabilitiesResult(execution_context, is_supported, info);
++
++    if (type == OperationType::kEncoding) {
++      pending_cb->resolver->DowncastTo<MediaCapabilitiesInfo>()->Resolve(info);
++    } else {
++      pending_cb->resolver->DowncastTo<MediaCapabilitiesDecodingInfo>()
++          ->Resolve(info);
++    }
++
++    const base::TimeDelta process_time =
++        base::TimeTicks::Now() - pending_cb->request_time;
++    UMA_HISTOGRAM_TIMES("Media.Capabilities.DecodingInfo.Time.Webrtc",
++                        process_time);
++    pending_cb_map_.erase(callback_id);
++    return;
++  }
++
+   // Special treatment if the config is not supported, or if only audio was
+   // specified which is indicated by the fact that `video_pixels` equals 0,
+   // or if we fail to access the WebrtcPerfHistoryService.
+@@ -1447,6 +1494,9 @@ void MediaCapabilities::OnWebrtcPerfHistoryInfo(int callback_id,
+   info->setSupported(*pending_cb->is_supported);
+   info->setPowerEfficient(*pending_cb->is_gpu_factories_supported);
+   info->setSmooth(is_smooth);
++  ApplyPersonaMediaCapabilitiesResult(
++      pending_cb->resolver->GetExecutionContext(), *pending_cb->is_supported,
++      info);
+ 
+   const base::TimeDelta process_time =
+       base::TimeTicks::Now() - pending_cb->request_time;

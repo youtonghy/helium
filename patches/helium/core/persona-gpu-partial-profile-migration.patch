@@ -1,0 +1,222 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index c13e7c3..a6da7d1 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -2580,7 +2580,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       }
+     }
+     persona.gpu = persona.gpu || {};
+-    persona.gpu['webglProfile'] = persona.gpu['webglProfile'] || {
++    const webglDefaults: Record<string, number> = {
+       maxTextureSize: 16384,
+       maxCubeMapTextureSize: 16384,
+       maxRenderbufferSize: 16384,
+@@ -2596,7 +2596,9 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       maxSamples: 4,
+       maxAnisotropy: 16,
+     };
+-    persona.gpu['webgl2Profile'] = persona.gpu['webgl2Profile'] || {
++    persona.gpu['webglProfile'] = this.ensureGpuProfileDefaults_(
++        persona.gpu['webglProfile'], webglDefaults);
++    const webgl2Defaults: Record<string, number> = {
+       max3DTextureSize: 2048,
+       maxArrayTextureLayers: 2048,
+       maxColorAttachments: 8,
+@@ -2606,7 +2608,9 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       maxTextureLodBias: 15,
+       maxSamples: 4,
+     };
+-    persona.gpu['webgpuProfile'] = persona.gpu['webgpuProfile'] || {
++    persona.gpu['webgl2Profile'] = this.ensureGpuProfileDefaults_(
++        persona.gpu['webgl2Profile'], webgl2Defaults);
++    const webgpuDefaults: Record<string, number> = {
+       maxTextureDimension1D: 8192,
+       maxTextureDimension2D: 8192,
+       maxTextureDimension3D: 2048,
+@@ -2625,6 +2629,8 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       maxComputeWorkgroupSizeZ: 64,
+       maxComputeWorkgroupsPerDimension: 65535,
+     };
++    persona.gpu['webgpuProfile'] = this.ensureGpuProfileDefaults_(
++        persona.gpu['webgpuProfile'], webgpuDefaults);
+     persona.gpu['webgpuFeatures'] = persona.gpu['webgpuFeatures'] || [
+       'texture-compression-bc',
+     ];
+@@ -2766,6 +2772,22 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     }
+   }
+ 
++  private ensureGpuProfileDefaults_(
++      profile: unknown, defaults: Record<string, number>):
++      Record<string, unknown> {
++    const shaped =
++        profile && typeof profile === 'object' && !Array.isArray(profile) ?
++        {...profile as Record<string, unknown>} :
++        {};
++    for (const [key, value] of Object.entries(defaults)) {
++      if (shaped[key] === undefined || shaped[key] === null ||
++          Number.isNaN(Number(shaped[key]))) {
++        shaped[key] = value;
++      }
++    }
++    return shaped;
++  }
++
+   private normalizeNumbers_(persona: PersonaRecord) {
+     this.ensureEditableShape_(persona);
+     const toNumber = (value: unknown) => Number(value || 0);
+diff --git a/components/helium_persona/persona_prefs.cc b/components/helium_persona/persona_prefs.cc
+index 54f9a03..b981c98 100644
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -536,6 +536,74 @@ void EnsureNumeric(base::Value::Dict& dict,
+   }
+ }
+ 
++void EnsureNumericProfileField(base::Value::Dict& profile,
++                               const base::Value::Dict& defaults,
++                               std::string_view key) {
++  if (HasNumericValue(profile, key)) {
++    return;
++  }
++  if (std::optional<int> default_int = defaults.FindInt(key)) {
++    profile.Set(key, *default_int);
++    return;
++  }
++  if (std::optional<double> default_double = defaults.FindDouble(key)) {
++    profile.Set(key, *default_double);
++  }
++}
++
++void EnsureWebGLProfileCompatibilityFields(base::Value::Dict& profile) {
++  base::Value::Dict defaults = MakeDefaultWebGLProfile();
++  EnsureNumericProfileField(profile, defaults, "maxTextureSize");
++  EnsureNumericProfileField(profile, defaults, "maxCubeMapTextureSize");
++  EnsureNumericProfileField(profile, defaults, "maxRenderbufferSize");
++  EnsureNumericProfileField(profile, defaults, "maxViewportWidth");
++  EnsureNumericProfileField(profile, defaults, "maxViewportHeight");
++  EnsureNumericProfileField(profile, defaults, "maxTextureImageUnits");
++  EnsureNumericProfileField(profile, defaults, "maxCombinedTextureImageUnits");
++  EnsureNumericProfileField(profile, defaults, "maxVertexAttribs");
++  EnsureNumericProfileField(profile, defaults, "maxVertexTextureImageUnits");
++  EnsureNumericProfileField(profile, defaults, "maxVertexUniformVectors");
++  EnsureNumericProfileField(profile, defaults, "maxFragmentUniformVectors");
++  EnsureNumericProfileField(profile, defaults, "maxVaryingVectors");
++  EnsureNumericProfileField(profile, defaults, "maxSamples");
++  EnsureNumericProfileField(profile, defaults, "maxAnisotropy");
++}
++
++void EnsureWebGL2ProfileCompatibilityFields(base::Value::Dict& profile) {
++  base::Value::Dict defaults = MakeDefaultWebGL2Profile();
++  EnsureNumericProfileField(profile, defaults, "max3DTextureSize");
++  EnsureNumericProfileField(profile, defaults, "maxArrayTextureLayers");
++  EnsureNumericProfileField(profile, defaults, "maxColorAttachments");
++  EnsureNumericProfileField(profile, defaults, "maxDrawBuffers");
++  EnsureNumericProfileField(profile, defaults, "maxUniformBlockSize");
++  EnsureNumericProfileField(profile, defaults, "uniformBufferOffsetAlignment");
++  EnsureNumericProfileField(profile, defaults, "maxTextureLodBias");
++  EnsureNumericProfileField(profile, defaults, "maxSamples");
++}
++
++void EnsureWebGPUProfileCompatibilityFields(base::Value::Dict& profile) {
++  base::Value::Dict defaults = MakeDefaultWebGPUProfile();
++  EnsureNumericProfileField(profile, defaults, "maxTextureDimension1D");
++  EnsureNumericProfileField(profile, defaults, "maxTextureDimension2D");
++  EnsureNumericProfileField(profile, defaults, "maxTextureDimension3D");
++  EnsureNumericProfileField(profile, defaults, "maxTextureArrayLayers");
++  EnsureNumericProfileField(profile, defaults, "maxBindGroups");
++  EnsureNumericProfileField(profile, defaults, "maxBindingsPerBindGroup");
++  EnsureNumericProfileField(profile, defaults, "maxUniformBufferBindingSize");
++  EnsureNumericProfileField(profile, defaults, "maxStorageBufferBindingSize");
++  EnsureNumericProfileField(profile, defaults, "maxBufferSize");
++  EnsureNumericProfileField(profile, defaults, "maxVertexBuffers");
++  EnsureNumericProfileField(profile, defaults, "maxVertexAttributes");
++  EnsureNumericProfileField(profile, defaults, "maxComputeWorkgroupStorageSize");
++  EnsureNumericProfileField(profile, defaults,
++                            "maxComputeInvocationsPerWorkgroup");
++  EnsureNumericProfileField(profile, defaults, "maxComputeWorkgroupSizeX");
++  EnsureNumericProfileField(profile, defaults, "maxComputeWorkgroupSizeY");
++  EnsureNumericProfileField(profile, defaults, "maxComputeWorkgroupSizeZ");
++  EnsureNumericProfileField(profile, defaults,
++                            "maxComputeWorkgroupsPerDimension");
++}
++
+ void EnsureUaChCompatibilityFields(base::Value::Dict& persona) {
+   if (!persona.FindDict("uaCh")) {
+     persona.Set("uaCh", MakeDefaultUaChProfile());
+@@ -783,12 +851,18 @@ void EnsureGpuCompatibilityFields(base::Value::Dict& persona) {
+   EnsureString(*gpu, "driver", "D3D11");
+   if (!gpu->FindDict("webglProfile")) {
+     gpu->Set("webglProfile", MakeDefaultWebGLProfile());
++  } else {
++    EnsureWebGLProfileCompatibilityFields(*gpu->FindDict("webglProfile"));
+   }
+   if (!gpu->FindDict("webgl2Profile")) {
+     gpu->Set("webgl2Profile", MakeDefaultWebGL2Profile());
++  } else {
++    EnsureWebGL2ProfileCompatibilityFields(*gpu->FindDict("webgl2Profile"));
+   }
+   if (!gpu->FindDict("webgpuProfile")) {
+     gpu->Set("webgpuProfile", MakeDefaultWebGPUProfile());
++  } else {
++    EnsureWebGPUProfileCompatibilityFields(*gpu->FindDict("webgpuProfile"));
+   }
+   if (!CleanStringListField(*gpu, "webgpuFeatures")) {
+     gpu->Set("webgpuFeatures", MakeDefaultWebGPUFeatures());
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index ae2acfb..bed9b78 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -692,6 +692,52 @@ TEST(HeliumPersonaPrefsTest, SavePersonaMigratesLegacyManualShape) {
+   EXPECT_TRUE(active.FindDict("fonts")->FindList("aliases"));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, SavePersonaRepairsPartialGpuProfiles) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++  base::Value::List presets = GetBuiltinPersonaPresets();
++  base::Value::Dict persona = DictAt(presets, 1).Clone();
++  persona.Set("id", "partial-gpu-persona");
++  persona.Set("source", "custom");
++  persona.Set("builtin", false);
++
++  base::Value::Dict* gpu = persona.FindDict("gpu");
++  ASSERT_TRUE(gpu);
++  base::Value::Dict* webgl_profile = gpu->FindDict("webglProfile");
++  ASSERT_TRUE(webgl_profile);
++  webgl_profile->Remove("maxTextureSize");
++  webgl_profile->Remove("maxAnisotropy");
++  base::Value::Dict* webgl2_profile = gpu->FindDict("webgl2Profile");
++  ASSERT_TRUE(webgl2_profile);
++  webgl2_profile->Remove("maxDrawBuffers");
++  webgl2_profile->Remove("maxTextureLodBias");
++  base::Value::Dict* webgpu_profile = gpu->FindDict("webgpuProfile");
++  ASSERT_TRUE(webgpu_profile);
++  webgpu_profile->Remove("maxTextureDimension2D");
++  webgpu_profile->Remove("maxBufferSize");
++  webgpu_profile->Remove("maxComputeWorkgroupsPerDimension");
++
++  EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
++  base::Value::Dict active = GetActivePersona(prefs);
++  ASSERT_TRUE(active.FindDict("gpu"));
++  webgl_profile = active.FindDict("gpu")->FindDict("webglProfile");
++  ASSERT_TRUE(webgl_profile);
++  EXPECT_EQ(16384, webgl_profile->FindInt("maxTextureSize").value_or(0));
++  EXPECT_EQ(16.0, webgl_profile->FindDouble("maxAnisotropy").value_or(0.0));
++  webgl2_profile = active.FindDict("gpu")->FindDict("webgl2Profile");
++  ASSERT_TRUE(webgl2_profile);
++  EXPECT_EQ(8, webgl2_profile->FindInt("maxDrawBuffers").value_or(0));
++  EXPECT_EQ(15.0,
++            webgl2_profile->FindDouble("maxTextureLodBias").value_or(0.0));
++  webgpu_profile = active.FindDict("gpu")->FindDict("webgpuProfile");
++  ASSERT_TRUE(webgpu_profile);
++  EXPECT_EQ(8192,
++            webgpu_profile->FindInt("maxTextureDimension2D").value_or(0));
++  EXPECT_EQ(268435456, webgpu_profile->FindInt("maxBufferSize").value_or(0));
++  EXPECT_EQ(65535, webgpu_profile->FindInt("maxComputeWorkgroupsPerDimension")
++                       .value_or(0));
++}
++
+ TEST(HeliumPersonaPrefsTest, PersonaStateNormalizesLegacyPersonaList) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);

@@ -1,0 +1,174 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 5ab749ee..2d9f77b3 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -142,6 +142,13 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+         .startsWith(String(prefix || '').toLowerCase());
+   }
+ 
++  private primaryLanguage_(value: unknown): string {
++    return String(value || '')
++        .trim()
++        .split('-')[0]
++        .toLowerCase();
++  }
++
+   private numberValue_(value: unknown): number {
+     return Number(value || 0);
+   }
+@@ -208,6 +215,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const screen = persona.screen || {};
+     const hardware = persona.hardware || {};
+     const rendering = persona.fontRendering || {};
++    const advanced = persona.advanced || {};
+     const os = String(persona.os || '');
+     const ua = String(persona.userAgent || '');
+     const platform = String(persona.platform || '');
+@@ -230,6 +238,10 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const memory = this.numberValue_(hardware['deviceMemory']);
+     const touchEnabled = Boolean(hardware['touchEnabled']);
+     const maxTouchPoints = this.numberValue_(hardware['maxTouchPoints']);
++    const storageQuota = this.numberValue_(advanced['storageQuotaGb']);
++    const speechVoiceName = String(advanced['speechVoiceName'] || '');
++    const speechVoiceLang = String(advanced['speechVoiceLang'] || '');
++    const speechVoiceUri = String(advanced['speechVoiceUri'] || '');
+     const fontRenderingId = String(rendering['id'] || '');
+     const fontRenderingEngine = String(rendering['engine'] || '');
+     const fontAntialiasing = Boolean(rendering['antialiasing']);
+@@ -342,6 +354,19 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+           warnings,
+           'navigator.languages[0] should match the persona locale.');
+     }
++    if (speechVoiceLang &&
++        this.primaryLanguage_(speechVoiceLang) !==
++            this.primaryLanguage_(locale)) {
++      this.addDraftWarning_(
++          warnings,
++          'Speech synthesis voice language should match the persona locale language.');
++    }
++    if ((speechVoiceName && !speechVoiceUri) ||
++        (!speechVoiceName && speechVoiceUri)) {
++      this.addDraftWarning_(
++          warnings,
++          'Speech synthesis voice name and URI should be filled together.');
++    }
+ 
+     if (this.contains_(os, 'macos') &&
+         (this.contains_(gpuVendor, 'nvidia') ||
+@@ -517,6 +539,19 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+           warnings,
+           'navigator.deviceMemory should use Chromium bucket values up to 8 GB.');
+     }
++    if (storageQuota < 0) {
++      this.addDraftWarning_(warnings, 'Storage quota must not be negative.');
++    }
++    if (storageQuota > 0 && memory > 0 && storageQuota < memory * 2) {
++      this.addDraftWarning_(
++          warnings,
++          'Storage quota is too small for the selected device memory bucket.');
++    }
++    if (storageQuota > 2048) {
++      this.addDraftWarning_(
++          warnings,
++          'Storage quota above 2 TB is unusual for desktop browser profiles.');
++    }
+     if (!touchEnabled && maxTouchPoints > 0) {
+       this.addDraftWarning_(
+           warnings,
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index 4711929e..7291c59c 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -777,6 +777,12 @@ TEST(HeliumPersonaPrefsTest, ValidationWarnsButAllowsConflicts) {
+   ASSERT_TRUE(hardware);
+   hardware->Set("deviceMemory", 16);
+   hardware->Set("maxTouchPoints", 2);
++  base::Value::Dict* advanced = persona.FindDict("advanced");
++  ASSERT_TRUE(advanced);
++  advanced->Set("storageQuotaGb", 1.0);
++  advanced->Set("speechVoiceName", "Samantha");
++  advanced->Set("speechVoiceLang", "en-US");
++  advanced->Set("speechVoiceUri", "");
+   base::Value::Dict* font_rendering = persona.FindDict("fontRendering");
+   ASSERT_TRUE(font_rendering);
+   font_rendering->Set("id", "windows-cleartype");
+@@ -827,7 +833,10 @@ TEST(HeliumPersonaPrefsTest, ValidationWarnsButAllowsConflicts) {
+   base::Value::List warnings = ValidatePersona(persona);
+   EXPECT_TRUE(WarningsContain(warnings, "Chinese language profiles"));
+   EXPECT_TRUE(WarningsContain(warnings, "Accept-Language should begin"));
++  EXPECT_TRUE(WarningsContain(warnings, "Speech synthesis voice language"));
++  EXPECT_TRUE(WarningsContain(warnings, "voice name and URI"));
+   EXPECT_TRUE(WarningsContain(warnings, "deviceMemory should use"));
++  EXPECT_TRUE(WarningsContain(warnings, "Storage quota is too small"));
+   EXPECT_TRUE(WarningsContain(warnings, "maxTouchPoints should be 0"));
+   EXPECT_TRUE(WarningsContain(warnings, "CoreText font rendering"));
+   EXPECT_TRUE(WarningsContain(warnings, "UA-CH fullVersion major"));
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index 79d62c07..9a66370c 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -238,6 +238,14 @@ std::string ExtractMajorVersion(std::string_view version) {
+   return std::string(major);
+ }
+ 
++std::string PrimaryLanguage(std::string_view language_tag) {
++  size_t dash = language_tag.find('-');
++  std::string_view language = dash == std::string_view::npos
++                                  ? language_tag
++                                  : language_tag.substr(0, dash);
++  return base::ToLowerASCII(std::string(language));
++}
++
+ std::string ExtractUaChromeMajor(std::string_view ua) {
+   constexpr std::string_view kToken = "Chrome/";
+   size_t token = ua.find(kToken);
+@@ -671,6 +679,14 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+       GetNestedBool(persona, "hardware", "touchEnabled");
+   const int max_touch_points =
+       GetNestedInt(persona, "hardware", "maxTouchPoints");
++  const double storage_quota_gb =
++      GetNestedDouble(persona, "advanced", "storageQuotaGb");
++  const std::string_view speech_voice_name =
++      GetNestedString(persona, "advanced", "speechVoiceName");
++  const std::string_view speech_voice_lang =
++      GetNestedString(persona, "advanced", "speechVoiceLang");
++  const std::string_view speech_voice_uri =
++      GetNestedString(persona, "advanced", "speechVoiceUri");
+   const std::string_view font_rendering_id =
+       GetNestedString(persona, "fontRendering", "id");
+   const std::string_view font_rendering_engine =
+@@ -917,6 +933,15 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+     AddWarning(warnings,
+                "navigator.languages[0] should match the persona locale.");
+   }
++  if (!speech_voice_lang.empty() &&
++      PrimaryLanguage(speech_voice_lang) != PrimaryLanguage(locale)) {
++    AddWarning(warnings,
++               "Speech synthesis voice language should match the persona locale language.");
++  }
++  if (speech_voice_name.empty() != speech_voice_uri.empty()) {
++    AddWarning(warnings,
++               "Speech synthesis voice name and URI should be filled together.");
++  }
+ 
+   if (width > 0 && height > 0 && (width < 1024 || height < 720)) {
+     AddWarning(warnings,
+@@ -1022,6 +1047,18 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+     AddWarning(warnings,
+                "navigator.deviceMemory should use Chromium bucket values up to 8 GB.");
+   }
++  if (storage_quota_gb < 0) {
++    AddWarning(warnings, "Storage quota must not be negative.");
++  }
++  if (storage_quota_gb > 0 && device_memory > 0 &&
++      storage_quota_gb < device_memory * 2) {
++    AddWarning(warnings,
++               "Storage quota is too small for the selected device memory bucket.");
++  }
++  if (storage_quota_gb > 2048) {
++    AddWarning(warnings,
++               "Storage quota above 2 TB is unusual for desktop browser profiles.");
++  }
+ 
+   if (!touch_enabled && max_touch_points > 0) {
+     AddWarning(warnings,

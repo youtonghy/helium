@@ -1,0 +1,220 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 1585ded..b4d1290 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -207,6 +207,45 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+         .filter(item => item.length > 0);
+   }
+ 
++  private fallbackLanguage_(locale: string): string {
++    const language = locale.split('-')[0].trim().toLowerCase();
++    return language || 'en';
++  }
++
++  private acceptLanguageForLocale_(locale: string): string {
++    const normalizedLocale = this.stringValue_(locale) || 'en-US';
++    const language = this.fallbackLanguage_(normalizedLocale);
++    return language && language !== normalizedLocale.toLowerCase() ?
++        `${normalizedLocale},${language};q=0.9` : normalizedLocale;
++  }
++
++  private navigatorLanguagesForLocale_(locale: string): string[] {
++    const normalizedLocale = this.stringValue_(locale) || 'en-US';
++    const language = this.fallbackLanguage_(normalizedLocale);
++    return language && language !== normalizedLocale.toLowerCase() ?
++        [normalizedLocale, language] : [normalizedLocale];
++  }
++
++  private canonicalUaChBrandsForMajor_(
++      major: number): Array<Record<string, string>> {
++    const version = String(major || 149);
++    return [
++      {brand: 'Chromium', version},
++      {brand: 'Google Chrome', version},
++      {brand: 'Not_A Brand', version: '24'},
++    ];
++  }
++
++  private positiveNumberOr_(value: unknown, fallback: number): number {
++    const number = this.numberValueOr_(value, fallback);
++    return Number.isFinite(number) && number > 0 ? number : fallback;
++  }
++
++  private nonNegativeNumberOr_(value: unknown, fallback: number): number {
++    const number = this.numberValueOr_(value, fallback);
++    return Number.isFinite(number) && number >= 0 ? number : fallback;
++  }
++
+   private addDraftWarning_(warnings: string[], warning: string) {
+     if (!warnings.includes(warning)) {
+       warnings.push(warning);
+@@ -1146,6 +1185,34 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     }).filter(Boolean) as Array<Record<string, string>>;
+   }
+ 
++  private normalizeUaChBrandsForSave_(
++      value: unknown, major: number): Array<Record<string, string>> {
++    const version = String(major || 149);
++    if (!Array.isArray(value)) {
++      return [];
++    }
++    const completeBrands = this.cleanUaChBrands_(value);
++    if (completeBrands.length === value.length) {
++      return completeBrands;
++    }
++    return value.map(item => {
++      if (!item || typeof item !== 'object' || Array.isArray(item)) {
++        return null;
++      }
++      const brand = this.stringValue_(
++          (item as Record<string, unknown>)['brand']);
++      if (!brand) {
++        return null;
++      }
++      const brandVersion = this.stringValue_(
++          (item as Record<string, unknown>)['version']) ||
++          (this.contains_(brand, 'not') && this.contains_(brand, 'brand') ?
++               '24' :
++               version);
++      return {brand, version: brandVersion};
++    }).filter(Boolean) as Array<Record<string, string>>;
++  }
++
+   private onUaChBrandsChanged_() {
+     this.set(
+         'editablePersona_.uaCh.brands',
+@@ -3068,6 +3135,28 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+   }
+ 
+   private normalizeNumbers_(persona: PersonaRecord) {
++    const regionBeforeNormalize =
++        persona.region && typeof persona.region === 'object' &&
++            !Array.isArray(persona.region) ?
++        persona.region :
++        {};
++    const uaChBeforeNormalize =
++        persona.uaCh && typeof persona.uaCh === 'object' &&
++            !Array.isArray(persona.uaCh) ?
++        persona.uaCh :
++        {};
++    const shouldDeriveAcceptLanguage =
++        !this.stringValue_(
++            (regionBeforeNormalize as Record<string, unknown>)['acceptLanguage']);
++    const shouldDeriveNavigatorLanguages =
++        !this.stringListValue_(
++            (regionBeforeNormalize as Record<string, unknown>)
++                ['navigatorLanguages']).length;
++    const uaChBrandsBeforeNormalize =
++        (uaChBeforeNormalize as Record<string, unknown>)['brands'];
++    const shouldDeriveUaChBrands =
++        !Array.isArray(uaChBrandsBeforeNormalize) ||
++        uaChBrandsBeforeNormalize.length === 0;
+     this.ensureEditableShape_(persona);
+     const toNumber = (value: unknown) => Number(value || 0);
+     const toString = (value: unknown) => this.stringValue_(value);
+@@ -3117,12 +3206,12 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     persona.gpu['renderer'] = toString(persona.gpu['renderer']);
+     persona.gpu['webgpuAdapter'] = toString(persona.gpu['webgpuAdapter']);
+     persona.gpu['driver'] = toString(persona.gpu['driver']);
+-    persona.hardware['hardwareConcurrency'] =
+-        toNumber(persona.hardware['hardwareConcurrency']);
+-    persona.hardware['deviceMemory'] =
+-        toNumber(persona.hardware['deviceMemory']);
+-    persona.hardware['maxTouchPoints'] =
+-        toNumber(persona.hardware['maxTouchPoints']);
++    persona.hardware['hardwareConcurrency'] = this.positiveNumberOr_(
++        persona.hardware['hardwareConcurrency'], 8);
++    persona.hardware['deviceMemory'] = this.positiveNumberOr_(
++        persona.hardware['deviceMemory'], 8);
++    persona.hardware['maxTouchPoints'] = this.nonNegativeNumberOr_(
++        persona.hardware['maxTouchPoints'], 0);
+     persona.hardware['touchEnabled'] = Boolean(persona.hardware['touchEnabled']);
+     for (const key of [
+       'platform',
+@@ -3135,13 +3224,12 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       persona.uaCh[key] = toString(persona.uaCh[key]);
+     }
+     persona.uaCh['brands'] =
+-        this.cleanUaChBrands_(persona.uaCh['brands']);
+-    if (!(persona.uaCh['brands'] as Array<Record<string, string>>).length) {
+-      persona.uaCh['brands'] = [
+-        {brand: 'Chromium', version: '149'},
+-        {brand: 'Google Chrome', version: '149'},
+-        {brand: 'Not_A Brand', version: '24'},
+-      ];
++        this.normalizeUaChBrandsForSave_(
++            persona.uaCh['brands'], this.chromeMajorVersion_(persona));
++    if (shouldDeriveUaChBrands ||
++        !(persona.uaCh['brands'] as Array<Record<string, string>>).length) {
++      persona.uaCh['brands'] =
++          this.canonicalUaChBrandsForMajor_(this.chromeMajorVersion_(persona));
+     }
+     persona.uaCh['formFactors'] = toStringList(persona.uaCh['formFactors']);
+     if (!(persona.uaCh['formFactors'] as string[]).length) {
+@@ -3157,29 +3245,50 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     persona.region['locale'] = toString(persona.region['locale']);
+     persona.region['acceptLanguage'] =
+         toString(persona.region['acceptLanguage']);
++    if (shouldDeriveAcceptLanguage || !persona.region['acceptLanguage']) {
++      persona.region['acceptLanguage'] =
++          this.acceptLanguageForLocale_(String(persona.region['locale'] || ''));
++    }
+     persona.region['navigatorLanguages'] =
+         toStringList(persona.region['navigatorLanguages']);
+-    if (!(persona.region['navigatorLanguages'] as string[]).length) {
+-      persona.region['navigatorLanguages'] = ['en-US', 'en'];
++    if (shouldDeriveNavigatorLanguages ||
++        !(persona.region['navigatorLanguages'] as string[]).length) {
++      persona.region['navigatorLanguages'] =
++          this.navigatorLanguagesForLocale_(
++              String(persona.region['locale'] || ''));
+     }
+     persona.network['type'] = toString(persona.network['type']);
+     persona.network['effectiveType'] =
+         toString(persona.network['effectiveType']);
+-    persona.screen['width'] = toNumber(persona.screen['width']);
+-    persona.screen['height'] = toNumber(persona.screen['height']);
+-    persona.screen['availLeft'] = toNumber(persona.screen['availLeft']);
+-    persona.screen['availTop'] = toNumber(persona.screen['availTop']);
+-    persona.screen['availWidth'] = toNumber(persona.screen['availWidth']);
+-    persona.screen['availHeight'] = toNumber(persona.screen['availHeight']);
+-    persona.screen['outerWidth'] = toNumber(persona.screen['outerWidth']);
+-    persona.screen['outerHeight'] = toNumber(persona.screen['outerHeight']);
+-    persona.screen['windowScreenX'] = toNumber(persona.screen['windowScreenX']);
+-    persona.screen['windowScreenY'] = toNumber(persona.screen['windowScreenY']);
++    persona.screen['width'] = this.positiveNumberOr_(
++        persona.screen['width'], 1920);
++    persona.screen['height'] = this.positiveNumberOr_(
++        persona.screen['height'], 1080);
++    persona.screen['availLeft'] = this.nonNegativeNumberOr_(
++        persona.screen['availLeft'], 0);
++    persona.screen['availTop'] = this.nonNegativeNumberOr_(
++        persona.screen['availTop'], 0);
++    persona.screen['availWidth'] = this.positiveNumberOr_(
++        persona.screen['availWidth'], Number(persona.screen['width']));
++    persona.screen['availHeight'] = this.positiveNumberOr_(
++        persona.screen['availHeight'],
++        Math.max(1, Number(persona.screen['height']) - 40));
++    persona.screen['outerWidth'] = this.positiveNumberOr_(
++        persona.screen['outerWidth'], Number(persona.screen['width']));
++    persona.screen['outerHeight'] = this.positiveNumberOr_(
++        persona.screen['outerHeight'], Number(persona.screen['height']));
++    persona.screen['windowScreenX'] = this.nonNegativeNumberOr_(
++        persona.screen['windowScreenX'], Number(persona.screen['availLeft']));
++    persona.screen['windowScreenY'] = this.nonNegativeNumberOr_(
++        persona.screen['windowScreenY'], Number(persona.screen['availTop']));
+     persona.screen['deviceScaleFactor'] =
+-        toNumber(persona.screen['deviceScaleFactor']);
+-    persona.screen['colorDepth'] = toNumber(persona.screen['colorDepth']);
+-    persona.screen['pixelDepth'] = toNumber(persona.screen['pixelDepth']);
+-    persona.screen['refreshRate'] = toNumber(persona.screen['refreshRate']);
++        this.positiveNumberOr_(persona.screen['deviceScaleFactor'], 1);
++    persona.screen['colorDepth'] = this.positiveNumberOr_(
++        persona.screen['colorDepth'], 24);
++    persona.screen['pixelDepth'] = this.positiveNumberOr_(
++        persona.screen['pixelDepth'], Number(persona.screen['colorDepth']));
++    persona.screen['refreshRate'] = this.positiveNumberOr_(
++        persona.screen['refreshRate'], 60);
+     persona.screen['orientationType'] =
+         String(persona.screen['orientationType'] || 'landscape-primary');
+     persona.screen['orientationAngle'] =

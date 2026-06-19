@@ -1,0 +1,13 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.html b/chrome/browser/resources/settings/privacy_page/persona_page.html
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -534,6 +534,9 @@
+         value="{{editablePersona_.fontRendering.id}}"></cr-input>
+     <cr-input label="Rendering profile"
+         value="{{editablePersona_.fontRendering.displayName}}"></cr-input>
++    <cr-input label="Rendering profile version"
++        value="{{editablePersona_.fontRendering.profileVersion}}"
++        type="number"></cr-input>
+     <cr-input label="Rendering engine"
+         value="{{editablePersona_.fontRendering.engine}}"></cr-input>
+     <cr-input label="Hinting"

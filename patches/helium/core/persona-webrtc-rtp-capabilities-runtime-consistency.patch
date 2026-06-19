@@ -1,0 +1,196 @@
+diff --git a/third_party/blink/renderer/modules/peerconnection/DEPS b/third_party/blink/renderer/modules/peerconnection/DEPS
+--- a/third_party/blink/renderer/modules/peerconnection/DEPS
++++ b/third_party/blink/renderer/modules/peerconnection/DEPS
+@@ -9,6 +9,7 @@ include_rules = [
+     "+third_party/blink/renderer/modules/permissions/permission_utils.h",
+     "+third_party/blink/renderer/modules/p2p",
+     "+third_party/blink/renderer/modules/webrtc",
++    "+third_party/blink/renderer/core/helium_persona",
+ 
+     "+base/lazy_instance.h",
+     "+base/power_monitor/power_observer.h",
+diff --git a/third_party/blink/renderer/modules/peerconnection/rtc_rtp_sender.cc b/third_party/blink/renderer/modules/peerconnection/rtc_rtp_sender.cc
+--- a/third_party/blink/renderer/modules/peerconnection/rtc_rtp_sender.cc
++++ b/third_party/blink/renderer/modules/peerconnection/rtc_rtp_sender.cc
+@@ -27,6 +27,8 @@
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_header_extension_capability.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_header_extension_parameters.h"
+ #include "third_party/blink/renderer/core/dom/dom_exception.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/streams/readable_stream.h"
+ #include "third_party/blink/renderer/core/streams/writable_stream.h"
+ #include "third_party/blink/renderer/modules/mediastream/media_stream_track.h"
+@@ -65,6 +67,35 @@ namespace {
+ 
+ webrtc::RtpCodec ToWebrtcRtpCodec(const RTCRtpCodec* codec);
+ 
++bool IsPersonaStableRtpCodec(const String& kind, const String& mime_type) {
++  if (kind == "audio") {
++    return mime_type.EndsWithIgnoringAsciiCase("/opus") ||
++           mime_type.EndsWithIgnoringAsciiCase("/pcmu") ||
++           mime_type.EndsWithIgnoringAsciiCase("/pcma") ||
++           mime_type.EndsWithIgnoringAsciiCase("/telephone-event") ||
++           mime_type.EndsWithIgnoringAsciiCase("/cn") ||
++           mime_type.EndsWithIgnoringAsciiCase("/red");
++  }
++
++  return mime_type.EndsWithIgnoringAsciiCase("/vp8") ||
++         mime_type.EndsWithIgnoringAsciiCase("/vp9") ||
++         mime_type.EndsWithIgnoringAsciiCase("/h264") ||
++         mime_type.EndsWithIgnoringAsciiCase("/av1") ||
++         mime_type.EndsWithIgnoringAsciiCase("/red") ||
++         mime_type.EndsWithIgnoringAsciiCase("/ulpfec") ||
++         mime_type.EndsWithIgnoringAsciiCase("/rtx") ||
++         mime_type.EndsWithIgnoringAsciiCase("/flexfec-03");
++}
++
++bool IsPersonaStableRtpHeaderExtension(const String& uri) {
++  return uri.EndsWithIgnoringAsciiCase("rtp-hdrext:sdes:mid") ||
++         uri.EndsWithIgnoringAsciiCase("rtp-hdrext:sdes:rtp-stream-id") ||
++         uri.EndsWithIgnoringAsciiCase(
++             "rtp-hdrext:sdes:repaired-rtp-stream-id") ||
++         uri.EndsWithIgnoringAsciiCase("/abs-send-time") ||
++         uri.EndsWithIgnoringAsciiCase("/transport-wide-cc-02");
++}
++
+ // This enum is used for logging and values must match the ones in
+ // tools/metrics/histograms/enums.xml
+ enum class WebRtcScalabilityMode {
+@@ -1029,19 +1060,26 @@ RTCRtpCapabilities* RTCRtpSender::getCapabilities(ScriptState* state,
+   std::unique_ptr<webrtc::RtpCapabilities> rtc_capabilities =
+       PeerConnectionDependencyFactory::From(*ExecutionContext::From(state))
+           .GetSenderCapabilities(kind);
++  const bool reduce_system_info =
++      PersonaSpoofingHelper::ReduceSystemInfo(ExecutionContext::From(state));
+ 
+   HeapVector<Member<RTCRtpCodecCapability>> codecs;
+   codecs.ReserveInitialCapacity(
+       base::checked_cast<wtf_size_t>(rtc_capabilities->codecs.size()));
+   for (const auto& rtc_codec : rtc_capabilities->codecs) {
+     auto* codec = RTCRtpCodecCapability::Create();
+-    codec->setMimeType(String::FromUtf8(rtc_codec.mime_type()));
++    String mime_type = String::FromUtf8(rtc_codec.mime_type());
++    if (reduce_system_info && !IsPersonaStableRtpCodec(kind, mime_type)) {
++      continue;
++    }
++
++    codec->setMimeType(mime_type);
+     if (rtc_codec.clock_rate)
+       codec->setClockRate(rtc_codec.clock_rate.value());
+ 
+     if (rtc_codec.num_channels)
+       codec->setChannels(rtc_codec.num_channels.value());
+-    if (!rtc_codec.parameters.empty()) {
++    if (!reduce_system_info && !rtc_codec.parameters.empty()) {
+       std::string sdp_fmtp_line;
+       for (const auto& parameter : rtc_codec.parameters) {
+         if (!sdp_fmtp_line.empty())
+@@ -1063,7 +1101,12 @@ RTCRtpCapabilities* RTCRtpSender::getCapabilities(ScriptState* state,
+       rtc_capabilities->header_extensions.size()));
+   for (const auto& rtc_header_extension : rtc_capabilities->header_extensions) {
+     auto* header_extension = RTCRtpHeaderExtensionCapability::Create();
+-    header_extension->setUri(String::FromUtf8(rtc_header_extension.uri));
++    String uri = String::FromUtf8(rtc_header_extension.uri);
++    if (reduce_system_info && !IsPersonaStableRtpHeaderExtension(uri)) {
++      continue;
++    }
++
++    header_extension->setUri(uri);
+     header_extensions.push_back(header_extension);
+   }
+   capabilities->setHeaderExtensions(header_extensions);
+diff --git a/third_party/blink/renderer/modules/peerconnection/rtc_rtp_receiver.cc b/third_party/blink/renderer/modules/peerconnection/rtc_rtp_receiver.cc
+--- a/third_party/blink/renderer/modules/peerconnection/rtc_rtp_receiver.cc
++++ b/third_party/blink/renderer/modules/peerconnection/rtc_rtp_receiver.cc
+@@ -20,6 +20,8 @@
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_decoding_parameters.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_header_extension_capability.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_header_extension_parameters.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/streams/readable_stream.h"
+ #include "third_party/blink/renderer/core/streams/writable_stream.h"
+ #include "third_party/blink/renderer/modules/peerconnection/peer_connection_dependency_factory.h"
+@@ -48,6 +50,39 @@
+ 
+ namespace blink {
+ 
++namespace {
++
++bool IsPersonaStableRtpCodec(const String& kind, const String& mime_type) {
++  if (kind == "audio") {
++    return mime_type.EndsWithIgnoringAsciiCase("/opus") ||
++           mime_type.EndsWithIgnoringAsciiCase("/pcmu") ||
++           mime_type.EndsWithIgnoringAsciiCase("/pcma") ||
++           mime_type.EndsWithIgnoringAsciiCase("/telephone-event") ||
++           mime_type.EndsWithIgnoringAsciiCase("/cn") ||
++           mime_type.EndsWithIgnoringAsciiCase("/red");
++  }
++
++  return mime_type.EndsWithIgnoringAsciiCase("/vp8") ||
++         mime_type.EndsWithIgnoringAsciiCase("/vp9") ||
++         mime_type.EndsWithIgnoringAsciiCase("/h264") ||
++         mime_type.EndsWithIgnoringAsciiCase("/av1") ||
++         mime_type.EndsWithIgnoringAsciiCase("/red") ||
++         mime_type.EndsWithIgnoringAsciiCase("/ulpfec") ||
++         mime_type.EndsWithIgnoringAsciiCase("/rtx") ||
++         mime_type.EndsWithIgnoringAsciiCase("/flexfec-03");
++}
++
++bool IsPersonaStableRtpHeaderExtension(const String& uri) {
++  return uri.EndsWithIgnoringAsciiCase("rtp-hdrext:sdes:mid") ||
++         uri.EndsWithIgnoringAsciiCase("rtp-hdrext:sdes:rtp-stream-id") ||
++         uri.EndsWithIgnoringAsciiCase(
++             "rtp-hdrext:sdes:repaired-rtp-stream-id") ||
++         uri.EndsWithIgnoringAsciiCase("/abs-send-time") ||
++         uri.EndsWithIgnoringAsciiCase("/transport-wide-cc-02");
++}
++
++}  // namespace
++
+ RTCRtpReceiver::RTCRtpReceiver(RTCPeerConnection* pc,
+                                std::unique_ptr<RTCRtpReceiverPlatform> receiver,
+                                MediaStreamTrack* track,
+@@ -286,18 +321,25 @@ RTCRtpCapabilities* RTCRtpReceiver::getCapabilities(ScriptState* state,
+   std::unique_ptr<webrtc::RtpCapabilities> rtc_capabilities =
+       PeerConnectionDependencyFactory::From(*ExecutionContext::From(state))
+           .GetReceiverCapabilities(kind);
++  const bool reduce_system_info =
++      PersonaSpoofingHelper::ReduceSystemInfo(ExecutionContext::From(state));
+ 
+   HeapVector<Member<RTCRtpCodecCapability>> codecs;
+   codecs.ReserveInitialCapacity(
+       base::checked_cast<wtf_size_t>(rtc_capabilities->codecs.size()));
+   for (const auto& rtc_codec : rtc_capabilities->codecs) {
+     auto* codec = RTCRtpCodecCapability::Create();
+-    codec->setMimeType(String::FromUtf8(rtc_codec.mime_type()));
++    String mime_type = String::FromUtf8(rtc_codec.mime_type());
++    if (reduce_system_info && !IsPersonaStableRtpCodec(kind, mime_type)) {
++      continue;
++    }
++
++    codec->setMimeType(mime_type);
+     if (rtc_codec.clock_rate)
+       codec->setClockRate(rtc_codec.clock_rate.value());
+     if (rtc_codec.num_channels)
+       codec->setChannels(rtc_codec.num_channels.value());
+-    if (!rtc_codec.parameters.empty()) {
++    if (!reduce_system_info && !rtc_codec.parameters.empty()) {
+       std::string sdp_fmtp_line;
+       for (const auto& parameter : rtc_codec.parameters) {
+         if (!sdp_fmtp_line.empty())
+@@ -319,7 +361,12 @@ RTCRtpCapabilities* RTCRtpReceiver::getCapabilities(ScriptState* state,
+       rtc_capabilities->header_extensions.size()));
+   for (const auto& rtc_header_extension : rtc_capabilities->header_extensions) {
+     auto* header_extension = RTCRtpHeaderExtensionCapability::Create();
+-    header_extension->setUri(String::FromUtf8(rtc_header_extension.uri));
++    String uri = String::FromUtf8(rtc_header_extension.uri);
++    if (reduce_system_info && !IsPersonaStableRtpHeaderExtension(uri)) {
++      continue;
++    }
++
++    header_extension->setUri(uri);
+     header_extensions.push_back(header_extension);
+   }
+   capabilities->setHeaderExtensions(header_extensions);

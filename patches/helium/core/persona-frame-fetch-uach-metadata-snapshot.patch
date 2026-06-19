@@ -1,0 +1,119 @@
+diff --git a/third_party/blink/renderer/core/loader/frame_fetch_context.cc b/third_party/blink/renderer/core/loader/frame_fetch_context.cc
+index 4e10b93..8606f70 100644
+--- a/third_party/blink/renderer/core/loader/frame_fetch_context.cc
++++ b/third_party/blink/renderer/core/loader/frame_fetch_context.cc
+@@ -37,6 +37,7 @@
+ #include "base/memory/scoped_refptr.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/metrics/histogram_macros.h"
++#include "base/strings/string_util.h"
+ #include "build/build_config.h"
+ #include "mojo/public/cpp/bindings/associated_remote.h"
+ #include "net/http/structured_headers.h"
+@@ -192,6 +193,91 @@ AtomicString PersonaColorSchemeHeader(
+   return fallback_dark ? http_names::kDark : http_names::kLight;
+ }
+ 
++bool IsHeliumPersonaUaChGreaseBrand(const std::string& brand) {
++  std::string lower = base::ToLowerASCII(brand);
++  return lower.find("not") != std::string::npos &&
++         lower.find("brand") != std::string::npos;
++}
++
++UserAgentBrandList ToHeliumPersonaUserAgentBrandList(
++    const std::vector<HeliumPersonaUaChBrand>& brands,
++    bool use_full_version,
++    const std::string& full_version) {
++  UserAgentBrandList list;
++  for (const HeliumPersonaUaChBrand& brand : brands) {
++    if (brand.brand.empty()) {
++      continue;
++    }
++    std::string version = brand.version;
++    if (use_full_version && !IsHeliumPersonaUaChGreaseBrand(brand.brand) &&
++        !full_version.empty()) {
++      version = full_version;
++    }
++    list.emplace_back(brand.brand, version);
++  }
++  return list;
++}
++
++void ApplyHeliumPersonaUserAgentMetadata(
++    const HeliumPersonaSnapshot& persona_snapshot,
++    UserAgentMetadata* metadata) {
++  if (!metadata || !persona_snapshot.IsEnabled() ||
++      !persona_snapshot.client_hints_enabled) {
++    return;
++  }
++  metadata->mobile = persona_snapshot.ua_ch_mobile;
++  if (!persona_snapshot.ua_ch_platform.empty()) {
++    metadata->platform = persona_snapshot.ua_ch_platform;
++  }
++  if (!persona_snapshot.ua_ch_platform_version.empty()) {
++    metadata->platform_version = persona_snapshot.ua_ch_platform_version;
++  }
++  if (!persona_snapshot.ua_ch_architecture.empty()) {
++    metadata->architecture = persona_snapshot.ua_ch_architecture;
++  }
++  if (!persona_snapshot.ua_ch_model.empty()) {
++    metadata->model = persona_snapshot.ua_ch_model;
++  }
++  if (!persona_snapshot.ua_ch_bitness.empty()) {
++    metadata->bitness = persona_snapshot.ua_ch_bitness;
++  }
++  if (!persona_snapshot.ua_ch_brands.empty()) {
++    metadata->brand_version_list = ToHeliumPersonaUserAgentBrandList(
++        persona_snapshot.ua_ch_brands, /*use_full_version=*/false,
++        persona_snapshot.ua_ch_full_version);
++  }
++  if (!persona_snapshot.ua_ch_full_version.empty()) {
++    metadata->full_version = persona_snapshot.ua_ch_full_version;
++  }
++  if (!persona_snapshot.ua_ch_full_version_list.empty()) {
++    metadata->brand_full_version_list =
++        ToHeliumPersonaUserAgentBrandList(
++            persona_snapshot.ua_ch_full_version_list,
++            /*use_full_version=*/false,
++            persona_snapshot.ua_ch_full_version);
++  } else if (!persona_snapshot.ua_ch_full_version.empty()) {
++    metadata->brand_full_version_list =
++        !persona_snapshot.ua_ch_brands.empty()
++            ? ToHeliumPersonaUserAgentBrandList(
++                  persona_snapshot.ua_ch_brands, /*use_full_version=*/true,
++                  persona_snapshot.ua_ch_full_version)
++            : metadata->brand_version_list;
++    for (UserAgentBrandVersion& brand_version :
++         metadata->brand_full_version_list) {
++      if (!IsHeliumPersonaUaChGreaseBrand(brand_version.brand)) {
++        brand_version.version = persona_snapshot.ua_ch_full_version;
++      }
++    }
++  }
++  metadata->wow64 = persona_snapshot.ua_ch_wow64;
++  if (!persona_snapshot.ua_ch_form_factors.empty()) {
++    metadata->form_factors = persona_snapshot.ua_ch_form_factors;
++  } else {
++    metadata->form_factors = {
++        persona_snapshot.ua_ch_mobile ? "Mobile" : "Desktop"};
++  }
++}
++
+ mojom::FetchCacheMode DetermineFrameCacheMode(Frame* frame) {
+   if (!frame) {
+     return mojom::FetchCacheMode::kDefault;
+@@ -686,6 +767,14 @@ void FrameFetchContext::AddClientHintsIfNecessary(
+       !PersonaSpoofingHelper::ClientHintsEnabled(execution_context)) {
+     return;
+   }
++  if (const HeliumPersonaSnapshot* snapshot =
++          PersonaSpoofingHelper::Get(execution_context)) {
++    if (!ua) {
++      ua.emplace();
++    }
++    ApplyHeliumPersonaUserAgentMetadata(*snapshot, &*ua);
++  }
++
+   const std::optional<float> persona_device_memory =
+       PersonaSpoofingHelper::DeviceMemory(execution_context);
+ 

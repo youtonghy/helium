@@ -1,0 +1,28 @@
+diff --git a/third_party/blink/renderer/core/css/css_font_selector_base.cc b/third_party/blink/renderer/core/css/css_font_selector_base.cc
+--- a/third_party/blink/renderer/core/css/css_font_selector_base.cc
++++ b/third_party/blink/renderer/core/css/css_font_selector_base.cc
+@@ -74,6 +74,11 @@ void CSSFontSelectorBase::WillUseFontData(
+     }
+     const AtomicString& family_name =
+         FamilyNameFromSettings(font_description, family);
++    if (PersonaSpoofingHelper::HasFontFamilyList(GetExecutionContext()) &&
++        !PersonaSpoofingHelper::IsFontFamilyExposed(GetExecutionContext(),
++                                                    family_name)) {
++      return;
++    }
+     if (!family_name.empty()) {
+       FontCache::PrewarmFamily(family_name);
+     }
+@@ -93,6 +98,12 @@ void CSSFontSelectorBase::WillUseFontData(
+   if (family.FamilyName().empty()) [[unlikely]] {
+     return;
+   }
++  if (PersonaSpoofingHelper::HasFontFamilyList(GetExecutionContext()) &&
++      !PersonaSpoofingHelper::IsFontFamilyExposed(GetExecutionContext(),
++                                                  family.FamilyName())) {
++    return;
++  }
++
+   family.SetIsPrewarmed();
+   FontCache::PrewarmFamily(family.FamilyName());
+ }

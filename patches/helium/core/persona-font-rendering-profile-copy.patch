@@ -1,0 +1,196 @@
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -391,6 +391,7 @@
+       </div>
+       <div class="persona-actions">
+         <cr-button on-click="onApplyFontRenderingClick_">Apply</cr-button>
++        <cr-button on-click="onCopyFontRenderingClick_">Copy</cr-button>
+         <cr-button disabled="[[profile.builtin]]"
+             on-click="onDeleteFontRenderingClick_">Delete</cr-button>
+       </div>
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -249,21 +249,88 @@
+     this.set('editablePersona_.fontRendering', JSON.parse(JSON.stringify(profile)));
+   }
+ 
++  private onCopyFontRenderingClick_(event: Event) {
++    const model = (event as CustomEvent).model;
++    const profile = model.profile as Record<string, unknown>;
++    this.set(
++        'editablePersona_.fontRendering',
++        this.makeCustomFontRenderingProfile_(profile));
++  }
++
++  private makeCustomFontRenderingId_(sourceId: string): string {
++    const slug = (sourceId || 'rendering')
++        .toLowerCase()
++        .replace(/[^a-z0-9]+/g, '-')
++        .replace(/^-+|-+$/g, '') || 'rendering';
++    const usedIds = new Set(
++        (this.fontRenderingProfiles_ || [])
++            .map(profile => String(profile['id'] || '')));
++    let candidate = `custom-${slug}`;
++    let suffix = 2;
++    while (usedIds.has(candidate)) {
++      candidate = `custom-${slug}-${suffix++}`;
++    }
++    return candidate;
++  }
++
++  private isBuiltinFontRenderingId_(profileId: string): boolean {
++    return (this.fontRenderingProfiles_ || []).some(profile =>
++        Boolean(profile['builtin']) && String(profile['id'] || '') === profileId);
++  }
++
++  private makeCustomFontRenderingProfile_(
++      sourceProfile: Record<string, unknown>): Record<string, unknown> {
++    const profile = JSON.parse(JSON.stringify(sourceProfile || {}));
++    const sourceId = String(profile['id'] || 'rendering');
++    profile['id'] = this.makeCustomFontRenderingId_(sourceId);
++    const displayName = String(profile['displayName'] || sourceId || 'Rendering');
++    profile['displayName'] = displayName.endsWith(' copy') ?
++        displayName : `${displayName} copy`;
++    profile['builtin'] = false;
++    profile['modified'] = true;
++    return profile;
++  }
++
++  private normalizeFontRenderingProfile_(profile: Record<string, unknown>) {
++    profile['textGamma'] = Number(profile['textGamma'] || 0);
++    profile['textContrast'] = Number(profile['textContrast'] || 0);
++    profile['antialiasing'] = Boolean(profile['antialiasing']);
++    profile['subpixelRendering'] = Boolean(profile['subpixelRendering']);
++    profile['subpixelPositioning'] = Boolean(profile['subpixelPositioning']);
++    profile['lcdText'] = Boolean(profile['lcdText']);
++    profile['useAutohinter'] = Boolean(profile['useAutohinter']);
++    profile['useBitmaps'] = Boolean(profile['useBitmaps']);
++    profile['builtin'] = false;
++    profile['modified'] = true;
++    if (!profile['id'] || this.isBuiltinFontRenderingId_(String(profile['id']))) {
++      profile['id'] = this.makeCustomFontRenderingId_(String(profile['id'] || 'rendering'));
++      const displayName = String(profile['displayName'] || profile['id']);
++      profile['displayName'] = displayName.endsWith(' copy') ?
++          displayName : `${displayName} copy`;
++    }
++  }
++
++  private async reloadStateKeepingEditor_(editablePersona: PersonaRecord) {
++    const state = await this.browserProxy_.getState();
++    this.presets_ = state.presets || [];
++    this.personas_ = state.personas || [];
++    this.personaOptions_ = [...this.presets_, ...this.personas_];
++    this.fontRenderingProfiles_ = state.fontRenderingProfiles || [];
++    this.activePersonaId_ = state.activePersonaId || state.activePersona?.id || '';
++    this.editablePersona_ = this.clonePersona_(editablePersona);
++    this.activePersonaSummary_ = this.formatPersonaSummary_(this.editablePersona_);
++    this.warnings_ = state.warnings || [];
++    this.syncTextFields_();
++  }
++
+   private async onSaveFontRenderingClick_() {
+     this.ensureEditableShape_(this.editablePersona_);
+     const profile = JSON.parse(JSON.stringify(this.editablePersona_.fontRendering));
+-    profile.textGamma = Number(profile.textGamma || 0);
+-    profile.textContrast = Number(profile.textContrast || 0);
+-    profile.antialiasing = Boolean(profile.antialiasing);
+-    profile.subpixelRendering = Boolean(profile.subpixelRendering);
+-    profile.subpixelPositioning = Boolean(profile.subpixelPositioning);
+-    profile.lcdText = Boolean(profile.lcdText);
+-    profile.useAutohinter = Boolean(profile.useAutohinter);
+-    profile.useBitmaps = Boolean(profile.useBitmaps);
+-    profile.builtin = false;
+-    profile.modified = true;
++    this.normalizeFontRenderingProfile_(profile);
++    const editablePersona = this.clonePersona_(this.editablePersona_);
++    editablePersona.fontRendering = JSON.parse(JSON.stringify(profile));
+     await this.browserProxy_.saveFontRenderingProfile(profile);
+-    await this.loadState_();
++    await this.reloadStateKeepingEditor_(editablePersona);
+   }
+ 
+   private async onDeleteFontRenderingClick_(event: Event) {
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -212,6 +212,30 @@
+       prefs::kHeliumCustomFontRenderingProfiles).Clone();
+ }
+ 
++bool CustomFontRenderingProfileIdExists(const PrefService& pref_service,
++                                        std::string_view profile_id) {
++  const base::Value::List& profiles =
++      pref_service.GetList(prefs::kHeliumCustomFontRenderingProfiles);
++  return FindPersonaInList(profiles, profile_id) != nullptr;
++}
++
++bool IsBuiltinFontRenderingProfileId(std::string_view profile_id) {
++  base::Value::List profiles = GetBuiltinFontRenderingProfiles();
++  return FindPersonaInList(profiles, profile_id) != nullptr;
++}
++
++std::string MakeCustomFontRenderingProfileId(const PrefService& pref_service,
++                                             std::string_view profile_id) {
++  std::string base_id = profile_id.empty() ? "rendering" : std::string(profile_id);
++  std::string candidate = base::StringPrintf("custom-%s", base_id.c_str());
++  int suffix = 2;
++  while (IsBuiltinFontRenderingProfileId(candidate) ||
++         CustomFontRenderingProfileIdExists(pref_service, candidate)) {
++    candidate = base::StringPrintf("custom-%s-%d", base_id.c_str(), suffix++);
++  }
++  return candidate;
++}
++
+ base::Value::List GetAllFontRenderingProfiles(const PrefService& pref_service) {
+   base::Value::List profiles;
+   for (const base::Value& value : GetBuiltinFontRenderingProfiles()) {
+@@ -236,7 +260,8 @@
+     base::Value::Dict custom = dict->Clone();
+     custom.Set("builtin", false);
+     custom.Set("modified", true);
+-    if (base::Value::Dict* existing = FindPersonaInList(profiles, id)) {
++    base::Value::Dict* existing = FindPersonaInList(profiles, id);
++    if (existing && !IsBuiltinFontRenderingProfileId(id)) {
+       *existing = std::move(custom);
+     } else {
+       profiles.Append(std::move(custom));
+@@ -425,6 +450,10 @@
+   }
+ 
+   std::string id = GetProfileId(profile);
++  if (IsBuiltinFontRenderingProfileId(id)) {
++    id = MakeCustomFontRenderingProfileId(pref_service, id);
++    profile.Set("id", id);
++  }
+   profile.Set("builtin", false);
+   profile.Set("modified", true);
+   profile.Set("updated", base::Time::Now().InMillisecondsFSinceUnixEpoch());
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -190,6 +190,27 @@
+   EXPECT_EQ("custom-lcd", *DictAt(*profiles, 4).FindString("id"));
+   EXPECT_FALSE(DictAt(*profiles, 4).FindBool("builtin").value_or(true));
+ 
++  base::Value::Dict copied_builtin = DictAt(*profiles, 0).Clone();
++  copied_builtin.Set("displayName", "Copied ClearType");
++  EXPECT_TRUE(SaveFontRenderingProfile(prefs, std::move(copied_builtin)));
++  state = GetPersonaState(prefs);
++  profiles = state.FindList("fontRenderingProfiles");
++  ASSERT_TRUE(profiles);
++  ASSERT_EQ(6u, profiles->size());
++  EXPECT_EQ("windows-cleartype", *DictAt(*profiles, 0).FindString("id"));
++  const base::Value::Dict* copied = nullptr;
++  for (const base::Value& value : *profiles) {
++    const base::Value::Dict* dict = value.GetIfDict();
++    const std::string* name = dict ? dict->FindString("displayName") : nullptr;
++    if (name && *name == "Copied ClearType") {
++      copied = dict;
++      break;
++    }
++  }
++  ASSERT_TRUE(copied);
++  EXPECT_EQ("custom-windows-cleartype", *copied->FindString("id"));
++  EXPECT_FALSE(copied->FindBool("builtin").value_or(true));
++
+   EXPECT_TRUE(DeleteFontRenderingProfile(prefs, "custom-lcd"));
+   state = GetPersonaState(prefs);
+   profiles = state.FindList("fontRenderingProfiles");

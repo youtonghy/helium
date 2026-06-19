@@ -1,0 +1,368 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 26c416e..6c51e56 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -1093,40 +1093,56 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     }).filter(Boolean).join(', ');
+   }
+ 
+   private uaChBrandsFromInput_(value: string): Array<Record<string, string>> {
+     return value.split(',')
+         .map(item => item.trim())
+         .filter(Boolean)
+         .map(item => {
+           const separator = item.lastIndexOf(':');
+           if (separator === -1) {
+             return {brand: item, version: ''};
+           }
+           return {
+             brand: item.slice(0, separator).trim(),
+             version: item.slice(separator + 1).trim(),
+           };
+         })
+         .filter(item => item.brand);
+   }
+ 
++  private cleanUaChBrands_(value: unknown): Array<Record<string, string>> {
++    if (!Array.isArray(value)) {
++      return [];
++    }
++    return value.map(item => {
++      if (!item || typeof item !== 'object' || Array.isArray(item)) {
++        return null;
++      }
++      const brand = String((item as Record<string, unknown>)['brand'] || '')
++          .trim();
++      const version = String(
++          (item as Record<string, unknown>)['version'] || '').trim();
++      return brand && version ? {brand, version} : null;
++    }).filter(Boolean) as Array<Record<string, string>>;
++  }
++
+   private onUaChBrandsChanged_() {
+     this.set(
+         'editablePersona_.uaCh.brands',
+         this.uaChBrandsFromInput_(this.uaChBrandsText_));
+   }
+ 
+   private onUaChFormFactorsChanged_() {
+     this.set(
+         'editablePersona_.uaCh.formFactors',
+         this.stringListFromInput_(this.uaChFormFactorsText_));
+   }
+ 
+   private onFontFamiliesChanged_() {
+     this.set(
+         'editablePersona_.fonts.families',
+         this.stringListFromInput_(this.fontFamiliesText_));
+   }
+ 
+   private onFontAliasesChanged_() {
+     this.set(
+@@ -2699,246 +2715,289 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     this.syncTextFields_();
+     this.captureEditorState_();
+     this.updateDraftWarnings_();
+   }
+ 
+   private async onDeletePersonaClick_(event: Event) {
+     const model = (event as CustomEvent).model;
+     const persona = model.persona as PersonaRecord;
+     if (!window.confirm(`Delete persona "${persona.name || persona.id}"?`)) {
+       return;
+     }
+     this.clearStatus_();
+     if (!await this.browserProxy_.deletePersona(persona.id)) {
+       this.showStatus_('Could not delete persona.');
+       return;
+     }
+     await this.loadState_();
+   }
+ 
+   private ensureEditableShape_(persona: PersonaRecord) {
+-    persona.uaCh = persona.uaCh || {};
++    persona.uaCh = persona.uaCh || {};
+     if (persona.navigatorVendor === undefined) {
+       persona.navigatorVendor = 'Google Inc.';
+     }
+     if (persona.navigatorProductSub === undefined) {
+       persona.navigatorProductSub = '20030107';
+     }
+     if (persona.navigatorVendorSub === undefined) {
+       persona.navigatorVendorSub = '';
+     }
+     if (persona.noiseSeed === undefined || persona.noiseSeed === null ||
+         !String(persona.noiseSeed).trim()) {
+       persona.noiseSeed = persona.id || this.makeRandomNoiseSeed_();
+     }
+-    persona.region = persona.region || {};
+-    persona.network = persona.network || {};
+-    const networkDefaults: Record<string, string|number|boolean> = {
++    persona.region = this.ensureObjectDefaults_(persona.region, {
++      timezone: 'America/New_York',
++      locale: 'en-US',
++      acceptLanguage: 'en-US,en;q=0.9',
++    });
++    persona.network = this.ensureObjectDefaults_(persona.network, {
+       type: 'ethernet',
+       effectiveType: '4g',
+       rtt: 50,
+       downlink: 10,
+       downlinkMax: 0,
+      saveData: false,
+      online: true,
+-    };
+-    for (const [key, value] of Object.entries(networkDefaults)) {
+-      if (persona.network[key] === undefined) {
+-        persona.network[key] = value;
+-      }
+-    }
+-    persona.gpu = persona.gpu || {};
++    });
++    persona.gpu = this.ensureObjectDefaults_(persona.gpu, {
++      vendor: 'Intel Inc.',
++      renderer:
++          'ANGLE (Intel, Intel(R) UHD Graphics 770 Direct3D11 vs_5_0 ps_5_0, D3D11)',
++      webgpuAdapter: 'Intel UHD Graphics 770',
++      driver: 'D3D11',
++    });
+     const webglDefaults: Record<string, number> = {
+       maxTextureSize: 16384,
+       maxCubeMapTextureSize: 16384,
+       maxRenderbufferSize: 16384,
+       maxViewportWidth: 16384,
+       maxViewportHeight: 16384,
+       maxTextureImageUnits: 16,
+       maxCombinedTextureImageUnits: 32,
+       maxVertexAttribs: 16,
+       maxVertexTextureImageUnits: 16,
+       maxVertexUniformVectors: 1024,
+       maxFragmentUniformVectors: 1024,
+       maxVaryingVectors: 30,
+       maxSamples: 4,
+       maxAnisotropy: 16,
+     };
+     persona.gpu['webglProfile'] = this.ensureGpuProfileDefaults_(
+         persona.gpu['webglProfile'], webglDefaults);
+     const webgl2Defaults: Record<string, number> = {
+       max3DTextureSize: 2048,
+       maxTextureDimension1D: 8192,
+       maxTextureDimension2D: 8192,
+       maxTextureDimension3D: 2048,
+       maxTextureArrayLayers: 256,
+       maxBindGroups: 4,
+       maxBindingsPerBindGroup: 1000,
+       maxUniformBufferBindingSize: 65536,
+       maxStorageBufferBindingSize: 134217728,
+       maxBufferSize: 268435456,
+       maxVertexBuffers: 8,
+       maxVertexAttributes: 16,
+       maxComputeWorkgroupStorageSize: 16384,
+       maxComputeInvocationsPerWorkgroup: 256,
+       maxComputeWorkgroupSizeX: 256,
+       maxComputeWorkgroupSizeY: 256,
+       maxComputeWorkgroupSizeZ: 64,
+       maxComputeWorkgroupsPerDimension: 65535,
+     };
+     persona.gpu['webgpuProfile'] = this.ensureGpuProfileDefaults_(
+         persona.gpu['webgpuProfile'], webgpuDefaults);
+-    persona.gpu['webgpuFeatures'] = persona.gpu['webgpuFeatures'] || [
+-      'texture-compression-bc',
+-    ];
+     persona.hardware = persona.hardware || {};
+     persona.screen = persona.screen || {};
+     if (persona.screen['availLeft'] === undefined) {
+       persona.screen['availLeft'] = 0;
+     }
+     if (persona.screen['availTop'] === undefined) {
+       persona.screen['availTop'] = 0;
+     }
+     if (persona.screen['outerWidth'] === undefined) {
+       persona.screen['outerWidth'] = persona.screen['width'] || 0;
+     }
+     if (persona.screen['outerHeight'] === undefined) {
+       persona.screen['outerHeight'] = persona.screen['height'] || 0;
+     }
+     if (persona.screen['windowScreenX'] === undefined) {
+       persona.screen['windowScreenX'] = persona.screen['availLeft'] || 0;
+     }
+     if (persona.screen['windowScreenY'] === undefined) {
+       persona.screen['windowScreenY'] = persona.screen['availTop'] || 0;
+     }
+         {};
+     for (const [key, value] of Object.entries(defaults)) {
+       if (shaped[key] === undefined || shaped[key] === null ||
+           Number.isNaN(Number(shaped[key]))) {
+         shaped[key] = value;
+       }
+     }
+     return shaped;
+   }
+ 
+   private ensureObjectDefaults_(
+       object: unknown, defaults: Record<string, unknown>):
+       Record<string, unknown> {
+     const shaped =
+         object && typeof object === 'object' && !Array.isArray(object) ?
+         {...object as Record<string, unknown>} :
+         {};
+     for (const [key, value] of Object.entries(defaults)) {
+       if (shaped[key] === undefined || shaped[key] === null ||
+           (Array.isArray(value) && !Array.isArray(shaped[key])) ||
++          (typeof value === 'boolean' && typeof shaped[key] !== 'boolean') ||
++          (typeof value === 'string' && typeof shaped[key] !== 'string') ||
+           (typeof shaped[key] === 'string' && !String(shaped[key]).trim())) {
+         shaped[key] = Array.isArray(value) ? [...value] : value;
+       }
+     }
+     return shaped;
+   }
+ 
+   private normalizeNumbers_(persona: PersonaRecord) {
+     this.ensureEditableShape_(persona);
+     const toNumber = (value: unknown) => Number(value || 0);
+     const toString = (value: unknown) => String(value || '').trim();
+     const toStringList = (value: unknown): string[] => {
+       return (Array.isArray(value) ? value : [])
+           .map(item => toString(item))
+           .filter(item => item.length > 0);
+     };
+     const normalizeNumberFields = (object: Record<string, unknown>, keys: string[]) => {
+       for (const key of keys) {
+         object[key] = toNumber(object[key]);
+       }
+     ]);
+     const webgl2Profile = persona.gpu['webgl2Profile'] as Record<string, unknown>;
+     normalizeNumberFields(webgl2Profile, [
+       'max3DTextureSize', 'maxArrayTextureLayers', 'maxColorAttachments',
+       'maxDrawBuffers', 'maxUniformBlockSize', 'uniformBufferOffsetAlignment',
+       'maxTextureLodBias', 'maxSamples',
+     ]);
+     const webgpuProfile = persona.gpu['webgpuProfile'] as Record<string, unknown>;
+     normalizeNumberFields(webgpuProfile, [
+       'maxTextureDimension1D', 'maxTextureDimension2D',
+       'maxTextureDimension3D', 'maxTextureArrayLayers', 'maxBindGroups',
+       'maxBindingsPerBindGroup', 'maxUniformBufferBindingSize',
+       'maxStorageBufferBindingSize', 'maxBufferSize', 'maxVertexBuffers',
+       'maxVertexAttributes', 'maxComputeWorkgroupStorageSize',
+       'maxComputeInvocationsPerWorkgroup', 'maxComputeWorkgroupSizeX',
+       'maxComputeWorkgroupSizeY', 'maxComputeWorkgroupSizeZ',
+       'maxComputeWorkgroupsPerDimension',
+     ]);
+     persona.gpu['webgpuFeatures'] =
+         toStringList(persona.gpu['webgpuFeatures']);
++    persona.gpu['vendor'] = toString(persona.gpu['vendor']);
++    persona.gpu['renderer'] = toString(persona.gpu['renderer']);
++    persona.gpu['webgpuAdapter'] = toString(persona.gpu['webgpuAdapter']);
++    persona.gpu['driver'] = toString(persona.gpu['driver']);
+     persona.hardware['hardwareConcurrency'] =
+         toNumber(persona.hardware['hardwareConcurrency']);
+     persona.hardware['deviceMemory'] =
+         toNumber(persona.hardware['deviceMemory']);
+     persona.hardware['maxTouchPoints'] =
+         toNumber(persona.hardware['maxTouchPoints']);
+     persona.hardware['touchEnabled'] = Boolean(persona.hardware['touchEnabled']);
++    for (const key of [
++      'platform',
++      'platformVersion',
++      'architecture',
++      'bitness',
++      'model',
++      'fullVersion',
++    ]) {
++      persona.uaCh[key] = toString(persona.uaCh[key]);
++    }
++    persona.uaCh['brands'] =
++        this.cleanUaChBrands_(persona.uaCh['brands']);
++    persona.uaCh['formFactors'] = toStringList(persona.uaCh['formFactors']);
+     persona.uaCh['mobile'] = Boolean(persona.uaCh['mobile']);
+     persona.uaCh['wow64'] = Boolean(persona.uaCh['wow64']);
+-    persona.navigatorVendor = String(persona.navigatorVendor || '');
+-    persona.navigatorProductSub = String(persona.navigatorProductSub || '');
+-    persona.navigatorVendorSub = String(persona.navigatorVendorSub || '');
++    persona.navigatorVendor = toString(persona.navigatorVendor);
++    persona.navigatorProductSub =
++        toString(persona.navigatorProductSub) || '20030107';
++    persona.navigatorVendorSub = toString(persona.navigatorVendorSub);
++    persona.region['timezone'] = toString(persona.region['timezone']);
++    persona.region['locale'] = toString(persona.region['locale']);
++    persona.region['acceptLanguage'] =
++        toString(persona.region['acceptLanguage']);
++    persona.region['navigatorLanguages'] =
++        toStringList(persona.region['navigatorLanguages']);
++    persona.network['type'] = toString(persona.network['type']);
++    persona.network['effectiveType'] =
++        toString(persona.network['effectiveType']);
+     persona.screen['width'] = toNumber(persona.screen['width']);
+     persona.screen['height'] = toNumber(persona.screen['height']);
+     persona.screen['availLeft'] = toNumber(persona.screen['availLeft']);
+     persona.screen['availTop'] = toNumber(persona.screen['availTop']);
+     persona.screen['availWidth'] = toNumber(persona.screen['availWidth']);
+     persona.screen['availHeight'] = toNumber(persona.screen['availHeight']);
+     persona.screen['outerWidth'] = toNumber(persona.screen['outerWidth']);
+     persona.screen['outerHeight'] = toNumber(persona.screen['outerHeight']);
+     persona.screen['windowScreenX'] = toNumber(persona.screen['windowScreenX']);
+     persona.screen['windowScreenY'] = toNumber(persona.screen['windowScreenY']);
+     persona.screen['deviceScaleFactor'] =
+         toNumber(persona.screen['deviceScaleFactor']);
+     persona.screen['colorDepth'] = toNumber(persona.screen['colorDepth']);
+     persona.screen['pixelDepth'] = toNumber(persona.screen['pixelDepth']);
+     persona.screen['refreshRate'] = toNumber(persona.screen['refreshRate']);
+     persona.screen['orientationType'] =
+         String(persona.screen['orientationType'] || 'landscape-primary');
+     persona.screen['orientationAngle'] =
+         toNumber(persona.screen['orientationAngle']);
+     persona.screen['colorScheme'] =
+     persona.screen['reducedMotion'] =
+        String(persona.screen['reducedMotion'] || 'no-preference');
+     persona.screen['reducedTransparency'] =
+         String(persona.screen['reducedTransparency'] || 'no-preference');
+     persona.screen['preferredContrast'] =
+         String(persona.screen['preferredContrast'] || 'no-preference');
+     persona.screen['forcedColors'] =
+         String(persona.screen['forcedColors'] || 'none');
+     persona.screen['invertedColors'] =
+         String(persona.screen['invertedColors'] || 'none');
+     persona.screen['colorGamut'] =
+         String(persona.screen['colorGamut'] || 'srgb');
+     persona.screen['dynamicRange'] =
+         String(persona.screen['dynamicRange'] || 'standard');
+     persona.screen['monochromeDepth'] =
+         toNumber(persona.screen['monochromeDepth']);
+     for (const key of ['id', 'displayName']) {
+       persona.fonts[key] = toString(persona.fonts[key]);
+     }
+     persona.fonts['families'] = toStringList(persona.fonts['families']);
++    if (!(persona.fonts['families'] as string[]).length) {
++      persona.fonts['families'] = [
++        'Arial',
++        'Calibri',
++        'Cambria',
++        'Candara',
++        'Consolas',
++        'Georgia',
++        'Segoe UI',
++        'Times New Roman',
++        'Verdana',
++      ];
++    }
+     persona.fonts['aliases'] = toStringList(persona.fonts['aliases']);
+     for (const key of ['id', 'displayName', 'engine', 'hinting']) {
+       persona.fontRendering[key] = toString(persona.fontRendering[key]);
+     }
+     persona.fontRendering['textGamma'] =
+         toNumber(persona.fontRendering['textGamma']);
+     persona.fontRendering['textContrast'] =
+         toNumber(persona.fontRendering['textContrast']);
+     persona.fontRendering['antialiasing'] =
+         Boolean(persona.fontRendering['antialiasing']);
+     persona.fontRendering['subpixelRendering'] =
+         Boolean(persona.fontRendering['subpixelRendering']);
+     persona.fontRendering['subpixelPositioning'] =
+         Boolean(persona.fontRendering['subpixelPositioning']);
+     persona.fontRendering['lcdText'] = Boolean(persona.fontRendering['lcdText']);
+     persona.fontRendering['useAutohinter'] =
+         Boolean(persona.fontRendering['useAutohinter']);
+     persona.fontRendering['useBitmaps'] =
+         Boolean(persona.fontRendering['useBitmaps']);
+     persona.advanced['storageQuotaGb'] =

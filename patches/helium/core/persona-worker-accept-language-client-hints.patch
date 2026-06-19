@@ -1,0 +1,16 @@
+diff --git a/third_party/blink/renderer/core/loader/worker_fetch_context.cc b/third_party/blink/renderer/core/loader/worker_fetch_context.cc
+index 10ac895..b51a301 100644
+--- a/third_party/blink/renderer/core/loader/worker_fetch_context.cc
++++ b/third_party/blink/renderer/core/loader/worker_fetch_context.cc
+@@ -234,6 +234,11 @@ void WorkerFetchContext::AddAdditionalRequestHeaders(ResourceRequest& request) {
+     }
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(global_scope_.Get()) &&
++      !PersonaSpoofingHelper::ClientHintsEnabled(global_scope_.Get())) {
++    return;
++  }
++
+   // TODO(crbug.com/1315612): WARNING: This bypasses the permissions policy.
+   // Unfortunately, workers lack a permissions policy and to derive proper hints
+   // https://github.com/w3c/webappsec-permissions-policy/issues/207.

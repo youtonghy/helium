@@ -1,0 +1,229 @@
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -933,5 +933,6 @@ blink::HeliumPersonaSnapshot ToBlinkPersonaSnapshot(
+   target.pdf_viewer_enabled = source.pdf_viewer_enabled;
+   target.storage_quota_gb = source.storage_quota_gb;
++  target.do_not_track_enabled = source.do_not_track_enabled;
+   target.speech_voice_name = source.speech_voice_name;
+   target.speech_voice_lang = source.speech_voice_lang;
+   target.speech_voice_uri = source.speech_voice_uri;
+--- a/chrome/browser/renderer_preferences_util.cc
++++ b/chrome/browser/renderer_preferences_util.cc
+@@ -22,6 +22,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/autofill/core/common/autofill_prefs.h"
++#include "components/helium_persona/persona_snapshot.h"
+ #include "components/language/core/browser/language_prefs.h"
+ #include "components/language/core/browser/pref_names.h"
+ #include "components/prefs/pref_service.h"
+@@ -153,6 +153,10 @@ void UpdateFromSystemSettings(blink::RendererPreferences* prefs,
+   prefs->enable_referrers = pref_service->GetBoolean(prefs::kEnableReferrers);
+   prefs->enable_do_not_track =
+       pref_service->GetBoolean(prefs::kEnableDoNotTrack);
++  helium_persona::PersonaSnapshot persona_snapshot =
++      helium_persona::MakePersonaSnapshot(*pref_service);
++  if (!persona_snapshot.passthrough)
++    prefs->enable_do_not_track = persona_snapshot.do_not_track_enabled;
+   prefs->enable_encrypted_media =
+       pref_service->GetBoolean(prefs::kEnableEncryptedMedia);
+ 
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -495,6 +494,9 @@
+     <cr-input label="Storage quota (GB, 0 = auto)"
+         value="{{editablePersona_.advanced.storageQuotaGb}}"
+         type="number"></cr-input>
++    <cr-checkbox checked="{{editablePersona_.advanced.doNotTrackEnabled}}">
++      Do Not Track header and navigator value
++    </cr-checkbox>
+     <cr-input label="Speech voice name"
+         value="{{editablePersona_.advanced.speechVoiceName}}"></cr-input>
+     <cr-input label="Speech voice language"
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -476,6 +476,7 @@ export class SettingsPersonaPageElement extends PolymerElement {
+       fontMetricNoise: true,
+       pdfViewerEnabled: true,
+       speechVoiceLocalService: true,
++      doNotTrackEnabled: false,
+       speechVoiceDefault: true,
+       allowGeolocation: false,
+       allowMediaCapture: false,
+@@ -586,7 +594,7 @@ export class SettingsPersonaPageElement extends PolymerElement {
+     const booleanAdvancedKeys = [
+       'clientHintsEnabled', 'reduceSystemInfo', 'canvasNoise',
+       'audioNoise', 'fontMetricNoise', 'pdfViewerEnabled',
+-      'speechVoiceLocalService', 'speechVoiceDefault', 'allowGeolocation',
++      'speechVoiceLocalService', 'speechVoiceDefault', 'doNotTrackEnabled', 'allowGeolocation',
+       'allowMediaCapture', 'virtualMediaDevices', 'allowDisplayCapture',
+       'allowDeviceApis', 'allowGamepads', 'allowSensorApis', 'allowMidi',
+       'allowLocalNetworkApis', 'allowWebNfc', 'allowWindowManagement',
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -513,6 +513,7 @@ TEST_F(PersonaPrefsTest, ManualRuntimeOverridesRoundTripSnapshot) {
+   advanced->Set("fontMetricNoise", false);
+   advanced->Set("pdfViewerEnabled", false);
+   advanced->Set("storageQuotaGb", 42.0);
++  advanced->Set("doNotTrackEnabled", true);
+   advanced->Set("speechVoiceName", "Manual Voice");
+   advanced->Set("speechVoiceLang", "fr-FR");
+   advanced->Set("speechVoiceUri", "urn:manual:voice");
+@@ -564,6 +565,9 @@ TEST_F(PersonaPrefsTest, ManualRuntimeOverridesRoundTripSnapshot) {
+   EXPECT_EQ(42.0, runtime.FindDict("advanced")
+                       ->FindDouble("storageQuotaGb")
+                       .value_or(0));
++  EXPECT_TRUE(runtime.FindDict("advanced")
++                  ->FindBool("doNotTrackEnabled")
++                  .value_or(false));
+   EXPECT_EQ("Manual Voice", *runtime.FindDict("advanced")
+                                 ->FindString("speechVoiceName"));
+   EXPECT_EQ("fr-FR", *runtime.FindDict("advanced")
+@@ -599,6 +603,7 @@ TEST_F(PersonaPrefsTest, ManualRuntimeOverridesRoundTripSnapshot) {
+   EXPECT_TRUE(snapshot.reduce_system_info);
+   EXPECT_FALSE(snapshot.pdf_viewer_enabled);
+   EXPECT_EQ(42.0, snapshot.storage_quota_gb);
++  EXPECT_TRUE(snapshot.do_not_track_enabled);
+   EXPECT_EQ("Manual Voice", snapshot.speech_voice_name);
+   EXPECT_EQ("fr-FR", snapshot.speech_voice_lang);
+   EXPECT_EQ("urn:manual:voice", snapshot.speech_voice_uri);
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -242,6 +242,7 @@ base::Value::Dict BuildPersona(
+   advanced.Set("fontMetricNoise", font_metric_noise);
+   advanced.Set("pdfViewerEnabled", true);
+   advanced.Set("storageQuotaGb", 0);
++  advanced.Set("doNotTrackEnabled", false);
+   advanced.Set("speechVoiceName", "");
+   advanced.Set("speechVoiceLang", "");
+   advanced.Set("speechVoiceUri", "");
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -337,6 +337,8 @@ PersonaSnapshot MakePersonaSnapshot(const base::Value::Dict& persona) {
+       GetNestedBool(persona, "advanced", "pdfViewerEnabled", true);
+   snapshot.storage_quota_gb =
+       GetNestedDouble(persona, "advanced", "storageQuotaGb");
++  snapshot.do_not_track_enabled =
++      GetNestedBool(persona, "advanced", "doNotTrackEnabled", false);
+   snapshot.speech_voice_name =
+       GetNestedString(persona, "advanced", "speechVoiceName");
+   snapshot.speech_voice_lang =
+@@ -561,6 +563,7 @@ base::Value::Dict PersonaSnapshotToValue(const PersonaSnapshot& snapshot) {
+   advanced.Set("fontMetricNoise", snapshot.font_metric_noise);
+   advanced.Set("pdfViewerEnabled", snapshot.pdf_viewer_enabled);
+   advanced.Set("storageQuotaGb", snapshot.storage_quota_gb);
++  advanced.Set("doNotTrackEnabled", snapshot.do_not_track_enabled);
+   advanced.Set("speechVoiceName", snapshot.speech_voice_name);
+   advanced.Set("speechVoiceLang", snapshot.speech_voice_lang);
+   advanced.Set("speechVoiceUri", snapshot.speech_voice_uri);
+--- a/components/helium_persona/persona_snapshot.h
++++ b/components/helium_persona/persona_snapshot.h
+@@ -136,6 +136,7 @@ struct COMPONENT_EXPORT(HELIUM_PERSONA) PersonaSnapshot {
+   bool font_metric_noise = true;
+   bool pdf_viewer_enabled = true;
+   double storage_quota_gb = 0;
++  bool do_not_track_enabled = false;
+   std::string speech_voice_name;
+   std::string speech_voice_lang;
+   std::string speech_voice_uri;
+--- a/content/browser/loader/browser_initiated_resource_request.cc
++++ b/content/browser/loader/browser_initiated_resource_request.cc
+@@ -24,10 +24,9 @@ void UpdateAdditionalHeadersForBrowserInitiatedRequest(
+ 
+   // Set the DoNotTrack header if appropriate.
+   // https://w3c.github.io/dnt/drafts/tracking-dnt.html#expression-format
++  if (should_update_existing_headers)
++    headers->RemoveHeader(blink::kDoNotTrackHeader);
+   if (renderer_preferences.enable_do_not_track) {
+-    if (should_update_existing_headers) {
+-      headers->RemoveHeader(blink::kDoNotTrackHeader);
+-    }
+     headers->SetHeaderIfMissing(blink::kDoNotTrackHeader, "1");
+   }
+ 
+--- a/content/browser/helium_noise/noise_token_data.cc
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -214,6 +214,7 @@ std::string BuildPersonaSalt(const blink::HeliumPersonaSnapshot& persona_snapsho
+   AppendSaltPart(salt, persona_snapshot.font_metric_noise);
+   AppendSaltPart(salt, persona_snapshot.pdf_viewer_enabled);
+   AppendSaltPart(salt, persona_snapshot.storage_quota_gb);
++  AppendSaltPart(salt, persona_snapshot.do_not_track_enabled);
+   AppendSaltPart(salt, persona_snapshot.speech_voice_name);
+   AppendSaltPart(salt, persona_snapshot.speech_voice_lang);
+   AppendSaltPart(salt, persona_snapshot.speech_voice_uri);
+--- a/content/renderer/render_frame_impl.cc
++++ b/content/renderer/render_frame_impl.cc
+@@ -4510,5 +4518,9 @@ void RenderFrameImpl::FinalizeRequestInternal(
+         blink::WebString::FromUtf8(blink::kDoNotTrackHeader), "1");
+   }
++  if (!GetWebView()->GetRendererPreferences().enable_do_not_track) {
++    request.ClearHttpHeaderField(
++        blink::WebString::FromUtf8(blink::kDoNotTrackHeader));
++  }
+ 
+   // The request's extra data may indicate that we should set a custom user
+   // agent. This needs to be done here, after WebKit is through with setting the
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -136,6 +136,7 @@ struct BLINK_COMMON_EXPORT HeliumPersonaSnapshot {
+   bool font_metric_noise = true;
+   bool pdf_viewer_enabled = true;
+   double storage_quota_gb = 0;
++  bool do_not_track_enabled = false;
+   std::string speech_voice_name;
+   std::string speech_voice_lang;
+   std::string speech_voice_uri;
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -440,7 +440,10 @@ struct BLINK_COMMON_EXPORT
+   static double storage_quota_gb(
+       const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.storage_quota_gb;
+   }
++  static bool do_not_track_enabled(const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.do_not_track_enabled;
++  }
+   static const std::string& speech_voice_name(
+       const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.speech_voice_name;
+@@ -649,2 +652,3 @@ StructTraits<blink::mojom::HeliumPersonaSnapshotDataView,
+   out->storage_quota_gb = data.storage_quota_gb();
++  out->do_not_track_enabled = data.do_not_track_enabled();
+   out->speech_voice_local_service = data.speech_voice_local_service();
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -127,5 +127,6 @@ struct HeliumPersonaSnapshot {
+   bool pdf_viewer_enabled;
+   double storage_quota_gb;
++  bool do_not_track_enabled;
+   string speech_voice_name;
+   string speech_voice_lang;
+   string speech_voice_uri;
+--- a/third_party/blink/renderer/modules/donottrack/DEPS
++++ b/third_party/blink/renderer/modules/donottrack/DEPS
+@@ -1,4 +1,5 @@
+ include_rules = [
+     "-third_party/blink/renderer/modules",
++    "+third_party/blink/renderer/core/helium_persona",
+     "+third_party/blink/renderer/modules/donottrack",
+ ]
+--- a/third_party/blink/renderer/modules/donottrack/navigator_do_not_track.cc
++++ b/third_party/blink/renderer/modules/donottrack/navigator_do_not_track.cc
+@@ -33,6 +33,7 @@
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/frame/local_frame_client.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/frame/navigator.h"
+ 
+ namespace blink {
+@@ -41,5 +42,9 @@ namespace NavigatorDoNotTrack {
+ String doNotTrack(Navigator& navigator) {
+   LocalDOMWindow* window = navigator.DomWindow();
++  if (const HeliumPersonaSnapshot* snapshot =
++          PersonaSpoofingHelper::Get(window)) {
++    return snapshot->do_not_track_enabled ? "1" : String();
++  }
+   return window ? window->GetFrame()->Client()->DoNotTrackValue() : String();
+ }
+ 

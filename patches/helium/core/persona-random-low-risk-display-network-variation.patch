@@ -1,0 +1,48 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -1481,6 +1481,7 @@
+         Math.max(1, Math.floor(availHeight * 0.72)), availHeight);
+     const maxX = Math.max(0, width - outerWidth);
+     const maxY = Math.max(0, availHeight - outerHeight);
++    const secondaryLandscape = this.randomInt_(1, 100) <= 3;
+     return {
+       width,
+       height,
+@@ -1496,8 +1497,9 @@
+       colorDepth: 24,
+       pixelDepth: 24,
+       refreshRate,
+-      orientationType: 'landscape-primary',
+-      orientationAngle: 0,
++      orientationType: secondaryLandscape ? 'landscape-secondary' :
++          'landscape-primary',
++      orientationAngle: secondaryLandscape ? 180 : 0,
+       colorScheme: this.randomInt_(1, 10) <= 3 ? 'dark' : 'light',
+       reducedMotion: 'no-preference',
+       reducedTransparency: 'no-preference',
+@@ -1571,12 +1573,19 @@
+       {type: 'wifi', effectiveType: '4g', rtt: [45, 110], downlink: [12, 90]},
+     ];
+     const profile = this.randomFrom_(networkProfiles, networkProfiles[0]);
++    const downlink = this.randomInt_(profile.downlink[0], profile.downlink[1]);
++    const finiteDownlinkMax = this.randomInt_(1, 100) <= 18;
++    const downlinkMax = finiteDownlinkMax ? this.randomInt_(
++        downlink, Math.max(downlink, Math.round(downlink * 2.5))) : 0;
++    const saveData = this.randomInt_(1, 100) <= 2;
+     persona.network = {
+       type: profile.type,
+-      effectiveType: profile.effectiveType,
+-      rtt: this.randomInt_(profile.rtt[0], profile.rtt[1]),
+-      downlink: this.randomInt_(profile.downlink[0], profile.downlink[1]),
+-      downlinkMax: 0,
+-      saveData: false,
++      effectiveType: saveData ? '3g' : profile.effectiveType,
++      rtt: saveData ? Math.max(120, this.randomInt_(profile.rtt[0], 180)) :
++          this.randomInt_(profile.rtt[0], profile.rtt[1]),
++      downlink: saveData ? Math.max(1, Math.min(downlink, 8)) : downlink,
++      downlinkMax,
++      saveData,
++      online: true,
+     };
+   }

@@ -1,0 +1,91 @@
+diff --git a/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc b/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
+index cd454bf5..2dba4d8 100644
+--- a/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
++++ b/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
+@@ -62,7 +62,8 @@ std::optional<V8GPUFeatureName::Enum> PersonaWebGPUFeatureEnum(
+ }
+ 
+ GPUSupportedFeatures* MakePersonaFeatureNameSet(
+-    const ExecutionContext* execution_context) {
++    const ExecutionContext* execution_context,
++    wgpu::Adapter adapter) {
+   GPUSupportedFeatures* features = MakeGarbageCollected<GPUSupportedFeatures>();
+   const HeliumPersonaSnapshot* snapshot =
+       PersonaSpoofingHelper::Get(execution_context);
+@@ -73,7 +74,9 @@ GPUSupportedFeatures* MakePersonaFeatureNameSet(
+     auto feature_name_enum =
+         PersonaWebGPUFeatureEnum(String::FromUtf8(feature_name));
+     if (feature_name_enum) {
+-      features->AddFeatureName(V8GPUFeatureName(feature_name_enum.value()));
++      V8GPUFeatureName feature(feature_name_enum.value());
++      if (adapter.HasFeature(AsDawnEnum(feature)))
++        features->AddFeatureName(feature);
+     }
+   }
+   return features;
+@@ -170,14 +173,16 @@ GPUAdapter::GPUAdapter(
+   if (supportsPropertiesVk) {
+     vk_driver_version_ = vkProperties.driverVersion;
+   }
+-  subgroup_min_size_ = info.subgroupMinSize;
+-  subgroup_max_size_ = info.subgroupMaxSize;
+   power_preference_ = powerProperties.powerPreference;
+ 
+   const bool use_persona_profile =
+       PersonaSpoofingHelper::IsEnabled(execution_context);
+   if (use_persona_profile) {
+-    features_ = MakePersonaFeatureNameSet(execution_context);
++    features_ = MakePersonaFeatureNameSet(execution_context, GetHandle());
++    subgroup_min_size_ = 0;
++    subgroup_max_size_ = 0;
+   } else {
++    subgroup_min_size_ = info.subgroupMinSize;
++    subgroup_max_size_ = info.subgroupMaxSize;
+     features_ = MakeFeatureNameSet(GetHandle());
+   }
+ 
+diff --git a/third_party/blink/renderer/modules/webgpu/gpu_device.cc b/third_party/blink/renderer/modules/webgpu/gpu_device.cc
+index a8c7bfe3..0bd2318 100644
+--- a/third_party/blink/renderer/modules/webgpu/gpu_device.cc
++++ b/third_party/blink/renderer/modules/webgpu/gpu_device.cc
+@@ -83,7 +83,8 @@ std::optional<V8GPUFeatureName::Enum> PersonaWebGPUFeatureEnum(
+ }
+ 
+ GPUSupportedFeatures* MakePersonaFeatureNameSet(
+-    const ExecutionContext* execution_context) {
++    const ExecutionContext* execution_context,
++    wgpu::Device device) {
+   GPUSupportedFeatures* features = MakeGarbageCollected<GPUSupportedFeatures>();
+   const HeliumPersonaSnapshot* snapshot =
+       PersonaSpoofingHelper::Get(execution_context);
+@@ -94,7 +95,20 @@ GPUSupportedFeatures* MakePersonaFeatureNameSet(
+     auto feature_name_enum =
+         PersonaWebGPUFeatureEnum(String::FromUtf8(feature_name));
+     if (feature_name_enum) {
+-      features->AddFeatureName(V8GPUFeatureName(feature_name_enum.value()));
++      V8GPUFeatureName feature(feature_name_enum.value());
++      wgpu::SupportedFeatures supported_features;
++      device.GetFeatures(&supported_features);
++      bool supported_by_device = false;
++      for (size_t i = 0; i < supported_features.featureCount; ++i) {
++        const wgpu::FeatureName supported_feature =
++            UNSAFE_TODO(supported_features.features[i]);
++        if (supported_feature == AsDawnEnum(feature)) {
++          supported_by_device = true;
++          break;
++        }
++      }
++      if (supported_by_device)
++        features->AddFeatureName(feature);
+     }
+   }
+   return features;
+@@ -234,7 +248,7 @@ void GPUDevice::Initialize(wgpu::Device handle,
+   const bool use_persona_profile =
+       PersonaSpoofingHelper::IsEnabled(GetExecutionContext());
+   if (use_persona_profile) {
+-    features_ = MakePersonaFeatureNameSet(GetExecutionContext());
++    features_ = MakePersonaFeatureNameSet(GetExecutionContext(), GetHandle());
+   } else {
+     wgpu::SupportedFeatures features;
+     GetHandle().GetFeatures(&features);

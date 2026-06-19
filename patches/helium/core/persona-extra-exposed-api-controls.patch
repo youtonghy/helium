@@ -1,0 +1,411 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 6bc01d9b..6e4ce8c5 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -995,6 +995,12 @@ blink::HeliumPersonaSnapshot ToBlinkPersonaSnapshot(
+   target.allow_fullscreen = source.allow_fullscreen;
+   target.allow_web_app_installation = source.allow_web_app_installation;
+   target.allow_web_printing = source.allow_web_printing;
++  target.allow_file_system_access = source.allow_file_system_access;
++  target.allow_web_locks = source.allow_web_locks;
++  target.allow_contacts = source.allow_contacts;
++  target.allow_badging = source.allow_badging;
++  target.allow_web_share = source.allow_web_share;
++  target.allow_eye_dropper = source.allow_eye_dropper;
+   return target;
+ }
+ 
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.html b/chrome/browser/resources/settings/privacy_page/persona_page.html
+index 99c43be8..774186db 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -672,6 +672,24 @@
+     <cr-checkbox checked="{{editablePersona_.advanced.allowStorageAccess}}">
+       Allow storage access permissions
+     </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowFileSystemAccess}}">
++      Allow File System Access
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowWebLocks}}">
++      Allow Web Locks
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowContacts}}">
++      Allow Contacts picker
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowBadging}}">
++      Allow app badging
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowWebShare}}">
++      Allow Web Share
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowEyeDropper}}">
++      Allow EyeDropper
++    </cr-checkbox>
+     <cr-checkbox checked="{{editablePersona_.advanced.allowPointerLock}}">
+       Allow pointer lock permission
+     </cr-checkbox>
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index df43d8c8..6e0fdd34 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -1522,6 +1577,12 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       allowFullscreen: false,
+       allowWebAppInstallation: false,
+       allowWebPrinting: false,
++      allowFileSystemAccess: false,
++      allowWebLocks: false,
++      allowContacts: false,
++      allowBadging: false,
++      allowWebShare: false,
++      allowEyeDropper: false,
+     };
+     for (const [key, value] of Object.entries(advancedDefaults)) {
+       if (persona.advanced[key] === undefined) {
+@@ -1665,6 +1726,8 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       'allowPaymentHandler', 'allowIdleDetection', 'allowWakeLock',
+       'allowStorageAccess', 'allowPointerLock', 'allowFullscreen',
+       'allowWebAppInstallation', 'allowWebPrinting',
++      'allowFileSystemAccess', 'allowWebLocks', 'allowContacts',
++      'allowBadging', 'allowWebShare', 'allowEyeDropper',
+     ];
+     for (const key of booleanAdvancedKeys) {
+       persona.advanced[key] = Boolean(persona.advanced[key]);
+diff --git a/components/helium_persona/persona_prefs.cc b/components/helium_persona/persona_prefs.cc
+index dd92edaf..2adb2f70 100644
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -485,6 +485,12 @@ base::Value::Dict MakeDefaultAdvancedProfile() {
+   advanced.Set("allowFullscreen", false);
+   advanced.Set("allowWebAppInstallation", false);
+   advanced.Set("allowWebPrinting", false);
++  advanced.Set("allowFileSystemAccess", false);
++  advanced.Set("allowWebLocks", false);
++  advanced.Set("allowContacts", false);
++  advanced.Set("allowBadging", false);
++  advanced.Set("allowWebShare", false);
++  advanced.Set("allowEyeDropper", false);
+   return advanced;
+ }
+ 
+@@ -643,6 +649,12 @@ void EnsureAdvancedCompatibilityFields(base::Value::Dict& persona) {
+   EnsureBool(*advanced, "allowFullscreen", false);
+   EnsureBool(*advanced, "allowWebAppInstallation", false);
+   EnsureBool(*advanced, "allowWebPrinting", false);
++  EnsureBool(*advanced, "allowFileSystemAccess", false);
++  EnsureBool(*advanced, "allowWebLocks", false);
++  EnsureBool(*advanced, "allowContacts", false);
++  EnsureBool(*advanced, "allowBadging", false);
++  EnsureBool(*advanced, "allowWebShare", false);
++  EnsureBool(*advanced, "allowEyeDropper", false);
+ }
+ 
+ void EnsureHardwareCompatibilityFields(base::Value::Dict& persona) {
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index 3854c71f..3e643497 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -141,6 +141,12 @@ void ExpectAdvancedExposedApiFields(const base::Value::Dict& advanced) {
+       "allowFullscreen",
+       "allowWebAppInstallation",
+       "allowWebPrinting",
++      "allowFileSystemAccess",
++      "allowWebLocks",
++      "allowContacts",
++      "allowBadging",
++      "allowWebShare",
++      "allowEyeDropper",
+   };
+   for (std::string_view field : kBoolFields) {
+     SCOPED_TRACE(field);
+@@ -381,6 +387,7 @@ TEST(HeliumPersonaPrefsTest, SavePersonaMigratesLegacyManualShape) {
+   advanced->Remove("cookieEnabled");
+   advanced->Remove("storageQuotaGb");
+   advanced->Remove("allowWebPrinting");
++  advanced->Remove("allowFileSystemAccess");
+   advanced->Remove("speechVoiceUri");
+ 
+   EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
+@@ -930,6 +937,7 @@ TEST(HeliumPersonaPrefsTest, ValidationRequiresAdvancedExposedApiFields) {
+   advanced->Remove("cookieEnabled");
+   advanced->Remove("storageQuotaGb");
+   advanced->Remove("allowWebPrinting");
++  advanced->Remove("allowFileSystemAccess");
+   advanced->Remove("speechVoiceUri");
+ 
+   EXPECT_FALSE(PersonaHasRequiredFields(persona));
+@@ -1307,6 +1315,12 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   advanced->Set("allowFullscreen", true);
+   advanced->Set("allowWebAppInstallation", true);
+   advanced->Set("allowWebPrinting", true);
++  advanced->Set("allowFileSystemAccess", true);
++  advanced->Set("allowWebLocks", true);
++  advanced->Set("allowContacts", true);
++  advanced->Set("allowBadging", true);
++  advanced->Set("allowWebShare", true);
++  advanced->Set("allowEyeDropper", true);
+ 
+   EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
+ 
+@@ -1483,6 +1497,12 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   EXPECT_TRUE(snapshot.allow_fullscreen);
+   EXPECT_TRUE(snapshot.allow_web_app_installation);
+   EXPECT_TRUE(snapshot.allow_web_printing);
++  EXPECT_TRUE(snapshot.allow_file_system_access);
++  EXPECT_TRUE(snapshot.allow_web_locks);
++  EXPECT_TRUE(snapshot.allow_contacts);
++  EXPECT_TRUE(snapshot.allow_badging);
++  EXPECT_TRUE(snapshot.allow_web_share);
++  EXPECT_TRUE(snapshot.allow_eye_dropper);
+ }
+ 
+ }  // namespace helium_persona
+diff --git a/components/helium_persona/persona_presets.cc b/components/helium_persona/persona_presets.cc
+index 65056b97..07967178 100644
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -324,6 +324,12 @@ base::Value::Dict MakeAdvanced(bool client_hints_enabled,
+   advanced.Set("allowFullscreen", false);
+   advanced.Set("allowWebAppInstallation", false);
+   advanced.Set("allowWebPrinting", false);
++  advanced.Set("allowFileSystemAccess", false);
++  advanced.Set("allowWebLocks", false);
++  advanced.Set("allowContacts", false);
++  advanced.Set("allowBadging", false);
++  advanced.Set("allowWebShare", false);
++  advanced.Set("allowEyeDropper", false);
+   return advanced;
+ }
+ 
+diff --git a/components/helium_persona/persona_snapshot.cc b/components/helium_persona/persona_snapshot.cc
+index 2f97fd5b..ffa28f89 100644
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -457,6 +457,18 @@ PersonaSnapshot MakePersonaSnapshot(const base::Value::Dict& persona) {
+       GetNestedBool(persona, "advanced", "allowWebAppInstallation", false);
+   snapshot.allow_web_printing =
+       GetNestedBool(persona, "advanced", "allowWebPrinting", false);
++  snapshot.allow_file_system_access =
++      GetNestedBool(persona, "advanced", "allowFileSystemAccess", false);
++  snapshot.allow_web_locks =
++      GetNestedBool(persona, "advanced", "allowWebLocks", false);
++  snapshot.allow_contacts =
++      GetNestedBool(persona, "advanced", "allowContacts", false);
++  snapshot.allow_badging =
++      GetNestedBool(persona, "advanced", "allowBadging", false);
++  snapshot.allow_web_share =
++      GetNestedBool(persona, "advanced", "allowWebShare", false);
++  snapshot.allow_eye_dropper =
++      GetNestedBool(persona, "advanced", "allowEyeDropper", false);
+   return snapshot;
+ }
+ 
+@@ -693,6 +705,12 @@ base::Value::Dict PersonaSnapshotToValue(const PersonaSnapshot& snapshot) {
+   advanced.Set("allowWebAppInstallation",
+                snapshot.allow_web_app_installation);
+   advanced.Set("allowWebPrinting", snapshot.allow_web_printing);
++  advanced.Set("allowFileSystemAccess", snapshot.allow_file_system_access);
++  advanced.Set("allowWebLocks", snapshot.allow_web_locks);
++  advanced.Set("allowContacts", snapshot.allow_contacts);
++  advanced.Set("allowBadging", snapshot.allow_badging);
++  advanced.Set("allowWebShare", snapshot.allow_web_share);
++  advanced.Set("allowEyeDropper", snapshot.allow_eye_dropper);
+   value.Set("advanced", std::move(advanced));
+   return value;
+ }
+diff --git a/components/helium_persona/persona_snapshot.h b/components/helium_persona/persona_snapshot.h
+index f78fca9f..0c2b74ac 100644
+--- a/components/helium_persona/persona_snapshot.h
++++ b/components/helium_persona/persona_snapshot.h
+@@ -198,6 +198,12 @@ struct COMPONENT_EXPORT(HELIUM_PERSONA) PersonaSnapshot {
+   bool allow_fullscreen = false;
+   bool allow_web_app_installation = false;
+   bool allow_web_printing = false;
++  bool allow_file_system_access = false;
++  bool allow_web_locks = false;
++  bool allow_contacts = false;
++  bool allow_badging = false;
++  bool allow_web_share = false;
++  bool allow_eye_dropper = false;
+ };
+ 
+ COMPONENT_EXPORT(HELIUM_PERSONA)
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index 3c54be2c..79d62c07 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -557,7 +557,13 @@ bool PersonaHasRequiredFields(const base::Value::Dict& persona) {
+          HasNestedBool(persona, "advanced", "allowPointerLock") &&
+          HasNestedBool(persona, "advanced", "allowFullscreen") &&
+          HasNestedBool(persona, "advanced", "allowWebAppInstallation") &&
+-         HasNestedBool(persona, "advanced", "allowWebPrinting");
++         HasNestedBool(persona, "advanced", "allowWebPrinting") &&
++         HasNestedBool(persona, "advanced", "allowFileSystemAccess") &&
++         HasNestedBool(persona, "advanced", "allowWebLocks") &&
++         HasNestedBool(persona, "advanced", "allowContacts") &&
++         HasNestedBool(persona, "advanced", "allowBadging") &&
++         HasNestedBool(persona, "advanced", "allowWebShare") &&
++         HasNestedBool(persona, "advanced", "allowEyeDropper");
+ }
+ 
+ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+diff --git a/content/browser/helium_noise/noise_token_data.cc b/content/browser/helium_noise/noise_token_data.cc
+index 996864c9..84a40c60 100644
+--- a/content/browser/helium_noise/noise_token_data.cc
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -276,6 +276,12 @@ std::string PersonaNoiseSalt(
+   AppendSaltPart(salt, persona_snapshot.allow_fullscreen);
+   AppendSaltPart(salt, persona_snapshot.allow_web_app_installation);
+   AppendSaltPart(salt, persona_snapshot.allow_web_printing);
++  AppendSaltPart(salt, persona_snapshot.allow_file_system_access);
++  AppendSaltPart(salt, persona_snapshot.allow_web_locks);
++  AppendSaltPart(salt, persona_snapshot.allow_contacts);
++  AppendSaltPart(salt, persona_snapshot.allow_badging);
++  AppendSaltPart(salt, persona_snapshot.allow_web_share);
++  AppendSaltPart(salt, persona_snapshot.allow_eye_dropper);
+   return salt;
+ }
+ 
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot.h b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+index 27501e47..bc6fefb8 100644
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -198,6 +198,12 @@ struct BLINK_COMMON_EXPORT HeliumPersonaSnapshot {
+   bool allow_fullscreen = false;
+   bool allow_web_app_installation = false;
+   bool allow_web_printing = false;
++  bool allow_file_system_access = false;
++  bool allow_web_locks = false;
++  bool allow_contacts = false;
++  bool allow_badging = false;
++  bool allow_web_share = false;
++  bool allow_eye_dropper = false;
+ 
+   bool IsEnabled() const { return enabled && !passthrough; }
+ };
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+index a1a2b03c..cdf5c76d 100644
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -679,6 +679,30 @@ struct BLINK_COMMON_EXPORT
+       const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.allow_web_printing;
+   }
++  static bool allow_file_system_access(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_file_system_access;
++  }
++  static bool allow_web_locks(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_web_locks;
++  }
++  static bool allow_contacts(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_contacts;
++  }
++  static bool allow_badging(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_badging;
++  }
++  static bool allow_web_share(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_web_share;
++  }
++  static bool allow_eye_dropper(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_eye_dropper;
++  }
+ 
+   static bool Read(blink::mojom::HeliumPersonaSnapshotDataView data,
+                    blink::HeliumPersonaSnapshot* out);
+@@ -831,6 +855,12 @@ inline bool StructTraits<blink::mojom::HeliumPersonaSnapshotDataView,
+   out->allow_fullscreen = data.allow_fullscreen();
+   out->allow_web_app_installation = data.allow_web_app_installation();
+   out->allow_web_printing = data.allow_web_printing();
++  out->allow_file_system_access = data.allow_file_system_access();
++  out->allow_web_locks = data.allow_web_locks();
++  out->allow_contacts = data.allow_contacts();
++  out->allow_badging = data.allow_badging();
++  out->allow_web_share = data.allow_web_share();
++  out->allow_eye_dropper = data.allow_eye_dropper();
+ 
+   return data.ReadId(&out->id) && data.ReadName(&out->name) &&
+          data.ReadDevice(&out->device) && data.ReadOs(&out->os) &&
+diff --git a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+index e42f64cb..de0a8099 100644
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -188,4 +188,10 @@ struct HeliumPersonaSnapshot {
+   bool allow_fullscreen;
+   bool allow_web_app_installation;
+   bool allow_web_printing;
++  bool allow_file_system_access;
++  bool allow_web_locks;
++  bool allow_contacts;
++  bool allow_badging;
++  bool allow_web_share;
++  bool allow_eye_dropper;
+ };
+diff --git a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
+index 3aa49743..58fa6960 100644
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
+@@ -317,6 +317,42 @@ bool PersonaSpoofingHelper::ShouldBlockWebPrinting(
+                                  &HeliumPersonaSnapshot::allow_web_printing);
+ }
+ 
++bool PersonaSpoofingHelper::ShouldBlockFileSystemAccess(
++    const ExecutionContext* context) {
++  return ShouldBlockIfNotAllowed(
++      context, &HeliumPersonaSnapshot::allow_file_system_access);
++}
++
++bool PersonaSpoofingHelper::ShouldBlockWebLocks(
++    const ExecutionContext* context) {
++  return ShouldBlockIfNotAllowed(context,
++                                 &HeliumPersonaSnapshot::allow_web_locks);
++}
++
++bool PersonaSpoofingHelper::ShouldBlockContacts(
++    const ExecutionContext* context) {
++  return ShouldBlockIfNotAllowed(context,
++                                 &HeliumPersonaSnapshot::allow_contacts);
++}
++
++bool PersonaSpoofingHelper::ShouldBlockBadging(
++    const ExecutionContext* context) {
++  return ShouldBlockIfNotAllowed(context,
++                                 &HeliumPersonaSnapshot::allow_badging);
++}
++
++bool PersonaSpoofingHelper::ShouldBlockWebShare(
++    const ExecutionContext* context) {
++  return ShouldBlockIfNotAllowed(context,
++                                 &HeliumPersonaSnapshot::allow_web_share);
++}
++
++bool PersonaSpoofingHelper::ShouldBlockEyeDropper(
++    const ExecutionContext* context) {
++  return ShouldBlockIfNotAllowed(context,
++                                 &HeliumPersonaSnapshot::allow_eye_dropper);
++}
++
+ bool PersonaSpoofingHelper::ShouldBlockPermission(
+     const ExecutionContext* context,
+     mojom::blink::PermissionName permission_name) {
+diff --git a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
+index a702cd85..086aeec4 100644
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
+@@ -55,6 +55,12 @@ class CORE_EXPORT PersonaSpoofingHelper {
+   static bool ShouldBlockManagedDevice(const ExecutionContext* context);
+   static bool ShouldBlockPointerLock(const ExecutionContext* context);
+   static bool ShouldBlockWebPrinting(const ExecutionContext* context);
++  static bool ShouldBlockFileSystemAccess(const ExecutionContext* context);
++  static bool ShouldBlockWebLocks(const ExecutionContext* context);
++  static bool ShouldBlockContacts(const ExecutionContext* context);
++  static bool ShouldBlockBadging(const ExecutionContext* context);
++  static bool ShouldBlockWebShare(const ExecutionContext* context);
++  static bool ShouldBlockEyeDropper(const ExecutionContext* context);
+   static bool ShouldBlockPermission(
+       const ExecutionContext* context,
+       mojom::blink::PermissionName permission_name);

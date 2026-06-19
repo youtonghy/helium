@@ -1,0 +1,106 @@
+diff --git a/content/browser/helium_noise/noise_token_data_unittest.cc b/content/browser/helium_noise/noise_token_data_unittest.cc
+--- a/content/browser/helium_noise/noise_token_data_unittest.cc
++++ b/content/browser/helium_noise/noise_token_data_unittest.cc
+@@ -227,8 +227,102 @@ TEST_F(HeliumNoiseTokenDataTest,
+   EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
+             TokenValue(different_seed_tokens,
+                        blink::HeliumNoiseFeature::kCanvas));
+ }
+ 
++TEST_F(HeliumNoiseTokenDataTest, PersonaSaltFieldsChangeNoiseTokens) {
++  const url::Origin origin =
++      url::Origin::Create(GURL("https://fingerprint.example/"));
++  const blink::HeliumPersonaSnapshot persona =
++      MakeSeededPersona("manual-seed");
++  const blink::HeliumNoiseTokenMap tokens =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
++
++  const auto expect_changed = [&](const char* field_name,
++                                  blink::HeliumPersonaSnapshot changed) {
++    SCOPED_TRACE(field_name);
++    const blink::HeliumNoiseTokenMap changed_tokens =
++        HeliumNoiseTokenData::GetTokens(&browser_context_, origin, changed);
++    EXPECT_TRUE(AnyFeatureChanged(tokens, changed_tokens));
++  };
++
++  blink::HeliumPersonaSnapshot different_ua_ch_brands = persona;
++  different_ua_ch_brands.ua_ch_brands = {
++      {"Chromium", "126"},
++      {"Google Chrome", "126"},
++      {"Not_A Brand", "24"},
++  };
++  expect_changed("ua_ch_brands", different_ua_ch_brands);
++
++  blink::HeliumPersonaSnapshot different_ua_ch_full_version_list = persona;
++  different_ua_ch_full_version_list.ua_ch_full_version_list = {
++      {"Chromium", "126.0.6478.127"},
++      {"Google Chrome", "126.0.6478.127"},
++      {"Not_A Brand", "24.0.0.0"},
++  };
++  expect_changed("ua_ch_full_version_list",
++                 different_ua_ch_full_version_list);
++
++  blink::HeliumPersonaSnapshot different_ua_ch_form_factors = persona;
++  different_ua_ch_form_factors.ua_ch_form_factors = {"Desktop", "Tablet"};
++  expect_changed("ua_ch_form_factors", different_ua_ch_form_factors);
++
++  blink::HeliumPersonaSnapshot different_languages = persona;
++  different_languages.navigator_languages = {"en-US", "en", "es-US"};
++  expect_changed("navigator_languages", different_languages);
++
++  blink::HeliumPersonaSnapshot different_webgpu_features = persona;
++  different_webgpu_features.webgpu_features = {
++      "texture-compression-bc",
++      "timestamp-query",
++  };
++  expect_changed("webgpu_features", different_webgpu_features);
++
++  blink::HeliumPersonaSnapshot different_webgl_limit = persona;
++  different_webgl_limit.webgl_max_combined_texture_image_units =
++      persona.webgl_max_combined_texture_image_units + 1;
++  expect_changed("webgl_max_combined_texture_image_units",
++                 different_webgl_limit);
++
++  blink::HeliumPersonaSnapshot different_webgl2_limit = persona;
++  different_webgl2_limit.webgl2_uniform_buffer_offset_alignment =
++      persona.webgl2_uniform_buffer_offset_alignment + 1;
++  expect_changed("webgl2_uniform_buffer_offset_alignment",
++                 different_webgl2_limit);
++
++  blink::HeliumPersonaSnapshot different_webgpu_buffer_binding = persona;
++  different_webgpu_buffer_binding.webgpu_max_uniform_buffer_binding_size =
++      persona.webgpu_max_uniform_buffer_binding_size + 1024;
++  different_webgpu_buffer_binding.webgpu_max_storage_buffer_binding_size =
++      persona.webgpu_max_storage_buffer_binding_size + 1024;
++  expect_changed("webgpu_buffer_binding_limits",
++                 different_webgpu_buffer_binding);
++
++  blink::HeliumPersonaSnapshot different_webgpu_compute_limits = persona;
++  different_webgpu_compute_limits.webgpu_max_compute_workgroup_storage_size =
++      persona.webgpu_max_compute_workgroup_storage_size + 1024;
++  different_webgpu_compute_limits.webgpu_max_compute_invocations_per_workgroup =
++      persona.webgpu_max_compute_invocations_per_workgroup + 1;
++  expect_changed("webgpu_compute_limits",
++                 different_webgpu_compute_limits);
++
++  blink::HeliumPersonaSnapshot different_font_families = persona;
++  different_font_families.font_families = {
++      "Arial",
++      "Calibri",
++      "Consolas",
++      "Segoe UI",
++  };
++  expect_changed("font_families", different_font_families);
++
++  blink::HeliumPersonaSnapshot different_font_aliases = persona;
++  different_font_aliases.font_aliases = {
++      "sans-serif=Arial",
++      "monospace=Consolas",
++      "system-ui=Segoe UI",
++  };
++  expect_changed("font_aliases", different_font_aliases);
++}
++
+ TEST_F(HeliumNoiseTokenDataTest,
+        PersonaWithoutNoiseSeedUsesRegeneratableSessionTokens) {
+   const url::Origin origin =

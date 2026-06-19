@@ -1,0 +1,50 @@
+diff --git a/content/browser/renderer_host/render_frame_host_impl.cc b/content/browser/renderer_host/render_frame_host_impl.cc
+index 18fb3520..0c046fb0 100644
+--- a/content/browser/renderer_host/render_frame_host_impl.cc
++++ b/content/browser/renderer_host/render_frame_host_impl.cc
+@@ -14871,6 +14871,11 @@ void RenderFrameHostImpl::GetFileSystemManager(
+ 
+ void RenderFrameHostImpl::GetGeolocationService(
+     mojo::PendingReceiver<blink::mojom::GeolocationService> receiver) {
++  const blink::HeliumPersonaSnapshot& persona_snapshot =
++      GetPage().persona_snapshot();
++  if (persona_snapshot.IsEnabled() && !persona_snapshot.allow_geolocation) {
++    return;
++  }
+   if (!geolocation_service_) {
+     auto* geolocation_context = delegate_->GetGeolocationContext();
+     if (!geolocation_context) {
+@@ -14883,18 +14888,33 @@ void RenderFrameHostImpl::GetGeolocationService(
+ 
+ void RenderFrameHostImpl::GetDeviceInfoService(
+     mojo::PendingReceiver<blink::mojom::DeviceAPIService> receiver) {
++  const blink::HeliumPersonaSnapshot& persona_snapshot =
++      GetPage().persona_snapshot();
++  if (persona_snapshot.IsEnabled() && !persona_snapshot.allow_device_apis) {
++    return;
++  }
+   GetContentClient()->browser()->CreateDeviceInfoService(this,
+                                                          std::move(receiver));
+ }
+ 
+ void RenderFrameHostImpl::GetManagedConfigurationService(
+     mojo::PendingReceiver<blink::mojom::ManagedConfigurationService> receiver) {
++  const blink::HeliumPersonaSnapshot& persona_snapshot =
++      GetPage().persona_snapshot();
++  if (persona_snapshot.IsEnabled() && !persona_snapshot.allow_managed_device) {
++    return;
++  }
+   GetContentClient()->browser()->CreateManagedConfigurationService(
+       this, std::move(receiver));
+ }
+ 
+ void RenderFrameHostImpl::GetFontAccessManager(
+     mojo::PendingReceiver<blink::mojom::FontAccessManager> receiver) {
++  const blink::HeliumPersonaSnapshot& persona_snapshot =
++      GetPage().persona_snapshot();
++  if (persona_snapshot.IsEnabled() && !persona_snapshot.allow_local_fonts) {
++    return;
++  }
+   GetStoragePartition()->GetFontAccessManager()->BindReceiver(
+       GetGlobalId(), std::move(receiver));
+ }

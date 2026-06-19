@@ -1,0 +1,176 @@
+--- a/third_party/blink/renderer/core/frame/screen.cc
++++ b/third_party/blink/renderer/core/frame/screen.cc
+@@ -172,7 +172,7 @@ bool Screen::isExtended() const {
+   if (!DomWindow()) {
+     return false;
+   }
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return false;
+   }
+   auto* context = GetExecutionContext();
+--- a/third_party/blink/renderer/modules/screen_details/screen_detailed.cc
++++ b/third_party/blink/renderer/modules/screen_details/screen_detailed.cc
+@@ -119,7 +119,7 @@ bool ScreenDetailed::AreHdrHeadroomEqual(const display::ScreenInfo& prev,
+ int ScreenDetailed::left() const {
+   if (!DomWindow())
+     return 0;
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return 0;
+   }
+   return GetRect(/*available=*/false).x();
+@@ -128,7 +128,7 @@ int ScreenDetailed::left() const {
+ int ScreenDetailed::top() const {
+   if (!DomWindow())
+     return 0;
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return 0;
+   }
+   return GetRect(/*available=*/false).y();
+@@ -137,7 +137,7 @@ int ScreenDetailed::top() const {
+ bool ScreenDetailed::isPrimary() const {
+   if (!DomWindow())
+     return false;
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return true;
+   }
+   return GetScreenInfo().is_primary;
+@@ -146,7 +146,7 @@ bool ScreenDetailed::isPrimary() const {
+ bool ScreenDetailed::isInternal() const {
+   if (!DomWindow())
+     return false;
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return false;
+   }
+   return GetScreenInfo().is_internal;
+@@ -159,7 +159,7 @@ float ScreenDetailed::devicePixelRatio() const {
+           PersonaSpoofingHelper::DeviceScaleFactor(GetExecutionContext())) {
+     return static_cast<float>(*value);
+   }
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext()))
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
+     return 1.f;
+   return GetScreenInfo().device_scale_factor;
+ }
+@@ -167,14 +167,14 @@ float ScreenDetailed::devicePixelRatio() const {
+ String ScreenDetailed::label() const {
+   if (!DomWindow())
+     return String();
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return String();
+   }
+   return String::FromUtf8(GetScreenInfo().label);
+ }
+ 
+ float ScreenDetailed::hdrHeadroom() const {
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return 0.f;
+   }
+   return std::log2(std::max(
+@@ -183,63 +183,63 @@ float ScreenDetailed::hdrHeadroom() const {
+ }
+ 
+ float ScreenDetailed::highDynamicRangeHeadroom() const {
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return kPersonaSdrHeadroom;
+   }
+   return GetScreenInfo().display_color_spaces.GetHDRMaxLuminanceRelative();
+ }
+ 
+ float ScreenDetailed::redPrimaryX() const {
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return kPersonaRedPrimaryX;
+   }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fRX;
+ }
+ 
+ float ScreenDetailed::redPrimaryY() const {
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return kPersonaRedPrimaryY;
+   }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fRY;
+ }
+ 
+ float ScreenDetailed::greenPrimaryX() const {
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return kPersonaGreenPrimaryX;
+   }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fGX;
+ }
+ 
+ float ScreenDetailed::greenPrimaryY() const {
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return kPersonaGreenPrimaryY;
+   }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fGY;
+ }
+ 
+ float ScreenDetailed::bluePrimaryX() const {
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return kPersonaBluePrimaryX;
+   }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fBX;
+ }
+ 
+ float ScreenDetailed::bluePrimaryY() const {
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return kPersonaBluePrimaryY;
+   }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fBY;
+ }
+ 
+ float ScreenDetailed::whitePointX() const {
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return kPersonaWhitePointX;
+   }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fWX;
+ }
+ 
+ float ScreenDetailed::whitePointY() const {
+-  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     return kPersonaWhitePointY;
+   }
+   return GetScreenInfo().display_color_spaces.GetPrimaries().fWY;
+--- a/third_party/blink/renderer/modules/screen_details/screen_details.cc
++++ b/third_party/blink/renderer/modules/screen_details/screen_details.cc
+@@ -22,7 +22,7 @@ namespace {
+ display::ScreenInfos PersonaScreenInfosFor(
+     LocalDOMWindow* window,
+     const display::ScreenInfos& source_infos) {
+-  if (!PersonaSpoofingHelper::ShouldBlockWindowManagement(window)) {
++  if (!PersonaSpoofingHelper::IsEnabled(window)) {
+     return source_infos;
+   }
+ 
+@@ -50,6 +50,7 @@ display::ScreenInfos PersonaScreenInfosFor(
+   info.device_scale_factor = static_cast<float>(device_scale_factor);
+   info.depth = static_cast<int>(color_depth);
+   info.depth_per_component = 8;
++  info.display_color_spaces = gfx::DisplayColorSpaces();
+   info.is_monochrome = false;
+   info.is_extended = false;
+   info.is_primary = true;
+@@ -124,7 +125,7 @@ void ScreenDetails::UpdateScreenInfos(LocalDOMWindow* window,
+ void ScreenDetails::RefreshPersonaScreenInfosIfNeeded(
+     LocalDOMWindow* window,
+     bool dispatch_events) {
+-  if (!PersonaSpoofingHelper::ShouldBlockWindowManagement(window)) {
++  if (!PersonaSpoofingHelper::IsEnabled(window)) {
+     return;
+   }
+ 

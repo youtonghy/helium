@@ -1,0 +1,49 @@
+diff --git a/content/browser/storage_partition_impl.cc b/content/browser/storage_partition_impl.cc
+index db639a91..b99d093f 100644
+--- a/content/browser/storage_partition_impl.cc
++++ b/content/browser/storage_partition_impl.cc
+@@ -162,6 +162,7 @@
+ #include "storage/browser/quota/quota_manager_impl.h"
+ #include "storage/browser/quota/quota_settings.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/navigation/preloading_headers.h"
+ #include "third_party/blink/public/common/permissions/permission_utils.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+@@ -304,6 +305,12 @@ void ClearedGpuCache(base::OnceClosure callback) {
+   std::move(callback).Run();
+ }
+ 
++bool HeliumPersonaAllowsBackgroundSync(BrowserContext* browser_context) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
++  return !snapshot.IsEnabled() || snapshot.allow_background_sync;
++}
++
+ void OnLocalStorageUsageInfo(
+     const scoped_refptr<DOMStorageContextWrapper>& dom_storage_context,
+     const scoped_refptr<storage::SpecialStoragePolicy>& special_storage_policy,
+@@ -2661,6 +2668,11 @@ void StoragePartitionImpl::OnCanSendReportingReports(
+     const std::vector<url::Origin>& origins,
+     OnCanSendReportingReportsCallback callback) {
+   DCHECK(initialized_);
++  if (!HeliumPersonaAllowsBackgroundSync(browser_context_)) {
++    std::move(callback).Run({});
++    return;
++  }
++
+   PermissionController& permission_controller =
+       CHECK_DEREF(browser_context_->GetPermissionController());
+ 
+@@ -2685,6 +2697,11 @@ void StoragePartitionImpl::OnCanSendDomainReliabilityUpload(
+     const url::Origin& origin,
+     OnCanSendDomainReliabilityUploadCallback callback) {
+   DCHECK(initialized_);
++  if (!HeliumPersonaAllowsBackgroundSync(browser_context_)) {
++    std::move(callback).Run(false);
++    return;
++  }
++
+   PermissionController& permission_controller =
+       CHECK_DEREF(browser_context_->GetPermissionController());
+   std::move(callback).Run(

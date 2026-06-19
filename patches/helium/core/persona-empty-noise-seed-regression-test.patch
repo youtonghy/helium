@@ -1,0 +1,32 @@
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -175,6 +175,29 @@ TEST(HeliumPersonaPrefsTest, PassthroughPresetCannotBecomeCustomPersona) {
+   EXPECT_FALSE(SavePersona(prefs, MakeCurrentSystemPreset()));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, SaveNewCustomPersonaReplacesEmptyNoiseSeed) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++  base::Value::List presets = GetBuiltinPersonaPresets();
++  base::Value::Dict persona = DictAt(presets, 1).Clone();
++  persona.Set("id", "");
++  persona.Set("noiseSeed", "");
++  persona.Set("source", "custom");
++  persona.Set("builtin", false);
++  persona.Set("modified", true);
++
++  EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
++  base::Value::Dict active = GetActivePersona(prefs);
++  const std::string* id = active.FindString("id");
++  const std::string* noise_seed = active.FindString("noiseSeed");
++  ASSERT_TRUE(id);
++  ASSERT_TRUE(noise_seed);
++  EXPECT_EQ(0u, id->rfind("persona-", 0));
++  EXPECT_EQ(0u, noise_seed->rfind("seed-", 0));
++  EXPECT_NE(*id, *noise_seed);
++  EXPECT_TRUE(active.FindBool("modified").value_or(false));
++}
++
+ TEST(HeliumPersonaPrefsTest, SaveBuiltinIdCreatesCustomPersona) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);

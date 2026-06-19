@@ -1,0 +1,41 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 4a2b4106..cddfbb40 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -1046,8 +1046,36 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     };
+   }
+ 
++  private applyConsistentRandomUaChIdentity_(persona: PersonaRecord) {
++    persona.uaCh = persona.uaCh || {};
++    const osFamily = this.personaOsFamily_(persona);
++    if (osFamily === 'mac') {
++      persona.uaCh['platform'] = 'macOS';
++      persona.uaCh['platformVersion'] = '15.6.0';
++      persona.uaCh['architecture'] = 'arm';
++      persona.uaCh['bitness'] = '64';
++      persona.uaCh['wow64'] = false;
++    } else if (osFamily === 'linux') {
++      persona.uaCh['platform'] = 'Linux';
++      persona.uaCh['platformVersion'] = '';
++      persona.uaCh['architecture'] = 'x86';
++      persona.uaCh['bitness'] = '64';
++      persona.uaCh['wow64'] = false;
++    } else {
++      persona.uaCh['platform'] = 'Windows';
++      persona.uaCh['platformVersion'] = '19.0.0';
++      persona.uaCh['architecture'] = 'x86';
++      persona.uaCh['bitness'] = '64';
++      persona.uaCh['wow64'] = false;
++    }
++    persona.uaCh['model'] = '';
++    persona.uaCh['mobile'] = false;
++    persona.uaCh['formFactors'] = ['Desktop'];
++  }
++
+   private applyRandomUaVersion_(persona: PersonaRecord) {
+     persona.uaCh = persona.uaCh || {};
++    this.applyConsistentRandomUaChIdentity_(persona);
+     const major = this.chromeMajorVersion_(persona);
+     const fullVersion = this.makeRandomChromeFullVersion_(major);
+     const majorVersion = String(major);

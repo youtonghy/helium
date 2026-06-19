@@ -1,0 +1,273 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.html b/chrome/browser/resources/settings/privacy_page/persona_page.html
+index 5d726ec7..99c43be8 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -178,6 +178,9 @@
+       <cr-button on-click="onRegenerateNoiseSeedClick_">
+         Regenerate noise seed
+       </cr-button>
++      <cr-button on-click="onRandomizePersonaClick_">
++        Randomize full persona
++      </cr-button>
+     </div>
+     <cr-input label="Device" value="{{editablePersona_.device}}"></cr-input>
+     <cr-input label="OS" value="{{editablePersona_.os}}"></cr-input>
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index e2542886..5a5d449f 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -261,6 +261,254 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     this.set('editablePersona_.noiseSeed', this.makeRandomNoiseSeed_());
+   }
+ 
++  private randomInt_(min: number, max: number): number {
++    const lower = Math.ceil(min);
++    const upper = Math.floor(max);
++    if (upper <= lower) {
++      return lower;
++    }
++    const range = upper - lower + 1;
++    const array = new Uint32Array(1);
++    if (window.crypto?.getRandomValues) {
++      window.crypto.getRandomValues(array);
++      return lower + array[0] % range;
++    }
++    return lower + Math.floor(Math.random() * range);
++  }
++
++  private randomFrom_<T>(items: T[], fallback: T): T {
++    if (!items.length) {
++      return fallback;
++    }
++    return items[this.randomInt_(0, items.length - 1)];
++  }
++
++  private personaOsFamily_(persona: PersonaRecord): string {
++    const surface = [
++      persona.os || '',
++      persona.platform || '',
++      persona.userAgent || '',
++    ].join(' ').toLowerCase();
++    if (surface.includes('mac')) {
++      return 'mac';
++    }
++    if (surface.includes('linux') || surface.includes('x11')) {
++      return 'linux';
++    }
++    return 'windows';
++  }
++
++  private pickRandomBasePersona_(): PersonaRecord|null {
++    const candidates = (this.presets_ || [])
++        .filter(item => !this.isPassthroughPersona_(item));
++    if (candidates.length) {
++      return this.randomFrom_(candidates, candidates[0]);
++    }
++    if (this.editablePersona_ &&
++        !this.isPassthroughPersona_(this.editablePersona_)) {
++      return this.editablePersona_;
++    }
++    return null;
++  }
++
++  private randomProfileByPrefix_(
++      profiles: Array<Record<string, unknown>>, prefixes: string[],
++      fallback: Record<string, unknown>): Record<string, unknown> {
++    for (const prefix of prefixes) {
++      const matches = (profiles || []).filter(profile => {
++        const id = String(profile['id'] || '');
++        return id.startsWith(prefix);
++      });
++      if (matches.length) {
++        return this.randomFrom_(matches, matches[0]);
++      }
++    }
++    return fallback;
++  }
++
++  private localeScopedFontPrefixes_(persona: PersonaRecord): string[] {
++    const osFamily = this.personaOsFamily_(persona);
++    const osPrefix = osFamily === 'mac' ? 'macos-' :
++        osFamily === 'linux' ? 'linux-' : 'windows-';
++    const region = persona.region || {};
++    const locale = String(region['locale'] || '')
++        .trim()
++        .toLowerCase()
++        .replace(/_/g, '-');
++    if (!locale) {
++      return [osPrefix];
++    }
++    const language = locale.split('-')[0];
++    return [
++      `${osPrefix}${locale}`,
++      language ? `${osPrefix}${language}` : '',
++      osPrefix,
++    ].filter(Boolean);
++  }
++
++  private applyConsistentRandomFonts_(persona: PersonaRecord) {
++    const osFamily = this.personaOsFamily_(persona);
++    const fontPackPrefixes = this.localeScopedFontPrefixes_(persona);
++    const renderingPrefixes = osFamily === 'mac' ? ['macos-'] :
++        osFamily === 'linux' ? ['linux-'] : ['windows-'];
++    const fontPack = this.randomProfileByPrefix_(
++        this.fontPackProfiles_, fontPackPrefixes, persona.fonts || {});
++    const rendering = this.randomProfileByPrefix_(
++        this.fontRenderingProfiles_, renderingPrefixes,
++        persona.fontRendering || {});
++    persona.fonts = JSON.parse(JSON.stringify(fontPack));
++    persona.fontRendering = JSON.parse(JSON.stringify(rendering));
++  }
++
++  private applyRandomHardware_(persona: PersonaRecord) {
++    const osFamily = this.personaOsFamily_(persona);
++    const windowsProfiles = [
++      {hardwareConcurrency: 4, deviceMemory: 8},
++      {hardwareConcurrency: 6, deviceMemory: 8},
++      {hardwareConcurrency: 8, deviceMemory: 16},
++      {hardwareConcurrency: 12, deviceMemory: 16},
++      {hardwareConcurrency: 16, deviceMemory: 32},
++    ];
++    const macProfiles = [
++      {hardwareConcurrency: 8, deviceMemory: 8},
++      {hardwareConcurrency: 8, deviceMemory: 16},
++      {hardwareConcurrency: 10, deviceMemory: 16},
++      {hardwareConcurrency: 12, deviceMemory: 32},
++    ];
++    const linuxProfiles = [
++      {hardwareConcurrency: 4, deviceMemory: 8},
++      {hardwareConcurrency: 8, deviceMemory: 8},
++      {hardwareConcurrency: 8, deviceMemory: 16},
++      {hardwareConcurrency: 12, deviceMemory: 16},
++    ];
++    const profiles = osFamily === 'mac' ? macProfiles :
++        osFamily === 'linux' ? linuxProfiles : windowsProfiles;
++    const profile = this.randomFrom_(profiles, profiles[0]);
++    persona.hardware = {
++      hardwareConcurrency: profile.hardwareConcurrency,
++      deviceMemory: profile.deviceMemory,
++      maxTouchPoints: 0,
++      touchEnabled: false,
++    };
++  }
++
++  private makeScreenProfile_(
++      width: number, height: number, deviceScaleFactor: number,
++      refreshRate: number, reservedHeight: number): Record<string, unknown> {
++    const availHeight = Math.max(1, height - reservedHeight);
++    const outerWidth = this.randomInt_(
++        Math.max(1, Math.floor(width * 0.72)), width);
++    const outerHeight = this.randomInt_(
++        Math.max(1, Math.floor(availHeight * 0.72)), availHeight);
++    const maxX = Math.max(0, width - outerWidth);
++    const maxY = Math.max(0, availHeight - outerHeight);
++    return {
++      width,
++      height,
++      availLeft: 0,
++      availTop: 0,
++      availWidth: width,
++      availHeight,
++      outerWidth,
++      outerHeight,
++      windowScreenX: this.randomInt_(0, Math.min(160, maxX)),
++      windowScreenY: this.randomInt_(0, Math.min(120, maxY)),
++      deviceScaleFactor,
++      colorDepth: 24,
++      pixelDepth: 24,
++      refreshRate,
++      orientationType: 'landscape-primary',
++      orientationAngle: 0,
++      colorScheme: this.randomInt_(1, 10) <= 3 ? 'dark' : 'light',
++      reducedMotion: 'no-preference',
++      reducedTransparency: 'no-preference',
++      preferredContrast: 'no-preference',
++      forcedColors: 'none',
++      invertedColors: 'none',
++      colorGamut: deviceScaleFactor > 1 ? 'p3' : 'srgb',
++      dynamicRange: 'standard',
++      monochromeDepth: 0,
++    };
++  }
++
++  private applyRandomScreen_(persona: PersonaRecord) {
++    const osFamily = this.personaOsFamily_(persona);
++    const macScreens = [
++      this.makeScreenProfile_(1440, 900, 2, 60, 40),
++      this.makeScreenProfile_(1512, 982, 2, 60, 40),
++      this.makeScreenProfile_(1728, 1117, 2, 60, 40),
++      this.makeScreenProfile_(2560, 1440, 2, 60, 40),
++    ];
++    const desktopScreens = [
++      this.makeScreenProfile_(1366, 768, 1, 60, 40),
++      this.makeScreenProfile_(1536, 864, 1.25, 60, 40),
++      this.makeScreenProfile_(1920, 1080, 1, 60, 40),
++      this.makeScreenProfile_(1920, 1080, 1, 75, 40),
++      this.makeScreenProfile_(2560, 1440, 1, 60, 40),
++      this.makeScreenProfile_(2560, 1440, 1, 144, 40),
++      this.makeScreenProfile_(3840, 2160, 1.5, 60, 48),
++    ];
++    const linuxScreens = [
++      this.makeScreenProfile_(1366, 768, 1, 60, 28),
++      this.makeScreenProfile_(1920, 1080, 1, 60, 28),
++      this.makeScreenProfile_(2560, 1440, 1, 60, 28),
++      this.makeScreenProfile_(3440, 1440, 1, 60, 28),
++    ];
++    const screens = osFamily === 'mac' ? macScreens :
++        osFamily === 'linux' ? linuxScreens : desktopScreens;
++    persona.screen = this.randomFrom_(screens, screens[0]);
++  }
++
++  private applyRandomNetwork_(persona: PersonaRecord) {
++    const networkProfiles = [
++      {type: 'wifi', effectiveType: '4g', rtt: [25, 70], downlink: [30, 160]},
++      {type: 'ethernet', effectiveType: '4g', rtt: [5, 35], downlink: [80, 350]},
++      {type: 'wifi', effectiveType: '4g', rtt: [45, 110], downlink: [12, 90]},
++    ];
++    const profile = this.randomFrom_(networkProfiles, networkProfiles[0]);
++    persona.network = {
++      type: profile.type,
++      effectiveType: profile.effectiveType,
++      rtt: this.randomInt_(profile.rtt[0], profile.rtt[1]),
++      downlink: this.randomInt_(profile.downlink[0], profile.downlink[1]),
++      downlinkMax: 0,
++      saveData: false,
++    };
++  }
++
++  private onRandomizePersonaClick_() {
++    this.flushTextFieldsToEditablePersona_();
++    const base = this.pickRandomBasePersona_();
++    if (!base) {
++      return;
++    }
++    const previous = this.clonePersona_(this.editablePersona_);
++    const persona = this.clonePersona_(base);
++    const isEditingCustom = previous && !previous.builtin &&
++        !this.isPassthroughPersona_(previous) &&
++        String(previous.source || '') === 'custom';
++    const basePresetName = String(base.name || persona.basePresetName ||
++        'Persona preset');
++    persona.id = isEditingCustom ? String(previous.id || '') : '';
++    persona.name = isEditingCustom && previous.name ?
++        String(previous.name) : `${basePresetName} random`;
++    persona.source = 'custom';
++    persona.basePresetId = String(base.id || persona.basePresetId || '');
++    persona.basePresetName = basePresetName;
++    persona.builtin = false;
++    persona.modified = true;
++    persona.passthrough = false;
++    persona.noiseSeed = this.makeRandomNoiseSeed_();
++    this.applyRandomHardware_(persona);
++    this.applyRandomScreen_(persona);
++    this.applyRandomNetwork_(persona);
++    this.applyConsistentRandomFonts_(persona);
++    this.normalizeNumbers_(persona);
++    this.set('editablePersona_', persona);
++    this.activePersonaSummary_ = this.formatPersonaSummary_(persona);
++    this.syncTextFields_();
++  }
++
+   private async onNewPersonaClick_() {
+     this.flushTextFieldsToEditablePersona_();
+     const base = this.isPassthroughPersona_(this.editablePersona_) ?

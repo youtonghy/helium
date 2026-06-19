@@ -1,0 +1,139 @@
+--- a/content/browser/helium_noise/noise_token_data.cc
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -10,6 +10,7 @@
+ 
+ #include <cstdint>
+ #include <memory>
++#include <string>
+ #include <string_view>
+ 
+ #include "base/containers/span.h"
+@@ -39,16 +40,57 @@
+ constexpr uint64_t kFnvPrime = 0x00000100000001b3;
+ constexpr uint64_t kFnvOffset = 0xcbf29ce484222325;
+ 
+-// Derives a token by combining a browser context token with an origin-specific
+-// string. This makes tokens unique per-origin, but consistent within
+-// the same BrowserContext.
+-blink::HeliumNoiseToken DeriveTokenFromOrigin(blink::HeliumNoiseToken token,
+-                                              std::string_view domain) {
++std::string PersonaNoiseSalt(
++    const blink::HeliumPersonaSnapshot& persona_snapshot) {
++  if (!persona_snapshot.IsEnabled()) {
++    return std::string();
++  }
++
++  return base::StrCat({
++      persona_snapshot.id,
++      "|",
++      persona_snapshot.name,
++      "|",
++      persona_snapshot.user_agent,
++      "|",
++      persona_snapshot.platform,
++      "|",
++      persona_snapshot.timezone,
++      "|",
++      persona_snapshot.locale,
++      "|",
++      persona_snapshot.gpu_vendor,
++      "|",
++      persona_snapshot.gpu_renderer,
++      "|",
++      persona_snapshot.font_pack_id,
++      "|",
++      persona_snapshot.font_rendering_id,
++      "|",
++      base::NumberToString(persona_snapshot.screen_width),
++      "x",
++      base::NumberToString(persona_snapshot.screen_height),
++      "@",
++      base::NumberToString(persona_snapshot.device_scale_factor),
++      "|",
++      base::NumberToString(persona_snapshot.hardware_concurrency),
++      "|",
++      base::NumberToString(persona_snapshot.device_memory),
++  });
++}
++
++// Derives a token by combining a browser context token with origin- and
++// persona-specific strings. This makes tokens unique per-origin and per-persona,
++// but consistent within the same BrowserContext/persona pair.
++blink::HeliumNoiseToken DeriveToken(blink::HeliumNoiseToken token,
++                                    std::string_view domain,
++                                    std::string_view persona_salt) {
+   uint64_t token_hash = kFnvOffset;
+   crypto::hash::Hasher hasher(crypto::hash::kSha256);
+ 
+   hasher.Update(base::U64ToLittleEndian(token.Value()));
+   hasher.Update(base::as_byte_span(domain));
++  hasher.Update(base::as_byte_span(persona_salt));
+ 
+   std::array<uint8_t, crypto::hash::kSha256Size> digest;
+   hasher.Finish(digest);
+@@ -85,16 +127,18 @@
+ // static
+ blink::HeliumNoiseTokenMap HeliumNoiseTokenData::GetTokens(
+     BrowserContext* context,
+-    const url::Origin& origin) {
++    const url::Origin& origin,
++    const blink::HeliumPersonaSnapshot& persona_snapshot) {
+   HeliumNoiseTokenData* data = GetBrowserTokens(context);
+ 
+   std::string domain = !origin.opaque()
+                           ? origin.Serialize()
+                           : base::UnguessableToken::Create().ToString();
++  std::string persona_salt = PersonaNoiseSalt(persona_snapshot);
+ 
+   blink::HeliumNoiseTokenMap result;
+   for (const auto& [feature, session_token] : data->session_tokens_) {
+-    result.insert({feature, DeriveTokenFromOrigin(session_token, domain)});
++    result.insert({feature, DeriveToken(session_token, domain, persona_salt)});
+   }
+ 
+   return result;
+--- a/content/browser/helium_noise/noise_token_data.h
++++ b/content/browser/helium_noise/noise_token_data.h
+@@ -15,6 +15,7 @@
+ #include "base/rand_util.h"
+ #include "content/public/browser/browser_context.h"
+ #include "third_party/blink/public/common/helium_noise/noise_token.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "url/origin.h"
+ 
+ namespace content {
+@@ -27,10 +28,12 @@
+   HeliumNoiseTokenData();
+ 
+   // Gets a map of BrowserContext-associated & feature-specific noise tokens
+-  // computed with the main frame's origin. If the origin is opaque, a random
+-  // value will be used instead.
++  // computed with the main frame's origin and active persona. If the origin is
++  // opaque, a random value will be used instead.
+   static blink::HeliumNoiseTokenMap GetTokens(BrowserContext* context,
+-                                              const url::Origin& origin);
++                                              const url::Origin& origin,
++                                              const blink::HeliumPersonaSnapshot&
++                                                  persona_snapshot);
+ 
+   // Regenerates all noise tokens, returning a HeliumNoiseTokenData instance.
+   static HeliumNoiseTokenData* RegenerateTokens(BrowserContext* context);
+--- a/content/browser/renderer_host/navigation_request.cc
++++ b/content/browser/renderer_host/navigation_request.cc
+@@ -9123,13 +9123,13 @@
+   if (IsInMainFrame()) {
+     BrowserContext* browser_context =
+         frame_tree_node()->navigator().controller().GetBrowserContext();
++    persona_snapshot_ =
++        GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
+     if (GetContentClient()->browser()->HeliumNoiseEnabled(
+             browser_context, origin_to_commit->GetURL())) {
+       noise_tokens_ = HeliumNoiseTokenData::GetTokens(
+-          browser_context, origin_to_commit.value());
++          browser_context, origin_to_commit.value(), persona_snapshot_);
+     }
+-    persona_snapshot_ =
+-        GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
+   }
+ 
+   if (ready_to_commit_callback_for_testing_)

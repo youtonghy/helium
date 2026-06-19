@@ -1,0 +1,318 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 3fc402dd..18553a53 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -307,11 +310,12 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+           'Chinese language profiles commonly pair with an Asia/* timezone.');
+     }
+     if ((this.contains_(locale, 'en-us') ||
++         this.contains_(locale, 'es-mx') ||
+          this.contains_(locale, 'es-us')) &&
+         timezone && !this.contains_(timezone, 'america')) {
+       this.addDraftWarning_(
+           warnings,
+-          'US language profiles commonly pair with an America/* timezone.');
++          'American language profiles commonly pair with an America/* timezone.');
+     }
+     if (this.contains_(locale, 'en-au') &&
+         !this.contains_(timezone, 'australia')) {
+@@ -322,18 +325,22 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     }
+     if ((this.contains_(locale, 'de-de') ||
+          this.contains_(locale, 'en-gb') ||
+-         this.contains_(locale, 'fr-fr')) &&
++         this.contains_(locale, 'fr-fr') ||
++         this.contains_(locale, 'pl-pl') ||
++         this.contains_(locale, 'pt-pt') ||
++         this.contains_(locale, 'sv-se')) &&
+         !this.contains_(timezone, 'europe')) {
+       this.addDraftWarning_(
+           warnings,
+           'European language profiles commonly pair with a Europe/* timezone.');
+     }
+-    if ((this.contains_(locale, 'ja-jp') ||
++    if ((this.contains_(locale, 'en-sg') ||
++         this.contains_(locale, 'ja-jp') ||
+          this.contains_(locale, 'zh-tw')) &&
+         !this.contains_(timezone, 'asia')) {
+       this.addDraftWarning_(
+           warnings,
+-          'East Asian language profiles commonly pair with an Asia/* timezone.');
++          'Asian language profiles commonly pair with an Asia/* timezone.');
+     }
+     if (this.contains_(locale, 'pt-br') &&
+         !this.contains_(timezone, 'america')) {
+@@ -1245,6 +1250,10 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+         this.makeSpeechVoiceProfile_(
+             'Microsoft Heera Desktop - English (India)', 'en-IN'),
+       ],
++      'en-sg': [
++        this.makeSpeechVoiceProfile_(
++            'Microsoft David Desktop - English (Singapore)', 'en-SG'),
++      ],
+       'en-us': [
+         this.makeSpeechVoiceProfile_(
+             'Microsoft David Desktop - English (United States)', 'en-US'),
+@@ -1255,6 +1264,10 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+         this.makeSpeechVoiceProfile_(
+             'Microsoft Helena Desktop - Spanish (Spain)', 'es-ES'),
+       ],
++      'es-mx': [
++        this.makeSpeechVoiceProfile_(
++            'Microsoft Sabina Desktop - Spanish (Mexico)', 'es-MX'),
++      ],
+       'es-us': [
+         this.makeSpeechVoiceProfile_(
+             'Microsoft Sabina Desktop - Spanish (United States)', 'es-US'),
+@@ -1283,10 +1296,22 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+         this.makeSpeechVoiceProfile_(
+             'Microsoft Frank Desktop - Dutch', 'nl-NL'),
+       ],
++      'pl-pl': [
++        this.makeSpeechVoiceProfile_(
++            'Microsoft Paulina Desktop - Polish', 'pl-PL'),
++      ],
+       'pt-br': [
+         this.makeSpeechVoiceProfile_(
+             'Microsoft Maria Desktop - Portuguese (Brazil)', 'pt-BR'),
+       ],
++      'pt-pt': [
++        this.makeSpeechVoiceProfile_(
++            'Microsoft Helia Desktop - Portuguese (Portugal)', 'pt-PT'),
++      ],
++      'sv-se': [
++        this.makeSpeechVoiceProfile_(
++            'Microsoft Hedvig Desktop - Swedish', 'sv-SE'),
++      ],
+       'zh-cn': [
+         this.makeSpeechVoiceProfile_(
+             'Microsoft Huihui Desktop - Chinese (Simplified)', 'zh-CN'),
+@@ -1305,11 +1330,13 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+         this.makeSpeechVoiceProfile_('Serena', 'en-GB'),
+       ],
+       'en-in': [this.makeSpeechVoiceProfile_('Rishi', 'en-IN')],
++      'en-sg': [this.makeSpeechVoiceProfile_('Samantha', 'en-SG')],
+       'en-us': [
+         this.makeSpeechVoiceProfile_('Samantha', 'en-US'),
+         this.makeSpeechVoiceProfile_('Alex', 'en-US'),
+       ],
+       'es-es': [this.makeSpeechVoiceProfile_('Monica', 'es-ES')],
++      'es-mx': [this.makeSpeechVoiceProfile_('Paulina', 'es-MX')],
+       'es-us': [this.makeSpeechVoiceProfile_('Paulina', 'es-US')],
+       'fr-ca': [this.makeSpeechVoiceProfile_('Amelie', 'fr-CA')],
+       'fr-fr': [this.makeSpeechVoiceProfile_('Thomas', 'fr-FR')],
+@@ -1317,7 +1344,10 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       'ja-jp': [this.makeSpeechVoiceProfile_('Kyoko', 'ja-JP')],
+       'ko-kr': [this.makeSpeechVoiceProfile_('Yuna', 'ko-KR')],
+       'nl-nl': [this.makeSpeechVoiceProfile_('Xander', 'nl-NL')],
++      'pl-pl': [this.makeSpeechVoiceProfile_('Zosia', 'pl-PL')],
+       'pt-br': [this.makeSpeechVoiceProfile_('Luciana', 'pt-BR')],
++      'pt-pt': [this.makeSpeechVoiceProfile_('Joana', 'pt-PT')],
++      'sv-se': [this.makeSpeechVoiceProfile_('Alva', 'sv-SE')],
+       'zh-cn': [this.makeSpeechVoiceProfile_('Ting-Ting', 'zh-CN')],
+       'zh-tw': [this.makeSpeechVoiceProfile_('Mei-Jia', 'zh-TW')],
+     };
+@@ -1327,8 +1357,10 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       'en-ca': [this.makeSpeechVoiceProfile_('English Canada', 'en-CA')],
+       'en-gb': [this.makeSpeechVoiceProfile_('English Great Britain', 'en-GB')],
+       'en-in': [this.makeSpeechVoiceProfile_('English India', 'en-IN')],
++      'en-sg': [this.makeSpeechVoiceProfile_('English Singapore', 'en-SG')],
+       'en-us': [this.makeSpeechVoiceProfile_('English United States', 'en-US')],
+       'es-es': [this.makeSpeechVoiceProfile_('Espanol Espana', 'es-ES')],
++      'es-mx': [this.makeSpeechVoiceProfile_('Espanol Mexico', 'es-MX')],
+       'es-us': [this.makeSpeechVoiceProfile_('Espanol America', 'es-US')],
+       'fr-ca': [this.makeSpeechVoiceProfile_('Francais Canada', 'fr-CA')],
+       'fr-fr': [this.makeSpeechVoiceProfile_('Francais France', 'fr-FR')],
+@@ -1336,7 +1368,10 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       'ja-jp': [this.makeSpeechVoiceProfile_('Japanese', 'ja-JP')],
+       'ko-kr': [this.makeSpeechVoiceProfile_('Korean', 'ko-KR')],
+       'nl-nl': [this.makeSpeechVoiceProfile_('Nederlands', 'nl-NL')],
++      'pl-pl': [this.makeSpeechVoiceProfile_('Polski', 'pl-PL')],
+       'pt-br': [this.makeSpeechVoiceProfile_('Portugues Brasil', 'pt-BR')],
++      'pt-pt': [this.makeSpeechVoiceProfile_('Portugues Portugal', 'pt-PT')],
++      'sv-se': [this.makeSpeechVoiceProfile_('Svenska', 'sv-SE')],
+       'zh-cn': [this.makeSpeechVoiceProfile_('Chinese Mandarin', 'zh-CN')],
+       'zh-tw': [this.makeSpeechVoiceProfile_('Chinese Taiwan', 'zh-TW')],
+     };
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index 4430db38..e631898d 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -159,6 +159,26 @@ void ExpectAdvancedExposedApiFields(const base::Value::Dict& advanced) {
+   EXPECT_TRUE(advanced.FindString("speechVoiceUri"));
+ }
+ 
++void ExpectPresetSpeechVoice(const base::Value::List& presets,
++                             std::string_view id,
++                             std::string_view expected_name,
++                             std::string_view expected_lang) {
++  SCOPED_TRACE(id);
++  const base::Value::Dict* preset = FindProfileById(presets, id);
++  ASSERT_TRUE(preset);
++  const base::Value::Dict* advanced = preset->FindDict("advanced");
++  ASSERT_TRUE(advanced);
++  const std::string* voice_name = advanced->FindString("speechVoiceName");
++  ASSERT_TRUE(voice_name);
++  const std::string* voice_lang = advanced->FindString("speechVoiceLang");
++  ASSERT_TRUE(voice_lang);
++  const std::string* voice_uri = advanced->FindString("speechVoiceUri");
++  ASSERT_TRUE(voice_uri);
++  EXPECT_EQ(std::string(expected_name), *voice_name);
++  EXPECT_EQ(std::string(expected_lang), *voice_lang);
++  EXPECT_EQ(std::string(expected_name), *voice_uri);
++}
++
+ }  // namespace
+ 
+ TEST(HeliumPersonaPrefsTest, BuiltinPresetsContainCompleteSystemImage) {
+@@ -225,6 +245,18 @@ TEST(HeliumPersonaPrefsTest, BuiltinPresetsContainCompleteSystemImage) {
+     }
+   }
+ 
++  ExpectPresetSpeechVoice(presets, "preset-windows-11-pl-pl-warsaw",
++                          "Microsoft Paulina Desktop - Polish", "pl-PL");
++  ExpectPresetSpeechVoice(presets, "preset-linux-pt-pt-lisbon",
++                          "Portugues Portugal", "pt-PT");
++  ExpectPresetSpeechVoice(presets, "preset-macos-es-mx-mexico-city",
++                          "Paulina", "es-MX");
++  ExpectPresetSpeechVoice(presets, "preset-windows-11-en-sg-singapore",
++                          "Microsoft David Desktop - English (Singapore)",
++                          "en-SG");
++  ExpectPresetSpeechVoice(presets, "preset-linux-sv-se-stockholm", "Svenska",
++                          "sv-SE");
++
+   const base::Value::Dict& windows = DictAt(presets, 1);
+   EXPECT_TRUE(PersonaHasRequiredFields(windows));
+   EXPECT_EQ("Windows 11", *windows.FindString("os"));
+diff --git a/components/helium_persona/persona_presets.cc b/components/helium_persona/persona_presets.cc
+index 11e59a71..b2e9c443 100644
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -356,8 +356,12 @@ std::string_view LocaleSpeechVoiceName(std::string_view os,
+       return "Daniel";
+     if (locale == "en-IN")
+       return "Rishi";
++    if (locale == "en-SG")
++      return "Samantha";
+     if (locale == "es-ES")
+       return "Monica";
++    if (locale == "es-MX")
++      return "Paulina";
+     if (locale == "es-US")
+       return "Paulina";
+     if (locale == "fr-CA")
+@@ -366,8 +370,14 @@ std::string_view LocaleSpeechVoiceName(std::string_view os,
+       return "Thomas";
+     if (locale == "ja-JP")
+       return "Kyoko";
++    if (locale == "pl-PL")
++      return "Zosia";
+     if (locale == "pt-BR")
+       return "Luciana";
++    if (locale == "pt-PT")
++      return "Joana";
++    if (locale == "sv-SE")
++      return "Alva";
+     if (locale == "zh-CN")
+       return "Ting-Ting";
+     if (locale == "zh-TW")
+@@ -385,8 +395,12 @@ std::string_view LocaleSpeechVoiceName(std::string_view os,
+       return "English Great Britain";
+     if (locale == "en-IN")
+       return "English India";
++    if (locale == "en-SG")
++      return "English Singapore";
+     if (locale == "es-ES")
+       return "Espanol Espana";
++    if (locale == "es-MX")
++      return "Espanol Mexico";
+     if (locale == "es-US")
+       return "Espanol America";
+     if (locale == "fr-CA")
+@@ -401,8 +415,14 @@ std::string_view LocaleSpeechVoiceName(std::string_view os,
+       return "Korean";
+     if (locale == "nl-NL")
+       return "Nederlands";
++    if (locale == "pl-PL")
++      return "Polski";
+     if (locale == "pt-BR")
+       return "Portugues Brasil";
++    if (locale == "pt-PT")
++      return "Portugues Portugal";
++    if (locale == "sv-SE")
++      return "Svenska";
+     if (locale == "zh-CN")
+       return "Chinese Mandarin";
+     if (locale == "zh-TW")
+@@ -419,10 +439,14 @@ std::string_view LocaleSpeechVoiceName(std::string_view os,
+     return "Microsoft Hazel Desktop - English (Great Britain)";
+   if (locale == "en-IN")
+     return "Microsoft Heera Desktop - English (India)";
++  if (locale == "en-SG")
++    return "Microsoft David Desktop - English (Singapore)";
+   if (locale == "es-US")
+     return "Microsoft Sabina Desktop - Spanish (United States)";
+   if (locale == "es-ES")
+     return "Microsoft Helena Desktop - Spanish (Spain)";
++  if (locale == "es-MX")
++    return "Microsoft Sabina Desktop - Spanish (Mexico)";
+   if (locale == "fr-CA")
+     return "Microsoft Caroline - French (Canada)";
+   if (locale == "fr-FR")
+@@ -435,8 +459,14 @@ std::string_view LocaleSpeechVoiceName(std::string_view os,
+     return "Microsoft Heami Desktop - Korean";
+   if (locale == "nl-NL")
+     return "Microsoft Frank Desktop - Dutch";
++  if (locale == "pl-PL")
++    return "Microsoft Paulina Desktop - Polish";
+   if (locale == "pt-BR")
+     return "Microsoft Maria Desktop - Portuguese (Brazil)";
++  if (locale == "pt-PT")
++    return "Microsoft Helia Desktop - Portuguese (Portugal)";
++  if (locale == "sv-SE")
++    return "Microsoft Hedvig Desktop - Swedish";
+   if (locale == "zh-CN")
+     return "Microsoft Huihui Desktop - Chinese (Simplified)";
+   return "Microsoft David Desktop - English (United States)";
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index 9a66370c..90ad8ecb 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -896,28 +896,28 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+                "Chinese language profiles commonly pair with an Asia/* timezone.");
+   }
+ 
+-  if ((Contains(locale, "en-us") || Contains(locale, "es-us")) &&
++  if ((Contains(locale, "en-us") || Contains(locale, "es-mx") ||
++       Contains(locale, "es-us")) &&
+       !(Contains(timezone, "america") || timezone.empty())) {
+     AddWarning(warnings,
+-               "US language profiles commonly pair with an America/* timezone.");
++               "American language profiles commonly pair with an America/* timezone.");
+   }
+   if (Contains(locale, "en-au") && !Contains(timezone, "australia")) {
+     AddWarning(warnings,
+                "Australian English profiles commonly pair with an Australia/* timezone.");
+   }
+-  if (Contains(locale, "de-de") && !Contains(timezone, "europe")) {
+-    AddWarning(warnings,
+-               "German profiles commonly pair with a Europe/* timezone.");
+-  }
+-  if ((Contains(locale, "en-gb") || Contains(locale, "fr-fr")) &&
++  if ((Contains(locale, "de-de") || Contains(locale, "en-gb") ||
++       Contains(locale, "fr-fr") || Contains(locale, "pl-pl") ||
++       Contains(locale, "pt-pt") || Contains(locale, "sv-se")) &&
+       !Contains(timezone, "europe")) {
+     AddWarning(warnings,
+                "European language profiles commonly pair with a Europe/* timezone.");
+   }
+-  if ((Contains(locale, "ja-jp") || Contains(locale, "zh-tw")) &&
++  if ((Contains(locale, "en-sg") || Contains(locale, "ja-jp") ||
++       Contains(locale, "zh-tw")) &&
+       !Contains(timezone, "asia")) {
+     AddWarning(warnings,
+-               "East Asian language profiles commonly pair with an Asia/* timezone.");
++               "Asian language profiles commonly pair with an Asia/* timezone.");
+   }
+   if (Contains(locale, "pt-br") && !Contains(timezone, "america")) {
+     AddWarning(warnings,

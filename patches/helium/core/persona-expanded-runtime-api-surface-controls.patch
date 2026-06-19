@@ -1,0 +1,789 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 94471193..91e4660e 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -1001,6 +1001,12 @@ blink::HeliumPersonaSnapshot ToBlinkPersonaSnapshot(
+   target.allow_badging = source.allow_badging;
+   target.allow_web_share = source.allow_web_share;
+   target.allow_eye_dropper = source.allow_eye_dropper;
++  target.allow_media_session = source.allow_media_session;
++  target.allow_picture_in_picture = source.allow_picture_in_picture;
++  target.allow_web_otp = source.allow_web_otp;
++  target.allow_shape_detection = source.allow_shape_detection;
++  target.allow_web_sockets = source.allow_web_sockets;
++  target.allow_web_transport = source.allow_web_transport;
+   return target;
+ }
+ 
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.html b/chrome/browser/resources/settings/privacy_page/persona_page.html
+index a8fb76cb..5ab16f74 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -690,6 +691,24 @@
+     <cr-checkbox checked="{{editablePersona_.advanced.allowEyeDropper}}">
+       Allow EyeDropper
+     </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowMediaSession}}">
++      Allow Media Session
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowPictureInPicture}}">
++      Allow Picture-in-Picture
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowWebOtp}}">
++      Allow WebOTP
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowShapeDetection}}">
++      Allow Shape Detection
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowWebSockets}}">
++      Allow WebSocket
++    </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.allowWebTransport}}">
++      Allow WebTransport
++    </cr-checkbox>
+     <cr-checkbox checked="{{editablePersona_.advanced.allowPointerLock}}">
+       Allow pointer lock permission
+     </cr-checkbox>
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 577b4b40..1176e8b0 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -285,6 +285,12 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const allowBadging = Boolean(advanced['allowBadging']);
+     const allowWebShare = Boolean(advanced['allowWebShare']);
+     const allowEyeDropper = Boolean(advanced['allowEyeDropper']);
++    const allowMediaSession = Boolean(advanced['allowMediaSession']);
++    const allowPictureInPicture = Boolean(advanced['allowPictureInPicture']);
++    const allowWebOtp = Boolean(advanced['allowWebOtp']);
++    const allowShapeDetection = Boolean(advanced['allowShapeDetection']);
++    const allowWebSockets = Boolean(advanced['allowWebSockets']);
++    const allowWebTransport = Boolean(advanced['allowWebTransport']);
+     const allowPresentationApis = Boolean(advanced['allowPresentationApis']);
+     const allowRemotePlayback = Boolean(advanced['allowRemotePlayback']);
+     const speechVoiceName = String(advanced['speechVoiceName'] || '');
+@@ -780,6 +786,35 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       this.addDraftWarning_(
+           warnings, 'allowEyeDropper exposes screen color sampling APIs.');
+     }
++    if (allowMediaSession) {
++      this.addDraftWarning_(
++          warnings,
++          'allowMediaSession exposes media session metadata and action handler APIs.');
++    }
++    if (allowPictureInPicture) {
++      this.addDraftWarning_(
++          warnings,
++          'allowPictureInPicture exposes Picture-in-Picture window and session APIs.');
++    }
++    if (allowWebOtp) {
++      this.addDraftWarning_(
++          warnings, 'allowWebOtp exposes SMS OTP receiver surfaces.');
++    }
++    if (allowShapeDetection) {
++      this.addDraftWarning_(
++          warnings,
++          'allowShapeDetection exposes barcode, face, and text detection service bindings.');
++    }
++    if (!allowWebSockets) {
++      this.addDraftWarning_(
++          warnings,
++          'Disabling allowWebSockets can break ordinary sites that rely on WebSocket connections.');
++    }
++    if (!allowWebTransport) {
++      this.addDraftWarning_(
++          warnings,
++          'Disabling allowWebTransport can break sites that rely on WebTransport connections.');
++    }
+     if (!allowPresentationApis && allowRemotePlayback) {
+       this.addDraftWarning_(
+           warnings,
+@@ -2244,6 +2284,12 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       allowBadging: false,
+       allowWebShare: false,
+       allowEyeDropper: false,
++      allowMediaSession: false,
++      allowPictureInPicture: false,
++      allowWebOtp: false,
++      allowShapeDetection: false,
++      allowWebSockets: true,
++      allowWebTransport: true,
+     };
+     for (const [key, value] of Object.entries(advancedDefaults)) {
+       if (persona.advanced[key] === undefined) {
+@@ -2389,6 +2435,8 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       'allowWebAppInstallation', 'allowWebPrinting',
+       'allowFileSystemAccess', 'allowWebLocks', 'allowContacts',
+       'allowBadging', 'allowWebShare', 'allowEyeDropper',
++      'allowMediaSession', 'allowPictureInPicture', 'allowWebOtp',
++      'allowShapeDetection', 'allowWebSockets', 'allowWebTransport',
+     ];
+     for (const key of booleanAdvancedKeys) {
+       persona.advanced[key] = Boolean(persona.advanced[key]);
+diff --git a/components/helium_persona/persona_prefs.cc b/components/helium_persona/persona_prefs.cc
+index 2adb2f70..18f3f974 100644
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -491,6 +491,12 @@ base::Value::Dict MakeDefaultAdvancedProfile() {
+   advanced.Set("allowBadging", false);
+   advanced.Set("allowWebShare", false);
+   advanced.Set("allowEyeDropper", false);
++  advanced.Set("allowMediaSession", false);
++  advanced.Set("allowPictureInPicture", false);
++  advanced.Set("allowWebOtp", false);
++  advanced.Set("allowShapeDetection", false);
++  advanced.Set("allowWebSockets", true);
++  advanced.Set("allowWebTransport", true);
+   return advanced;
+ }
+ 
+@@ -655,6 +661,12 @@ void EnsureAdvancedCompatibilityFields(base::Value::Dict& persona) {
+   EnsureBool(*advanced, "allowBadging", false);
+   EnsureBool(*advanced, "allowWebShare", false);
+   EnsureBool(*advanced, "allowEyeDropper", false);
++  EnsureBool(*advanced, "allowMediaSession", false);
++  EnsureBool(*advanced, "allowPictureInPicture", false);
++  EnsureBool(*advanced, "allowWebOtp", false);
++  EnsureBool(*advanced, "allowShapeDetection", false);
++  EnsureBool(*advanced, "allowWebSockets", true);
++  EnsureBool(*advanced, "allowWebTransport", true);
+ }
+ 
+ void EnsureHardwareCompatibilityFields(base::Value::Dict& persona) {
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index 9f125159..5e5acc29 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -147,6 +147,12 @@ void ExpectAdvancedExposedApiFields(const base::Value::Dict& advanced) {
+       "allowBadging",
+       "allowWebShare",
+       "allowEyeDropper",
++      "allowMediaSession",
++      "allowPictureInPicture",
++      "allowWebOtp",
++      "allowShapeDetection",
++      "allowWebSockets",
++      "allowWebTransport",
+   };
+   for (std::string_view field : kBoolFields) {
+     SCOPED_TRACE(field);
+@@ -463,6 +469,8 @@ TEST(HeliumPersonaPrefsTest, SavePersonaMigratesLegacyManualShape) {
+   advanced->Remove("storageQuotaGb");
+   advanced->Remove("allowWebPrinting");
+   advanced->Remove("allowFileSystemAccess");
++  advanced->Remove("allowMediaSession");
++  advanced->Remove("allowWebSockets");
+   advanced->Remove("speechVoiceUri");
+ 
+   EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
+@@ -877,6 +885,12 @@ TEST(HeliumPersonaPrefsTest, ValidationWarnsAboutInconsistentPersonas) {
+   advanced->Set("allowBadging", true);
+   advanced->Set("allowWebShare", true);
+   advanced->Set("allowEyeDropper", true);
++  advanced->Set("allowMediaSession", true);
++  advanced->Set("allowPictureInPicture", true);
++  advanced->Set("allowWebOtp", true);
++  advanced->Set("allowShapeDetection", true);
++  advanced->Set("allowWebSockets", false);
++  advanced->Set("allowWebTransport", false);
+   advanced->Set("allowRemotePlayback", true);
+   advanced->Set("speechVoiceName", "Samantha");
+   advanced->Set("speechVoiceLang", "en-US");
+@@ -1143,6 +1157,8 @@ TEST(HeliumPersonaPrefsTest, ValidationRequiresAdvancedExposedApiFields) {
+   advanced->Remove("storageQuotaGb");
+   advanced->Remove("allowWebPrinting");
+   advanced->Remove("allowFileSystemAccess");
++  advanced->Remove("allowMediaSession");
++  advanced->Remove("allowWebSockets");
+   advanced->Remove("speechVoiceUri");
+ 
+   EXPECT_FALSE(PersonaHasRequiredFields(persona));
+@@ -980,6 +988,12 @@ TEST(HeliumPersonaPrefsTest, ValidationWarnsAboutInconsistentPersonas) {
+   EXPECT_TRUE(WarningsContain(warnings, "allowBadging exposes"));
+   EXPECT_TRUE(WarningsContain(warnings, "allowWebShare exposes"));
+   EXPECT_TRUE(WarningsContain(warnings, "allowEyeDropper exposes"));
++  EXPECT_TRUE(WarningsContain(warnings, "allowMediaSession exposes"));
++  EXPECT_TRUE(WarningsContain(warnings, "allowPictureInPicture exposes"));
++  EXPECT_TRUE(WarningsContain(warnings, "allowWebOtp exposes"));
++  EXPECT_TRUE(WarningsContain(warnings, "allowShapeDetection exposes"));
++  EXPECT_TRUE(WarningsContain(warnings, "Disabling allowWebSockets"));
++  EXPECT_TRUE(WarningsContain(warnings, "Disabling allowWebTransport"));
+   EXPECT_TRUE(WarningsContain(warnings, "Remote Playback reuses"));
+   EXPECT_TRUE(WarningsContain(warnings, "maxTouchPoints should be 0"));
+   EXPECT_TRUE(WarningsContain(warnings, "CoreText font rendering"));
+@@ -1537,6 +1551,12 @@ TEST(HeliumPersonaPrefsTest, RuntimeSnapshotPreservesManualOverrides) {
+   advanced->Set("allowBadging", true);
+   advanced->Set("allowWebShare", true);
+   advanced->Set("allowEyeDropper", true);
++  advanced->Set("allowMediaSession", true);
++  advanced->Set("allowPictureInPicture", true);
++  advanced->Set("allowWebOtp", true);
++  advanced->Set("allowShapeDetection", true);
++  advanced->Set("allowWebSockets", false);
++  advanced->Set("allowWebTransport", false);
+ 
+   EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
+ 
+@@ -1722,6 +1742,12 @@ TEST(HeliumPersonaPrefsTest, RuntimeSnapshotPreservesManualOverrides) {
+   EXPECT_TRUE(snapshot.allow_badging);
+   EXPECT_TRUE(snapshot.allow_web_share);
+   EXPECT_TRUE(snapshot.allow_eye_dropper);
++  EXPECT_TRUE(snapshot.allow_media_session);
++  EXPECT_TRUE(snapshot.allow_picture_in_picture);
++  EXPECT_TRUE(snapshot.allow_web_otp);
++  EXPECT_TRUE(snapshot.allow_shape_detection);
++  EXPECT_FALSE(snapshot.allow_web_sockets);
++  EXPECT_FALSE(snapshot.allow_web_transport);
+ }
+ 
+ }  // namespace helium_persona
+diff --git a/components/helium_persona/persona_presets.cc b/components/helium_persona/persona_presets.cc
+index 07967178..93534c2e 100644
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -330,6 +330,12 @@ base::Value::Dict MakeAdvanced(bool client_hints_enabled,
+   advanced.Set("allowBadging", false);
+   advanced.Set("allowWebShare", false);
+   advanced.Set("allowEyeDropper", false);
++  advanced.Set("allowMediaSession", false);
++  advanced.Set("allowPictureInPicture", false);
++  advanced.Set("allowWebOtp", false);
++  advanced.Set("allowShapeDetection", false);
++  advanced.Set("allowWebSockets", true);
++  advanced.Set("allowWebTransport", true);
+   return advanced;
+ }
+ 
+diff --git a/components/helium_persona/persona_snapshot.cc b/components/helium_persona/persona_snapshot.cc
+index ffa28f89..b0ab45c2 100644
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -469,6 +469,18 @@ PersonaSnapshot MakePersonaSnapshot(const base::Value::Dict& persona) {
+       GetNestedBool(persona, "advanced", "allowWebShare", false);
+   snapshot.allow_eye_dropper =
+       GetNestedBool(persona, "advanced", "allowEyeDropper", false);
++  snapshot.allow_media_session =
++      GetNestedBool(persona, "advanced", "allowMediaSession", false);
++  snapshot.allow_picture_in_picture =
++      GetNestedBool(persona, "advanced", "allowPictureInPicture", false);
++  snapshot.allow_web_otp =
++      GetNestedBool(persona, "advanced", "allowWebOtp", false);
++  snapshot.allow_shape_detection =
++      GetNestedBool(persona, "advanced", "allowShapeDetection", false);
++  snapshot.allow_web_sockets =
++      GetNestedBool(persona, "advanced", "allowWebSockets", true);
++  snapshot.allow_web_transport =
++      GetNestedBool(persona, "advanced", "allowWebTransport", true);
+   return snapshot;
+ }
+ 
+@@ -711,6 +723,13 @@ base::Value::Dict PersonaSnapshotToValue(const PersonaSnapshot& snapshot) {
+   advanced.Set("allowBadging", snapshot.allow_badging);
+   advanced.Set("allowWebShare", snapshot.allow_web_share);
+   advanced.Set("allowEyeDropper", snapshot.allow_eye_dropper);
++  advanced.Set("allowMediaSession", snapshot.allow_media_session);
++  advanced.Set("allowPictureInPicture",
++               snapshot.allow_picture_in_picture);
++  advanced.Set("allowWebOtp", snapshot.allow_web_otp);
++  advanced.Set("allowShapeDetection", snapshot.allow_shape_detection);
++  advanced.Set("allowWebSockets", snapshot.allow_web_sockets);
++  advanced.Set("allowWebTransport", snapshot.allow_web_transport);
+   value.Set("advanced", std::move(advanced));
+   return value;
+ }
+diff --git a/components/helium_persona/persona_snapshot.h b/components/helium_persona/persona_snapshot.h
+index 0c2b74ac..0dbec3ef 100644
+--- a/components/helium_persona/persona_snapshot.h
++++ b/components/helium_persona/persona_snapshot.h
+@@ -204,6 +204,12 @@ struct COMPONENT_EXPORT(HELIUM_PERSONA) PersonaSnapshot {
+   bool allow_badging = false;
+   bool allow_web_share = false;
+   bool allow_eye_dropper = false;
++  bool allow_media_session = false;
++  bool allow_picture_in_picture = false;
++  bool allow_web_otp = false;
++  bool allow_shape_detection = false;
++  bool allow_web_sockets = true;
++  bool allow_web_transport = true;
+ };
+ 
+ COMPONENT_EXPORT(HELIUM_PERSONA)
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index 5295c4c5..e97a26cf 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -571,7 +571,13 @@ bool PersonaHasRequiredFields(const base::Value::Dict& persona) {
+          HasNestedBool(persona, "advanced", "allowContacts") &&
+          HasNestedBool(persona, "advanced", "allowBadging") &&
+          HasNestedBool(persona, "advanced", "allowWebShare") &&
+-         HasNestedBool(persona, "advanced", "allowEyeDropper");
++         HasNestedBool(persona, "advanced", "allowEyeDropper") &&
++         HasNestedBool(persona, "advanced", "allowMediaSession") &&
++         HasNestedBool(persona, "advanced", "allowPictureInPicture") &&
++         HasNestedBool(persona, "advanced", "allowWebOtp") &&
++         HasNestedBool(persona, "advanced", "allowShapeDetection") &&
++         HasNestedBool(persona, "advanced", "allowWebSockets") &&
++         HasNestedBool(persona, "advanced", "allowWebTransport");
+ }
+ 
+ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+@@ -761,6 +761,18 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+       GetNestedBool(persona, "advanced", "allowWebShare");
+   const bool allow_eye_dropper =
+       GetNestedBool(persona, "advanced", "allowEyeDropper");
++  const bool allow_media_session =
++      GetNestedBool(persona, "advanced", "allowMediaSession");
++  const bool allow_picture_in_picture =
++      GetNestedBool(persona, "advanced", "allowPictureInPicture");
++  const bool allow_web_otp =
++      GetNestedBool(persona, "advanced", "allowWebOtp");
++  const bool allow_shape_detection =
++      GetNestedBool(persona, "advanced", "allowShapeDetection");
++  const bool allow_web_sockets =
++      GetNestedBool(persona, "advanced", "allowWebSockets", true);
++  const bool allow_web_transport =
++      GetNestedBool(persona, "advanced", "allowWebTransport", true);
+   const bool allow_presentation_apis =
+       GetNestedBool(persona, "advanced", "allowPresentationApis");
+   const bool allow_remote_playback =
+@@ -1301,6 +1301,29 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+   if (allow_eye_dropper) {
+     AddWarning(warnings, "allowEyeDropper exposes screen color sampling APIs.");
+   }
++  if (allow_media_session) {
++    AddWarning(warnings,
++               "allowMediaSession exposes media session metadata and action handler APIs.");
++  }
++  if (allow_picture_in_picture) {
++    AddWarning(warnings,
++               "allowPictureInPicture exposes Picture-in-Picture window and session APIs.");
++  }
++  if (allow_web_otp) {
++    AddWarning(warnings, "allowWebOtp exposes SMS OTP receiver surfaces.");
++  }
++  if (allow_shape_detection) {
++    AddWarning(warnings,
++               "allowShapeDetection exposes barcode, face, and text detection service bindings.");
++  }
++  if (!allow_web_sockets) {
++    AddWarning(warnings,
++               "Disabling allowWebSockets can break ordinary sites that rely on WebSocket connections.");
++  }
++  if (!allow_web_transport) {
++    AddWarning(warnings,
++               "Disabling allowWebTransport can break sites that rely on WebTransport connections.");
++  }
+   if (!allow_presentation_apis && allow_remote_playback) {
+     AddWarning(warnings,
+                "Remote Playback reuses PresentationService; disabling Presentation API does not fully isolate that browser service while Remote Playback is allowed.");
+diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
+index 0a47b6f1..93b68a12 100644
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -824,6 +824,97 @@ bool HeliumPersonaAllowsKeyboardLock(RenderFrameHost* host) {
+   return !snapshot.IsEnabled() || snapshot.allow_keyboard_layout;
+ }
+ 
++blink::HeliumPersonaSnapshot GetHeliumPersonaSnapshot(DedicatedWorkerHost* host) {
++  return GetHeliumPersonaSnapshot(
++      host ? host->GetProcessHost()->GetBrowserContext() : nullptr);
++}
++
++blink::HeliumPersonaSnapshot GetHeliumPersonaSnapshot(SharedWorkerHost* host) {
++  return GetHeliumPersonaSnapshot(
++      host ? host->GetProcessHost()->GetBrowserContext() : nullptr);
++}
++
++bool HeliumPersonaAllowsMediaSession(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_media_session;
++}
++
++bool HeliumPersonaAllowsPictureInPicture(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_picture_in_picture;
++}
++
++bool HeliumPersonaAllowsWebOtp(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_web_otp;
++}
++
++bool HeliumPersonaAllowsShapeDetection(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_shape_detection;
++}
++
++bool HeliumPersonaAllowsShapeDetection(DedicatedWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_shape_detection;
++}
++
++bool HeliumPersonaAllowsShapeDetection(SharedWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_shape_detection;
++}
++
++bool HeliumPersonaAllowsShapeDetection(ServiceWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_shape_detection;
++}
++
++bool HeliumPersonaAllowsWebSockets(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_web_sockets;
++}
++
++bool HeliumPersonaAllowsWebSockets(DedicatedWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_web_sockets;
++}
++
++bool HeliumPersonaAllowsWebSockets(SharedWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_web_sockets;
++}
++
++bool HeliumPersonaAllowsWebSockets(ServiceWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_web_sockets;
++}
++
++bool HeliumPersonaAllowsWebTransport(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_web_transport;
++}
++
++bool HeliumPersonaAllowsWebTransport(DedicatedWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_web_transport;
++}
++
++bool HeliumPersonaAllowsWebTransport(SharedWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_web_transport;
++}
++
++bool HeliumPersonaAllowsWebTransport(ServiceWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_web_transport;
++}
++
+ }  // namespace
+ 
+ // Documents/frames
+@@ -1027,5 +1118,7 @@ void PopulateBinderMapWithContext(
+   map->Add<blink::mojom::WebUsbService>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::CreateWebUsbService>);
+ 
+-  map->Add<blink::mojom::WebSocketConnector>(
+-      &BindRenderFrameHostImpl<&RenderFrameHostImpl::CreateWebSocketConnector>);
++  if (HeliumPersonaAllowsWebSockets(host)) {
++    map->Add<blink::mojom::WebSocketConnector>(
++        &BindRenderFrameHostImpl<&RenderFrameHostImpl::CreateWebSocketConnector>);
++  }
+@@ -1072,8 +1165,10 @@ void PopulateBinderMapWithContext(
+   map->Add<blink::mojom::PushMessaging>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetPushMessaging>);
+ 
+-  map->Add<blink::mojom::WebTransportConnector>(
+-      &BindRenderFrameHostImpl<
+-          &RenderFrameHostImpl::CreateWebTransportConnector>);
++  if (HeliumPersonaAllowsWebTransport(host)) {
++    map->Add<blink::mojom::WebTransportConnector>(
++        &BindRenderFrameHostImpl<
++            &RenderFrameHostImpl::CreateWebTransportConnector>);
++  }
+ 
+   // BrowserMainLoop::GetInstance() may be null on unit tests.
+@@ -1190,23 +1285,25 @@ void PopulateBinderMapWithContext(
+   map->Add<network::mojom::TrustTokenQueryAnswerer>(
+       &BindRenderFrameHostImpl<
+           &RenderFrameHostImpl::BindTrustTokenQueryAnswerer>);
+ 
+-  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-      base::BindRepeating(
+-          [](RenderFrameHost* host,
+-             mojo::PendingReceiver<
+-                 shape_detection::mojom::BarcodeDetectionProvider> receiver) {
+-            BindBarcodeDetectionProvider(std::move(receiver));
+-          }));
+-
+-  map->Add<shape_detection::mojom::FaceDetectionProvider>(base::BindRepeating(
+-      [](RenderFrameHost* host,
+-         mojo::PendingReceiver<shape_detection::mojom::FaceDetectionProvider>
+-             receiver) { BindFaceDetectionProvider(std::move(receiver)); }));
+-
+-  map->Add<shape_detection::mojom::TextDetection>(base::BindRepeating(
+-      [](RenderFrameHost* host,
+-         mojo::PendingReceiver<shape_detection::mojom::TextDetection>
+-             receiver) { BindTextDetection(std::move(receiver)); }));
++  if (HeliumPersonaAllowsShapeDetection(host)) {
++    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
++        base::BindRepeating(
++            [](RenderFrameHost* host,
++               mojo::PendingReceiver<
++                   shape_detection::mojom::BarcodeDetectionProvider> receiver) {
++              BindBarcodeDetectionProvider(std::move(receiver));
++            }));
++
++    map->Add<shape_detection::mojom::FaceDetectionProvider>(base::BindRepeating(
++        [](RenderFrameHost* host,
++           mojo::PendingReceiver<shape_detection::mojom::FaceDetectionProvider>
++               receiver) { BindFaceDetectionProvider(std::move(receiver)); }));
++
++    map->Add<shape_detection::mojom::TextDetection>(base::BindRepeating(
++        [](RenderFrameHost* host,
++           mojo::PendingReceiver<shape_detection::mojom::TextDetection>
++               receiver) { BindTextDetection(std::move(receiver)); }));
++  }
+ 
+   auto* command_line = base::CommandLine::ForCurrentProcess();
+@@ -1322,4 +1419,8 @@ void PopulateBinderMapWithContext(
+-  map->Add<blink::mojom::MediaSessionService>(&MediaSessionServiceImpl::Create);
+-  map->Add<blink::mojom::PictureInPictureService>(
+-      &PictureInPictureServiceImpl::Create);
++  if (HeliumPersonaAllowsMediaSession(host)) {
++    map->Add<blink::mojom::MediaSessionService>(&MediaSessionServiceImpl::Create);
++  }
++  if (HeliumPersonaAllowsPictureInPicture(host)) {
++    map->Add<blink::mojom::PictureInPictureService>(
++        &PictureInPictureServiceImpl::Create);
++  }
+   map->Add<blink::mojom::WakeLockService>(&WakeLockServiceImpl::Create);
+@@ -1363,6 +1464,7 @@ void PopulateBinderMapWithContext(
+       &BindRenderFrameHostImpl<
+           &RenderFrameHostImpl::GetWebAuthenticationService>);
+-  if (base::FeatureList::IsEnabled(features::kWebOTP)) {
++  if (base::FeatureList::IsEnabled(features::kWebOTP) &&
++      HeliumPersonaAllowsWebOtp(host)) {
+     map->Add<blink::mojom::WebOTPService>(
+         &BindRenderFrameHostImpl<
+             &RenderFrameHostImpl::BindWebOTPServiceReceiver>);
+@@ -1445,10 +1547,12 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
+   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
+ 
+   // static binders
+-  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-      &BindBarcodeDetectionProvider);
+-  map->Add<shape_detection::mojom::FaceDetectionProvider>(
+-      &BindFaceDetectionProvider);
+-  map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  if (HeliumPersonaAllowsShapeDetection(host)) {
++    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
++        &BindBarcodeDetectionProvider);
++    map->Add<shape_detection::mojom::FaceDetectionProvider>(
++        &BindFaceDetectionProvider);
++    map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  }
+   map->Add<ukm::mojom::UkmRecorderFactory>(&BindUkmRecorderFactory);
+ 
+@@ -1489,9 +1593,13 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
+   map->Add<blink::mojom::WebUsbService>(base::BindRepeating(
+       &DedicatedWorkerHost::CreateWebUsbService, base::Unretained(host)));
+-  map->Add<blink::mojom::WebSocketConnector>(base::BindRepeating(
+-      &DedicatedWorkerHost::CreateWebSocketConnector, base::Unretained(host)));
+-  map->Add<blink::mojom::WebTransportConnector>(
+-      base::BindRepeating(&DedicatedWorkerHost::CreateWebTransportConnector,
+-                          base::Unretained(host)));
++  if (HeliumPersonaAllowsWebSockets(host)) {
++    map->Add<blink::mojom::WebSocketConnector>(base::BindRepeating(
++        &DedicatedWorkerHost::CreateWebSocketConnector, base::Unretained(host)));
++  }
++  if (HeliumPersonaAllowsWebTransport(host)) {
++    map->Add<blink::mojom::WebTransportConnector>(
++        base::BindRepeating(&DedicatedWorkerHost::CreateWebTransportConnector,
++                            base::Unretained(host)));
++  }
+   map->Add<blink::mojom::WakeLockService>(base::BindRepeating(
+       &DedicatedWorkerHost::CreateWakeLockService, base::Unretained(host)));
+@@ -1622,9 +1730,11 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
+   map->Add<blink::mojom::ContentSecurityNotifier>(base::DoNothing());
+ 
+   // static binders
+-  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-      &BindBarcodeDetectionProvider);
+-  map->Add<shape_detection::mojom::FaceDetectionProvider>(
+-      &BindFaceDetectionProvider);
+-  map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  if (HeliumPersonaAllowsShapeDetection(host)) {
++    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
++        &BindBarcodeDetectionProvider);
++    map->Add<shape_detection::mojom::FaceDetectionProvider>(
++        &BindFaceDetectionProvider);
++    map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  }
+   map->Add<ukm::mojom::UkmRecorderFactory>(&BindUkmRecorderFactory);
+@@ -1638,9 +1748,13 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
+       base::ThreadPool::CreateSequencedTaskRunner(
+           {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
+ 
+-  map->Add<blink::mojom::WebTransportConnector>(base::BindRepeating(
+-      &SharedWorkerHost::CreateWebTransportConnector, base::Unretained(host)));
+-  map->Add<blink::mojom::WebSocketConnector>(base::BindRepeating(
+-      &SharedWorkerHost::CreateWebSocketConnector, base::Unretained(host)));
++  if (HeliumPersonaAllowsWebTransport(host)) {
++    map->Add<blink::mojom::WebTransportConnector>(base::BindRepeating(
++        &SharedWorkerHost::CreateWebTransportConnector, base::Unretained(host)));
++  }
++  if (HeliumPersonaAllowsWebSockets(host)) {
++    map->Add<blink::mojom::WebSocketConnector>(base::BindRepeating(
++        &SharedWorkerHost::CreateWebSocketConnector, base::Unretained(host)));
++  }
+   map->Add<blink::mojom::CacheStorage>(base::BindRepeating(
+       &SharedWorkerHost::BindCacheStorage, base::Unretained(host)));
+@@ -1799,11 +1913,13 @@ void PopulateServiceWorkerBinders(ServiceWorkerHost* host,
+   map->Add<blink::mojom::ContentSecurityNotifier>(base::DoNothing());
+ 
+   // static binders
+   map->Add<blink::mojom::FileUtilitiesHost>(
+       base::BindRepeating(&BindFileUtilitiesHost, host));
+-  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-      &BindBarcodeDetectionProvider);
+-  map->Add<shape_detection::mojom::FaceDetectionProvider>(
+-      &BindFaceDetectionProvider);
+-  map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  if (HeliumPersonaAllowsShapeDetection(host)) {
++    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
++        &BindBarcodeDetectionProvider);
++    map->Add<shape_detection::mojom::FaceDetectionProvider>(
++        &BindFaceDetectionProvider);
++    map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  }
+   map->Add<ukm::mojom::UkmRecorderFactory>(&BindUkmRecorderFactory);
+@@ -1810,8 +1926,12 @@ void PopulateServiceWorkerBinders(ServiceWorkerHost* host,
+ 
+   // worker host binders
+-  map->Add<blink::mojom::WebSocketConnector>(base::BindRepeating(
+-      &ServiceWorkerHost::CreateWebSocketConnector, base::Unretained(host)));
+-  map->Add<blink::mojom::WebTransportConnector>(base::BindRepeating(
+-      &ServiceWorkerHost::CreateWebTransportConnector, base::Unretained(host)));
++  if (HeliumPersonaAllowsWebSockets(host)) {
++    map->Add<blink::mojom::WebSocketConnector>(base::BindRepeating(
++        &ServiceWorkerHost::CreateWebSocketConnector, base::Unretained(host)));
++  }
++  if (HeliumPersonaAllowsWebTransport(host)) {
++    map->Add<blink::mojom::WebTransportConnector>(base::BindRepeating(
++        &ServiceWorkerHost::CreateWebTransportConnector, base::Unretained(host)));
++  }
+   map->Add<blink::mojom::CacheStorage>(base::BindRepeating(
+       &ServiceWorkerHost::BindCacheStorage, base::Unretained(host)));
+diff --git a/content/browser/helium_noise/noise_token_data.cc b/content/browser/helium_noise/noise_token_data.cc
+index 84a40c60..42aaf963 100644
+--- a/content/browser/helium_noise/noise_token_data.cc
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -282,6 +282,12 @@ std::string PersonaNoiseSalt(
+   AppendSaltPart(salt, persona_snapshot.allow_badging);
+   AppendSaltPart(salt, persona_snapshot.allow_web_share);
+   AppendSaltPart(salt, persona_snapshot.allow_eye_dropper);
++  AppendSaltPart(salt, persona_snapshot.allow_media_session);
++  AppendSaltPart(salt, persona_snapshot.allow_picture_in_picture);
++  AppendSaltPart(salt, persona_snapshot.allow_web_otp);
++  AppendSaltPart(salt, persona_snapshot.allow_shape_detection);
++  AppendSaltPart(salt, persona_snapshot.allow_web_sockets);
++  AppendSaltPart(salt, persona_snapshot.allow_web_transport);
+   return salt;
+ }
+ 
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot.h b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+index bc6fefb8..e89fcf2d 100644
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -204,6 +204,12 @@ struct BLINK_COMMON_EXPORT HeliumPersonaSnapshot {
+   bool allow_badging = false;
+   bool allow_web_share = false;
+   bool allow_eye_dropper = false;
++  bool allow_media_session = false;
++  bool allow_picture_in_picture = false;
++  bool allow_web_otp = false;
++  bool allow_shape_detection = false;
++  bool allow_web_sockets = true;
++  bool allow_web_transport = true;
+ 
+   bool IsEnabled() const { return enabled && !passthrough; }
+ };
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+index cdf5c76d..ae61c62f 100644
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -703,6 +703,30 @@ struct BLINK_COMMON_EXPORT
+       const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.allow_eye_dropper;
+   }
++  static bool allow_media_session(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_media_session;
++  }
++  static bool allow_picture_in_picture(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_picture_in_picture;
++  }
++  static bool allow_web_otp(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_web_otp;
++  }
++  static bool allow_shape_detection(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_shape_detection;
++  }
++  static bool allow_web_sockets(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_web_sockets;
++  }
++  static bool allow_web_transport(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.allow_web_transport;
++  }
+ 
+   static bool Read(blink::mojom::HeliumPersonaSnapshotDataView data,
+                    blink::HeliumPersonaSnapshot* out);
+@@ -861,6 +885,12 @@ inline bool StructTraits<blink::mojom::HeliumPersonaSnapshotDataView,
+   out->allow_badging = data.allow_badging();
+   out->allow_web_share = data.allow_web_share();
+   out->allow_eye_dropper = data.allow_eye_dropper();
++  out->allow_media_session = data.allow_media_session();
++  out->allow_picture_in_picture = data.allow_picture_in_picture();
++  out->allow_web_otp = data.allow_web_otp();
++  out->allow_shape_detection = data.allow_shape_detection();
++  out->allow_web_sockets = data.allow_web_sockets();
++  out->allow_web_transport = data.allow_web_transport();
+ 
+   return data.ReadId(&out->id) && data.ReadName(&out->name) &&
+          data.ReadDevice(&out->device) && data.ReadOs(&out->os) &&
+diff --git a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+index de0a8099..74828d20 100644
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -194,4 +194,10 @@ struct HeliumPersonaSnapshot {
+   bool allow_badging;
+   bool allow_web_share;
+   bool allow_eye_dropper;
++  bool allow_media_session;
++  bool allow_picture_in_picture;
++  bool allow_web_otp;
++  bool allow_shape_detection;
++  bool allow_web_sockets;
++  bool allow_web_transport;
+ };
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 1176e8b0..f1914b55 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -1815,6 +1815,12 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       allowBadging: false,
+       allowWebShare: false,
+       allowEyeDropper: false,
++      allowMediaSession: false,
++      allowPictureInPicture: false,
++      allowWebOtp: false,
++      allowShapeDetection: false,
++      allowWebSockets: true,
++      allowWebTransport: true,
+       storageQuotaGb: this.randomFrom_(quotaProfiles, quotaProfiles[0]),
+       doNotTrackEnabled: this.randomInt_(1, 100) <= 4,
+     }, voiceProfile);

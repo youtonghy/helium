@@ -1,0 +1,35 @@
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index 35f8ef3..19db2db 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -257,17 +257,20 @@ std::string PrimaryLanguage(std::string_view language_tag) {
+ }
+ 
+ std::string ExtractUaChromeMajor(std::string_view ua) {
+-  constexpr std::string_view kToken = "Chrome/";
+-  size_t token = ua.find(kToken);
+-  if (token == std::string_view::npos) {
+-    return std::string();
+-  }
+-  std::string_view version = ua.substr(token + kToken.size());
+-  size_t end = version.find_first_of(" ;)/");
+-  if (end != std::string_view::npos) {
+-    version = version.substr(0, end);
++  constexpr std::string_view kTokens[] = {"Chrome/", "Chromium/"};
++  for (std::string_view token_name : kTokens) {
++    size_t token = ua.find(token_name);
++    if (token == std::string_view::npos) {
++      continue;
++    }
++    std::string_view version = ua.substr(token + token_name.size());
++    size_t end = version.find_first_of(" ;)/");
++    if (end != std::string_view::npos) {
++      version = version.substr(0, end);
++    }
++    return ExtractMajorVersion(version);
+   }
+-  return ExtractMajorVersion(version);
++  return std::string();
+ }
+ 
+ bool IsUaChGreaseBrand(std::string_view brand) {

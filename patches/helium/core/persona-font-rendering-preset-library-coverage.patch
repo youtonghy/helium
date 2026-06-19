@@ -1,0 +1,68 @@
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index f4ced1e..23108b9 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -501,40 +501,63 @@ TEST(HeliumPersonaPrefsTest, BuiltinFontRenderingProfilesStayComplete) {
+       "linux-freetype",
+       "linux-freetype-full",
+       "linux-freetype-grayscale",
+       "linux-ubuntu-subpixel",
+       "linux-fedora-grayscale",
+       "linux-kde-subpixel",
+       "linux-gnome-grayscale",
+       "generic-grayscale",
+   };
+ 
+   for (std::string_view id : kExpectedRenderingIds) {
+     const base::Value::Dict* profile = FindProfileById(rendering_profiles, id);
+     ASSERT_TRUE(profile) << id;
+     EXPECT_TRUE(profile->FindString("displayName"));
+     EXPECT_TRUE(profile->FindString("engine"));
+     EXPECT_TRUE(profile->FindString("hinting"));
+     ExpectFontRenderingProfileFields(*profile);
+   }
+ }
+ 
++TEST(HeliumPersonaPrefsTest,
++     BuiltinFontRenderingProfilesCoverPresetRenderingProfiles) {
++  base::Value::List presets = GetBuiltinPersonaPresets();
++  base::Value::List profiles = GetBuiltinFontRenderingProfiles();
++
++  for (const base::Value& value : presets) {
++    const base::Value::Dict* preset = value.GetIfDict();
++    ASSERT_TRUE(preset);
++    if (preset->FindBool("passthrough").value_or(false)) {
++      continue;
++    }
++    const std::string* preset_id = preset->FindString("id");
++    const base::Value::Dict* font_rendering =
++        preset->FindDict("fontRendering");
++    ASSERT_TRUE(font_rendering);
++    const std::string* rendering_id = font_rendering->FindString("id");
++    ASSERT_TRUE(rendering_id);
++    EXPECT_TRUE(ProfilesContainId(profiles, *rendering_id))
++        << (preset_id ? *preset_id : "<missing preset id>") << " -> "
++        << *rendering_id;
++  }
++}
++
+ TEST(HeliumPersonaPrefsTest, ClonePresetPersistsAndBecomesActive) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);
+ 
+   base::Value::Dict cloned = ClonePresetIntoProfile(
+       prefs, "preset-windows-11-zh-cn-shanghai");
+   const std::string* cloned_id = cloned.FindString("id");
+   ASSERT_TRUE(cloned_id);
+   EXPECT_EQ(*cloned_id, prefs.GetString(prefs::kHeliumActivePersonaId));
+ 
+   const base::Value::List& personas =
+       prefs.GetList(prefs::kHeliumPersonaRecords);
+   ASSERT_EQ(1u, personas.size());
+   EXPECT_EQ(*cloned_id, *DictAt(personas, 0).FindString("id"));
+   ASSERT_TRUE(DictAt(personas, 0).FindString("noiseSeed"));
+   EXPECT_NE(*cloned_id, *DictAt(personas, 0).FindString("noiseSeed"));
+   EXPECT_EQ("preset-windows-11-zh-cn-shanghai",
+             *DictAt(personas, 0).FindString("basePresetId"));
+ 
+   base::Value::Dict active = GetActivePersona(prefs);

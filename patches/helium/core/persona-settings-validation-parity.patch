@@ -1,0 +1,241 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.html b/chrome/browser/resources/settings/privacy_page/persona_page.html
+index e3681146..47873d83 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -279,121 +279,121 @@
+         on-change="onWebGPUFeaturesChanged_"></cr-input>
+     <cr-input label="WebGL max texture size"
+         value="{{editablePersona_.gpu.webglProfile.maxTextureSize}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL max cube map texture"
+         value="{{editablePersona_.gpu.webglProfile.maxCubeMapTextureSize}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL max renderbuffer"
+         value="{{editablePersona_.gpu.webglProfile.maxRenderbufferSize}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL max viewport width"
+         value="{{editablePersona_.gpu.webglProfile.maxViewportWidth}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL max viewport height"
+         value="{{editablePersona_.gpu.webglProfile.maxViewportHeight}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL texture image units"
+         value="{{editablePersona_.gpu.webglProfile.maxTextureImageUnits}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL combined texture units"
+         value="{{editablePersona_.gpu.webglProfile.maxCombinedTextureImageUnits}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL vertex attribs"
+         value="{{editablePersona_.gpu.webglProfile.maxVertexAttribs}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL vertex texture units"
+         value="{{editablePersona_.gpu.webglProfile.maxVertexTextureImageUnits}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL vertex uniforms"
+         value="{{editablePersona_.gpu.webglProfile.maxVertexUniformVectors}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL fragment uniforms"
+         value="{{editablePersona_.gpu.webglProfile.maxFragmentUniformVectors}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL varying vectors"
+         value="{{editablePersona_.gpu.webglProfile.maxVaryingVectors}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL max samples"
+         value="{{editablePersona_.gpu.webglProfile.maxSamples}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL anisotropy"
+         value="{{editablePersona_.gpu.webglProfile.maxAnisotropy}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL2 max 3D texture"
+         value="{{editablePersona_.gpu.webgl2Profile.max3DTextureSize}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL2 texture layers"
+         value="{{editablePersona_.gpu.webgl2Profile.maxArrayTextureLayers}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL2 color attachments"
+         value="{{editablePersona_.gpu.webgl2Profile.maxColorAttachments}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL2 draw buffers"
+         value="{{editablePersona_.gpu.webgl2Profile.maxDrawBuffers}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL2 uniform block size"
+         value="{{editablePersona_.gpu.webgl2Profile.maxUniformBlockSize}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL2 uniform alignment"
+         value="{{editablePersona_.gpu.webgl2Profile.uniformBufferOffsetAlignment}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL2 texture LOD bias"
+         value="{{editablePersona_.gpu.webgl2Profile.maxTextureLodBias}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGL2 max samples"
+         value="{{editablePersona_.gpu.webgl2Profile.maxSamples}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU max texture 1D"
+         value="{{editablePersona_.gpu.webgpuProfile.maxTextureDimension1D}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU max texture 2D"
+         value="{{editablePersona_.gpu.webgpuProfile.maxTextureDimension2D}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU max texture 3D"
+         value="{{editablePersona_.gpu.webgpuProfile.maxTextureDimension3D}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU texture array layers"
+         value="{{editablePersona_.gpu.webgpuProfile.maxTextureArrayLayers}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU bind groups"
+         value="{{editablePersona_.gpu.webgpuProfile.maxBindGroups}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU bindings per group"
+         value="{{editablePersona_.gpu.webgpuProfile.maxBindingsPerBindGroup}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU uniform buffer binding"
+         value="{{editablePersona_.gpu.webgpuProfile.maxUniformBufferBindingSize}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU storage buffer binding"
+         value="{{editablePersona_.gpu.webgpuProfile.maxStorageBufferBindingSize}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU max buffer size"
+         value="{{editablePersona_.gpu.webgpuProfile.maxBufferSize}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU vertex buffers"
+         value="{{editablePersona_.gpu.webgpuProfile.maxVertexBuffers}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU vertex attributes"
+         value="{{editablePersona_.gpu.webgpuProfile.maxVertexAttributes}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU compute storage"
+         value="{{editablePersona_.gpu.webgpuProfile.maxComputeWorkgroupStorageSize}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU compute invocations"
+         value="{{editablePersona_.gpu.webgpuProfile.maxComputeInvocationsPerWorkgroup}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU workgroup X"
+         value="{{editablePersona_.gpu.webgpuProfile.maxComputeWorkgroupSizeX}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU workgroup Y"
+         value="{{editablePersona_.gpu.webgpuProfile.maxComputeWorkgroupSizeY}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU workgroup Z"
+         value="{{editablePersona_.gpu.webgpuProfile.maxComputeWorkgroupSizeZ}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="WebGPU workgroups per dimension"
+         value="{{editablePersona_.gpu.webgpuProfile.maxComputeWorkgroupsPerDimension}}"
+-        type="number"></cr-input>
++        type="number" min="1"></cr-input>
+     <cr-input label="CPU cores"
+         value="{{editablePersona_.hardware.hardwareConcurrency}}"
+         type="number"></cr-input>
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index c7ed44c8..0710ec98 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -346,6 +346,11 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     return ['standard', 'high'].includes(String(value || '').toLowerCase());
+   }
+ 
++  private isKnownFontHinting_(value: unknown): boolean {
++    return ['none', 'slight', 'medium', 'full']
++        .includes(String(value || '').toLowerCase());
++  }
++
+   private isKnownWebGpuFeature_(value: unknown): boolean {
+     return [
+       'depth32float-stencil8',
+@@ -536,9 +541,12 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const fontRenderingId = String(rendering['id'] || '');
+     const fontRenderingDisplayName = String(rendering['displayName'] || '');
+     const fontRenderingEngine = String(rendering['engine'] || '');
++    const fontHinting = String(rendering['hinting'] || '');
+     const fontAntialiasing = Boolean(rendering['antialiasing']);
+     const fontSubpixelRendering = Boolean(rendering['subpixelRendering']);
+     const fontLcdText = Boolean(rendering['lcdText']);
++    const fontTextGamma = this.numberValue_(rendering['textGamma']);
++    const fontTextContrast = this.numberValue_(rendering['textContrast']);
+     const networkType = String(network['type'] || '');
+     const networkEffectiveType = String(network['effectiveType'] || '');
+     const networkRtt = this.numberValue_(network['rtt']);
+@@ -1281,12 +1289,23 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+           warnings,
+           'Touch-enabled personas should expose at least one touch point.');
+     }
++    if (touchEnabled || maxTouchPoints > 0) {
++      this.addDraftWarning_(
++          warnings,
++          'Touch-enabled desktop personas are less common and may stand out.');
++    }
+     if (uaChMobile && width >= 1024 && height >= 720) {
+       this.addDraftWarning_(
+           warnings,
+           'Mobile UA-CH metadata does not match a desktop screen size.');
+     }
+ 
++    if (!this.isKnownFontHinting_(fontHinting)) {
++      this.addDraftWarning_(
++          warnings,
++          'Font rendering hinting should be none, slight, medium, or full.');
++    }
++
+     if ((this.contains_(locale, 'zh') || this.contains_(acceptLanguage, 'zh')) &&
+         !(this.contains_(fontPackSurface, 'zh') ||
+           this.contains_(fontPackSurface, 'chinese') ||
+@@ -1365,6 +1384,12 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+           warnings,
+           'Subpixel/LCD text should not be enabled when antialiasing is disabled.');
+     }
++    if (fontTextGamma < 0 || fontTextGamma > 3 || fontTextContrast < 0 ||
++        fontTextContrast > 2) {
++      this.addDraftWarning_(
++          warnings,
++          'Font rendering gamma/contrast values are outside common desktop ranges.');
++    }
+     return warnings;
+   }
+ 
+@@ -3431,7 +3456,8 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       if (shaped[key] === undefined || shaped[key] === null ||
+           (typeof shaped[key] === 'string' &&
+            !String(shaped[key]).trim()) ||
+-          Number.isNaN(Number(shaped[key]))) {
++          !Number.isFinite(Number(shaped[key])) ||
++          Number(shaped[key]) <= 0) {
+         shaped[key] = value;
+       }
+     }

@@ -1,0 +1,163 @@
+diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -915,6 +915,25 @@
+   return !snapshot.IsEnabled() || snapshot.allow_web_transport;
+ }
+
++bool HeliumPersonaAllowsDeviceApis(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_device_apis;
++}
++
++bool HeliumPersonaAllowsGamepads(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_gamepads;
++}
++
++bool HeliumPersonaAllowsMediaPerformanceMetrics(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() ||
++         (snapshot.allow_media_capture && !snapshot.reduce_system_info);
++}
++
+ }  // namespace
+
+ // Documents/frames
+@@ -1011,7 +1030,9 @@
+       &BindRenderFrameHostImpl<
+           &RenderFrameHostImpl::CreateDedicatedWorkerHostFactory>);
+
+-  map->Add<blink::mojom::DevicePostureProvider>(&BindDevicePostureProvider);
++  if (HeliumPersonaAllowsDeviceApis(host)) {
++    map->Add<blink::mojom::DevicePostureProvider>(&BindDevicePostureProvider);
++  }
+
+   map->Add<blink::mojom::FeatureObserver>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetFeatureObserver>);
+@@ -1028,8 +1049,10 @@
+         &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetFontAccessManager>);
+   }
+
+-  map->Add<device::mojom::GamepadHapticsManager>(
+-      &device::GamepadHapticsManager::Create);
++  if (HeliumPersonaAllowsGamepads(host)) {
++    map->Add<device::mojom::GamepadHapticsManager>(
++        &device::GamepadHapticsManager::Create);
++  }
+
+   map->Add<blink::mojom::GeolocationService>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetGeolocationService>);
+@@ -1222,33 +1245,35 @@
+           &RenderFrameHostImpl::BindKeySystemSupportReceiver>);
+ #endif
+
+-  map->Add<media::mojom::MediaMetricsProvider>(
+-      &BindRenderFrameHostImpl<
+-          &RenderFrameHostImpl::BindMediaMetricsProviderReceiver>);
+-
+-  map->Add<media::mojom::VideoEncoderMetricsProvider>(
+-      &BindRenderFrameHostImpl<
+-          &RenderFrameHostImpl::BindVideoEncoderMetricsProviderReceiver>);
+-
+-  map->Add<media::mojom::WebrtcVideoPerfRecorder>(base::BindRepeating(
+-      [](RenderFrameHost* host,
+-         mojo::PendingReceiver<media::mojom::WebrtcVideoPerfRecorder>
+-             receiver) {
+-        DCHECK_CURRENTLY_ON(BrowserThread::UI);
+-        media::WebrtcVideoPerfRecorder::Create(
+-            BrowserContextImpl::From(host->GetBrowserContext())
+-                ->GetWebrtcVideoPerfHistory(),
+-            std::move(receiver));
+-      }));
+-
+-  map->Add<media::mojom::WebrtcVideoPerfHistory>(base::BindRepeating(
+-      [](RenderFrameHost* host,
+-         mojo::PendingReceiver<media::mojom::WebrtcVideoPerfHistory> receiver) {
+-        DCHECK_CURRENTLY_ON(BrowserThread::UI);
+-        BrowserContextImpl::From(host->GetBrowserContext())
+-            ->GetWebrtcVideoPerfHistory()
+-            ->BindReceiver(std::move(receiver));
+-      }));
++  if (HeliumPersonaAllowsMediaPerformanceMetrics(host)) {
++    map->Add<media::mojom::MediaMetricsProvider>(
++        &BindRenderFrameHostImpl<
++            &RenderFrameHostImpl::BindMediaMetricsProviderReceiver>);
++
++    map->Add<media::mojom::VideoEncoderMetricsProvider>(
++        &BindRenderFrameHostImpl<
++            &RenderFrameHostImpl::BindVideoEncoderMetricsProviderReceiver>);
++
++    map->Add<media::mojom::WebrtcVideoPerfRecorder>(base::BindRepeating(
++        [](RenderFrameHost* host,
++           mojo::PendingReceiver<media::mojom::WebrtcVideoPerfRecorder>
++               receiver) {
++          DCHECK_CURRENTLY_ON(BrowserThread::UI);
++          media::WebrtcVideoPerfRecorder::Create(
++              BrowserContextImpl::From(host->GetBrowserContext())
++                  ->GetWebrtcVideoPerfHistory(),
++              std::move(receiver));
++        }));
++
++    map->Add<media::mojom::WebrtcVideoPerfHistory>(base::BindRepeating(
++        [](RenderFrameHost* host,
++           mojo::PendingReceiver<media::mojom::WebrtcVideoPerfHistory> receiver) {
++          DCHECK_CURRENTLY_ON(BrowserThread::UI);
++          BrowserContextImpl::From(host->GetBrowserContext())
++              ->GetWebrtcVideoPerfHistory()
++              ->BindReceiver(std::move(receiver));
++        }));
++  }
+
+ #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
+   map->Add<media::mojom::RemoterFactory>(
+@@ -1272,11 +1297,13 @@
+             host->GetStorageKey().origin(), std::move(receiver));
+       }));
+
+-  map->Add<media::mojom::VideoDecodePerfHistory>(base::BindRepeating(
+-      [](RenderFrameHost* host,
+-         mojo::PendingReceiver<media::mojom::VideoDecodePerfHistory> receiver) {
+-        host->GetProcess()->BindVideoDecodePerfHistory(std::move(receiver));
+-      }));
++  if (HeliumPersonaAllowsMediaPerformanceMetrics(host)) {
++    map->Add<media::mojom::VideoDecodePerfHistory>(base::BindRepeating(
++        [](RenderFrameHost* host,
++           mojo::PendingReceiver<media::mojom::VideoDecodePerfHistory> receiver) {
++          host->GetProcess()->BindVideoDecodePerfHistory(std::move(receiver));
++        }));
++  }
+
+   map->Add<network::mojom::RestrictedCookieManager>(
+       &BindRenderFrameHostImpl<
+@@ -1485,15 +1511,18 @@
+   map->Add<blink::mojom::AnchorElementInteractionHost>(
+       &AnchorElementInteractionHostImpl::Create);
+
+-  map->Add<device::mojom::VibrationManager>(
+-      [](RenderFrameHost* host,
+-         mojo::PendingReceiver<device::mojom::VibrationManager> receiver) {
+-        GetDeviceService().BindVibrationManager(
+-            std::move(receiver), static_cast<RenderFrameHostImpl*>(host)
+-                                     ->CreateVibrationManagerListener());
+-      });
++  if (HeliumPersonaAllowsDeviceApis(host)) {
++    map->Add<device::mojom::VibrationManager>(
++        [](RenderFrameHost* host,
++           mojo::PendingReceiver<device::mojom::VibrationManager> receiver) {
++          GetDeviceService().BindVibrationManager(
++              std::move(receiver), static_cast<RenderFrameHostImpl*>(host)
++                                       ->CreateVibrationManagerListener());
++        });
++  }
+
+ #if BUILDFLAG(IS_CHROMEOS)
+-  if (base::FeatureList::IsEnabled(features::kWebLockScreenApi)) {
++  if (base::FeatureList::IsEnabled(features::kWebLockScreenApi) &&
++      HeliumPersonaAllowsDeviceApis(host)) {
+     map->Add<blink::mojom::LockScreenService>(&LockScreenServiceImpl::Create);
+   }
+ #endif

@@ -1,0 +1,38 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index cddbe55..27a0f3f 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -1422,6 +1422,22 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     }).filter(brand => Boolean(brand.brand));
+   }
+ 
++  private deriveUaChFullVersionList_(
++      brands: Array<Record<string, unknown>>, fullVersion: unknown):
++      Array<Record<string, unknown>> {
++    const normalizedFullVersion = this.stringValue_(fullVersion);
++    return brands.map(brand => {
++      const name = this.stringValue_(brand['brand']);
++      const shortVersion = this.stringValue_(brand['version']);
++      return {
++        brand: name,
++        version: normalizedFullVersion && !this.isUaChGreaseBrand_(name) ?
++            normalizedFullVersion :
++            shortVersion,
++      };
++    }).filter(brand => Boolean(brand.brand));
++  }
++
+   private uaChBrandsFromInput_(value: string): Array<Record<string, string>> {
+     return value.split(',')
+         .map(item => item.trim())
+@@ -1840,7 +1856,9 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+           this.makeRandomUaChGreaseBrand_(),
+         ]);
+     persona.uaCh['fullVersionList'] =
+-        this.uaChFullVersionListForDisplay_(persona.uaCh);
++        this.deriveUaChFullVersionList_(
++            persona.uaCh['brands'] as Array<Record<string, unknown>>,
++            persona.uaCh['fullVersion']);
+   }
+ 
+   private personaOsFamily_(persona: PersonaRecord): string {

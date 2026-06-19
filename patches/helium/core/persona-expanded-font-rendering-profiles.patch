@@ -1,0 +1,154 @@
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -305,20 +305,45 @@
+   return MakeFontRendering("windows-cleartype", "Windows ClearType",
+                            "DirectWrite", "full", true, true, false,
+                            true, false, false, 1.4, 0.5);
++}
++
++base::Value::Dict MakeWindowsGrayscaleRendering() {
++  return MakeFontRendering("windows-grayscale", "Windows grayscale",
++                           "DirectWrite", "medium", true, false, false,
++                           false, false, false, 1.4, 0.0);
+ }
+ 
+ base::Value::Dict MakeMacCoreTextRendering() {
+-  return MakeFontRendering("macos-coretext", "macOS CoreText",
++  return MakeFontRendering("macos-coretext", "macOS CoreText Retina",
+                            "CoreText", "none", true, false, true,
+                            false, false, false, 1.4, 0.0);
+ }
+ 
++base::Value::Dict MakeMacCoreTextLegacyRendering() {
++  return MakeFontRendering("macos-coretext-legacy", "macOS CoreText legacy",
++                           "CoreText", "none", true, false, false,
++                           false, false, false, 1.4, 0.0);
++}
++
+ base::Value::Dict MakeLinuxFreeTypeRendering() {
+   return MakeFontRendering("linux-freetype", "Linux FreeType",
+                            "FreeType", "slight", true, true, false,
+                            false, true, false, 1.4, 0.0);
+ }
+ 
++base::Value::Dict MakeLinuxFreeTypeFullRendering() {
++  return MakeFontRendering("linux-freetype-full", "Linux FreeType full hinting",
++                           "FreeType", "full", true, true, false,
++                           true, true, false, 1.4, 0.2);
++}
++
++base::Value::Dict MakeLinuxFreeTypeGrayscaleRendering() {
++  return MakeFontRendering("linux-freetype-grayscale",
++                           "Linux FreeType grayscale",
++                           "FreeType", "slight", true, false, false,
++                           false, true, false, 1.4, 0.0);
++}
++
+ base::Value::Dict MakeGenericGrayRendering() {
+   return MakeFontRendering("generic-grayscale", "Generic grayscale",
+                            "Skia", "medium", true, false, false,
+@@ -330,8 +355,12 @@
+ base::Value::List GetBuiltinFontRenderingProfiles() {
+   base::Value::List profiles;
+   profiles.Append(MakeWindowsClearTypeRendering());
++  profiles.Append(MakeWindowsGrayscaleRendering());
+   profiles.Append(MakeMacCoreTextRendering());
++  profiles.Append(MakeMacCoreTextLegacyRendering());
+   profiles.Append(MakeLinuxFreeTypeRendering());
++  profiles.Append(MakeLinuxFreeTypeFullRendering());
++  profiles.Append(MakeLinuxFreeTypeGrayscaleRendering());
+   profiles.Append(MakeGenericGrayRendering());
+   return profiles;
+ }
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -39,6 +39,18 @@
+   return false;
+ }
+ 
++bool ProfilesContainId(const base::Value::List& profiles,
++                       std::string_view expected_id) {
++  for (const base::Value& profile : profiles) {
++    const base::Value::Dict* dict = profile.GetIfDict();
++    const std::string* id = dict ? dict->FindString("id") : nullptr;
++    if (id && *id == expected_id) {
++      return true;
++    }
++  }
++  return false;
++}
++
+ }  // namespace
+ 
+ TEST(HeliumPersonaPrefsTest, BuiltinPresetsContainCompleteSystemImage) {
+@@ -82,9 +94,16 @@
+   EXPECT_TRUE(font_rendering->FindBool("antialiasing").value_or(false));
+ 
+   base::Value::List rendering_profiles = GetBuiltinFontRenderingProfiles();
+-  ASSERT_EQ(4u, rendering_profiles.size());
+-  EXPECT_EQ("macos-coretext",
+-            *DictAt(rendering_profiles, 1).FindString("id"));
++  ASSERT_GE(rendering_profiles.size(), 8u);
++  EXPECT_TRUE(ProfilesContainId(rendering_profiles, "windows-cleartype"));
++  EXPECT_TRUE(ProfilesContainId(rendering_profiles, "windows-grayscale"));
++  EXPECT_TRUE(ProfilesContainId(rendering_profiles, "macos-coretext"));
++  EXPECT_TRUE(ProfilesContainId(rendering_profiles, "macos-coretext-legacy"));
++  EXPECT_TRUE(ProfilesContainId(rendering_profiles, "linux-freetype"));
++  EXPECT_TRUE(ProfilesContainId(rendering_profiles, "linux-freetype-full"));
++  EXPECT_TRUE(ProfilesContainId(rendering_profiles,
++                                "linux-freetype-grayscale"));
++  EXPECT_TRUE(ProfilesContainId(rendering_profiles, "generic-grayscale"));
+ 
+   const base::Value::Dict& current = DictAt(presets, 0);
+   EXPECT_TRUE(current.FindBool("passthrough").value_or(false));
+@@ -162,10 +181,12 @@
+   base::Value::Dict state = GetPersonaState(prefs);
+   const base::Value::List* profiles = state.FindList("fontRenderingProfiles");
+   ASSERT_TRUE(profiles);
+-  ASSERT_EQ(4u, profiles->size());
++  const size_t builtin_profile_count = GetBuiltinFontRenderingProfiles().size();
++  ASSERT_EQ(builtin_profile_count, profiles->size());
+   EXPECT_EQ("DirectWrite", *DictAt(*profiles, 0).FindString("engine"));
+-  EXPECT_EQ("CoreText", *DictAt(*profiles, 1).FindString("engine"));
+-  EXPECT_EQ("FreeType", *DictAt(*profiles, 2).FindString("engine"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "windows-grayscale"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "macos-coretext"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "linux-freetype-full"));
+   ASSERT_TRUE(DictAt(*profiles, 0).FindBool("builtin").value_or(false));
+ 
+   base::Value::Dict custom;
+@@ -186,9 +207,11 @@
+   state = GetPersonaState(prefs);
+   profiles = state.FindList("fontRenderingProfiles");
+   ASSERT_TRUE(profiles);
+-  ASSERT_EQ(5u, profiles->size());
+-  EXPECT_EQ("custom-lcd", *DictAt(*profiles, 4).FindString("id"));
+-  EXPECT_FALSE(DictAt(*profiles, 4).FindBool("builtin").value_or(true));
++  ASSERT_EQ(builtin_profile_count + 1, profiles->size());
++  const base::Value::Dict& custom_profile =
++      DictAt(*profiles, builtin_profile_count);
++  EXPECT_EQ("custom-lcd", *custom_profile.FindString("id"));
++  EXPECT_FALSE(custom_profile.FindBool("builtin").value_or(true));
+ 
+   base::Value::Dict copied_builtin = DictAt(*profiles, 0).Clone();
+   copied_builtin.Set("displayName", "Copied ClearType");
+@@ -196,7 +219,7 @@
+   state = GetPersonaState(prefs);
+   profiles = state.FindList("fontRenderingProfiles");
+   ASSERT_TRUE(profiles);
+-  ASSERT_EQ(6u, profiles->size());
++  ASSERT_EQ(builtin_profile_count + 2, profiles->size());
+   EXPECT_EQ("windows-cleartype", *DictAt(*profiles, 0).FindString("id"));
+   const base::Value::Dict* copied = nullptr;
+   for (const base::Value& value : *profiles) {
+@@ -215,7 +238,9 @@
+   state = GetPersonaState(prefs);
+   profiles = state.FindList("fontRenderingProfiles");
+   ASSERT_TRUE(profiles);
+-  EXPECT_EQ(4u, profiles->size());
++  EXPECT_EQ(builtin_profile_count + 1, profiles->size());
++  EXPECT_TRUE(ProfilesContainId(*profiles, "custom-windows-cleartype"));
++  EXPECT_FALSE(ProfilesContainId(*profiles, "custom-lcd"));
+ }
+ 
+ TEST(HeliumPersonaPrefsTest, ValidationWarnsButAllowsConflicts) {

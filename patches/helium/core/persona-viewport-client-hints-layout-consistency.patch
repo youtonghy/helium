@@ -1,0 +1,42 @@
+diff --git a/content/browser/client_hints/client_hints.cc b/content/browser/client_hints/client_hints.cc
+index 38831bf..5e92611 100644
+--- a/content/browser/client_hints/client_hints.cc
++++ b/content/browser/client_hints/client_hints.cc
+@@ -540,18 +540,10 @@ void AddPersonaViewportWidthHeader(
+     const GURL& url,
+     FrameTreeNode* frame_tree_node,
+     ClientHintsControllerDelegate* delegate,
+-    const blink::HeliumPersonaSnapshot& persona_snapshot,
++    const blink::HeliumPersonaSnapshot&,
+     bool use_deprecated_version = false) {
+-  if (persona_snapshot.screen_width <= 0) {
+-    AddViewportWidthHeader(headers, context, url, frame_tree_node, delegate,
+-                           use_deprecated_version);
+-    return;
+-  }
+-  SetHeaderToInt(headers,
+-                 use_deprecated_version
+-                     ? WebClientHintsType::kViewportWidth_DEPRECATED
+-                     : WebClientHintsType::kViewportWidth,
+-                 persona_snapshot.screen_width);
++  AddViewportWidthHeader(headers, context, url, frame_tree_node, delegate,
++                         use_deprecated_version);
+ }
+ 
+ void AddPersonaViewportHeightHeader(
+@@ -560,13 +552,8 @@ void AddPersonaViewportHeightHeader(
+     const GURL& url,
+     FrameTreeNode* frame_tree_node,
+     ClientHintsControllerDelegate* delegate,
+-    const blink::HeliumPersonaSnapshot& persona_snapshot) {
+-  if (persona_snapshot.screen_height <= 0) {
+-    AddViewportHeightHeader(headers, context, url, frame_tree_node, delegate);
+-    return;
+-  }
+-  SetHeaderToInt(headers, WebClientHintsType::kViewportHeight,
+-                 persona_snapshot.screen_height);
++    const blink::HeliumPersonaSnapshot&) {
++  AddViewportHeightHeader(headers, context, url, frame_tree_node, delegate);
+ }
+ 
+ void AddRttHeader(net::HttpRequestHeaders* headers,

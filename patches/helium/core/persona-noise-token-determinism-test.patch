@@ -1,0 +1,201 @@
+--- /dev/null
++++ b/content/browser/helium_noise/noise_token_data_unittest.cc
+@@ -0,0 +1,188 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "content/browser/helium_noise/noise_token_data.h"
++
++#include <cstdint>
++#include <string>
++#include <utility>
++
++#include "base/check.h"
++#include "content/public/test/browser_task_environment.h"
++#include "content/public/test/test_browser_context.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "url/gurl.h"
++#include "url/origin.h"
++
++namespace content {
++
++namespace {
++
++blink::HeliumPersonaSnapshot MakeSeededPersona(std::string noise_seed) {
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  snapshot.passthrough = false;
++  snapshot.id = "windows-us";
++  snapshot.name = "Windows 11 / en-US / America/New_York";
++  snapshot.device = "Desktop";
++  snapshot.os = "Windows 11";
++  snapshot.user_agent =
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
++  snapshot.platform = "Win32";
++  snapshot.noise_seed = std::move(noise_seed);
++
++  snapshot.ua_ch_platform = "Windows";
++  snapshot.ua_ch_platform_version = "15.0.0";
++  snapshot.ua_ch_architecture = "x86";
++  snapshot.ua_ch_bitness = "64";
++  snapshot.ua_ch_full_version = "126.0.6478.127";
++  snapshot.ua_ch_brands = {{"Chromium", "126"}, {"Google Chrome", "126"}};
++
++  snapshot.timezone = "America/New_York";
++  snapshot.locale = "en-US";
++  snapshot.accept_language = "en-US,en;q=0.9";
++  snapshot.navigator_languages = {"en-US", "en"};
++
++  snapshot.gpu_vendor = "Intel Inc.";
++  snapshot.gpu_renderer = "ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)";
++  snapshot.webgpu_adapter = "Intel Iris Xe Graphics";
++  snapshot.gpu_driver = "31.0.101.5534";
++
++  snapshot.screen_width = 1920;
++  snapshot.screen_height = 1080;
++  snapshot.avail_width = 1920;
++  snapshot.avail_height = 1040;
++  snapshot.device_scale_factor = 1.0;
++  snapshot.color_depth = 24;
++  snapshot.pixel_depth = 24;
++  snapshot.refresh_rate = 60;
++
++  snapshot.hardware_concurrency = 8;
++  snapshot.device_memory = 8;
++
++  snapshot.font_pack_id = "windows-11-en";
++  snapshot.font_pack_name = "Windows 11 English";
++  snapshot.font_families = {"Arial", "Calibri", "Segoe UI"};
++  snapshot.font_aliases = {"sans-serif=Arial", "system-ui=Segoe UI"};
++  snapshot.font_rendering_id = "windows-cleartype";
++  snapshot.font_rendering_engine = "DirectWrite";
++  snapshot.font_antialiasing = true;
++  snapshot.font_subpixel_rendering = true;
++  snapshot.font_lcd_text = true;
++
++  return snapshot;
++}
++
++uint64_t TokenValue(const blink::HeliumNoiseTokenMap& tokens,
++                    blink::HeliumNoiseFeature feature) {
++  auto it = tokens.find(feature);
++  CHECK(it != tokens.end());
++  return it->second.Value();
++}
++
++bool AnyFeatureChanged(const blink::HeliumNoiseTokenMap& before,
++                       const blink::HeliumNoiseTokenMap& after) {
++  return TokenValue(before, blink::HeliumNoiseFeature::kCanvas) !=
++             TokenValue(after, blink::HeliumNoiseFeature::kCanvas) ||
++         TokenValue(before, blink::HeliumNoiseFeature::kAudio) !=
++             TokenValue(after, blink::HeliumNoiseFeature::kAudio) ||
++         TokenValue(before, blink::HeliumNoiseFeature::kHardware) !=
++             TokenValue(after, blink::HeliumNoiseFeature::kHardware);
++}
++
++class HeliumNoiseTokenDataTest : public testing::Test {
++ protected:
++  BrowserTaskEnvironment task_environment_;
++  TestBrowserContext browser_context_;
++};
++
++TEST_F(HeliumNoiseTokenDataTest,
++       SeededPersonaTokensStayStableAcrossSessionRegeneration) {
++  const url::Origin origin =
++      url::Origin::Create(GURL("https://fingerprint.example/"));
++  blink::HeliumPersonaSnapshot persona = MakeSeededPersona("manual-seed");
++
++  const blink::HeliumNoiseTokenMap before =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
++  HeliumNoiseTokenData::RegenerateTokens(&browser_context_);
++  const blink::HeliumNoiseTokenMap after =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
++
++  EXPECT_EQ(3u, before.size());
++  EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kCanvas),
++            TokenValue(after, blink::HeliumNoiseFeature::kCanvas));
++  EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kAudio),
++            TokenValue(after, blink::HeliumNoiseFeature::kAudio));
++  EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kHardware),
++            TokenValue(after, blink::HeliumNoiseFeature::kHardware));
++}
++
++TEST_F(HeliumNoiseTokenDataTest,
++       SeededPersonaTokensVaryByOriginFeatureAndPersonaSalt) {
++  const url::Origin origin =
++      url::Origin::Create(GURL("https://fingerprint.example/"));
++  const url::Origin other_origin =
++      url::Origin::Create(GURL("https://other.example/"));
++  blink::HeliumPersonaSnapshot persona = MakeSeededPersona("manual-seed");
++  blink::HeliumPersonaSnapshot different_persona = persona;
++  different_persona.locale = "de-DE";
++  different_persona.timezone = "Europe/Berlin";
++  blink::HeliumPersonaSnapshot different_seed =
++      MakeSeededPersona("manual-seed-2");
++
++  const blink::HeliumNoiseTokenMap tokens =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
++  const blink::HeliumNoiseTokenMap other_origin_tokens =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, other_origin,
++                                      persona);
++  const blink::HeliumNoiseTokenMap different_persona_tokens =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, origin,
++                                      different_persona);
++  const blink::HeliumNoiseTokenMap different_seed_tokens =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, origin,
++                                      different_seed);
++
++  EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
++            TokenValue(tokens, blink::HeliumNoiseFeature::kAudio));
++  EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
++            TokenValue(tokens, blink::HeliumNoiseFeature::kHardware));
++
++  EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
++            TokenValue(other_origin_tokens,
++                       blink::HeliumNoiseFeature::kCanvas));
++  EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
++            TokenValue(different_persona_tokens,
++                       blink::HeliumNoiseFeature::kCanvas));
++  EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
++            TokenValue(different_seed_tokens,
++                       blink::HeliumNoiseFeature::kCanvas));
++}
++
++TEST_F(HeliumNoiseTokenDataTest,
++       PersonaWithoutNoiseSeedUsesRegeneratableSessionTokens) {
++  const url::Origin origin =
++      url::Origin::Create(GURL("https://fingerprint.example/"));
++  blink::HeliumPersonaSnapshot persona = MakeSeededPersona(std::string());
++
++  const blink::HeliumNoiseTokenMap first =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
++  const blink::HeliumNoiseTokenMap second =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
++
++  EXPECT_EQ(TokenValue(first, blink::HeliumNoiseFeature::kCanvas),
++            TokenValue(second, blink::HeliumNoiseFeature::kCanvas));
++
++  HeliumNoiseTokenData::RegenerateTokens(&browser_context_);
++  const blink::HeliumNoiseTokenMap regenerated =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
++
++  EXPECT_TRUE(AnyFeatureChanged(first, regenerated));
++}
++
++}  // namespace
++
++}  // namespace content
+--- a/content/test/BUILD.gn
++++ b/content/test/BUILD.gn
+@@ -2709,6 +2709,7 @@
+     "../browser/generic_sensor/frame_sensor_provider_proxy_unittest.cc",
+     "../browser/generic_sensor/web_contents_sensor_provider_proxy_unittest.cc",
+     "../browser/geolocation/geolocation_service_impl_unittest.cc",
++    "../browser/helium_noise/noise_token_data_unittest.cc",
+     "../browser/gpu/gpu_data_manager_impl_private_unittest.cc",
+     "../browser/handwriting/handwriting_recognition_service_impl_unittest.cc",
+     "../browser/idle/idle_manager_unittest.cc",

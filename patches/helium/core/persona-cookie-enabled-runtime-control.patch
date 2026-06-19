@@ -1,0 +1,196 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index fc296a28..39871341 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -932,6 +932,7 @@ blink::HeliumPersonaSnapshot ToBlinkPersonaSnapshot(
+   target.audio_noise = source.audio_noise;
+   target.font_metric_noise = source.font_metric_noise;
+   target.pdf_viewer_enabled = source.pdf_viewer_enabled;
++  target.cookie_enabled = source.cookie_enabled;
+   target.storage_quota_gb = source.storage_quota_gb;
+   target.do_not_track_enabled = source.do_not_track_enabled;
+   target.speech_voice_name = source.speech_voice_name;
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.html b/chrome/browser/resources/settings/privacy_page/persona_page.html
+index 670bea67..bf4571f0 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -516,6 +516,9 @@
+     <cr-checkbox checked="{{editablePersona_.advanced.pdfViewerEnabled}}">
+       PDF viewer plugin surface
+     </cr-checkbox>
++    <cr-checkbox checked="{{editablePersona_.advanced.cookieEnabled}}">
++      navigator.cookieEnabled
++    </cr-checkbox>
+     <cr-input label="Storage quota (GB, 0 = auto)"
+         value="{{editablePersona_.advanced.storageQuotaGb}}"
+         type="number"></cr-input>
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 7d444cba..417308c2 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -580,6 +580,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       audioNoise: true,
+       fontMetricNoise: true,
+       pdfViewerEnabled: true,
++      cookieEnabled: true,
+       speechVoiceLocalService: true,
+       doNotTrackEnabled: false,
+       speechVoiceDefault: true,
+@@ -715,7 +716,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     }
+     const booleanAdvancedKeys = [
+       'clientHintsEnabled', 'reduceSystemInfo', 'canvasNoise',
+-      'audioNoise', 'fontMetricNoise', 'pdfViewerEnabled',
++      'audioNoise', 'fontMetricNoise', 'pdfViewerEnabled', 'cookieEnabled',
+       'speechVoiceLocalService', 'speechVoiceDefault', 'doNotTrackEnabled', 'allowGeolocation',
+       'allowMediaCapture', 'virtualMediaDevices', 'allowDisplayCapture',
+       'allowDeviceApis', 'allowGamepads', 'allowSensorApis', 'allowMidi',
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index f2b56e5d..1e16cf3d 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -698,6 +698,7 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   advanced->Set("audioNoise", false);
+   advanced->Set("fontMetricNoise", false);
+   advanced->Set("pdfViewerEnabled", false);
++  advanced->Set("cookieEnabled", false);
+   advanced->Set("storageQuotaGb", 42.0);
+   advanced->Set("doNotTrackEnabled", true);
+   advanced->Set("speechVoiceName", "Manual Voice");
+@@ -770,6 +771,9 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   EXPECT_FALSE(runtime.FindDict("advanced")
+                    ->FindBool("pdfViewerEnabled")
+                    .value_or(true));
++  EXPECT_FALSE(runtime.FindDict("advanced")
++                   ->FindBool("cookieEnabled")
++                   .value_or(true));
+   EXPECT_EQ(42.0, runtime.FindDict("advanced")
+                       ->FindDouble("storageQuotaGb")
+                       .value_or(0));
+@@ -827,6 +831,7 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   EXPECT_FALSE(snapshot.client_hints_enabled);
+   EXPECT_TRUE(snapshot.reduce_system_info);
+   EXPECT_FALSE(snapshot.pdf_viewer_enabled);
++  EXPECT_FALSE(snapshot.cookie_enabled);
+   EXPECT_EQ(42.0, snapshot.storage_quota_gb);
+   EXPECT_TRUE(snapshot.do_not_track_enabled);
+   EXPECT_EQ("Manual Voice", snapshot.speech_voice_name);
+diff --git a/components/helium_persona/persona_presets.cc b/components/helium_persona/persona_presets.cc
+index e27613be..5954be7a 100644
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -264,6 +264,7 @@ base::Value::Dict MakeAdvanced(bool client_hints_enabled,
+   advanced.Set("audioNoise", audio_noise);
+   advanced.Set("fontMetricNoise", font_metric_noise);
+   advanced.Set("pdfViewerEnabled", true);
++  advanced.Set("cookieEnabled", true);
+   advanced.Set("storageQuotaGb", 0);
+   advanced.Set("doNotTrackEnabled", false);
+   advanced.Set("speechVoiceName", "");
+diff --git a/components/helium_persona/persona_snapshot.cc b/components/helium_persona/persona_snapshot.cc
+index 8331831d..3587a30f 100644
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -336,6 +336,8 @@ PersonaSnapshot MakePersonaSnapshot(const base::Value::Dict& persona) {
+       GetNestedBool(persona, "advanced", "fontMetricNoise", true);
+   snapshot.pdf_viewer_enabled =
+       GetNestedBool(persona, "advanced", "pdfViewerEnabled", true);
++  snapshot.cookie_enabled =
++      GetNestedBool(persona, "advanced", "cookieEnabled", true);
+   snapshot.storage_quota_gb =
+       GetNestedDouble(persona, "advanced", "storageQuotaGb");
+   snapshot.do_not_track_enabled =
+@@ -590,6 +592,7 @@ base::Value::Dict PersonaSnapshotToValue(const PersonaSnapshot& snapshot) {
+   advanced.Set("audioNoise", snapshot.audio_noise);
+   advanced.Set("fontMetricNoise", snapshot.font_metric_noise);
+   advanced.Set("pdfViewerEnabled", snapshot.pdf_viewer_enabled);
++  advanced.Set("cookieEnabled", snapshot.cookie_enabled);
+   advanced.Set("storageQuotaGb", snapshot.storage_quota_gb);
+   advanced.Set("doNotTrackEnabled", snapshot.do_not_track_enabled);
+   advanced.Set("speechVoiceName", snapshot.speech_voice_name);
+diff --git a/components/helium_persona/persona_snapshot.h b/components/helium_persona/persona_snapshot.h
+index daa58cee..b90afc78 100644
+--- a/components/helium_persona/persona_snapshot.h
++++ b/components/helium_persona/persona_snapshot.h
+@@ -136,6 +136,7 @@ struct COMPONENT_EXPORT(HELIUM_PERSONA) PersonaSnapshot {
+   bool audio_noise = true;
+   bool font_metric_noise = true;
+   bool pdf_viewer_enabled = true;
++  bool cookie_enabled = true;
+   double storage_quota_gb = 0;
+   bool do_not_track_enabled = false;
+   std::string speech_voice_name;
+diff --git a/content/browser/helium_noise/noise_token_data.cc b/content/browser/helium_noise/noise_token_data.cc
+index 14ed858c..48836f80 100644
+--- a/content/browser/helium_noise/noise_token_data.cc
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -214,6 +214,7 @@ std::string PersonaNoiseSalt(
+   AppendSaltPart(salt, persona_snapshot.audio_noise);
+   AppendSaltPart(salt, persona_snapshot.font_metric_noise);
+   AppendSaltPart(salt, persona_snapshot.pdf_viewer_enabled);
++  AppendSaltPart(salt, persona_snapshot.cookie_enabled);
+   AppendSaltPart(salt, persona_snapshot.storage_quota_gb);
+   AppendSaltPart(salt, persona_snapshot.do_not_track_enabled);
+   AppendSaltPart(salt, persona_snapshot.speech_voice_name);
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot.h b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+index 18916611..d908323f 100644
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -136,6 +136,7 @@ struct BLINK_COMMON_EXPORT HeliumPersonaSnapshot {
+   bool audio_noise = true;
+   bool font_metric_noise = true;
+   bool pdf_viewer_enabled = true;
++  bool cookie_enabled = true;
+   double storage_quota_gb = 0;
+   bool do_not_track_enabled = false;
+   std::string speech_voice_name;
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+index c1acc50f..442e6659 100644
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -441,6 +441,9 @@ struct BLINK_COMMON_EXPORT
+       const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.pdf_viewer_enabled;
+   }
++  static bool cookie_enabled(const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.cookie_enabled;
++  }
+   static double storage_quota_gb(
+       const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.storage_quota_gb;
+@@ -708,6 +711,7 @@ inline bool StructTraits<blink::mojom::HeliumPersonaSnapshotDataView,
+   out->audio_noise = data.audio_noise();
+   out->font_metric_noise = data.font_metric_noise();
+   out->pdf_viewer_enabled = data.pdf_viewer_enabled();
++  out->cookie_enabled = data.cookie_enabled();
+   out->storage_quota_gb = data.storage_quota_gb();
+   out->do_not_track_enabled = data.do_not_track_enabled();
+   out->speech_voice_local_service = data.speech_voice_local_service();
+diff --git a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+index 26fc5d09..17441367 100644
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -126,6 +126,7 @@ struct HeliumPersonaSnapshot {
+   bool audio_noise;
+   bool font_metric_noise;
+   bool pdf_viewer_enabled;
++  bool cookie_enabled;
+   double storage_quota_gb;
+   bool do_not_track_enabled;
+   string speech_voice_name;
+diff --git a/third_party/blink/renderer/core/frame/navigator.cc b/third_party/blink/renderer/core/frame/navigator.cc
+index 497c15ed..0e0176d1 100644
+--- a/third_party/blink/renderer/core/frame/navigator.cc
++++ b/third_party/blink/renderer/core/frame/navigator.cc
+@@ -72,6 +72,11 @@ bool Navigator::cookieEnabled() const {
+   if (!DomWindow())
+     return false;
+ 
++  if (const HeliumPersonaSnapshot* snapshot =
++          PersonaSpoofingHelper::Get(GetExecutionContext())) {
++    return snapshot->cookie_enabled;
++  }
++
+   if (DomWindow()->GetStorageKey().IsThirdPartyContext()) {
+     DomWindow()->CountUse(WebFeature::kNavigatorCookieEnabledThirdParty);
+   }

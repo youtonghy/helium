@@ -1,0 +1,170 @@
+diff --git a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
+@@ -61,6 +61,7 @@ class CORE_EXPORT PersonaSpoofingHelper {
+   static bool ShouldBlockBadging(const ExecutionContext* context);
+   static bool ShouldBlockWebShare(const ExecutionContext* context);
+   static bool ShouldBlockEyeDropper(const ExecutionContext* context);
++  static bool ShouldBlockSpeechSynthesis(const ExecutionContext* context);
+   static bool ShouldBlockPermission(
+       const ExecutionContext* context,
+       mojom::blink::PermissionName permission_name);
+diff --git a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
+@@ -351,6 +351,12 @@ bool PersonaSpoofingHelper::ShouldBlockEyeDropper(
+     const ExecutionContext* context) {
+   return ShouldBlockIfNotAllowed(context,
+                                  &HeliumPersonaSnapshot::allow_eye_dropper);
++}
++
++bool PersonaSpoofingHelper::ShouldBlockSpeechSynthesis(
++    const ExecutionContext* context) {
++  return ShouldBlockIfNotAllowed(
++      context, &HeliumPersonaSnapshot::allow_speech_synthesis);
+ }
+ 
+ bool PersonaSpoofingHelper::ShouldBlockPermission(
+diff --git a/third_party/blink/renderer/modules/speech/speech_synthesis.cc b/third_party/blink/renderer/modules/speech/speech_synthesis.cc
+--- a/third_party/blink/renderer/modules/speech/speech_synthesis.cc
++++ b/third_party/blink/renderer/modules/speech/speech_synthesis.cc
+@@ -178,6 +178,10 @@ void SetPersonaSpeechVoiceList(
+           MakePersonaSpeechVoice(context)));
+ }
+ 
++bool ShouldBlockSpeechSynthesis(ExecutionContext* context) {
++  return PersonaSpoofingHelper::ShouldBlockSpeechSynthesis(context);
++}
++
+ }  // namespace
+ 
+ 
+@@ -216,6 +220,15 @@ SpeechSynthesis::SpeechSynthesis(LocalDOMWindow& window)
+ void SpeechSynthesis::OnSetVoiceList(
+     Vector<mojom::blink::SpeechSynthesisVoicePtr> mojom_voices) {
+   if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    if (ShouldBlockSpeechSynthesis(GetExecutionContext())) {
++      if (!voice_list_.empty()) {
++        voice_list_.clear();
++        VoicesDidChange();
++      }
++      receiver_.reset();
++      mojom_synthesis_.reset();
++      return;
++    }
+     if (!HasPersonaSpeechVoiceList(voice_list_, GetExecutionContext())) {
+       SetPersonaSpeechVoiceList(voice_list_, GetExecutionContext());
+       VoicesDidChange();
+@@ -231,6 +244,12 @@ void SpeechSynthesis::OnSetVoiceList(
+ }
+ 
+ const HeapVector<Member<SpeechSynthesisVoice>>& SpeechSynthesis::getVoices() {
++  if (ShouldBlockSpeechSynthesis(GetExecutionContext())) {
++    voice_list_.clear();
++    receiver_.reset();
++    mojom_synthesis_.reset();
++    return voice_list_;
++  }
+   if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
+     if (!HasPersonaSpeechVoiceList(voice_list_, GetExecutionContext()))
+       SetPersonaSpeechVoiceList(voice_list_, GetExecutionContext());
+@@ -247,6 +266,9 @@ const HeapVector<Member<SpeechSynthesisVoice>>& SpeechSynthesis::getVoices() {
+ }
+ 
+ bool SpeechSynthesis::speaking() const {
++  if (ShouldBlockSpeechSynthesis(GetExecutionContext()))
++    return false;
++
+   // If we have a current speech utterance, then that means we're assumed to be
+   // in a speaking state. This state is independent of whether the utterance
+   // happens to be paused.
+@@ -254,12 +276,18 @@ bool SpeechSynthesis::speaking() const {
+ }
+ 
+ bool SpeechSynthesis::pending() const {
++  if (ShouldBlockSpeechSynthesis(GetExecutionContext()))
++    return false;
++
+   // This is true if there are any utterances that have not started.
+   // That means there will be more than one in the queue.
+   return utterance_queue_.size() > 1;
+ }
+ 
+ bool SpeechSynthesis::paused() const {
++  if (ShouldBlockSpeechSynthesis(GetExecutionContext()))
++    return false;
++
+   return is_paused_;
+ }
+ 
+@@ -268,7 +296,13 @@ bool SpeechSynthesis::paused() const {
+                             SpeechSynthesisUtterance* utterance) {
+   DCHECK(utterance);
+   if (!script_state->ContextIsValid())
++    return;
++
++  if (ShouldBlockSpeechSynthesis(GetExecutionContext())) {
++    FireErrorEvent(utterance, 0 /* char_index */,
++                   V8SpeechSynthesisErrorCode::Enum::kNotAllowed);
+     return;
++  }
+ 
+   // Note: Non-UseCounter based TTS metrics are of the form TextToSpeech.* and
+   // are generally global, whereas these are scoped to a single page load.
+@@ -296,6 +330,10 @@ void SpeechSynthesis::cancel() {
+   // may still have references to some of these utterances and may
+   // fire events on them asynchronously.
+   utterance_queue_.clear();
++  if (ShouldBlockSpeechSynthesis(GetExecutionContext())) {
++    is_paused_ = false;
++    return;
++  }
+ 
+   if (mojom::blink::SpeechSynthesis* mojom_synthesis =
+           TryEnsureMojomSynthesis())
+@@ -303,6 +341,9 @@ void SpeechSynthesis::cancel() {
+ }
+ 
+ void SpeechSynthesis::pause() {
++  if (ShouldBlockSpeechSynthesis(GetExecutionContext()))
++    return;
++
+   if (is_paused_)
+     return;
+ 
+@@ -312,6 +353,9 @@ void SpeechSynthesis::pause() {
+ }
+ 
+ void SpeechSynthesis::resume() {
++  if (ShouldBlockSpeechSynthesis(GetExecutionContext()))
++    return;
++
+   if (!CurrentSpeechUtterance())
+     return;
+ 
+@@ -372,6 +416,12 @@ void SpeechSynthesis::StartSpeakingImmediately() {
+   SpeechSynthesisUtterance* utterance = CurrentSpeechUtterance();
+   DCHECK(utterance);
+ 
++  if (ShouldBlockSpeechSynthesis(GetExecutionContext())) {
++    HandleSpeakingCompleted(
++        utterance, mojom::blink::SpeechSynthesisErrorCode::kCancelled);
++    return;
++  }
++
+   double millis;
+   if (!GetElapsedTimeMillis(&millis))
+     return;
+@@ -516,6 +566,12 @@ void SpeechSynthesis::SetMojomSynthesisForTesting(
+ }
+ 
+ mojom::blink::SpeechSynthesis* SpeechSynthesis::TryEnsureMojomSynthesis() {
++  if (ShouldBlockSpeechSynthesis(GetExecutionContext())) {
++    receiver_.reset();
++    mojom_synthesis_.reset();
++    return nullptr;
++  }
++
+   if (mojom_synthesis_.is_bound())
+     return mojom_synthesis_.get();
+ 

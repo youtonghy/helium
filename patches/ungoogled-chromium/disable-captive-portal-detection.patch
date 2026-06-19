@@ -1,0 +1,19 @@
+# Disable captive portal detection probes.
+
+--- a/components/captive_portal/core/captive_portal_detector.cc
++++ b/components/captive_portal/core/captive_portal_detector.cc
+@@ -45,12 +45,7 @@ void CaptivePortalDetector::DetectCaptivePortal(
+     DetectionCallback detection_callback,
+     const net::NetworkTrafficAnnotationTag& traffic_annotation) {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+-  DCHECK(!FetchingURL());
+   DCHECK(!detection_callback.is_null());
+-
+-  if (!detection_callback_.is_null())
+-    LOG(ERROR) << "DetectCaptivePortal called while request is pending.";
+-  detection_callback_ = std::move(detection_callback);
+-
+-  StartProbe(traffic_annotation, url);
++  Results results;
++  std::move(detection_callback).Run(results);
+ }

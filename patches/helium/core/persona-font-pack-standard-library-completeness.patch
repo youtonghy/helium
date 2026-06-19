@@ -1,0 +1,143 @@
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index e1b1abf..c8a2433 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -1053,6 +1053,15 @@ TEST(HeliumPersonaPrefsTest, StateIncludesIndependentFontPackProfiles) {
+   EXPECT_TRUE(ProfilesContainId(*profiles, "macos-es-mx"));
+   EXPECT_TRUE(ProfilesContainId(*profiles, "linux-pl-pl"));
+   EXPECT_TRUE(ProfilesContainId(*profiles, "linux-pt-pt"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "windows-11-en-ca"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "windows-11-en-gb"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "windows-11-es-us"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "windows-pt-br"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "macos-en-us"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "linux-en-gb"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "linux-en-us"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "linux-fr-fr"));
++  EXPECT_TRUE(ProfilesContainId(*profiles, "linux-it-it"));
+   ASSERT_TRUE(DictAt(*profiles, 0).FindBool("builtin").value_or(false));
+ 
+   base::Value::Dict custom;
+@@ -1096,6 +1105,24 @@ TEST(HeliumPersonaPrefsTest, StateIncludesIndependentFontPackProfiles) {
+   EXPECT_FALSE(ProfilesContainId(*profiles, "custom-cjk"));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, BuiltinFontPackProfilesCoverPresetFontPacks) {
++  base::Value::List presets = GetBuiltinPersonaPresets();
++  base::Value::List profiles = GetBuiltinFontPackProfiles();
++
++  for (const base::Value& value : presets) {
++    const base::Value::Dict* preset = value.GetIfDict();
++    ASSERT_TRUE(preset);
++    if (preset->FindBool("passthrough").value_or(false)) {
++      continue;
++    }
++    const base::Value::Dict* fonts = preset->FindDict("fonts");
++    ASSERT_TRUE(fonts);
++    const std::string* font_pack_id = fonts->FindString("id");
++    ASSERT_TRUE(font_pack_id);
++    EXPECT_TRUE(ProfilesContainId(profiles, *font_pack_id)) << *font_pack_id;
++  }
++}
++
+ TEST(HeliumPersonaPrefsTest, UpdatingFontPackProfilePropagatesLinkedPersonas) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);
+diff --git a/components/helium_persona/persona_presets.cc b/components/helium_persona/persona_presets.cc
+index f2f9a26..7e63387 100644
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -681,12 +681,30 @@ base::Value::List GetBuiltinFontPackProfiles() {
+                                {"sans-serif=Meiryo", "serif=Yu Mincho",
+                                 "monospace=Consolas",
+                                 "system-ui=Yu Gothic"}));
++  profiles.Append(MakeFontPack(
++      "windows-11-en-ca", "Windows 11 Canadian English fonts",
++      {"Arial", "Calibri", "Cambria", "Candara", "Consolas", "Georgia",
++       "Segoe UI", "Times New Roman", "Verdana"},
++      {"sans-serif=Arial", "serif=Times New Roman",
++       "monospace=Consolas", "system-ui=Segoe UI"}));
++  profiles.Append(MakeFontPack(
++      "windows-11-en-gb", "Windows 11 English fonts",
++      {"Arial", "Calibri", "Cambria", "Candara", "Consolas", "Georgia",
++       "Segoe UI", "Times New Roman", "Verdana"},
++      {"sans-serif=Arial", "serif=Times New Roman",
++       "monospace=Consolas", "system-ui=Segoe UI"}));
+   profiles.Append(MakeFontPack(
+       "windows-11-en-in", "Windows 11 Indian English fonts",
+       {"Arial", "Calibri", "Cambria", "Consolas", "Georgia", "Mangal",
+        "Nirmala UI", "Segoe UI", "Times New Roman", "Verdana"},
+       {"sans-serif=Arial", "serif=Times New Roman",
+        "monospace=Consolas", "system-ui=Segoe UI"}));
++  profiles.Append(MakeFontPack(
++      "windows-11-es-us", "Windows 11 Spanish US fonts",
++      {"Arial", "Calibri", "Cambria", "Candara", "Consolas", "Georgia",
++       "Segoe UI", "Times New Roman", "Verdana"},
++      {"sans-serif=Arial", "serif=Times New Roman",
++       "monospace=Consolas", "system-ui=Segoe UI"}));
+   profiles.Append(MakeFontPack(
+       "windows-11-fr-fr", "Windows 11 French fonts",
+       {"Arial", "Calibri", "Cambria", "Candara", "Consolas", "Georgia",
+@@ -705,12 +723,24 @@ base::Value::List GetBuiltinFontPackProfiles() {
+        "Segoe UI", "Times New Roman", "Verdana"},
+       {"sans-serif=Arial", "serif=Times New Roman",
+        "monospace=Consolas", "system-ui=Segoe UI"}));
++  profiles.Append(MakeFontPack(
++      "windows-pt-br", "Windows Portuguese fonts",
++      {"Arial", "Calibri", "Cambria", "Candara", "Consolas", "Georgia",
++       "Segoe UI", "Times New Roman", "Verdana"},
++      {"sans-serif=Arial", "serif=Times New Roman",
++       "monospace=Consolas", "system-ui=Segoe UI"}));
+   profiles.Append(MakeFontPack(
+       "macos-core", "macOS core fonts",
+       {"Arial", "Helvetica", "Helvetica Neue", "Menlo", "Monaco",
+        "New York", "SF Pro Display", "SF Pro Text", "Times"},
+       {"sans-serif=Helvetica", "serif=Times", "monospace=Menlo",
+        "system-ui=SF Pro Text"}));
++  profiles.Append(MakeFontPack(
++      "macos-en-us", "macOS English fonts",
++      {"Arial", "Helvetica", "Helvetica Neue", "Menlo", "Monaco",
++       "New York", "SF Pro Display", "SF Pro Text", "Times"},
++      {"sans-serif=Helvetica", "serif=Times", "monospace=Menlo",
++       "system-ui=SF Pro Text"}));
+   profiles.Append(MakeFontPack(
+       "macos-zh-tw", "macOS Traditional Chinese fonts",
+       {"Arial", "Helvetica", "Helvetica Neue", "Menlo", "PingFang TC",
+@@ -756,12 +786,37 @@ base::Value::List GetBuiltinFontPackProfiles() {
+        "Liberation Sans", "Liberation Serif", "Noto Sans"},
+       {"sans-serif=Liberation Sans", "serif=Liberation Serif",
+        "monospace=Liberation Mono", "system-ui=Noto Sans"}));
++  profiles.Append(MakeFontPack(
++      "linux-en-gb", "Linux English fonts",
++      {"Cantarell", "DejaVu Sans", "DejaVu Serif", "Liberation Mono",
++       "Liberation Sans", "Noto Sans", "Noto Serif", "Ubuntu"},
++      {"sans-serif=Noto Sans", "serif=Noto Serif",
++       "monospace=Liberation Mono", "system-ui=Noto Sans"}));
++  profiles.Append(MakeFontPack(
++      "linux-en-us", "Linux US desktop fonts",
++      {"Arial", "Cantarell", "DejaVu Sans", "DejaVu Serif",
++       "Liberation Mono", "Liberation Sans", "Noto Sans", "Noto Serif",
++       "Ubuntu"},
++      {"sans-serif=Noto Sans", "serif=Noto Serif",
++       "monospace=Liberation Mono", "system-ui=Noto Sans"}));
+   profiles.Append(MakeFontPack(
+       "linux-es-es", "Linux Spanish fonts",
+       {"Cantarell", "DejaVu Sans", "DejaVu Serif", "Liberation Mono",
+        "Liberation Sans", "Noto Sans", "Noto Serif", "Ubuntu"},
+       {"sans-serif=Noto Sans", "serif=Noto Serif",
+        "monospace=Liberation Mono", "system-ui=Noto Sans"}));
++  profiles.Append(MakeFontPack(
++      "linux-fr-fr", "Linux French fonts",
++      {"Cantarell", "DejaVu Sans", "DejaVu Serif", "Liberation Mono",
++       "Liberation Sans", "Noto Sans", "Noto Serif", "Ubuntu"},
++      {"sans-serif=Noto Sans", "serif=Noto Serif",
++       "monospace=Liberation Mono", "system-ui=Noto Sans"}));
++  profiles.Append(MakeFontPack(
++      "linux-it-it", "Linux Italian fonts",
++      {"Cantarell", "DejaVu Sans", "DejaVu Serif", "Liberation Mono",
++       "Liberation Sans", "Noto Sans", "Noto Serif", "Ubuntu"},
++      {"sans-serif=Noto Sans", "serif=Noto Serif",
++       "monospace=Liberation Mono", "system-ui=Noto Sans"}));
+   profiles.Append(MakeFontPack(
+       "linux-nl-nl", "Linux Dutch fonts",
+       {"Cantarell", "DejaVu Sans", "DejaVu Serif", "Liberation Mono",

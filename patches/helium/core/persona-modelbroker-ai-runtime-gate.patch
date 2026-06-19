@@ -1,0 +1,28 @@
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index 9684518..ac3620f 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -315,6 +315,12 @@ bool HeliumPersonaAllowsPlatformCredentials(
+   return !snapshot.IsEnabled() || snapshot.allow_platform_credentials;
+ }
+ 
++bool HeliumPersonaAllowsAiApis(content::RenderFrameHost* render_frame_host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(render_frame_host);
++  return !snapshot.IsEnabled() || snapshot.allow_ai_apis;
++}
++
+ bool HeliumPersonaAllowsProtectedMediaIdentifier(
+     content::RenderFrameHost* render_frame_host) {
+   blink::HeliumPersonaSnapshot snapshot =
+@@ -534,7 +540,9 @@ void PopulateChromeFrameBinders(
+   map->Add<translate::mojom::ContentTranslateDriver>(
+       &translate::BindContentTranslateDriver);
+ 
+-  map->Add<optimization_guide::mojom::ModelBroker>(&BindModelBroker);
++  if (HeliumPersonaAllowsAiApis(render_frame_host)) {
++    map->Add<optimization_guide::mojom::ModelBroker>(&BindModelBroker);
++  }
+ 
+   if (HeliumPersonaAllowsPlatformCredentials(render_frame_host)) {
+     map->Add<blink::mojom::CredentialManager>(&BindCredentialManager);

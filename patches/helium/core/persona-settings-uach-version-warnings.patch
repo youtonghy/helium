@@ -1,0 +1,91 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 1725b5b..9a93ef4 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -246,6 +246,15 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     return Number.isFinite(number) && number >= 0 ? number : fallback;
+   }
+ 
++  private majorVersionFromString_(value: unknown): number {
++    const match = /^(\d+)/.exec(this.stringValue_(value));
++    if (!match) {
++      return 0;
++    }
++    const major = Number(match[1]);
++    return Number.isFinite(major) && major > 0 ? major : 0;
++  }
++
+   private addDraftWarning_(warnings: string[], warning: string) {
+     if (!warnings.includes(warning)) {
+       warnings.push(warning);
+@@ -333,6 +342,35 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     return ['standard', 'high'].includes(String(value || '').toLowerCase());
+   }
+ 
++  private uaChromeMajor_(ua: string): number {
++    const match = /(?:Chrome|Chromium)\/(\d+)/.exec(ua);
++    if (!match) {
++      return 0;
++    }
++    const major = Number(match[1]);
++    return Number.isFinite(major) && major > 0 ? major : 0;
++  }
++
++  private uaChBrandMajorVersions_(
++      brands: unknown): Array<Record<string, number>> {
++    if (!Array.isArray(brands)) {
++      return [];
++    }
++    return brands.map(brand => {
++      if (!brand || typeof brand !== 'object' || Array.isArray(brand)) {
++        return null;
++      }
++      const name = this.stringValue_(
++          (brand as Record<string, unknown>)['brand']);
++      if (!name || this.contains_(name, 'not')) {
++        return null;
++      }
++      const major = this.majorVersionFromString_(
++          (brand as Record<string, unknown>)['version']);
++      return major > 0 ? {brand: name, major} : null;
++    }).filter(Boolean) as Array<Record<string, number>>;
++  }
++
+   private deriveDraftWarnings_(persona: PersonaRecord): string[] {
+     const warnings: string[] = [];
+     if (!persona || this.isPassthroughPersona_(persona)) {
+@@ -351,6 +389,9 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const platform = String(persona.platform || '');
+     const uaChPlatform = String(uaCh['platform'] || '');
+     const uaChArchitecture = String(uaCh['architecture'] || '');
++    const uaMajor = this.uaChromeMajor_(ua);
++    const uaChFullMajor = this.majorVersionFromString_(uaCh['fullVersion']);
++    const uaChBrandMajors = this.uaChBrandMajorVersions_(uaCh['brands']);
+     const locale = String(region['locale'] || '');
+     const timezone = String(region['timezone'] || '');
+     const acceptLanguage = String(region['acceptLanguage'] || '');
+@@ -518,6 +559,24 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+           warnings,
+           'Linux personas should use Linux UA-CH platform metadata.');
+     }
++    if (uaMajor > 0 && uaChFullMajor > 0 && uaMajor !== uaChFullMajor) {
++      this.addDraftWarning_(
++          warnings,
++          'UA Chrome major version should match UA-CH fullVersion major version.');
++    }
++    if (uaMajor > 0 &&
++        uaChBrandMajors.some(brand => brand.major !== uaMajor)) {
++      this.addDraftWarning_(
++          warnings,
++          'UA Chrome major version should match Chromium/Chrome UA-CH brand major versions.');
++    }
++    const brandMajorSet =
++        new Set(uaChBrandMajors.map(brand => brand.major));
++    if (brandMajorSet.size > 1) {
++      this.addDraftWarning_(
++          warnings,
++          'Chromium/Chrome UA-CH brand major versions should match each other.');
++    }
+ 
+     if (this.contains_(locale, 'zh') && !this.contains_(timezone, 'asia')) {
+       this.addDraftWarning_(

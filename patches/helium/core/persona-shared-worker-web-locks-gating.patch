@@ -1,0 +1,18 @@
+diff --git a/content/browser/worker_host/shared_worker_host.cc b/content/browser/worker_host/shared_worker_host.cc
+index 55b24c73..d50940a5 100644
+--- a/content/browser/worker_host/shared_worker_host.cc
++++ b/content/browser/worker_host/shared_worker_host.cc
+@@ -698,6 +698,13 @@ void SharedWorkerHost::BindCacheStorageForBucket(
+ 
+ void SharedWorkerHost::CreateLockManager(
+     mojo::PendingReceiver<blink::mojom::LockManager> receiver) {
++  const blink::HeliumPersonaSnapshot persona_snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++          GetStoragePartitionImpl()->browser_context());
++  if (persona_snapshot.IsEnabled() && !persona_snapshot.allow_web_locks) {
++    return;
++  }
++
+   GetStoragePartitionImpl()->BindLockManager(
+       GetWorkerStorageKey(), token().value(), std::move(receiver));
+   GetStoragePartitionImpl()->GetLockManager()->AddLockObserver(token().value(),

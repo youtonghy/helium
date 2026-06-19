@@ -1,0 +1,250 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -297,6 +297,9 @@
+     const speechVoiceName = String(advanced['speechVoiceName'] || '');
+     const speechVoiceLang = String(advanced['speechVoiceLang'] || '');
+     const speechVoiceUri = String(advanced['speechVoiceUri'] || '');
++    const fontPackId = String(fonts['id'] || '');
++    const fontPackDisplayName = String(fonts['displayName'] || '');
++    const fontPackSurface = `${fontPackId} ${fontPackDisplayName} ${this.fontFamiliesText_ || ''}`;
+     const fontRenderingId = String(rendering['id'] || '');
+     const fontRenderingDisplayName = String(rendering['displayName'] || '');
+     const fontRenderingEngine = String(rendering['engine'] || '');
+@@ -839,6 +842,39 @@
+       this.addDraftWarning_(
+           warnings,
+           'Mobile UA-CH metadata does not match a desktop screen size.');
++    }
++
++    if ((this.contains_(locale, 'zh') || this.contains_(acceptLanguage, 'zh')) &&
++        !(this.contains_(fontPackSurface, 'zh') ||
++          this.contains_(fontPackSurface, 'chinese') ||
++          this.contains_(fontPackSurface, 'yahei') ||
++          this.contains_(fontPackSurface, 'simsun') ||
++          this.contains_(fontPackSurface, 'pingfang') ||
++          this.contains_(fontPackSurface, 'noto sans cjk'))) {
++      this.addDraftWarning_(
++          warnings,
++          'Chinese language personas should normally use a Chinese-capable font pack.');
++    }
++    if (this.contains_(locale, 'ja') &&
++        !(this.contains_(fontPackSurface, 'ja') ||
++          this.contains_(fontPackSurface, 'japanese') ||
++          this.contains_(fontPackSurface, 'meiryo') ||
++          this.contains_(fontPackSurface, 'yu gothic') ||
++          this.contains_(fontPackSurface, 'hiragino') ||
++          this.contains_(fontPackSurface, 'noto sans cjk'))) {
++      this.addDraftWarning_(
++          warnings,
++          'Japanese language personas should normally use a Japanese-capable font pack.');
++    }
++    if (this.contains_(locale, 'ko') &&
++        !(this.contains_(fontPackSurface, 'ko') ||
++          this.contains_(fontPackSurface, 'korean') ||
++          this.contains_(fontPackSurface, 'malgun') ||
++          this.contains_(fontPackSurface, 'batang') ||
++          this.contains_(fontPackSurface, 'noto sans cjk'))) {
++      this.addDraftWarning_(
++          warnings,
++          'Korean language personas should normally use a Korean-capable font pack.');
+     }
+ 
+     if (this.contains_(os, 'windows') &&
+@@ -1231,24 +1267,51 @@
+     return fallback;
+   }
+ 
+-  private localeScopedFontPrefixes_(persona: PersonaRecord): string[] {
++  private randomProfileByPredicate_(
++      profiles: Array<Record<string, unknown>>,
++      predicates: Array<(profile: Record<string, unknown>) => boolean>,
++      fallback: Record<string, unknown>): Record<string, unknown> {
++    for (const predicate of predicates) {
++      const matches = (profiles || []).filter(predicate);
++      if (matches.length) {
++        return this.randomFrom_(matches, matches[0]);
++      }
++    }
++    return fallback;
++  }
++
++  private localeScopedFontPredicates_(persona: PersonaRecord):
++      Array<(profile: Record<string, unknown>) => boolean> {
+     const osFamily = this.personaOsFamily_(persona);
+-    const osPrefix = osFamily === 'mac' ? 'macos-' :
+-        osFamily === 'linux' ? 'linux-' : 'windows-';
++    const osPrefix = osFamily === 'mac' ? 'macos' :
++        osFamily === 'linux' ? 'linux' : 'windows';
+     const region = persona.region || {};
+     const locale = String(region['locale'] || '')
+         .trim()
+         .toLowerCase()
+         .replace(/_/g, '-');
+-    if (!locale) {
+-      return [osPrefix];
+-    }
+     const language = locale.split('-')[0];
++    const preferredIds = new Set<string>();
++    if (locale) {
++      preferredIds.add(`${osPrefix}-${locale}`);
++      preferredIds.add(`${osPrefix}-11-${locale}`);
++    }
++    if (language) {
++      preferredIds.add(`${osPrefix}-${language}`);
++      preferredIds.add(`${osPrefix}-11-${language}`);
++    }
++    const currentId = String((persona.fonts || {})['id'] || '').toLowerCase();
+     return [
+-      `${osPrefix}${locale}`,
+-      language ? `${osPrefix}${language}` : '',
+-      osPrefix,
+-    ].filter(Boolean);
++      profile => preferredIds.has(String(profile['id'] || '').toLowerCase()),
++      profile => currentId.length > 0 &&
++          String(profile['id'] || '').toLowerCase() === currentId,
++      profile => {
++        const id = String(profile['id'] || '').toLowerCase();
++        return id === `${osPrefix}-core` || id === `${osPrefix}-11-core`;
++      },
++      profile => String(profile['id'] || '').toLowerCase()
++          .startsWith(`${osPrefix}-`),
++    ];
+   }
+ 
+   private displayScopedFontRenderingProfiles_(
+@@ -1285,13 +1348,13 @@
+ 
+   private applyConsistentRandomFonts_(persona: PersonaRecord) {
+     const osFamily = this.personaOsFamily_(persona);
+-    const fontPackPrefixes = this.localeScopedFontPrefixes_(persona);
++    const fontPackPredicates = this.localeScopedFontPredicates_(persona);
+     const renderingPrefixes = osFamily === 'mac' ? ['macos-'] :
+         osFamily === 'linux' ? ['linux-'] : ['windows-'];
+     const renderingProfiles = this.displayScopedFontRenderingProfiles_(
+         persona, this.fontRenderingProfiles_);
+-    const fontPack = this.randomProfileByPrefix_(
+-        this.fontPackProfiles_, fontPackPrefixes, persona.fonts || {});
++    const fontPack = this.randomProfileByPredicate_(
++        this.fontPackProfiles_, fontPackPredicates, persona.fonts || {});
+     const rendering = this.randomProfileByPrefix_(
+         renderingProfiles, renderingPrefixes, persona.fontRendering || {});
+     persona.fonts = JSON.parse(JSON.stringify(fontPack));
+@@ -1543,6 +1606,34 @@
+     const screens = osFamily === 'mac' ? macScreens :
+         osFamily === 'linux' ? linuxScreens : desktopScreens;
+     persona.screen = this.randomFrom_(screens, screens[0]);
++  }
++
++  private applyConsistentRandomDeviceLabel_(persona: PersonaRecord) {
++    const osFamily = this.personaOsFamily_(persona);
++    const screen = persona.screen || {};
++    const gpu = persona.gpu || {};
++    const hardware = persona.hardware || {};
++    const width = this.numberValue_(screen['width']);
++    const height = this.numberValue_(screen['height']);
++    const cores = this.numberValue_(hardware['hardwareConcurrency']);
++    const gpuSurface = `${gpu['renderer'] || ''} ${gpu['webgpuAdapter'] || ''}`;
++    if (osFamily === 'mac') {
++      const isLargeDisplay = Math.max(width, height) >= 1700;
++      const isProGpu = this.contains_(gpuSurface, 'm3') ||
++          this.contains_(gpuSurface, 'pro') || cores >= 10 || isLargeDisplay;
++      persona.device = isProGpu ? 'MacBook Pro' : 'MacBook Air';
++      return;
++    }
++    if (osFamily === 'linux') {
++      persona.device = Math.max(width, height) >= 3000 ?
++          'Linux ultrawide workstation' : 'Linux workstation';
++      return;
++    }
++    const hasDiscreteGpu = this.contains_(gpuSurface, 'nvidia') ||
++        this.contains_(gpuSurface, 'radeon') || this.contains_(gpuSurface, 'rtx') ||
++        this.contains_(gpuSurface, 'rx ');
++    persona.device = hasDiscreteGpu || cores >= 12 ?
++        'Desktop workstation' : 'Desktop PC';
+   }
+ 
+   private applyRandomDisplayPreferences_(persona: PersonaRecord) {
+@@ -1941,6 +2032,7 @@
+     this.applyRandomHardware_(persona);
+     this.applyRandomGpu_(persona);
+     this.applyRandomScreen_(persona);
++    this.applyConsistentRandomDeviceLabel_(persona);
+     this.applyRandomDisplayPreferences_(persona);
+     this.applyRandomNetwork_(persona);
+     this.applyRandomAdvancedSurface_(persona);
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -419,15 +419,15 @@
+       {"preset-macos-en-au-melbourne", "macOS 15", "MacIntel",
+        "Australia/Melbourne", "en-AU", "en-AU,en;q=0.9"},
+       {"preset-windows-11-zh-cn-shanghai", "Windows 11", "Win32",
+-       "Asia/Shanghai", "zh-CN", "zh-CN,zh;q=0.9,en;q=0.7"},
++       "Asia/Shanghai", "zh-CN", "zh-CN,zh;q=0.9,en;q=0.8"},
+       {"preset-linux-de-de-berlin", "Linux x86_64", "Linux x86_64",
+-       "Europe/Berlin", "de-DE", "de-DE,de;q=0.9,en;q=0.7"},
++       "Europe/Berlin", "de-DE", "de-DE,de;q=0.9,en;q=0.8"},
+       {"preset-windows-11-ja-jp-tokyo", "Windows 11", "Win32",
+-       "Asia/Tokyo", "ja-JP", "ja-JP,ja;q=0.9,en;q=0.7"},
++       "Asia/Tokyo", "ja-JP", "ja-JP,ja;q=0.9,en;q=0.8"},
+       {"preset-macos-en-gb-london", "macOS 15", "MacIntel",
+        "Europe/London", "en-GB", "en-GB,en;q=0.9"},
+       {"preset-linux-pt-pt-lisbon", "Linux x86_64", "Linux x86_64",
+-       "Europe/Lisbon", "pt-PT", "pt-PT,pt;q=0.9,en;q=0.7"},
++       "Europe/Lisbon", "pt-PT", "pt-PT,pt;q=0.9,en;q=0.8"},
+       {"preset-windows-11-en-sg-singapore", "Windows 11", "Win32",
+        "Asia/Singapore", "en-SG", "en-SG,en;q=0.9"},
+   };
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -786,6 +786,12 @@
+       GetNestedString(persona, "advanced", "speechVoiceLang");
+   const std::string_view speech_voice_uri =
+       GetNestedString(persona, "advanced", "speechVoiceUri");
++  const std::string_view font_pack_id = GetNestedString(persona, "fonts", "id");
++  const std::string_view font_pack_display_name =
++      GetNestedString(persona, "fonts", "displayName");
++  const std::string font_pack_surface = base::StrCat(
++      {font_pack_id, " ", font_pack_display_name, " ",
++       base::JoinString(GetNestedStringList(persona, "fonts", "families"), " ")});
+   const std::string_view font_rendering_id =
+       GetNestedString(persona, "fontRendering", "id");
+   const std::string_view font_rendering_display_name =
+@@ -1357,6 +1363,35 @@
+     AddWarning(warnings,
+                "Font rendering hinting should be none, slight, medium, or full.");
+   }
++  if ((Contains(locale, "zh") || Contains(accept_language, "zh")) &&
++      !(Contains(font_pack_surface, "zh") ||
++        Contains(font_pack_surface, "chinese") ||
++        Contains(font_pack_surface, "yahei") ||
++        Contains(font_pack_surface, "simsun") ||
++        Contains(font_pack_surface, "pingfang") ||
++        Contains(font_pack_surface, "noto sans cjk"))) {
++    AddWarning(warnings,
++               "Chinese language personas should normally use a Chinese-capable font pack.");
++  }
++  if (Contains(locale, "ja") &&
++      !(Contains(font_pack_surface, "ja") ||
++        Contains(font_pack_surface, "japanese") ||
++        Contains(font_pack_surface, "meiryo") ||
++        Contains(font_pack_surface, "yu gothic") ||
++        Contains(font_pack_surface, "hiragino") ||
++        Contains(font_pack_surface, "noto sans cjk"))) {
++    AddWarning(warnings,
++               "Japanese language personas should normally use a Japanese-capable font pack.");
++  }
++  if (Contains(locale, "ko") &&
++      !(Contains(font_pack_surface, "ko") ||
++        Contains(font_pack_surface, "korean") ||
++        Contains(font_pack_surface, "malgun") ||
++        Contains(font_pack_surface, "batang") ||
++        Contains(font_pack_surface, "noto sans cjk"))) {
++    AddWarning(warnings,
++               "Korean language personas should normally use a Korean-capable font pack.");
++  }
+   if (Contains(os, "windows") &&
+       !(Contains(font_rendering_id, "cleartype") ||
+         Contains(font_rendering_engine, "directwrite"))) {

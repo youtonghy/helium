@@ -1,0 +1,37 @@
+diff --git a/content/browser/renderer_host/navigation_request.cc b/content/browser/renderer_host/navigation_request.cc
+index 6e5fcbef..7259c9d9 100644
+--- a/content/browser/renderer_host/navigation_request.cc
++++ b/content/browser/renderer_host/navigation_request.cc
+@@ -1165,13 +1165,24 @@ bool MaybeEvictFromBackForwardCacheBySubframeNavigation(
+   return false;
+ }
+ 
++bool HeliumPersonaAllowsStorageAccess(BrowserContext* browser_context) {
++  const blink::HeliumPersonaSnapshot persona_snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
++  return !persona_snapshot.IsEnabled() || persona_snapshot.allow_storage_access;
++}
++
+ net::StorageAccessApiStatus ShouldLoadWithStorageAccess(
++    BrowserContext* browser_context,
+     const blink::mojom::BeginNavigationParams& begin_params,
+     const blink::mojom::CommonNavigationParams& common_params,
+     const RenderFrameHostImpl* previous_document_rfh,
+     bool did_encounter_cross_origin_redirect,
+     const GURL response_url,
+     const network::mojom::URLResponseHead* response) {
++  if (!HeliumPersonaAllowsStorageAccess(browser_context)) {
++    return net::StorageAccessApiStatus::kNone;
++  }
++
+   // Storage Access API Headers:
+   // https://github.com/privacycg/storage-access-headers
+   //
+@@ -6957,6 +6968,7 @@ void NavigationRequest::CommitNavigation() {
+   }
+ 
+   commit_params_->load_with_storage_access = ShouldLoadWithStorageAccess(
++      frame_tree_node()->navigator().controller().GetBrowserContext(),
+       begin_params(), common_params(), frame_tree_node()->current_frame_host(),
+       did_encounter_cross_origin_redirect(), GetURL(), response());
+ 

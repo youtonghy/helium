@@ -1,0 +1,45 @@
+diff --git a/third_party/blink/renderer/modules/webcodecs/image_decoder_external.cc b/third_party/blink/renderer/modules/webcodecs/image_decoder_external.cc
+--- a/third_party/blink/renderer/modules/webcodecs/image_decoder_external.cc
++++ b/third_party/blink/renderer/modules/webcodecs/image_decoder_external.cc
+@@ -15,6 +15,8 @@
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_image_decode_result.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_image_decoder_init.h"
+ #include "third_party/blink/renderer/core/dom/dom_exception.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/fetch/readable_stream_bytes_consumer.h"
+ #include "third_party/blink/renderer/core/typed_arrays/dom_array_piece.h"
+ #include "third_party/blink/renderer/modules/webcodecs/image_track.h"
+@@ -62,6 +64,18 @@ bool IsTypeSupportedInternal(String type) {
+   return IsSupportedImageMimeType(type.Ascii());
+ }
+ 
++bool IsPersonaStableImageDecoderType(String type) {
++  if (!type.ContainsOnlyAsciiOrEmpty()) {
++    return false;
++  }
++
++  const String type_lower = type.ToAsciiLower();
++  return type_lower == "image/png" || type_lower == "image/jpeg" ||
++         type_lower == "image/gif" || type_lower == "image/webp" ||
++         type_lower == "image/avif" || type_lower == "image/bmp" ||
++         type_lower == "image/svg+xml";
++}
++
+ ImageDecoder::AnimationOption AnimationOptionFromIsAnimated(bool is_animated) {
+   return is_animated ? ImageDecoder::AnimationOption::kPreferAnimation
+                      : ImageDecoder::AnimationOption::kPreferStillImage;
+@@ -139,6 +153,13 @@ ScriptPromise<IDLBoolean> ImageDecoderExternal::isTypeSupported(
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<IDLBoolean>>(script_state);
+   auto promise = resolver->Promise();
++  if (PersonaSpoofingHelper::ReduceSystemInfo(
++          ExecutionContext::From(script_state)) &&
++      !IsPersonaStableImageDecoderType(type)) {
++    resolver->Resolve(false);
++    return promise;
++  }
++
+   resolver->Resolve(IsTypeSupportedInternal(type));
+   return promise;
+ }

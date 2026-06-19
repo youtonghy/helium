@@ -1,0 +1,124 @@
+diff --git a/third_party/blink/public/web/web_view.h b/third_party/blink/public/web/web_view.h
+--- a/third_party/blink/public/web/web_view.h
++++ b/third_party/blink/public/web/web_view.h
+@@ -431,6 +431,7 @@ class BLINK_EXPORT WebView {
+       const RendererPreferences& preferences) = 0;
+   virtual const RendererPreferences& GetRendererPreferences() const = 0;
+ 
++  virtual const HeliumNoiseTokenMap& GetHeliumNoiseTokens() const = 0;
+   virtual const HeliumPersonaSnapshot& GetHeliumPersonaSnapshot() const = 0;
+ 
+   // Web preferences ---------------------------------------------------
+diff --git a/third_party/blink/renderer/core/exported/web_view_impl.h b/third_party/blink/renderer/core/exported/web_view_impl.h
+--- a/third_party/blink/renderer/core/exported/web_view_impl.h
++++ b/third_party/blink/renderer/core/exported/web_view_impl.h
+@@ -219,5 +219,6 @@ class CORE_EXPORT WebViewImpl final : public WebView,
+   void SetRendererPreferences(const RendererPreferences& preferences) override;
+   const RendererPreferences& GetRendererPreferences() const override;
++  const HeliumNoiseTokenMap& GetHeliumNoiseTokens() const override;
+   const HeliumPersonaSnapshot& GetHeliumPersonaSnapshot() const override;
+ 
+   void SetWebPreferences(const web_pref::WebPreferences& preferences) override;
+diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_party/blink/renderer/core/exported/web_view_impl.cc
+--- a/third_party/blink/renderer/core/exported/web_view_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
+@@ -3934,6 +3934,10 @@ const RendererPreferences& WebViewImpl::GetRendererPreferences() const {
+   return renderer_preferences_;
+ }
+ 
++const HeliumNoiseTokenMap& WebViewImpl::GetHeliumNoiseTokens() const {
++  return page_->GetHeliumNoiseTokens();
++}
++
+ const HeliumPersonaSnapshot& WebViewImpl::GetHeliumPersonaSnapshot() const {
+   return page_->GetHeliumPersonaSnapshot();
+ }
+diff --git a/components/printing/renderer/print_render_frame_helper.cc b/components/printing/renderer/print_render_frame_helper.cc
+--- a/components/printing/renderer/print_render_frame_helper.cc
++++ b/components/printing/renderer/print_render_frame_helper.cc
+@@ -671,6 +671,9 @@ class HeaderAndFooterContext {
+  private:
+   static blink::WebView* CreateWebView(
+       const blink::WebLocalFrame& source_frame) {
++    const blink::HeliumNoiseTokenMap noise_tokens =
++        source_frame.View() ? source_frame.View()->GetHeliumNoiseTokens()
++                            : blink::HeliumNoiseTokenMap();
+     const blink::HeliumPersonaSnapshot persona_snapshot =
+         source_frame.View() ? source_frame.View()->GetHeliumPersonaSnapshot()
+                             : blink::HeliumPersonaSnapshot();
+@@ -686,7 +689,7 @@ class HeaderAndFooterContext {
+         /*color_provider_colors=*/nullptr,
+         /*history_index=*/-1,
+         /*history_length=*/0,
+-        /*noise_tokens=*/blink::HeliumNoiseTokenMap(),
++        /*noise_tokens=*/noise_tokens,
+         /*persona_snapshot=*/persona_snapshot);
+     view->GetSettings()->SetJavaScriptEnabled(true);
+     return view;
+@@ -965,6 +968,9 @@ void PrepareFrameAndViewForPrint::CopySelection(
+   // on the page).
+   WebPreferences prefs = preferences;
+   prefs.javascript_enabled = false;
++  const blink::HeliumNoiseTokenMap noise_tokens =
++      frame()->View() ? frame()->View()->GetHeliumNoiseTokens()
++                      : blink::HeliumNoiseTokenMap();
+   const blink::HeliumPersonaSnapshot persona_snapshot =
+       frame()->View() ? frame()->View()->GetHeliumPersonaSnapshot()
+                       : blink::HeliumPersonaSnapshot();
+@@ -984,7 +990,7 @@ void PrepareFrameAndViewForPrint::CopySelection(
+       /*color_provider_colors=*/nullptr,
+       /*history_index=*/-1,
+       /*history_length=*/0,
+-      /*noise_tokens=*/blink::HeliumNoiseTokenMap(),
++      /*noise_tokens=*/noise_tokens,
+       /*persona_snapshot=*/persona_snapshot);
+   blink::WebView::ApplyWebPreferences(prefs, web_view);
+   blink::WebLocalFrame* main_frame = blink::WebLocalFrame::CreateMainFrame(
+diff --git a/components/plugins/renderer/webview_plugin.h b/components/plugins/renderer/webview_plugin.h
+--- a/components/plugins/renderer/webview_plugin.h
++++ b/components/plugins/renderer/webview_plugin.h
+@@ -11,6 +11,7 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "mojo/public/cpp/bindings/associated_receiver.h"
+ #include "mojo/public/cpp/bindings/associated_remote.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
+ #include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
+ #include "third_party/blink/public/mojom/widget/platform_widget.mojom.h"
+ #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
+@@ -171,6 +172,7 @@ class WebViewPlugin : public blink::WebPlugin, public blink::WebViewObserver {
+         WebViewPlugin* plugin,
+         const blink::web_pref::WebPreferences& parent_web_preferences,
+         const blink::RendererPreferences& parent_renderer_preferences,
++        const blink::HeliumNoiseTokenMap& parent_noise_tokens,
+         const blink::HeliumPersonaSnapshot& parent_persona_snapshot);
+     ~WebViewHelper() override;
+ 
+diff --git a/components/plugins/renderer/webview_plugin.cc b/components/plugins/renderer/webview_plugin.cc
+--- a/components/plugins/renderer/webview_plugin.cc
++++ b/components/plugins/renderer/webview_plugin.cc
+@@ -58,7 +58,8 @@ WebViewPlugin::WebViewPlugin(WebView* web_view,
+       focused_(false),
+       is_painting_(false),
+       is_resizing_(false),
+       web_view_helper_(this, preferences, web_view->GetRendererPreferences(),
++                       web_view->GetHeliumNoiseTokens(),
+                        web_view->GetHeliumPersonaSnapshot()) {}
+ 
+ // static
+@@ -260,6 +261,7 @@ WebViewPlugin::WebViewHelper::WebViewHelper(
+     WebViewPlugin* plugin,
+     const WebPreferences& parent_web_preferences,
+     const blink::RendererPreferences& parent_renderer_preferences,
++    const blink::HeliumNoiseTokenMap& parent_noise_tokens,
+     const blink::HeliumPersonaSnapshot& parent_persona_snapshot)
+     : plugin_(plugin),
+       agent_group_scheduler_(
+@@ -281,7 +283,7 @@ WebViewPlugin::WebViewHelper::WebViewHelper(
+       /*color_provider_colors=*/nullptr,
+       /*history_index=*/-1,
+       /*history_length=*/0,
+-      /*noise_tokens=*/blink::HeliumNoiseTokenMap(),
++      /*noise_tokens=*/parent_noise_tokens,
+       /*persona_snapshot=*/parent_persona_snapshot);
+   // ApplyWebPreferences before making a WebLocalFrame so that the frame sees a
+   // consistent view of our preferences.

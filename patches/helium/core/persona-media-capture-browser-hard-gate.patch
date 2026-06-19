@@ -1,0 +1,143 @@
+diff --git a/content/browser/renderer_host/media/media_stream_dispatcher_host.cc b/content/browser/renderer_host/media/media_stream_dispatcher_host.cc
+--- a/content/browser/renderer_host/media/media_stream_dispatcher_host.cc
++++ b/content/browser/renderer_host/media/media_stream_dispatcher_host.cc
+@@ -199,10 +199,53 @@ bool IsDisplayCaptureStreamType(blink::mojom::MediaStreamType stream_type) {
+   return false;
+ }
+ 
++bool IsDeviceCaptureStreamType(blink::mojom::MediaStreamType stream_type) {
++  switch (stream_type) {
++    case blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE:
++    case blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE:
++      return true;
++    case blink::mojom::MediaStreamType::NO_SERVICE:
++    case blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE:
++    case blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE:
++    case blink::mojom::MediaStreamType::GUM_DESKTOP_AUDIO_CAPTURE:
++    case blink::mojom::MediaStreamType::GUM_DESKTOP_VIDEO_CAPTURE:
++    case blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE:
++    case blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE:
++    case blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB:
++    case blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_SET:
++    case blink::mojom::MediaStreamType::NUM_MEDIA_TYPES:
++      return false;
++  }
++  return false;
++}
++
++bool ControlsRequestMediaCapture(const blink::StreamControls& controls) {
++  return IsDeviceCaptureStreamType(controls.audio.stream_type) ||
++         IsDeviceCaptureStreamType(controls.video.stream_type);
++}
++
+ bool ControlsRequestDisplayCapture(const blink::StreamControls& controls) {
+   return controls.request_all_screens ||
+          IsDisplayCaptureStreamType(controls.audio.stream_type) ||
+          IsDisplayCaptureStreamType(controls.video.stream_type);
++}
++
++void CheckMediaCaptureAllowedOnUIThread(
++    GlobalRenderFrameHostId render_frame_host_id,
++    base::OnceCallback<void(bool)> callback) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++
++  RenderFrameHostImpl* const render_frame_host =
++      RenderFrameHostImpl::FromID(render_frame_host_id);
++  if (!render_frame_host || !render_frame_host->IsActive()) {
++    std::move(callback).Run(false);
++    return;
++  }
++
++  const blink::HeliumPersonaSnapshot& persona_snapshot =
++      render_frame_host->GetPage().persona_snapshot();
++  std::move(callback).Run(!persona_snapshot.IsEnabled() ||
++                          persona_snapshot.allow_media_capture);
+ }
+ 
+ }  // namespace
+@@ -378,6 +421,7 @@ void MediaStreamDispatcherHost::OnWebContentsFocused() {
+ 
+ void MediaStreamDispatcherHost::GenerateStreamsChecksOnUIThread(
+     GlobalRenderFrameHostId render_frame_host_id,
++    bool request_media_capture,
+     bool request_display_capture,
+     bool request_all_screens,
+     base::OnceCallback<void(MediaDeviceSaltAndOriginCallback)>
+@@ -404,6 +448,13 @@ void MediaStreamDispatcherHost::GenerateStreamsChecksOnUIThread(
+             MediaStreamRequestResult::PERMISSION_DENIED_BY_SYSTEM));
+     return;
+   }
++  if (request_media_capture && persona_snapshot.IsEnabled() &&
++      !persona_snapshot.allow_media_capture) {
++    std::move(result_callback)
++        .Run(base::unexpected(
++            MediaStreamRequestResult::PERMISSION_DENIED_BY_SYSTEM));
++    return;
++  }
+ 
+   if (request_all_screens) {
+     CheckRequestAllScreensAllowed(std::move(get_salt_and_origin_cb),
+@@ -521,7 +572,8 @@ void MediaStreamDispatcherHost::GenerateStreams(
+       FROM_HERE,
+       base::BindOnce(
+           &MediaStreamDispatcherHost::GenerateStreamsChecksOnUIThread,
+-          render_frame_host_id_, ControlsRequestDisplayCapture(controls),
++          render_frame_host_id_, ControlsRequestMediaCapture(controls),
++          ControlsRequestDisplayCapture(controls),
+           controls.request_all_screens,
+           base::BindOnce(get_salt_and_origin_cb_, render_frame_host_id_),
+           base::BindPostTaskToCurrentDefault(base::BindOnce(
+@@ -632,6 +684,30 @@ void MediaStreamDispatcherHost::OpenDevice(int32_t page_request_id,
+ 
+   GetUIThreadTaskRunner({})->PostTask(
+       FROM_HERE,
++      base::BindOnce(
++          &CheckMediaCaptureAllowedOnUIThread, render_frame_host_id_,
++          base::BindPostTaskToCurrentDefault(base::BindOnce(
++              &MediaStreamDispatcherHost::OpenDeviceIfMediaCaptureAllowed,
++              weak_factory_.GetWeakPtr(), page_request_id, device_id, type,
++              std::move(callback)))));
++}
++
++void MediaStreamDispatcherHost::OpenDeviceIfMediaCaptureAllowed(
++    int32_t page_request_id,
++    const std::string& device_id,
++    blink::mojom::MediaStreamType type,
++    OpenDeviceCallback callback,
++    bool allowed) {
++  DCHECK_CURRENTLY_ON(BrowserThread::IO);
++
++  if (!allowed) {
++    std::move(callback).Run(false /* success */, std::string(),
++                            blink::MediaStreamDevice());
++    return;
++  }
++
++  GetUIThreadTaskRunner({})->PostTask(
++      FROM_HERE,
+       base::BindOnce(get_salt_and_origin_cb_, render_frame_host_id_,
+                      base::BindPostTaskToCurrentDefault(base::BindOnce(
+                          &MediaStreamDispatcherHost::DoOpenDevice,
+diff --git a/content/browser/renderer_host/media/media_stream_dispatcher_host.h b/content/browser/renderer_host/media/media_stream_dispatcher_host.h
+--- a/content/browser/renderer_host/media/media_stream_dispatcher_host.h
++++ b/content/browser/renderer_host/media/media_stream_dispatcher_host.h
+@@ -87,6 +87,7 @@ class CONTENT_EXPORT MediaStreamDispatcherHost
+   // the computation of the device salt and origin).
+   static void GenerateStreamsChecksOnUIThread(
+       GlobalRenderFrameHostId render_frame_host_id,
++      bool request_media_capture,
+       bool request_display_capture,
+       bool request_all_screens,
+       base::OnceCallback<void(MediaDeviceSaltAndOriginCallback)>
+@@ -186,6 +187,11 @@ class CONTENT_EXPORT MediaStreamDispatcherHost
+                     blink::mojom::MediaStreamType type,
+                     OpenDeviceCallback callback,
+                     const MediaDeviceSaltAndOrigin& salt_and_origin);
++  void OpenDeviceIfMediaCaptureAllowed(int32_t request_id,
++                                       const std::string& device_id,
++                                       blink::mojom::MediaStreamType type,
++                                       OpenDeviceCallback callback,
++                                       bool allowed);
+ 
+   void OnDeviceStopped(const std::string& label,
+                        const blink::MediaStreamDevice& device);

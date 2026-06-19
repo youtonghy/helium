@@ -1,0 +1,21 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index cddfbb40..f8a3fb8d 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -1073,9 +1073,16 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     persona.uaCh['formFactors'] = ['Desktop'];
+   }
+ 
++  private applyConsistentRandomNavigatorIdentity_(persona: PersonaRecord) {
++    persona.navigatorVendor = 'Google Inc.';
++    persona.navigatorProductSub = '20030107';
++    persona.navigatorVendorSub = '';
++  }
++
+   private applyRandomUaVersion_(persona: PersonaRecord) {
+     persona.uaCh = persona.uaCh || {};
+     this.applyConsistentRandomUaChIdentity_(persona);
++    this.applyConsistentRandomNavigatorIdentity_(persona);
+     const major = this.chromeMajorVersion_(persona);
+     const fullVersion = this.makeRandomChromeFullVersion_(major);
+     const majorVersion = String(major);

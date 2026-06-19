@@ -1,0 +1,100 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 0ee31348..2ac14025 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -3530,41 +3530,67 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const toString = (value: unknown) => this.stringValue_(value);
+     const toStringList = (value: unknown): string[] =>
+         this.stringListValue_(value);
+-    const normalizeNumberFields = (object: Record<string, unknown>, keys: string[]) => {
+-      for (const key of keys) {
+-        object[key] = toNumber(object[key]);
+-      }
++    const webglDefaults: Record<string, number> = {
++      maxTextureSize: 16384,
++      maxCubeMapTextureSize: 16384,
++      maxRenderbufferSize: 16384,
++      maxViewportWidth: 16384,
++      maxViewportHeight: 16384,
++      maxTextureImageUnits: 16,
++      maxCombinedTextureImageUnits: 32,
++      maxVertexAttribs: 16,
++      maxVertexTextureImageUnits: 16,
++      maxVertexUniformVectors: 1024,
++      maxFragmentUniformVectors: 1024,
++      maxVaryingVectors: 30,
++      maxSamples: 4,
++      maxAnisotropy: 16,
++    };
++    const webgl2Defaults: Record<string, number> = {
++      max3DTextureSize: 2048,
++      maxArrayTextureLayers: 2048,
++      maxColorAttachments: 8,
++      maxDrawBuffers: 8,
++      maxUniformBlockSize: 65536,
++      uniformBufferOffsetAlignment: 256,
++      maxTextureLodBias: 15,
++      maxSamples: 4,
+     };
++    const webgpuDefaults: Record<string, number> = {
++      maxTextureDimension1D: 8192,
++      maxTextureDimension2D: 8192,
++      maxTextureDimension3D: 2048,
++      maxTextureArrayLayers: 256,
++      maxBindGroups: 4,
++      maxBindingsPerBindGroup: 1000,
++      maxUniformBufferBindingSize: 65536,
++      maxStorageBufferBindingSize: 134217728,
++      maxBufferSize: 268435456,
++      maxVertexBuffers: 8,
++      maxVertexAttributes: 16,
++      maxComputeWorkgroupStorageSize: 16384,
++      maxComputeInvocationsPerWorkgroup: 256,
++      maxComputeWorkgroupSizeX: 256,
++      maxComputeWorkgroupSizeY: 256,
++      maxComputeWorkgroupSizeZ: 64,
++      maxComputeWorkgroupsPerDimension: 65535,
++    };
++    const normalizeNumberFields =
++        (object: Record<string, unknown>, defaults: Record<string, number>) => {
++          for (const [key, fallback] of Object.entries(defaults)) {
++            object[key] = this.positiveNumberOr_(object[key], fallback);
++          }
++        };
+     persona.network['rtt'] = toNumber(persona.network['rtt']);
+    persona.network['downlink'] = toNumber(persona.network['downlink']);
+    persona.network['downlinkMax'] = toNumber(persona.network['downlinkMax']);
+    persona.network['saveData'] = Boolean(persona.network['saveData']);
+    persona.network['online'] = persona.network['online'] !== false;
+     const webglProfile = persona.gpu['webglProfile'] as Record<string, unknown>;
+-    normalizeNumberFields(webglProfile, [
+-      'maxTextureSize', 'maxCubeMapTextureSize', 'maxRenderbufferSize',
+-      'maxViewportWidth', 'maxViewportHeight', 'maxTextureImageUnits',
+-      'maxCombinedTextureImageUnits', 'maxVertexAttribs',
+-      'maxVertexTextureImageUnits', 'maxVertexUniformVectors',
+-      'maxFragmentUniformVectors', 'maxVaryingVectors', 'maxSamples',
+-      'maxAnisotropy',
+-    ]);
++    normalizeNumberFields(webglProfile, webglDefaults);
+     const webgl2Profile = persona.gpu['webgl2Profile'] as Record<string, unknown>;
+-    normalizeNumberFields(webgl2Profile, [
+-      'max3DTextureSize', 'maxArrayTextureLayers', 'maxColorAttachments',
+-      'maxDrawBuffers', 'maxUniformBlockSize', 'uniformBufferOffsetAlignment',
+-      'maxTextureLodBias', 'maxSamples',
+-    ]);
++    normalizeNumberFields(webgl2Profile, webgl2Defaults);
+     const webgpuProfile = persona.gpu['webgpuProfile'] as Record<string, unknown>;
+-    normalizeNumberFields(webgpuProfile, [
+-      'maxTextureDimension1D', 'maxTextureDimension2D',
+-      'maxTextureDimension3D', 'maxTextureArrayLayers', 'maxBindGroups',
+-      'maxBindingsPerBindGroup', 'maxUniformBufferBindingSize',
+-      'maxStorageBufferBindingSize', 'maxBufferSize', 'maxVertexBuffers',
+-      'maxVertexAttributes', 'maxComputeWorkgroupStorageSize',
+-      'maxComputeInvocationsPerWorkgroup', 'maxComputeWorkgroupSizeX',
+-      'maxComputeWorkgroupSizeY', 'maxComputeWorkgroupSizeZ',
+-      'maxComputeWorkgroupsPerDimension',
+-    ]);
++    normalizeNumberFields(webgpuProfile, webgpuDefaults);
+     persona.gpu['webgpuFeatures'] =
+         toStringList(persona.gpu['webgpuFeatures']);
+     if (!(persona.gpu['webgpuFeatures'] as string[]).length) {

@@ -1,0 +1,13 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index b4d1290..1725b5b 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -3108,6 +3108,8 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+         {};
+     for (const [key, value] of Object.entries(defaults)) {
+       if (shaped[key] === undefined || shaped[key] === null ||
++          (typeof shaped[key] === 'string' &&
++           !String(shaped[key]).trim()) ||
+           Number.isNaN(Number(shaped[key]))) {
+         shaped[key] = value;
+       }

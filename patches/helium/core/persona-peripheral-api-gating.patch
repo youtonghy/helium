@@ -1,0 +1,497 @@
+diff --git a/third_party/blink/renderer/core/events/pointer_event.cc b/third_party/blink/renderer/core/events/pointer_event.cc
+index 677da5ac..b4d47899 100644
+--- a/third_party/blink/renderer/core/events/pointer_event.cc
++++ b/third_party/blink/renderer/core/events/pointer_event.cc
+@@ -11,6 +11,7 @@
+ #include "third_party/blink/renderer/core/dom/events/event_path.h"
+ #include "third_party/blink/renderer/core/events/pointer_event_util.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+ #include "third_party/blink/renderer/platform/wtf/math_extras.h"
+ 
+@@ -204,6 +205,15 @@ PointerId PointerEvent::pointerIdForBindings() const {
+   return pointerId();
+ }
+ 
++int32_t PointerEvent::persistentDeviceId() const {
++  if (auto* document = GetDocument()) {
++    if (PersonaSpoofingHelper::IsEnabled(document)) {
++      return 0;
++    }
++  }
++  return persistent_device_id_;
++}
++
+ Document* PointerEvent::GetDocument() const {
+   if (auto* local_dom_window = DynamicTo<LocalDOMWindow>(view()))
+     return local_dom_window->document();
+diff --git a/third_party/blink/renderer/core/events/pointer_event.h b/third_party/blink/renderer/core/events/pointer_event.h
+index 754410fb..f983a89c 100644
+--- a/third_party/blink/renderer/core/events/pointer_event.h
++++ b/third_party/blink/renderer/core/events/pointer_event.h
+@@ -107,7 +107,7 @@ class CORE_EXPORT PointerEvent : public MouseEvent {
+ 
+   Document* GetDocument() const;
+ 
+-  int32_t persistentDeviceId() const { return persistent_device_id_; }
++  int32_t persistentDeviceId() const;
+ 
+   bool GetPreventCountingAsInteraction() const {
+     return prevent_counting_as_interaction_;
+diff --git a/third_party/blink/renderer/modules/installedapp/DEPS b/third_party/blink/renderer/modules/installedapp/DEPS
+index dc115d0d..0877faff 100644
+--- a/third_party/blink/renderer/modules/installedapp/DEPS
++++ b/third_party/blink/renderer/modules/installedapp/DEPS
+@@ -1,3 +1,4 @@
+ include_rules = [
+     "+services/metrics/public/cpp",
+-]
+\ No newline at end of file
++    "+third_party/blink/renderer/core/helium_persona",
++]
+diff --git a/third_party/blink/renderer/modules/installedapp/navigator_installed_app.cc b/third_party/blink/renderer/modules/installedapp/navigator_installed_app.cc
+index 8cd793a2..13dc82bc 100644
+--- a/third_party/blink/renderer/modules/installedapp/navigator_installed_app.cc
++++ b/third_party/blink/renderer/modules/installedapp/navigator_installed_app.cc
+@@ -12,6 +12,7 @@
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/frame/navigator.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/modules/installedapp/installed_app_controller.h"
+ #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+ #include "third_party/blink/renderer/platform/bindings/script_state.h"
+@@ -42,6 +43,15 @@ NavigatorInstalledApp::getInstalledRelatedApps(
+     return EmptyPromise();
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(navigator.DomWindow())) {
++    auto* resolver = MakeGarbageCollected<
++        ScriptPromiseResolver<IDLSequence<RelatedApplication>>>(
++        script_state, exception_state.GetContext());
++    auto promise = resolver->Promise();
++    resolver->Resolve(HeapVector<Member<RelatedApplication>>());
++    return promise;
++  }
++
+   auto* resolver = MakeGarbageCollected<
+       ScriptPromiseResolver<IDLSequence<RelatedApplication>>>(
+       script_state, exception_state.GetContext());
+diff --git a/third_party/blink/renderer/modules/managed_device/navigator_managed_data.cc b/third_party/blink/renderer/modules/managed_device/navigator_managed_data.cc
+index c812a030..fb205181 100644
+--- a/third_party/blink/renderer/modules/managed_device/navigator_managed_data.cc
++++ b/third_party/blink/renderer/modules/managed_device/navigator_managed_data.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "third_party/blink/renderer/modules/managed_device/navigator_managed_data.h"
+ 
++#include <optional>
++
+ #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
+ #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+@@ -13,6 +15,7 @@
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/navigator.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+ #include "third_party/blink/renderer/modules/event_target_modules.h"
+ #include "third_party/blink/renderer/platform/bindings/exception_code.h"
+@@ -43,6 +46,16 @@ bool AreDeviceAttributesAllowedByPermissionsPolicy(ExecutionContext* context) {
+       network::mojom::PermissionsPolicyFeature::kDeviceAttributes);
+ }
+ 
++ScriptPromise<IDLNullable<IDLString>> ResolveNullDeviceAttribute(
++    ScriptState* script_state) {
++  auto* resolver =
++      MakeGarbageCollected<ScriptPromiseResolver<IDLNullable<IDLString>>>(
++          script_state);
++  auto promise = resolver->Promise();
++  resolver->Resolve(std::nullopt);
++  return promise;
++}
++
+ }  // namespace
+ 
+ const char NavigatorManagedData::kSupplementName[] = "NavigatorManagedData";
+@@ -146,6 +159,15 @@ void NavigatorManagedData::OnServiceConnectionError() {
+ ScriptPromise<IDLRecord<IDLString, IDLAny>>
+ NavigatorManagedData::getManagedConfiguration(ScriptState* script_state,
+                                               Vector<String> keys) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    auto* resolver = MakeGarbageCollected<
++        ScriptPromiseResolver<IDLRecord<IDLString, IDLAny>>>(script_state);
++    auto promise = resolver->Promise();
++    HeapVector<std::pair<String, ScriptValue>> result;
++    resolver->Resolve(result);
++    return promise;
++  }
++
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<IDLRecord<IDLString, IDLAny>>>(
+           script_state);
+@@ -173,6 +195,9 @@ ScriptPromise<IDLNullable<IDLString>> NavigatorManagedData::getDirectoryId(
+   if (!CheckDeviceAttributesAllowed(exception_state)) {
+     return EmptyPromise();
+   }
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return ResolveNullDeviceAttribute(script_state);
++  }
+ 
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<IDLNullable<IDLString>>>(
+@@ -192,6 +217,9 @@ ScriptPromise<IDLNullable<IDLString>> NavigatorManagedData::getHostname(
+   if (!CheckDeviceAttributesAllowed(exception_state)) {
+     return EmptyPromise();
+   }
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return ResolveNullDeviceAttribute(script_state);
++  }
+ 
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<IDLNullable<IDLString>>>(
+@@ -211,6 +239,9 @@ ScriptPromise<IDLNullable<IDLString>> NavigatorManagedData::getSerialNumber(
+   if (!CheckDeviceAttributesAllowed(exception_state)) {
+     return EmptyPromise();
+   }
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return ResolveNullDeviceAttribute(script_state);
++  }
+ 
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<IDLNullable<IDLString>>>(
+@@ -230,6 +261,9 @@ ScriptPromise<IDLNullable<IDLString>> NavigatorManagedData::getAnnotatedAssetId(
+   if (!CheckDeviceAttributesAllowed(exception_state)) {
+     return EmptyPromise();
+   }
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return ResolveNullDeviceAttribute(script_state);
++  }
+ 
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<IDLNullable<IDLString>>>(
+@@ -249,6 +283,9 @@ NavigatorManagedData::getAnnotatedLocation(ScriptState* script_state,
+   if (!CheckDeviceAttributesAllowed(exception_state)) {
+     return EmptyPromise();
+   }
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return ResolveNullDeviceAttribute(script_state);
++  }
+ 
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<IDLNullable<IDLString>>>(
+@@ -338,6 +375,9 @@ void NavigatorManagedData::AddedEventListener(
+   }
+ 
+   EventTarget::AddedEventListener(event_type, registered_listener);
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return;
++  }
+ #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+   if (event_type == event_type_names::kManagedconfigurationchange) {
+     if (!configuration_observer_.is_bound()) {
+diff --git a/third_party/blink/renderer/modules/presentation/DEPS b/third_party/blink/renderer/modules/presentation/DEPS
+index ec7c7852..87ba9ab7 100644
+--- a/third_party/blink/renderer/modules/presentation/DEPS
++++ b/third_party/blink/renderer/modules/presentation/DEPS
+@@ -1,6 +1,7 @@
+ include_rules = [
+     "+mojo/public",
+     "-third_party/blink/renderer/modules",
++    "+third_party/blink/renderer/core/helium_persona",
+     "+third_party/blink/renderer/modules/event_modules.h",
+     "+third_party/blink/renderer/modules/event_target_modules.h",
+     "+third_party/blink/renderer/modules/event_target_modules_names.h",
+diff --git a/third_party/blink/renderer/modules/presentation/presentation.cc b/third_party/blink/renderer/modules/presentation/presentation.cc
+index 69dc0c78..c02fa78e 100644
+--- a/third_party/blink/renderer/modules/presentation/presentation.cc
++++ b/third_party/blink/renderer/modules/presentation/presentation.cc
+@@ -7,6 +7,7 @@
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/navigator.h"
+ #include "third_party/blink/renderer/core/frame/settings.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/modules/presentation/presentation_controller.h"
+ #include "third_party/blink/renderer/modules/presentation/presentation_receiver.h"
+ #include "third_party/blink/renderer/modules/presentation/presentation_request.h"
+@@ -64,6 +65,8 @@ void Presentation::setDefaultRequest(PresentationRequest* request) {
+   LocalDOMWindow* window = GetSupplementable()->DomWindow();
+   if (!window)
+     return;
++  if (PersonaSpoofingHelper::IsEnabled(window))
++    return;
+ 
+   PresentationController* controller = PresentationController::From(*window);
+   controller->GetPresentationService()->SetDefaultPresentationUrls(
+@@ -72,6 +75,8 @@ void Presentation::setDefaultRequest(PresentationRequest* request) {
+ 
+ void Presentation::MaybeInitReceiver() {
+   LocalDOMWindow* window = GetSupplementable()->DomWindow();
++  if (PersonaSpoofingHelper::IsEnabled(window))
++    return;
+   if (!receiver_ && window && IsOutermostDocument(window) &&
+       window->GetFrame()->GetSettings()->GetPresentationReceiver()) {
+     receiver_ = MakeGarbageCollected<PresentationReceiver>(window);
+@@ -79,6 +84,8 @@ void Presentation::MaybeInitReceiver() {
+ }
+ 
+ PresentationReceiver* Presentation::receiver() {
++  if (PersonaSpoofingHelper::IsEnabled(GetSupplementable()->DomWindow()))
++    return nullptr;
+   MaybeInitReceiver();
+   return receiver_.Get();
+ }
+diff --git a/third_party/blink/renderer/modules/presentation/presentation_availability.cc b/third_party/blink/renderer/modules/presentation/presentation_availability.cc
+index 13e5fb63..60e4f5d0 100644
+--- a/third_party/blink/renderer/modules/presentation/presentation_availability.cc
++++ b/third_party/blink/renderer/modules/presentation/presentation_availability.cc
+@@ -10,6 +10,7 @@
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_state_observer.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/modules/event_target_modules_names.h"
+ #include "third_party/blink/renderer/modules/presentation/presentation_availability_state.h"
+ #include "third_party/blink/renderer/modules/presentation/presentation_controller.h"
+@@ -104,6 +105,9 @@ void PresentationAvailability::SetState(State state) {
+ }
+ 
+ void PresentationAvailability::UpdateListening() {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   PresentationController* controller =
+       PresentationController::FromContext(GetExecutionContext());
+   if (!controller) {
+diff --git a/third_party/blink/renderer/modules/presentation/presentation_request.cc b/third_party/blink/renderer/modules/presentation/presentation_request.cc
+index 17853ae8..fe525fe8 100644
+--- a/third_party/blink/renderer/modules/presentation/presentation_request.cc
++++ b/third_party/blink/renderer/modules/presentation/presentation_request.cc
+@@ -14,6 +14,7 @@
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/frame/settings.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
+ #include "third_party/blink/renderer/modules/event_target_modules.h"
+ #include "third_party/blink/renderer/modules/presentation/presentation_availability_state.h"
+@@ -143,6 +144,15 @@ ScriptPromise<PresentationConnection> PresentationRequest::start(
+     return EmptyPromise();
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(window)) {
++    auto* resolver =
++        MakeGarbageCollected<ScriptPromiseResolver<PresentationConnection>>(
++            script_state, exception_state.GetContext());
++    resolver->RejectWithDOMException(DOMExceptionCode::kNotFoundError,
++                                     "No screens found.");
++    return resolver->Promise();
++  }
++
+   PresentationController* controller = PresentationController::From(*window);
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<PresentationConnection>>(
+@@ -169,6 +179,16 @@ ScriptPromise<PresentationConnection> PresentationRequest::reconnect(
+     return EmptyPromise();
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    auto* resolver =
++        MakeGarbageCollected<ScriptPromiseResolver<PresentationConnection>>(
++            script_state, exception_state.GetContext());
++    resolver->RejectWithDOMException(
++        DOMExceptionCode::kNotFoundError,
++        "Error joining route: No matching route");
++    return resolver->Promise();
++  }
++
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<PresentationConnection>>(
+           script_state, exception_state.GetContext());
+@@ -206,6 +226,15 @@ ScriptPromise<PresentationAvailability> PresentationRequest::getAvailability(
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<PresentationAvailability>>(
+           script_state, exception_state.GetContext());
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    if (!availability_ || availability_->value()) {
++      availability_ =
++          PresentationAvailability::Take(GetExecutionContext(), urls_, false);
++    }
++    resolver->Resolve(availability_);
++    return resolver->Promise();
++  }
++
+   auto screen_availability =
+       controller->GetAvailabilityState()->GetScreenAvailability(urls_);
+   // Reject Promise if screen availability is unsupported for all URLs.
+diff --git a/third_party/blink/renderer/modules/remoteplayback/DEPS b/third_party/blink/renderer/modules/remoteplayback/DEPS
+index a64d765b..52a3e823 100644
+--- a/third_party/blink/renderer/modules/remoteplayback/DEPS
++++ b/third_party/blink/renderer/modules/remoteplayback/DEPS
+@@ -2,6 +2,7 @@ include_rules = [
+     "+mojo/public",
+     "+media/base",
+     "-third_party/blink/renderer/modules",
++    "+third_party/blink/renderer/core/helium_persona",
+     "+third_party/blink/renderer/modules/event_target_modules.h",
+     "+third_party/blink/renderer/modules/modules_export.h",
+     "+third_party/blink/renderer/modules/presentation",
+diff --git a/third_party/blink/renderer/modules/remoteplayback/remote_playback.cc b/third_party/blink/renderer/modules/remoteplayback/remote_playback.cc
+index 49de3969..5b657bf6 100644
+--- a/third_party/blink/renderer/modules/remoteplayback/remote_playback.cc
++++ b/third_party/blink/renderer/modules/remoteplayback/remote_playback.cc
+@@ -24,6 +24,7 @@
+ #include "third_party/blink/renderer/core/html/media/html_video_element.h"
+ #include "third_party/blink/renderer/core/html/media/remote_playback_observer.h"
+ #include "third_party/blink/renderer/core/html_names.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/probe/async_task_context.h"
+ #include "third_party/blink/renderer/core/probe/core_probes.h"
+ #include "third_party/blink/renderer/modules/event_target_modules.h"
+@@ -244,6 +245,12 @@ ScriptPromise<IDLUndefined> RemotePlayback::prompt(
+     return EmptyPromise();
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    exception_state.ThrowDOMException(DOMExceptionCode::kNotFoundError,
++                                      "No remote playback devices found.");
++    return EmptyPromise();
++  }
++
+   if (!RuntimeEnabledFeatures::RemotePlaybackBackendEnabled()) {
+     exception_state.ThrowDOMException(
+         DOMExceptionCode::kNotSupportedError,
+@@ -286,6 +293,8 @@ bool RemotePlayback::HasPendingActivity() const {
+ void RemotePlayback::PromptInternal() {
+   if (!GetExecutionContext())
+     return;
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
+ 
+   PresentationController* controller =
+       PresentationController::FromContext(GetExecutionContext());
+@@ -450,6 +459,13 @@ void RemotePlayback::SourceChanged(const KURL& source,
+ }
+ 
+ void RemotePlayback::UpdateAvailabilityUrlsAndStartListening() {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    StopListeningForAvailability();
++    availability_urls_.clear();
++    availability_ = mojom::ScreenAvailability::UNAVAILABLE;
++    return;
++  }
++
+   if (is_background_availability_monitoring_disabled_for_testing_ ||
+       IsBackgroundAvailabilityMonitoringDisabled() ||
+       !RuntimeEnabledFeatures::RemotePlaybackBackendEnabled()) {
+@@ -530,6 +546,9 @@ void RemotePlayback::StateChangedForTesting(bool is_connected) {
+ }
+ 
+ bool RemotePlayback::RemotePlaybackAvailable() const {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return false;
++
+   if (IsBackgroundAvailabilityMonitoringDisabled() &&
+       RuntimeEnabledFeatures::RemotePlaybackBackendEnabled() &&
+       !media_element_->currentSrc().IsEmpty()) {
+@@ -688,6 +707,9 @@ void RemotePlayback::StopListeningForAvailability() {
+ }
+ 
+ void RemotePlayback::MaybeStartListeningForAvailability() {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   if (IsBackgroundAvailabilityMonitoringDisabled() ||
+       is_background_availability_monitoring_disabled_for_testing_) {
+     return;
+diff --git a/third_party/blink/renderer/modules/xr/DEPS b/third_party/blink/renderer/modules/xr/DEPS
+index e6fb8a27..280f7a23 100644
+--- a/third_party/blink/renderer/modules/xr/DEPS
++++ b/third_party/blink/renderer/modules/xr/DEPS
+@@ -1,4 +1,5 @@
+ include_rules = [
++    "+third_party/blink/renderer/core/helium_persona",
+     "+mojo/public/cpp/system/platform_handle.h",
+     "+device/vr/buildflags/buildflags.h",
+     "+device/vr/public/cpp/features.h",
+diff --git a/third_party/blink/renderer/modules/xr/xr_system.cc b/third_party/blink/renderer/modules/xr/xr_system.cc
+index 4ad2f073..b37a143b 100644
+--- a/third_party/blink/renderer/modules/xr/xr_system.cc
++++ b/third_party/blink/renderer/modules/xr/xr_system.cc
+@@ -32,6 +32,7 @@
+ #include "third_party/blink/renderer/core/frame/settings.h"
+ #include "third_party/blink/renderer/core/frame/viewport_data.h"
+ #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/html/html_element.h"
+ #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+@@ -947,6 +948,11 @@ ScriptPromise<IDLBoolean> XRSystem::isSessionSupported(
+     return promise;  // Promise will be rejected by generated bindings
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    resolver->Resolve(false);
++    return promise;
++  }
++
+   DisableBackForwardCache();
+ 
+   device::mojom::blink::XRSessionMode session_mode =
+@@ -1258,6 +1264,12 @@ ScriptPromise<XRSession> XRSystem::requestSession(
+                             // bindings
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(DomWindow())) {
++    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
++                                      kNoDevicesMessage);
++    return EmptyPromise();
++  }
++
+   DisableBackForwardCache();
+ 
+   device::mojom::blink::XRSessionMode session_mode =
+@@ -1432,6 +1444,12 @@ void XRSystem::MakeXrCompatibleAsync(
+     return;
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    std::move(callback).Run(
++        device::mojom::XrCompatibleResult::kNoDeviceAvailable);
++    return;
++  }
++
+   TryEnsureService();
+   if (service_.is_bound()) {
+     service_->MakeXrCompatible(std::move(callback));
+@@ -1451,6 +1469,9 @@ void XRSystem::MakeXrCompatibleSync(
+   }
+   *xr_compatible_result = device::mojom::XrCompatibleResult::kNoDeviceAvailable;
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   TryEnsureService();
+   if (service_.is_bound())
+     service_->MakeXrCompatible(xr_compatible_result);
+@@ -1467,6 +1488,8 @@ void XRSystem::OnSessionEnded(XRSession* session) {
+ // it might be able to support immersive sessions, where it couldn't before.
+ void XRSystem::OnDeviceChanged() {
+   ExecutionContext* context = GetExecutionContext();
++  if (PersonaSpoofingHelper::IsEnabled(context))
++    return;
+   if (context && context->IsFeatureEnabled(
+                      network::mojom::PermissionsPolicyFeature::kWebXr)) {
+     DispatchEvent(*blink::Event::Create(event_type_names::kDevicechange));
+@@ -1766,6 +1789,9 @@ void XRSystem::OnEnvironmentProviderDisconnect() {
+ void XRSystem::TryEnsureService() {
+   DVLOG(2) << __func__;
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   // If we already have a service, there's nothing to do.
+   if (service_.is_bound()) {
+     DVLOG(2) << __func__ << ": service already bound";

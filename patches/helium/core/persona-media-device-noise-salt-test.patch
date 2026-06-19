@@ -1,0 +1,37 @@
+diff --git a/content/browser/helium_noise/noise_token_data_unittest.cc b/content/browser/helium_noise/noise_token_data_unittest.cc
+--- a/content/browser/helium_noise/noise_token_data_unittest.cc
++++ b/content/browser/helium_noise/noise_token_data_unittest.cc
+@@ -181,6 +181,13 @@ TEST_F(HeliumNoiseTokenDataTest,
+   different_network.monochrome_depth = 1;
+   blink::HeliumPersonaSnapshot different_seed =
+       MakeSeededPersona("manual-seed-2");
++  blink::HeliumPersonaSnapshot different_media_devices = persona;
++  different_media_devices.media_video_input_device_id = "persona-camera-2";
++  different_media_devices.media_video_input_label = "External USB Camera";
++  different_media_devices.media_video_width = 1920;
++  different_media_devices.media_video_height = 1080;
++  different_media_devices.media_audio_channel_count = 1;
++  different_media_devices.media_voice_isolation = true;
+ 
+   const blink::HeliumNoiseTokenMap tokens =
+       HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
+@@ -193,6 +200,9 @@ TEST_F(HeliumNoiseTokenDataTest,
+   const blink::HeliumNoiseTokenMap different_network_tokens =
+       HeliumNoiseTokenData::GetTokens(&browser_context_, origin,
+                                       different_network);
++  const blink::HeliumNoiseTokenMap different_media_tokens =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, origin,
++                                      different_media_devices);
+   const blink::HeliumNoiseTokenMap different_seed_tokens =
+       HeliumNoiseTokenData::GetTokens(&browser_context_, origin,
+                                       different_seed);
+@@ -211,6 +221,9 @@ TEST_F(HeliumNoiseTokenDataTest,
+   EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
+             TokenValue(different_network_tokens,
+                        blink::HeliumNoiseFeature::kCanvas));
++  EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
++            TokenValue(different_media_tokens,
++                       blink::HeliumNoiseFeature::kCanvas));
+   EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
+             TokenValue(different_seed_tokens,
+                        blink::HeliumNoiseFeature::kCanvas));

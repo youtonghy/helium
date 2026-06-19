@@ -1,0 +1,41 @@
+diff --git a/third_party/blink/renderer/modules/webaudio/audio_context.cc b/third_party/blink/renderer/modules/webaudio/audio_context.cc
+index f7ad833..a236680 100644
+--- a/third_party/blink/renderer/modules/webaudio/audio_context.cc
++++ b/third_party/blink/renderer/modules/webaudio/audio_context.cc
+@@ -87,6 +87,8 @@ constexpr double kOutputLatencyQuatizingFactor = 0.008;
+ // When the client has enough permission, the outputLatency property gets
+ // 1ms precision.
+ constexpr double kOutputLatencyMaxPrecisionFactor = 0.001;
++constexpr double kPersonaAudioBaseLatency = 0.01;
++constexpr double kPersonaAudioOutputLatency = 0.02;
+ 
+ // Operations tracked in the WebAudio.AudioContext.Operation histogram.
+ enum class AudioContextOperation {
+@@ -1145,8 +1147,11 @@ double AudioContext::baseLatency() const {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
+   DCHECK(destination());
+ 
+-  if (!base::FeatureList::IsEnabled(blink::features::kHeliumNoiseAudio) ||
+-      !PersonaSpoofingHelper::AudioNoiseEnabled(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return kPersonaAudioBaseLatency;
++  }
++
++  if (!base::FeatureList::IsEnabled(blink::features::kHeliumNoiseAudio)) {
+     return base_latency_;
+   }
+ 
+@@ -1160,8 +1165,11 @@ double AudioContext::outputLatency() const {
+ 
+   DeferredTaskHandler::GraphAutoLocker locker(this);
+ 
+-  if (!base::FeatureList::IsEnabled(blink::features::kHeliumNoiseAudio) ||
+-      !PersonaSpoofingHelper::AudioNoiseEnabled(GetExecutionContext())) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return kPersonaAudioOutputLatency;
++  }
++
++  if (!base::FeatureList::IsEnabled(blink::features::kHeliumNoiseAudio)) {
+     return output_position_.hardware_output_latency;
+   }
+ 

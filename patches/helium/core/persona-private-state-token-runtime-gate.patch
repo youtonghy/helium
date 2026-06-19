@@ -1,0 +1,55 @@
+diff --git a/content/browser/renderer_host/render_frame_host_impl.cc b/content/browser/renderer_host/render_frame_host_impl.cc
+index 3693ef6..cce4ca4 100644
+--- a/content/browser/renderer_host/render_frame_host_impl.cc
++++ b/content/browser/renderer_host/render_frame_host_impl.cc
+@@ -2025,6 +2025,8 @@ class RenderFrameHostImpl::SubresourceLoaderFactoriesConfig {
+     result.trust_token_issuance_policy_ =
+         DetermineAfterCommitWhetherToForbidTrustTokenOperation(
+             frame, network::mojom::TrustTokenOperationType::kIssuance);
++    result.ApplyPersonaPrivateStateTokenPolicy(
++        frame.GetPage().persona_snapshot());
+ 
+     // Our data collection policy disallows collecting UKMs while prerendering.
+     // So, assign a valid ID only when the page is not in the prerendering
+@@ -2101,6 +2103,8 @@ class RenderFrameHostImpl::SubresourceLoaderFactoriesConfig {
+               navigation_request.GetRenderFrameHost(),
+               navigation_request.commit_params(), result.origin(),
+               network::mojom::TrustTokenOperationType::kIssuance);
++      result.ApplyPersonaPrivateStateTokenPolicy(
++          navigation_request.persona_snapshot());
+ 
+       // Determine if the frame's sandboxing policy contains the
+       // `allow-same-site-none-cookies` value and a CookieSettingOverride should
+@@ -2210,6 +2214,18 @@ class RenderFrameHostImpl::SubresourceLoaderFactoriesConfig {
+   // Private constructor - please go through the static For... methods.
+   SubresourceLoaderFactoriesConfig() = default;
+ 
++  void ApplyPersonaPrivateStateTokenPolicy(
++      const blink::HeliumPersonaSnapshot& persona_snapshot) {
++    if (!persona_snapshot.IsEnabled() ||
++        persona_snapshot.allow_private_state_tokens) {
++      return;
++    }
++    trust_token_redemption_policy_ =
++        network::mojom::TrustTokenOperationPolicyVerdict::kForbid;
++    trust_token_issuance_policy_ =
++        network::mojom::TrustTokenOperationPolicyVerdict::kForbid;
++  }
++
+   url::Origin origin_;
+   net::IsolationInfo isolation_info_;
+   network::mojom::ClientSecurityStatePtr client_security_state_;
+@@ -14883,6 +14899,13 @@ void RenderFrameHostImpl::BindRestrictedCookieManagerWithOrigin(
+ 
+ void RenderFrameHostImpl::BindTrustTokenQueryAnswerer(
+     mojo::PendingReceiver<network::mojom::TrustTokenQueryAnswerer> receiver) {
++  const blink::HeliumPersonaSnapshot& persona_snapshot =
++      GetPage().persona_snapshot();
++  if (persona_snapshot.IsEnabled() &&
++      !persona_snapshot.allow_private_state_tokens) {
++    return;
++  }
++
+   auto top_frame_origin = ComputeTopFrameOrigin(GetLastCommittedOrigin());
+ 
+   // A check at the callsite in the renderer ensures a correctly functioning

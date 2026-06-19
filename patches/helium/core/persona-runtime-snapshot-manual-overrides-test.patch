@@ -1,0 +1,206 @@
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index 7357bc6..66cff1e 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -314,4 +314,200 @@ TEST(HeliumPersonaPrefsTest, SnapshotRoundTripsCompleteFields) {
+                   .value_or(false));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict persona = ClonePresetIntoProfile(
++      prefs, "preset-windows-11-en-us-new-york");
++  ASSERT_FALSE(persona.empty());
++
++  persona.Set("name", "Manual runtime override");
++  persona.Set("noiseSeed", "manual-runtime-seed");
++  persona.Set("userAgent", "ManualUA/149.0");
++  persona.Set("platform", "Linux x86_64");
++
++  base::Value::Dict* ua_ch = persona.FindDict("uaCh");
++  ASSERT_TRUE(ua_ch);
++  ua_ch->Set("platform", "Linux");
++  ua_ch->Set("platformVersion", "6.8.0");
++  ua_ch->Set("architecture", "x86");
++  ua_ch->Set("bitness", "64");
++  ua_ch->Set("model", "");
++  ua_ch->Set("fullVersion", "149.0.9999.1");
++  ua_ch->Set("mobile", false);
++  ua_ch->Set("wow64", true);
++  base::Value::List form_factors;
++  form_factors.Append("Desktop");
++  ua_ch->Set("formFactors", std::move(form_factors));
++
++  base::Value::Dict* region = persona.FindDict("region");
++  ASSERT_TRUE(region);
++  region->Set("timezone", "Europe/Paris");
++  region->Set("locale", "fr-FR");
++  region->Set("acceptLanguage", "fr-FR,fr;q=0.9,en;q=0.8");
++  base::Value::List navigator_languages;
++  navigator_languages.Append("fr-FR");
++  navigator_languages.Append("fr");
++  navigator_languages.Append("en");
++  region->Set("navigatorLanguages", std::move(navigator_languages));
++
++  base::Value::Dict* gpu = persona.FindDict("gpu");
++  ASSERT_TRUE(gpu);
++  gpu->Set("vendor", "Manual GPU Vendor");
++  gpu->Set("renderer", "Manual GPU Renderer");
++  gpu->Set("webgpuAdapter", "Manual WebGPU Adapter");
++  gpu->Set("driver", "31.0.manual");
++
++  base::Value::Dict* webgl_profile = gpu->FindDict("webglProfile");
++  ASSERT_TRUE(webgl_profile);
++  webgl_profile->Set("maxTextureSize", 4096);
++  webgl_profile->Set("maxCubeMapTextureSize", 4096);
++  webgl_profile->Set("maxRenderbufferSize", 4096);
++  webgl_profile->Set("maxViewportWidth", 3000);
++  webgl_profile->Set("maxViewportHeight", 2000);
++  webgl_profile->Set("maxTextureImageUnits", 8);
++  webgl_profile->Set("maxCombinedTextureImageUnits", 16);
++  webgl_profile->Set("maxVertexAttribs", 12);
++  webgl_profile->Set("maxVertexTextureImageUnits", 8);
++  webgl_profile->Set("maxVertexUniformVectors", 512);
++  webgl_profile->Set("maxFragmentUniformVectors", 512);
++  webgl_profile->Set("maxVaryingVectors", 16);
++  webgl_profile->Set("maxSamples", 2);
++  webgl_profile->Set("maxAnisotropy", 4.0);
++
++  base::Value::Dict* webgl2_profile = gpu->FindDict("webgl2Profile");
++  ASSERT_TRUE(webgl2_profile);
++  webgl2_profile->Set("max3DTextureSize", 1024);
++  webgl2_profile->Set("maxArrayTextureLayers", 512);
++  webgl2_profile->Set("maxColorAttachments", 4);
++  webgl2_profile->Set("maxDrawBuffers", 4);
++  webgl2_profile->Set("maxUniformBlockSize", 32768);
++  webgl2_profile->Set("uniformBufferOffsetAlignment", 128);
++  webgl2_profile->Set("maxTextureLodBias", 8.0);
++  webgl2_profile->Set("maxSamples", 2);
++
++  base::Value::Dict* webgpu_profile = gpu->FindDict("webgpuProfile");
++  ASSERT_TRUE(webgpu_profile);
++  webgpu_profile->Set("maxTextureDimension1D", 4096);
++  webgpu_profile->Set("maxTextureDimension2D", 4096);
++  webgpu_profile->Set("maxTextureDimension3D", 1024);
++  webgpu_profile->Set("maxTextureArrayLayers", 128);
++  webgpu_profile->Set("maxBindGroups", 4);
++  webgpu_profile->Set("maxBindingsPerBindGroup", 500);
++  webgpu_profile->Set("maxUniformBufferBindingSize", 32768);
++  webgpu_profile->Set("maxStorageBufferBindingSize", 67108864);
++  webgpu_profile->Set("maxBufferSize", 134217728);
++  webgpu_profile->Set("maxVertexBuffers", 6);
++  webgpu_profile->Set("maxVertexAttributes", 12);
++  webgpu_profile->Set("maxComputeWorkgroupStorageSize", 8192);
++  webgpu_profile->Set("maxComputeInvocationsPerWorkgroup", 128);
++  webgpu_profile->Set("maxComputeWorkgroupSizeX", 128);
++  webgpu_profile->Set("maxComputeWorkgroupSizeY", 128);
++  webgpu_profile->Set("maxComputeWorkgroupSizeZ", 32);
++  webgpu_profile->Set("maxComputeWorkgroupsPerDimension", 32768);
++
++  base::Value::Dict* screen = persona.FindDict("screen");
++  ASSERT_TRUE(screen);
++  screen->Set("width", 3000);
++  screen->Set("height", 2000);
++  screen->Set("availWidth", 3000);
++  screen->Set("availHeight", 1960);
++  screen->Set("deviceScaleFactor", 1.5);
++  screen->Set("colorDepth", 30);
++  screen->Set("pixelDepth", 30);
++  screen->Set("refreshRate", 120);
++
++  base::Value::Dict* hardware = persona.FindDict("hardware");
++  ASSERT_TRUE(hardware);
++  hardware->Set("hardwareConcurrency", 6);
++  hardware->Set("deviceMemory", 6.0);
++  hardware->Set("touchEnabled", true);
++  hardware->Set("maxTouchPoints", 5);
++
++  base::Value::Dict* fonts = persona.FindDict("fonts");
++  ASSERT_TRUE(fonts);
++  fonts->Set("id", "manual-font-pack");
++  fonts->Set("displayName", "Manual font pack");
++  base::Value::List families;
++  families.Append("Custom Sans");
++  families.Append("Custom Serif");
++  fonts->Set("families", std::move(families));
++  base::Value::List aliases;
++  aliases.Append("sans-serif=Custom Sans");
++  fonts->Set("aliases", std::move(aliases));
++
++  base::Value::Dict* font_rendering = persona.FindDict("fontRendering");
++  ASSERT_TRUE(font_rendering);
++  font_rendering->Set("id", "manual-font-rendering");
++  font_rendering->Set("displayName", "Manual rendering");
++  font_rendering->Set("engine", "FreeType");
++  font_rendering->Set("hinting", "none");
++  font_rendering->Set("antialiasing", true);
++  font_rendering->Set("subpixelRendering", false);
++  font_rendering->Set("subpixelPositioning", true);
++  font_rendering->Set("lcdText", false);
++  font_rendering->Set("useAutohinter", true);
++  font_rendering->Set("useBitmaps", true);
++  font_rendering->Set("textGamma", 1.8);
++  font_rendering->Set("textContrast", 0.4);
++
++  base::Value::Dict* advanced = persona.FindDict("advanced");
++  ASSERT_TRUE(advanced);
++  advanced->Set("clientHintsEnabled", false);
++  advanced->Set("reduceSystemInfo", true);
++  advanced->Set("canvasNoise", false);
++  advanced->Set("audioNoise", false);
++  advanced->Set("fontMetricNoise", false);
++  advanced->Set("allowGeolocation", true);
++  advanced->Set("allowLocalFonts", true);
++  advanced->Set("virtualMediaDevices", false);
++
++  EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
++
++  base::Value::Dict runtime = MakeRuntimeSnapshot(prefs);
++  EXPECT_EQ("manual-runtime-seed", *runtime.FindString("noiseSeed"));
++  EXPECT_EQ("ManualUA/149.0", *runtime.FindString("userAgent"));
++  EXPECT_EQ("fr-FR", *runtime.FindDict("region")->FindString("locale"));
++  EXPECT_EQ("Manual GPU Renderer",
++            *runtime.FindDict("gpu")->FindString("renderer"));
++  EXPECT_EQ(4096, runtime.FindDict("gpu")
++                      ->FindDict("webglProfile")
++                      ->FindInt("maxTextureSize")
++                      .value_or(0));
++  EXPECT_EQ(134217728, runtime.FindDict("gpu")
++                           ->FindDict("webgpuProfile")
++                           ->FindInt("maxBufferSize")
++                           .value_or(0));
++  EXPECT_EQ(3000, runtime.FindDict("screen")->FindInt("width").value_or(0));
++  EXPECT_EQ(6, runtime.FindDict("hardware")
++                   ->FindInt("hardwareConcurrency")
++                   .value_or(0));
++  EXPECT_EQ("manual-font-pack", *runtime.FindDict("fonts")->FindString("id"));
++  EXPECT_FALSE(runtime.FindDict("advanced")
++                   ->FindBool("clientHintsEnabled")
++                   .value_or(true));
++  EXPECT_TRUE(runtime.FindDict("advanced")
++                  ->FindBool("allowGeolocation")
++                  .value_or(false));
++
++  PersonaSnapshot snapshot = MakePersonaSnapshot(runtime);
++  EXPECT_EQ("manual-runtime-seed", snapshot.noise_seed);
++  EXPECT_EQ("Europe/Paris", snapshot.timezone);
++  EXPECT_EQ("Manual GPU Vendor", snapshot.gpu_vendor);
++  EXPECT_EQ(3000, snapshot.screen_width);
++  EXPECT_EQ(6, snapshot.hardware_concurrency);
++  EXPECT_EQ(5, snapshot.max_touch_points);
++  EXPECT_EQ(4096, snapshot.webgl_max_texture_size);
++  EXPECT_EQ(512, snapshot.webgl2_max_array_texture_layers);
++  EXPECT_EQ(134217728, snapshot.webgpu_max_buffer_size);
++  EXPECT_EQ("manual-font-pack", snapshot.font_pack_id);
++  EXPECT_EQ("manual-font-rendering", snapshot.font_rendering_id);
++  EXPECT_FALSE(snapshot.client_hints_enabled);
++  EXPECT_TRUE(snapshot.reduce_system_info);
++  EXPECT_TRUE(snapshot.allow_geolocation);
++  EXPECT_TRUE(snapshot.allow_local_fonts);
++  EXPECT_FALSE(snapshot.virtual_media_devices);
++}
++
+ }  // namespace helium_persona
+\ No newline at end of file

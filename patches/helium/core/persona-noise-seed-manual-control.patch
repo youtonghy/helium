@@ -1,0 +1,227 @@
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -813,6 +813,7 @@
+   target.os = source.os;
+   target.user_agent = source.user_agent;
+   target.platform = source.platform;
++  target.noise_seed = source.noise_seed;
+   target.ua_ch_platform = source.ua_ch_platform;
+   target.ua_ch_platform_version = source.ua_ch_platform_version;
+   target.ua_ch_architecture = source.ua_ch_architecture;
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -172,6 +172,8 @@
+         value="{{editablePersona_.basePresetId}}"></cr-input>
+     <cr-input label="Base preset"
+         value="{{editablePersona_.basePresetName}}"></cr-input>
++    <cr-input class="wide" label="Noise seed"
++        value="{{editablePersona_.noiseSeed}}"></cr-input>
+     <cr-input label="Device" value="{{editablePersona_.device}}"></cr-input>
+     <cr-input label="OS" value="{{editablePersona_.os}}"></cr-input>
+     <cr-input label="Platform" value="{{editablePersona_.platform}}"></cr-input>
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -230,6 +230,7 @@
+     const persona = this.clonePersona_(base);
+     const sourceName = persona.basePresetName || persona.name || 'Custom persona';
+     persona.id = '';
++    persona.noiseSeed = '';
+     persona.name = persona.name ? `${persona.name} copy` : 'Custom persona';
+     persona.source = 'custom';
+     persona.basePresetId = persona.basePresetId || this.activePersonaId_;
+@@ -291,6 +292,9 @@
+ 
+   private ensureEditableShape_(persona: PersonaRecord) {
+     persona.uaCh = persona.uaCh || {};
++    if (persona.noiseSeed === undefined || persona.noiseSeed === null) {
++      persona.noiseSeed = persona.id || '';
++    }
+     persona.region = persona.region || {};
+     persona.gpu = persona.gpu || {};
+     persona.gpu['webglProfile'] = persona.gpu['webglProfile'] || {
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -23,10 +23,16 @@
+ 
+ namespace {
+ 
++std::string MakeRandomToken() {
++  return base::NumberToString(base::RandUint64());
++}
++
+ std::string MakeCustomPersonaId() {
+-  uint64_t token = base::RandUint64();
+-  return base::StringPrintf("persona-%s",
+-                            base::NumberToString(token).c_str());
++  return base::StringPrintf("persona-%s", MakeRandomToken().c_str());
++}
++
++std::string MakeNoiseSeed() {
++  return base::StringPrintf("seed-%s", MakeRandomToken().c_str());
+ }
+ 
+ std::string GetPersonaId(const base::Value::Dict& persona) {
+@@ -145,6 +151,11 @@
+ }
+ 
+ void EnsurePersonaCompatibilityFields(base::Value::Dict& persona) {
++  const std::string* noise_seed = persona.FindString("noiseSeed");
++  if (!noise_seed || noise_seed->empty()) {
++    const std::string* id = persona.FindString("id");
++    persona.Set("noiseSeed", id && !id->empty() ? *id : MakeNoiseSeed());
++  }
+   if (!persona.FindDict("fontRendering")) {
+     persona.Set("fontRendering", MakeDefaultFontRenderingProfile());
+   }
+@@ -171,6 +182,7 @@
+       preset_name ? *preset_name : std::string();
+ 
+   persona.Set("id", MakeCustomPersonaId());
++  persona.Set("noiseSeed", MakeNoiseSeed());
+   persona.Set("source", "custom");
+   persona.Set("builtin", false);
+   persona.Set("modified", false);
+@@ -367,6 +379,9 @@
+   if (id.empty()) {
+     id = MakeCustomPersonaId();
+     persona.Set("id", id);
++    if (!persona.FindString("noiseSeed")) {
++      persona.Set("noiseSeed", MakeNoiseSeed());
++    }
+     if (!persona.FindString("basePresetName")) {
+       const std::string* name = persona.FindString("name");
+       persona.Set("basePresetName", name ? *name : "Custom persona");
+@@ -377,6 +392,9 @@
+     // Built-in presets are immutable. Saving a built-in id creates a copy.
+     persona.Set("id", MakeCustomPersonaId());
+     id = GetPersonaId(persona);
++    if (!persona.FindString("noiseSeed")) {
++      persona.Set("noiseSeed", MakeNoiseSeed());
++    }
+   }
+ 
+   persona.Set("source", "custom");
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -49,6 +49,7 @@
+   EXPECT_TRUE(PersonaHasRequiredFields(windows));
+   EXPECT_EQ("Windows 11", *windows.FindString("os"));
+   EXPECT_EQ("Win32", *windows.FindString("platform"));
++  EXPECT_EQ(*windows.FindString("id"), *windows.FindString("noiseSeed"));
+ 
+   const base::Value::Dict* region = windows.FindDict("region");
+   ASSERT_TRUE(region);
+@@ -119,6 +120,8 @@
+       prefs.GetList(prefs::kHeliumPersonaRecords);
+   ASSERT_EQ(1u, personas.size());
+   EXPECT_EQ(*cloned_id, *DictAt(personas, 0).FindString("id"));
++  ASSERT_TRUE(DictAt(personas, 0).FindString("noiseSeed"));
++  EXPECT_NE(*cloned_id, *DictAt(personas, 0).FindString("noiseSeed"));
+   EXPECT_EQ("preset-windows-11-zh-cn-shanghai",
+             *DictAt(personas, 0).FindString("basePresetId"));
+ 
+@@ -147,6 +150,7 @@
+   base::Value::Dict active = GetActivePersona(prefs);
+   ASSERT_TRUE(active.FindString("id"));
+   EXPECT_NE(original_id, *active.FindString("id"));
++  EXPECT_EQ(original_id, *active.FindString("noiseSeed"));
+   EXPECT_EQ(original_id, *active.FindString("basePresetId"));
+   EXPECT_TRUE(active.FindBool("modified").value_or(false));
+ }
+@@ -269,6 +273,7 @@
+   base::Value::Dict value = PersonaSnapshotToValue(snapshot);
+   EXPECT_TRUE(PersonaHasRequiredFields(value));
+   EXPECT_FALSE(value.FindBool("passthrough").value_or(true));
++  EXPECT_EQ("preset-linux-de-de-berlin", *value.FindString("noiseSeed"));
+   EXPECT_EQ("Linux", *value.FindDict("uaCh")->FindString("platform"));
+   EXPECT_EQ("149.0.7827.114",
+             *value.FindDict("uaCh")->FindString("fullVersion"));
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -281,6 +281,7 @@
+                              base::Value::Dict advanced) {
+   base::Value::Dict preset;
+   preset.Set("id", id);
++  preset.Set("noiseSeed", id);
+   preset.Set("name", name);
+   preset.Set("source", source);
+   preset.Set("device", device);
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -158,6 +158,7 @@
+   snapshot.os = GetString(persona, "os");
+   snapshot.user_agent = GetString(persona, "userAgent");
+   snapshot.platform = GetString(persona, "platform");
++  snapshot.noise_seed = GetString(persona, "noiseSeed");
+   snapshot.passthrough = persona.FindBool("passthrough").value_or(false);
+ 
+   snapshot.ua_ch_platform = GetNestedString(persona, "uaCh", "platform");
+@@ -375,6 +376,7 @@
+   value.Set("os", snapshot.os);
+   value.Set("userAgent", snapshot.user_agent);
+   value.Set("platform", snapshot.platform);
++  value.Set("noiseSeed", snapshot.noise_seed);
+   value.Set("passthrough", snapshot.passthrough);
+ 
+   base::Value::Dict ua_ch;
+--- a/components/helium_persona/persona_snapshot.h
++++ b/components/helium_persona/persona_snapshot.h
+@@ -27,6 +27,7 @@
+   std::string os;
+   std::string user_agent;
+   std::string platform;
++  std::string noise_seed;
+   bool passthrough = false;
+ 
+   std::string ua_ch_platform;
+--- a/content/browser/helium_noise/noise_token_data.cc
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -94,6 +94,7 @@
+   }
+ 
+   std::string salt;
++  AppendSaltPart(salt, persona_snapshot.noise_seed);
+   AppendSaltPart(salt, persona_snapshot.id);
+   AppendSaltPart(salt, persona_snapshot.name);
+   AppendSaltPart(salt, persona_snapshot.device);
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -28,6 +28,7 @@
+   std::string os;
+   std::string user_agent;
+   std::string platform;
++  std::string noise_seed;
+ 
+   std::string ua_ch_platform;
+   std::string ua_ch_platform_version;
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -62,6 +62,10 @@
+       const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.platform;
+   }
++  static const std::string& noise_seed(
++      const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.noise_seed;
++  }
+   static const std::string& ua_ch_platform(
+       const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.ua_ch_platform;
+@@ -612,6 +616,7 @@
+          data.ReadDevice(&out->device) && data.ReadOs(&out->os) &&
+          data.ReadUserAgent(&out->user_agent) &&
+          data.ReadPlatform(&out->platform) &&
++         data.ReadNoiseSeed(&out->noise_seed) &&
+          data.ReadUaChPlatform(&out->ua_ch_platform) &&
+          data.ReadUaChPlatformVersion(&out->ua_ch_platform_version) &&
+          data.ReadUaChArchitecture(&out->ua_ch_architecture) &&
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -18,6 +18,7 @@
+   string os;
+   string user_agent;
+   string platform;
++  string noise_seed;
+ 
+   string ua_ch_platform;
+   string ua_ch_platform_version;

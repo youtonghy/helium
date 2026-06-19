@@ -1,0 +1,350 @@
+diff --git a/components/helium_persona/persona_prefs.cc b/components/helium_persona/persona_prefs.cc
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -1083,6 +1083,128 @@
+   return normalized;
+ }
+ 
++bool IsStringListEqual(const base::Value::List* first,
++                       const base::Value::List* second) {
++  if (!first || !second || first->size() != second->size()) {
++    return false;
++  }
++  for (size_t index = 0; index < first->size(); ++index) {
++    const std::string* first_value = (*first)[index].GetIfString();
++    const std::string* second_value = (*second)[index].GetIfString();
++    if (!first_value || !second_value || *first_value != *second_value) {
++      return false;
++    }
++  }
++  return true;
++}
++
++bool FontPackProfileMatches(const base::Value::Dict& persona_profile,
++                            const base::Value::Dict& reference_profile) {
++  const std::string* display_name = persona_profile.FindString("displayName");
++  const std::string* reference_display_name =
++      reference_profile.FindString("displayName");
++  return display_name && reference_display_name &&
++         *display_name == *reference_display_name &&
++         IsStringListEqual(persona_profile.FindList("families"),
++                           reference_profile.FindList("families")) &&
++         IsStringListEqual(persona_profile.FindList("aliases"),
++                           reference_profile.FindList("aliases"));
++}
++
++bool FontRenderingProfileMatches(const base::Value::Dict& persona_profile,
++                                 const base::Value::Dict& reference_profile) {
++  const std::string* display_name = persona_profile.FindString("displayName");
++  const std::string* reference_display_name =
++      reference_profile.FindString("displayName");
++  const std::string* engine = persona_profile.FindString("engine");
++  const std::string* reference_engine = reference_profile.FindString("engine");
++  const std::string* hinting = persona_profile.FindString("hinting");
++  const std::string* reference_hinting = reference_profile.FindString("hinting");
++  return display_name && reference_display_name &&
++         *display_name == *reference_display_name && engine &&
++         reference_engine && *engine == *reference_engine && hinting &&
++         reference_hinting && *hinting == *reference_hinting &&
++         persona_profile.FindBool("antialiasing") ==
++             reference_profile.FindBool("antialiasing") &&
++         persona_profile.FindBool("subpixelRendering") ==
++             reference_profile.FindBool("subpixelRendering") &&
++         persona_profile.FindBool("subpixelPositioning") ==
++             reference_profile.FindBool("subpixelPositioning") &&
++         persona_profile.FindBool("lcdText") ==
++             reference_profile.FindBool("lcdText") &&
++         persona_profile.FindBool("useAutohinter") ==
++             reference_profile.FindBool("useAutohinter") &&
++         persona_profile.FindBool("useBitmaps") ==
++             reference_profile.FindBool("useBitmaps") &&
++         GetProfileNumber(persona_profile, "textGamma", 1.4) ==
++             GetProfileNumber(reference_profile, "textGamma", 1.4) &&
++         GetProfileNumber(persona_profile, "textContrast", 0.0) ==
++             GetProfileNumber(reference_profile, "textContrast", 0.0);
++}
++
++void StripProfileListMetadata(base::Value::Dict& profile) {
++  profile.Remove("builtin");
++  profile.Remove("modified");
++  profile.Remove("updated");
++}
++
++void PropagateFontPackProfileToLinkedPersonas(
++    PrefService& pref_service,
++    const base::Value::Dict& previous_profile,
++    const base::Value::Dict& updated_profile) {
++  const std::string profile_id = GetProfileId(updated_profile);
++  if (profile_id.empty()) {
++    return;
++  }
++  base::Value::Dict persona_profile = updated_profile.Clone();
++  StripProfileListMetadata(persona_profile);
++  base::Value::List personas = CloneUserPersonas(pref_service);
++  bool changed = false;
++  for (base::Value& entry : personas) {
++    base::Value::Dict* persona = entry.GetIfDict();
++    base::Value::Dict* fonts = persona ? persona->FindDict("fonts") : nullptr;
++    if (!fonts || GetProfileId(*fonts) != profile_id ||
++        !FontPackProfileMatches(*fonts, previous_profile)) {
++      continue;
++    }
++    persona->Set("fonts", persona_profile.Clone());
++    persona->Set("updated", base::Time::Now().InMillisecondsFSinceUnixEpoch());
++    changed = true;
++  }
++  if (changed) {
++    pref_service.SetList(prefs::kHeliumPersonaRecords, std::move(personas));
++  }
++}
++
++void PropagateFontRenderingProfileToLinkedPersonas(
++    PrefService& pref_service,
++    const base::Value::Dict& previous_profile,
++    const base::Value::Dict& updated_profile) {
++  const std::string profile_id = GetProfileId(updated_profile);
++  if (profile_id.empty()) {
++    return;
++  }
++  base::Value::Dict persona_profile = updated_profile.Clone();
++  StripProfileListMetadata(persona_profile);
++  base::Value::List personas = CloneUserPersonas(pref_service);
++  bool changed = false;
++  for (base::Value& entry : personas) {
++    base::Value::Dict* persona = entry.GetIfDict();
++    base::Value::Dict* rendering =
++        persona ? persona->FindDict("fontRendering") : nullptr;
++    if (!rendering || GetProfileId(*rendering) != profile_id ||
++        !FontRenderingProfileMatches(*rendering, previous_profile)) {
++      continue;
++    }
++    persona->Set("fontRendering", persona_profile.Clone());
++    persona->Set("updated", base::Time::Now().InMillisecondsFSinceUnixEpoch());
++    changed = true;
++  }
++  if (changed) {
++    pref_service.SetList(prefs::kHeliumPersonaRecords, std::move(personas));
++  }
++}
++
+ base::Value::List GetCompatibleBuiltinPersonaPresets() {
+   base::Value::List presets = GetBuiltinPersonaPresets();
+   for (base::Value& value : presets) {
+@@ -1277,11 +1399,14 @@
+   profile.Set("modified", true);
+   profile.Set("updated", base::Time::Now().InMillisecondsFSinceUnixEpoch());
+ 
++  base::Value::Dict updated_profile = profile.Clone();
+   base::Value::List profiles = CloneCustomFontPackProfiles(pref_service);
++  std::optional<base::Value::Dict> previous_profile;
+   bool replaced = false;
+   for (base::Value& entry : profiles) {
+     base::Value::Dict* dict = entry.GetIfDict();
+     if (dict && GetProfileId(*dict) == id) {
++      previous_profile = dict->Clone();
+       *dict = profile.Clone();
+       replaced = true;
+       break;
+@@ -1293,6 +1418,10 @@
+ 
+   pref_service.SetList(prefs::kHeliumCustomFontPackProfiles,
+                        std::move(profiles));
++  if (previous_profile) {
++    PropagateFontPackProfileToLinkedPersonas(
++        pref_service, *previous_profile, updated_profile);
++  }
+   pref_service.SetInteger(
+       prefs::kHeliumPersonaRevision,
+       pref_service.GetInteger(prefs::kHeliumPersonaRevision) + 1);
+@@ -1342,11 +1471,14 @@
+   profile.Set("modified", true);
+   profile.Set("updated", base::Time::Now().InMillisecondsFSinceUnixEpoch());
+ 
++  base::Value::Dict updated_profile = profile.Clone();
+   base::Value::List profiles = CloneCustomFontRenderingProfiles(pref_service);
++  std::optional<base::Value::Dict> previous_profile;
+   bool replaced = false;
+   for (base::Value& entry : profiles) {
+     base::Value::Dict* dict = entry.GetIfDict();
+     if (dict && GetProfileId(*dict) == id) {
++      previous_profile = dict->Clone();
+       *dict = profile.Clone();
+       replaced = true;
+       break;
+@@ -1358,6 +1490,10 @@
+ 
+   pref_service.SetList(prefs::kHeliumCustomFontRenderingProfiles,
+                        std::move(profiles));
++  if (previous_profile) {
++    PropagateFontRenderingProfileToLinkedPersonas(
++        pref_service, *previous_profile, updated_profile);
++  }
+   pref_service.SetInteger(
+       prefs::kHeliumPersonaRevision,
+       pref_service.GetInteger(prefs::kHeliumPersonaRevision) + 1);
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -738,6 +738,75 @@
+   EXPECT_FALSE(ProfilesContainId(*profiles, "custom-lcd"));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, UpdatingFontRenderingPropagatesLinkedPersonas) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict rendering;
++  rendering.Set("id", "custom-follow-rendering");
++  rendering.Set("displayName", "Follow rendering");
++  rendering.Set("engine", "Skia");
++  rendering.Set("hinting", "medium");
++  rendering.Set("antialiasing", true);
++  rendering.Set("subpixelRendering", false);
++  rendering.Set("subpixelPositioning", false);
++  rendering.Set("lcdText", false);
++  rendering.Set("useAutohinter", false);
++  rendering.Set("useBitmaps", false);
++  rendering.Set("textGamma", 1.4);
++  rendering.Set("textContrast", 0.0);
++  EXPECT_TRUE(SaveFontRenderingProfile(prefs, rendering.Clone()));
++
++  base::Value::Dict state = GetPersonaState(prefs);
++  const base::Value::Dict* saved_rendering = FindProfileById(
++      *state.FindList("fontRenderingProfiles"), "custom-follow-rendering");
++  ASSERT_TRUE(saved_rendering);
++
++  base::Value::Dict linked = ClonePresetIntoProfile(
++      prefs, "preset-windows-11-en-us-new-york");
++  ASSERT_FALSE(linked.empty());
++  const std::string linked_id = *linked.FindString("id");
++  linked.Set("fontRendering", saved_rendering->Clone());
++  EXPECT_TRUE(SavePersona(prefs, std::move(linked)));
++
++  base::Value::Dict detached = ClonePresetIntoProfile(
++      prefs, "preset-windows-11-en-us-new-york");
++  ASSERT_FALSE(detached.empty());
++  const std::string detached_id = *detached.FindString("id");
++  base::Value::Dict detached_rendering = saved_rendering->Clone();
++  detached_rendering.Set("textGamma", 1.9);
++  detached.Set("fontRendering", std::move(detached_rendering));
++  EXPECT_TRUE(SavePersona(prefs, std::move(detached)));
++
++  rendering.Set("displayName", "Follow rendering updated");
++  rendering.Set("hinting", "full");
++  rendering.Set("textGamma", 1.6);
++  EXPECT_TRUE(SaveFontRenderingProfile(prefs, std::move(rendering)));
++
++  state = GetPersonaState(prefs);
++  const base::Value::List* personas = state.FindList("personas");
++  ASSERT_TRUE(personas);
++  const base::Value::Dict* linked_persona =
++      FindProfileById(*personas, linked_id);
++  ASSERT_TRUE(linked_persona);
++  const base::Value::Dict* linked_rendering =
++      linked_persona->FindDict("fontRendering");
++  ASSERT_TRUE(linked_rendering);
++  EXPECT_EQ("Follow rendering updated",
++            *linked_rendering->FindString("displayName"));
++  EXPECT_EQ("full", *linked_rendering->FindString("hinting"));
++  EXPECT_EQ(1.6, linked_rendering->FindDouble("textGamma").value_or(0));
++
++  const base::Value::Dict* detached_persona =
++      FindProfileById(*personas, detached_id);
++  ASSERT_TRUE(detached_persona);
++  const base::Value::Dict* detached_rendering_saved =
++      detached_persona->FindDict("fontRendering");
++  ASSERT_TRUE(detached_rendering_saved);
++  EXPECT_EQ(1.9,
++            detached_rendering_saved->FindDouble("textGamma").value_or(0));
++}
++
+ TEST(HeliumPersonaPrefsTest, SaveFontRenderingProfileCreatesIdWhenEmpty) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);
+@@ -859,6 +928,75 @@
+   EXPECT_TRUE(ProfilesContainId(*profiles, "custom-windows-11-core"));
+   EXPECT_FALSE(ProfilesContainId(*profiles, "custom-cjk"));
+ }
++
++TEST(HeliumPersonaPrefsTest, UpdatingFontPackProfilePropagatesLinkedPersonas) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict pack;
++  pack.Set("id", "custom-follow-fonts");
++  pack.Set("displayName", "Follow fonts");
++  base::Value::List families;
++  families.Append("Arial");
++  pack.Set("families", std::move(families));
++  base::Value::List aliases;
++  aliases.Append("sans-serif=Arial");
++  pack.Set("aliases", std::move(aliases));
++  EXPECT_TRUE(SaveFontPackProfile(prefs, pack.Clone()));
++
++  base::Value::Dict state = GetPersonaState(prefs);
++  const base::Value::Dict* saved_pack = FindProfileById(
++      *state.FindList("fontPackProfiles"), "custom-follow-fonts");
++  ASSERT_TRUE(saved_pack);
++
++  base::Value::Dict linked = ClonePresetIntoProfile(
++      prefs, "preset-windows-11-en-us-new-york");
++  ASSERT_FALSE(linked.empty());
++  const std::string linked_id = *linked.FindString("id");
++  linked.Set("fonts", saved_pack->Clone());
++  EXPECT_TRUE(SavePersona(prefs, std::move(linked)));
++
++  base::Value::Dict detached = ClonePresetIntoProfile(
++      prefs, "preset-windows-11-en-us-new-york");
++  ASSERT_FALSE(detached.empty());
++  const std::string detached_id = *detached.FindString("id");
++  base::Value::Dict detached_fonts = saved_pack->Clone();
++  base::Value::List detached_families;
++  detached_families.Append("Manual Sans");
++  detached_fonts.Set("families", std::move(detached_families));
++  detached.Set("fonts", std::move(detached_fonts));
++  EXPECT_TRUE(SavePersona(prefs, std::move(detached)));
++
++  pack.Set("displayName", "Follow fonts updated");
++  base::Value::List updated_families;
++  updated_families.Append("Arial");
++  updated_families.Append("Noto Sans");
++  pack.Set("families", std::move(updated_families));
++  EXPECT_TRUE(SaveFontPackProfile(prefs, std::move(pack)));
++
++  state = GetPersonaState(prefs);
++  const base::Value::List* personas = state.FindList("personas");
++  ASSERT_TRUE(personas);
++  const base::Value::Dict* linked_persona =
++      FindProfileById(*personas, linked_id);
++  ASSERT_TRUE(linked_persona);
++  const base::Value::Dict* linked_fonts = linked_persona->FindDict("fonts");
++  ASSERT_TRUE(linked_fonts);
++  EXPECT_EQ("Follow fonts updated", *linked_fonts->FindString("displayName"));
++  ASSERT_TRUE(linked_fonts->FindList("families"));
++  EXPECT_EQ(2u, linked_fonts->FindList("families")->size());
++
++  const base::Value::Dict* detached_persona =
++      FindProfileById(*personas, detached_id);
++  ASSERT_TRUE(detached_persona);
++  const base::Value::Dict* detached_fonts_saved =
++      detached_persona->FindDict("fonts");
++  ASSERT_TRUE(detached_fonts_saved);
++  ASSERT_TRUE(detached_fonts_saved->FindList("families"));
++  ASSERT_EQ(1u, detached_fonts_saved->FindList("families")->size());
++  EXPECT_EQ("Manual Sans",
++            (*detached_fonts_saved->FindList("families"))[0].GetString());
++}
+ 
+ TEST(HeliumPersonaPrefsTest, SaveFontPackProfileCreatesIdWhenEmpty) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -9,6 +9,7 @@
+ #include <string_view>
+ #include <vector>
+ 
++#include "base/strings/strcat.h"
+ #include "base/strings/string_util.h"
+ #include "base/values.h"
+ #include "components/helium_persona/persona_presets.h"

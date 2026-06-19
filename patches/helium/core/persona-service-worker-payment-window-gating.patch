@@ -1,0 +1,21 @@
+diff --git a/content/browser/service_worker/service_worker_version.cc b/content/browser/service_worker/service_worker_version.cc
+index 462dd996..6531b7b8 100644
+--- a/content/browser/service_worker/service_worker_version.cc
++++ b/content/browser/service_worker/service_worker_version.cc
+@@ -1934,6 +1934,16 @@ void ServiceWorkerVersion::OpenPaymentHandlerWindow(
+     std::move(callback).Run(
+         false /* success */, nullptr /* client */,
+         std::string("The service worker system is shutting down."));
++    return;
++  }
++
++  const blink::HeliumPersonaSnapshot persona_snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++          context_->wrapper()->browser_context());
++  if (persona_snapshot.IsEnabled() && !persona_snapshot.allow_payment_handler) {
++    std::move(callback).Run(
++        false /* success */, nullptr /* client */,
++        std::string("Payment handler windows are disabled by the active persona."));
+     return;
+   }
+ 

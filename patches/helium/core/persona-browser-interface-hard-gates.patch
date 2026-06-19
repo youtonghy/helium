@@ -1,0 +1,70 @@
+diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -925,6 +925,24 @@
+   blink::HeliumPersonaSnapshot snapshot =
+       GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
+   return !snapshot.IsEnabled() || snapshot.allow_gamepads;
++}
++
++bool HeliumPersonaAllowsMidi(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_midi;
++}
++
++bool HeliumPersonaAllowsRealBatteryStatus(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_real_battery_status;
++}
++
++bool HeliumPersonaAllowsWebXr(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_web_xr;
+ }
+ 
+ bool HeliumPersonaAllowsMediaPerformanceMetrics(RenderFrameHost* host) {
+@@ -1066,7 +1084,7 @@
+ #endif  // BUILDFLAG(ENABLE_MDNS)
+ 
+   // BrowserMainLoop::GetInstance() may be null on unit tests.
+-  if (BrowserMainLoop::GetInstance()) {
++  if (BrowserMainLoop::GetInstance() && HeliumPersonaAllowsMidi(host)) {
+     map->Add<midi::mojom::MidiSessionProvider>(
+         base::BindRepeating(&MidiHost::BindReceiver,
+                             host->GetProcess()->GetID(),
+@@ -1163,7 +1181,9 @@
+       base::ThreadPool::CreateSequencedTaskRunner(
+           {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
+ 
+-  map->Add<device::mojom::GamepadMonitor>(&device::GamepadMonitor::Create);
++  if (HeliumPersonaAllowsGamepads(host)) {
++    map->Add<device::mojom::GamepadMonitor>(&device::GamepadMonitor::Create);
++  }
+ 
+   map->Add<blink::mojom::WebSensorProvider>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetSensorProvider>);
+@@ -1424,7 +1444,9 @@
+     map->Add<blink::mojom::BackgroundFetchService>(
+         &BackgroundFetchServiceImpl::CreateForFrame);
+   }
+-  map->Add<device::mojom::BatteryMonitor>(&BindBatteryMonitor);
++  if (HeliumPersonaAllowsRealBatteryStatus(host)) {
++    map->Add<device::mojom::BatteryMonitor>(&BindBatteryMonitor);
++  }
+   map->Add<blink::mojom::ColorChooserFactory>(&BindColorChooserFactoryForFrame);
+   map->Add<blink::mojom::EyeDropperChooser>(&EyeDropperChooserImpl::Create);
+   if (HeliumPersonaAllowsCookieStore(host)) {
+@@ -1452,7 +1474,9 @@
+   }
+   map->Add<blink::mojom::WakeLockService>(&WakeLockServiceImpl::Create);
+ #if BUILDFLAG(ENABLE_VR)
+-  map->Add<device::mojom::VRService>(&VRServiceImpl::Create);
++  if (HeliumPersonaAllowsWebXr(host)) {
++    map->Add<device::mojom::VRService>(&VRServiceImpl::Create);
++  }
+ #else
+   map->Add<device::mojom::VRService>(
+       &EmptyBinderForFrame<device::mojom::VRService>);

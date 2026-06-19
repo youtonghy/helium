@@ -1,0 +1,267 @@
+--- a/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+@@ -20,6 +20,8 @@
+   fonts: Record<string, unknown>;
+   fontRendering: Record<string, unknown>;
+   advanced: Record<string, unknown>;
++  basePresetId?: string;
++  basePresetName?: string;
+   builtin?: boolean;
+   modified?: boolean;
+   passthrough?: boolean;
+@@ -31,6 +33,7 @@
+   activePersona: PersonaRecord;
+   presets: PersonaRecord[];
+   personas: PersonaRecord[];
++  fontRenderingProfiles: Array<Record<string, unknown>>;
+   warnings: string[];
+   revision: number;
+ }
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -156,6 +156,7 @@
+         <div class="persona-detail">
+           [[persona.device]] / [[persona.os]] / [[formatRegion_(persona)]]
+         </div>
++        <div class="persona-detail">[[formatPersonaSource_(persona)]]</div>
+       </div>
+       <div class="persona-actions">
+         <cr-button on-click="onUsePersonaClick_">$i18n{heliumPersonaUse}</cr-button>
+@@ -167,6 +168,10 @@
+   <div class="persona-section-title">$i18n{heliumPersonaIdentity}</div>
+   <div class="editor-grid">
+     <cr-input label="Name" value="{{editablePersona_.name}}"></cr-input>
++    <cr-input label="Base preset id"
++        value="{{editablePersona_.basePresetId}}"></cr-input>
++    <cr-input label="Base preset"
++        value="{{editablePersona_.basePresetName}}"></cr-input>
+     <cr-input label="Device" value="{{editablePersona_.device}}"></cr-input>
+     <cr-input label="OS" value="{{editablePersona_.os}}"></cr-input>
+     <cr-input label="Platform" value="{{editablePersona_.platform}}"></cr-input>
+@@ -257,7 +262,22 @@
+   </div>
+ 
+   <div class="persona-section-title">$i18n{heliumPersonaFonts}</div>
+-  <div class="editor-grid">
++  <template is="dom-repeat" items="[[fontRenderingProfiles_]]" as="profile">
++    <div class="cr-row persona-card">
++      <div class="persona-main cr-padded-text">
++        <div class="persona-name">[[profile.displayName]]</div>
++        <div class="persona-detail">
++          [[profile.engine]] / [[profile.hinting]]
++        </div>
++      </div>
++      <div class="persona-actions">
++        <cr-button on-click="onApplyFontRenderingClick_">Apply</cr-button>
++      </div>
++    </div>
++  </template>
++  <div class="editor-grid">
++    <cr-input label="Font pack id"
++        value="{{editablePersona_.fonts.id}}"></cr-input>
+     <cr-input label="Font pack"
+         value="{{editablePersona_.fonts.displayName}}"></cr-input>
+     <cr-input class="wide" label="Families"
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -28,6 +28,7 @@
+       presets_: Array,
+       personas_: Array,
+       personaOptions_: Array,
++      fontRenderingProfiles_: Array,
+       editablePersona_: Object,
+       activePersonaId_: String,
+       activePersonaSummary_: String,
+@@ -44,6 +45,7 @@
+   declare private presets_: PersonaRecord[];
+   declare private personas_: PersonaRecord[];
+   declare private personaOptions_: PersonaRecord[];
++  declare private fontRenderingProfiles_: Array<Record<string, unknown>>;
+   declare private editablePersona_: PersonaRecord;
+   declare private activePersonaId_: string;
+   declare private activePersonaSummary_: string;
+@@ -70,6 +72,7 @@
+     this.presets_ = state.presets || [];
+     this.personas_ = state.personas || [];
+     this.personaOptions_ = [...this.presets_, ...this.personas_];
++    this.fontRenderingProfiles_ = state.fontRenderingProfiles || [];
+     this.activePersonaId_ = state.activePersonaId || state.activePersona?.id || '';
+     this.editablePersona_ = this.clonePersona_(state.activePersona);
+     this.activePersonaSummary_ = this.formatPersonaSummary_(this.editablePersona_);
+@@ -186,6 +189,11 @@
+     return Boolean(persona?.passthrough);
+   }
+ 
++  private formatPersonaSource_(persona: PersonaRecord): string {
++    const baseName = persona.basePresetName || persona.source || 'custom';
++    return persona.modified ? `${baseName} / modified` : String(baseName);
++  }
++
+   private async onActivePersonaChanged_(event: Event) {
+     const select = event.target as HTMLSelectElement;
+     if (!select.value) {
+@@ -213,12 +221,31 @@
+   }
+ 
+   private async onNewPersonaClick_() {
+-    const preset = this.presets_.find(item => !this.isPassthroughPersona_(item));
+-    if (!preset) {
++    const base = this.isPassthroughPersona_(this.editablePersona_) ?
++        this.presets_.find(item => !this.isPassthroughPersona_(item)) :
++        this.editablePersona_;
++    if (!base) {
+       return;
+     }
+-    await this.browserProxy_.clonePreset(preset.id);
+-    await this.loadState_();
++    const persona = this.clonePersona_(base);
++    const sourceName = persona.basePresetName || persona.name || 'Custom persona';
++    persona.id = '';
++    persona.name = persona.name ? `${persona.name} copy` : 'Custom persona';
++    persona.source = 'custom';
++    persona.basePresetId = persona.basePresetId || this.activePersonaId_;
++    persona.basePresetName = sourceName;
++    persona.builtin = false;
++    persona.modified = true;
++    persona.passthrough = false;
++    this.normalizeNumbers_(persona);
++    await this.browserProxy_.savePersona(persona);
++    await this.loadState_();
++  }
++
++  private onApplyFontRenderingClick_(event: Event) {
++    const model = (event as CustomEvent).model;
++    const profile = model.profile as Record<string, unknown>;
++    this.set('editablePersona_.fontRendering', JSON.parse(JSON.stringify(profile)));
+   }
+ 
+   private async onUsePersonaClick_(event: Event) {
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -92,16 +92,29 @@
+ }
+ 
+ base::Value::Dict MakeEditablePersona(base::Value::Dict persona) {
++  const std::string* preset_id = persona.FindString("id");
++  const std::string* preset_name = persona.FindString("name");
++  const std::string base_preset_id = preset_id ? *preset_id : std::string();
++  const std::string base_preset_name =
++      preset_name ? *preset_name : std::string();
++
+   persona.Set("id", MakeCustomPersonaId());
+   persona.Set("source", "custom");
+   persona.Set("builtin", false);
+   persona.Set("modified", false);
++  if (!base_preset_id.empty()) {
++    persona.Set("basePresetId", base_preset_id);
++  }
++  if (!base_preset_name.empty()) {
++    persona.Set("basePresetName", base_preset_name);
++  }
+   persona.Set("created", base::Time::Now().InMillisecondsFSinceUnixEpoch());
+   persona.Set("updated", base::Time::Now().InMillisecondsFSinceUnixEpoch());
+ 
+-  const std::string* preset_name = persona.FindString("name");
+-  persona.Set("name", preset_name ? base::StringPrintf("%s copy", preset_name->c_str())
+-                                  : "Custom persona");
++  persona.Set("name", !base_preset_name.empty()
++                          ? base::StringPrintf("%s copy",
++                                               base_preset_name.c_str())
++                          : "Custom persona");
+   return persona;
+ }
+ 
+@@ -175,6 +188,7 @@
+             pref_service.GetString(prefs::kHeliumActivePersonaId));
+   state.Set("presets", GetBuiltinPersonaPresets());
+   state.Set("personas", CloneUserPersonas(pref_service));
++  state.Set("fontRenderingProfiles", GetBuiltinFontRenderingProfiles());
+ 
+   base::Value::Dict active = GetActivePersona(pref_service);
+   state.Set("activePersona", active.Clone());
+@@ -227,6 +241,10 @@
+   if (id.empty()) {
+     id = MakeCustomPersonaId();
+     persona.Set("id", id);
++    if (!persona.FindString("basePresetName")) {
++      const std::string* name = persona.FindString("name");
++      persona.Set("basePresetName", name ? *name : "Custom persona");
++    }
+   }
+ 
+   if (FindBuiltinPersona(id).empty() == false) {
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -70,6 +70,11 @@
+   EXPECT_EQ("windows-cleartype", *font_rendering->FindString("id"));
+   EXPECT_TRUE(font_rendering->FindBool("antialiasing").value_or(false));
+ 
++  base::Value::List rendering_profiles = GetBuiltinFontRenderingProfiles();
++  ASSERT_EQ(4u, rendering_profiles.size());
++  EXPECT_EQ("macos-coretext",
++            *DictAt(rendering_profiles, 1).FindString("id"));
++
+   const base::Value::Dict& current = DictAt(presets, 0);
+   EXPECT_TRUE(current.FindBool("passthrough").value_or(false));
+   EXPECT_TRUE(PersonaHasRequiredFields(current));
+@@ -104,6 +109,8 @@
+       prefs.GetList(prefs::kHeliumPersonaRecords);
+   ASSERT_EQ(1u, personas.size());
+   EXPECT_EQ(*cloned_id, *DictAt(personas, 0).FindString("id"));
++  EXPECT_EQ("preset-windows-11-zh-cn-shanghai",
++            *DictAt(personas, 0).FindString("basePresetId"));
+ 
+   base::Value::Dict active = GetActivePersona(prefs);
+   EXPECT_EQ(*cloned_id, *active.FindString("id"));
+@@ -130,7 +137,21 @@
+   base::Value::Dict active = GetActivePersona(prefs);
+   ASSERT_TRUE(active.FindString("id"));
+   EXPECT_NE(original_id, *active.FindString("id"));
++  EXPECT_EQ(original_id, *active.FindString("basePresetId"));
+   EXPECT_TRUE(active.FindBool("modified").value_or(false));
++}
++
++TEST(HeliumPersonaPrefsTest, StateIncludesIndependentFontRenderingProfiles) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict state = GetPersonaState(prefs);
++  const base::Value::List* profiles = state.FindList("fontRenderingProfiles");
++  ASSERT_TRUE(profiles);
++  ASSERT_EQ(4u, profiles->size());
++  EXPECT_EQ("DirectWrite", *DictAt(*profiles, 0).FindString("engine"));
++  EXPECT_EQ("CoreText", *DictAt(*profiles, 1).FindString("engine"));
++  EXPECT_EQ("FreeType", *DictAt(*profiles, 2).FindString("engine"));
+ }
+ 
+ TEST(HeliumPersonaPrefsTest, ValidationWarnsButAllowsConflicts) {
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -255,6 +255,15 @@
+ 
+ }  // namespace
+ 
++base::Value::List GetBuiltinFontRenderingProfiles() {
++  base::Value::List profiles;
++  profiles.Append(MakeWindowsClearTypeRendering());
++  profiles.Append(MakeMacCoreTextRendering());
++  profiles.Append(MakeLinuxFreeTypeRendering());
++  profiles.Append(MakeGenericGrayRendering());
++  return profiles;
++}
++
+ base::Value::Dict MakeCurrentSystemPreset() {
+   base::Value::Dict preset = MakePreset(
+       kDefaultPresetId,
+--- a/components/helium_persona/persona_presets.h
++++ b/components/helium_persona/persona_presets.h
+@@ -16,6 +16,9 @@
+ base::Value::List GetBuiltinPersonaPresets();
+ 
+ COMPONENT_EXPORT(HELIUM_PERSONA)
++base::Value::List GetBuiltinFontRenderingProfiles();
++
++COMPONENT_EXPORT(HELIUM_PERSONA)
+ base::Value::Dict MakeCurrentSystemPreset();
+ 
+ }  // namespace helium_persona

@@ -1,0 +1,251 @@
+--- a/components/helium_persona/persona_prefs_unittest.cc	2026-06-15 00:19:01
++++ b/components/helium_persona/persona_prefs_unittest.cc	2026-06-15 00:22:26
+@@ -154,6 +154,9 @@
+   ASSERT_TRUE(font_rendering);
+   font_rendering->Set("id", "windows-cleartype");
+   font_rendering->Set("engine", "DirectWrite");
++  base::Value::Dict* ua_ch = persona.FindDict("uaCh");
++  ASSERT_TRUE(ua_ch);
++  ua_ch->Set("fullVersion", "148.0.0.0");
+ 
+   base::Value::List warnings = ValidatePersona(persona);
+   EXPECT_TRUE(WarningsContain(warnings, "Chinese language profiles"));
+@@ -161,6 +164,7 @@
+   EXPECT_TRUE(WarningsContain(warnings, "deviceMemory should use"));
+   EXPECT_TRUE(WarningsContain(warnings, "maxTouchPoints should be 0"));
+   EXPECT_TRUE(WarningsContain(warnings, "CoreText font rendering"));
++  EXPECT_TRUE(WarningsContain(warnings, "UA-CH fullVersion major"));
+   EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
+ }
+ 
+--- a/components/helium_persona/persona_validation.cc	2026-06-15 00:19:01
++++ b/components/helium_persona/persona_validation.cc	2026-06-15 00:21:35
+@@ -127,6 +127,32 @@
+                           base::ToLowerASCII(std::string(prefix)));
+ }
+ 
++std::string ExtractMajorVersion(std::string_view version) {
++  size_t dot = version.find('.');
++  std::string_view major = dot == std::string_view::npos
++                               ? version
++                               : version.substr(0, dot);
++  return std::string(major);
++}
++
++std::string ExtractUaChromeMajor(std::string_view ua) {
++  constexpr std::string_view kToken = "Chrome/";
++  size_t token = ua.find(kToken);
++  if (token == std::string_view::npos) {
++    return std::string();
++  }
++  std::string_view version = ua.substr(token + kToken.size());
++  size_t end = version.find_first_of(" ;)/");
++  if (end != std::string_view::npos) {
++    version = version.substr(0, end);
++  }
++  return ExtractMajorVersion(version);
++}
++
++bool IsUaChGreaseBrand(std::string_view brand) {
++  return Contains(brand, "not") && Contains(brand, "brand");
++}
++
+ bool EqualsInsensitive(std::string_view lhs, std::string_view rhs) {
+   return base::ToLowerASCII(std::string(lhs)) ==
+          base::ToLowerASCII(std::string(rhs));
+@@ -217,6 +243,7 @@
+       GetNestedString(persona, "uaCh", "platformVersion");
+   const std::string_view ua_ch_architecture =
+       GetNestedString(persona, "uaCh", "architecture");
++  const std::string ua_major = ExtractUaChromeMajor(ua);
+   const std::string_view ua_ch_full_version =
+       GetNestedString(persona, "uaCh", "fullVersion");
+   const base::Value::Dict* ua_ch = persona.FindDict("uaCh");
+@@ -313,6 +340,33 @@
+   if (ua_ch_full_version.empty()) {
+     AddWarning(warnings,
+                "UA-CH fullVersion should be set so high-entropy hints match the UA.");
++  } else if (!ua_major.empty() &&
++             ExtractMajorVersion(ua_ch_full_version) != ua_major) {
++    AddWarning(warnings,
++               "UA-CH fullVersion major should match the UA Chrome major version.");
++  }
++  if (ua_ch_brands && !ua_major.empty()) {
++    for (const base::Value& value : *ua_ch_brands) {
++      const base::Value::Dict* brand = value.GetIfDict();
++      if (!brand) {
++        continue;
++      }
++      const std::string* brand_name = brand->FindString("brand");
++      const std::string* brand_version = brand->FindString("version");
++      if (!brand_name || IsUaChGreaseBrand(*brand_name)) {
++        continue;
++      }
++      if (!brand_version || brand_version->empty()) {
++        AddWarning(warnings,
++                   "UA-CH brand versions should be set for non-GREASE brands.");
++        continue;
++      }
++      if (ExtractMajorVersion(*brand_version) != ua_major) {
++        AddWarning(warnings,
++                   "UA-CH brand major versions should match the UA Chrome major version.");
++        break;
++      }
++    }
+   }
+   if (ua_ch_form_factors.empty()) {
+     AddWarning(warnings,
+--- a/content/browser/client_hints/client_hints.cc	2026-06-15 00:19:01
++++ b/content/browser/client_hints/client_hints.cc	2026-06-15 00:22:57
+@@ -480,6 +480,14 @@
+     net::HttpRequestHeaders* headers,
+     const blink::HeliumPersonaSnapshot& persona_snapshot,
+     bool use_deprecated_version = false) {
++  if (persona_snapshot.reduce_system_info) {
++    SetHeaderToDouble(headers,
++                      use_deprecated_version
++                          ? WebClientHintsType::kDeviceMemory_DEPRECATED
++                          : WebClientHintsType::kDeviceMemory,
++                      2);
++    return;
++  }
+   if (persona_snapshot.device_memory <= 0) {
+     AddDeviceMemoryHeader(headers, use_deprecated_version);
+     return;
+--- a/content/browser/font_access/font_access_manager.cc	2026-06-15 00:19:01
++++ b/content/browser/font_access/font_access_manager.cc	2026-06-15 00:22:57
+@@ -14,6 +14,7 @@
+ #include "base/functional/bind.h"
+ #include "base/memory/read_only_shared_memory_region.h"
+ #include "base/sequence_checker.h"
++#include "base/strings/string_util.h"
+ #include "base/task/thread_pool.h"
+ #include "base/types/pass_key.h"
+ #include "content/browser/font_access/font_enumeration_cache.h"
+@@ -42,6 +43,15 @@
+ 
+ namespace {
+ 
++std::string MakePersonaPostscriptName(const std::string& family) {
++  std::string postscript_name;
++  base::RemoveChars(family, " -_.,()[]{}", &postscript_name);
++  if (postscript_name.empty()) {
++    return "SystemRegular";
++  }
++  return postscript_name + "-Regular";
++}
++
+ base::ReadOnlySharedMemoryRegion CreatePersonaFontEnumerationRegion(
+     const blink::HeliumPersonaSnapshot& snapshot) {
+   if (!snapshot.IsEnabled() || snapshot.font_families.empty()) {
+@@ -49,14 +59,12 @@
+   }
+ 
+   blink::FontEnumerationTable table;
+-  size_t virtual_font_index = 0;
+   for (const std::string& family : snapshot.font_families) {
+     if (family.empty()) {
+       continue;
+     }
+     blink::FontEnumerationTable_FontData* font = table.add_fonts();
+-    font->set_postscript_name(
+-        "HeliumPersona-Font-" + std::to_string(++virtual_font_index));
++    font->set_postscript_name(MakePersonaPostscriptName(family));
+     font->set_full_name(family);
+     font->set_family(family);
+     font->set_style("Regular");
+@@ -200,15 +209,22 @@ void FontAccessManager::DidRequestPermission(
+   }
+ 
+   if (RenderFrameHostImpl* rfh = RenderFrameHostImpl::FromID(frame_id)) {
+-    base::ReadOnlySharedMemoryRegion persona_font_region =
+-        CreatePersonaFontEnumerationRegion(
+-            GetContentClient()->browser()->GetHeliumPersonaSnapshot(
+-                rfh->GetBrowserContext()));
+-    if (persona_font_region.IsValid()) {
+-      std::move(callback).Run(blink::mojom::FontEnumerationStatus::kOk,
+-                              std::move(persona_font_region));
++    blink::HeliumPersonaSnapshot persona_snapshot =
++        GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++            rfh->GetBrowserContext());
++    if (persona_snapshot.IsEnabled()) {
++      base::ReadOnlySharedMemoryRegion persona_font_region =
++          CreatePersonaFontEnumerationRegion(persona_snapshot);
++      if (persona_font_region.IsValid()) {
++        std::move(callback).Run(blink::mojom::FontEnumerationStatus::kOk,
++                                std::move(persona_font_region));
++      } else {
++        std::move(callback).Run(
++            blink::mojom::FontEnumerationStatus::kPermissionDenied,
++            base::ReadOnlySharedMemoryRegion());
++      }
+       return;
+     }
+   }
+ 
+   // Per-platform delegation for obtaining cached font enumeration data occurs
+--- a/third_party/blink/renderer/core/execution_context/navigator_base.cc	2026-06-15 00:19:01
++++ b/third_party/blink/renderer/core/execution_context/navigator_base.cc	2026-06-15 00:21:09
+@@ -123,11 +123,11 @@
+ }
+ 
+ unsigned int NavigatorBase::hardwareConcurrency() const {
++  if (PersonaSpoofingHelper::ReduceSystemInfo(GetExecutionContext()))
++    return 2;
+   if (auto cores =
+           PersonaSpoofingHelper::HardwareConcurrency(GetExecutionContext()))
+     return *cores;
+-  if (PersonaSpoofingHelper::ReduceSystemInfo(GetExecutionContext()))
+-    return 2;
+   if (base::FeatureList::IsEnabled(blink::features::kReducedSystemInfo))
+     return 2;
+   unsigned int hardware_concurrency =
+@@ -139,6 +139,8 @@
+ }
+ 
+ float NavigatorBase::deviceMemory() const {
++  if (PersonaSpoofingHelper::ReduceSystemInfo(GetExecutionContext()))
++    return 2;
+   if (auto memory = PersonaSpoofingHelper::DeviceMemory(GetExecutionContext()))
+     return *memory;
+   return NavigatorDeviceMemory::deviceMemory();
+--- a/third_party/blink/renderer/modules/font_access/font_metadata.cc	2026-06-15 00:19:01
++++ b/third_party/blink/renderer/modules/font_access/font_metadata.cc	2026-06-15 00:21:09
+@@ -72,14 +72,6 @@
+   if (!resolver->GetScriptState()->ContextIsValid())
+     return;
+ 
+-  if (postscriptName.starts_with("HeliumPersona-")) {
+-    ScriptState::Scope scope(resolver->GetScriptState());
+-    resolver->Reject(V8ThrowException::CreateTypeError(
+-        resolver->GetScriptState()->GetIsolate(),
+-        "Font data is unavailable for virtual persona fonts."));
+-    return;
+-  }
+-
+   SetUpFontUniqueLookupIfNecessary();
+ 
+   FontDescription description;
+
+--- a/third_party/blink/renderer/modules/screen_details/window_screen_details.cc	2026-06-15 00:19:01
++++ b/third_party/blink/renderer/modules/screen_details/window_screen_details.cc	2026-06-15 00:21:09
+@@ -7,6 +7,7 @@
+ #include "third_party/blink/public/mojom/permissions/permission_status.mojom-blink.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+@@ -68,5 +69,11 @@ ScriptPromise<ScreenDetails> WindowScreenDetails::GetScreenDetails(
+   LocalDOMWindow* window = LocalDOMWindow::From(script_state);
+   DCHECK(window->IsSecureContext());  // [SecureContext] in IDL.
++  if (PersonaSpoofingHelper::ShouldBlockWindowManagement(window)) {
++    exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
++                                      "Window management is unavailable for the active browser persona.");
++    return EmptyPromise();
++  }
++
+   if (!permission_service_.is_bound()) {
+     // See https://bit.ly/2S0zRAS for task types.
+     ConnectToPermissionService(

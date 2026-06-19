@@ -1,0 +1,924 @@
+diff --git a/third_party/blink/renderer/modules/bluetooth/DEPS b/third_party/blink/renderer/modules/bluetooth/DEPS
+--- a/third_party/blink/renderer/modules/bluetooth/DEPS
++++ b/third_party/blink/renderer/modules/bluetooth/DEPS
+@@ -2,6 +2,7 @@
+     "+device/bluetooth/public/mojom",
+     "+mojo/public/cpp/bindings",
+     "-third_party/blink/renderer/modules",
++    "+third_party/blink/renderer/core/helium_persona",
+     "+third_party/blink/renderer/modules/bluetooth",
+     "+third_party/blink/renderer/modules/event_target_modules.h",
+ ]
+diff --git a/third_party/blink/renderer/modules/bluetooth/bluetooth.cc b/third_party/blink/renderer/modules/bluetooth/bluetooth.cc
+--- a/third_party/blink/renderer/modules/bluetooth/bluetooth.cc
++++ b/third_party/blink/renderer/modules/bluetooth/bluetooth.cc
+@@ -31,6 +31,7 @@
+ #include "third_party/blink/renderer/core/frame/frame.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/frame/navigator.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+@@ -326,6 +327,10 @@
+     return ToResolvedPromise<IDLBoolean>(script_state, false);
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(window)) {
++    return ToResolvedPromise<IDLBoolean>(script_state, false);
++  }
++
+   CHECK(window->IsSecureContext());
+   EnsureServiceConnection(window);
+ 
+@@ -388,6 +393,14 @@
+   AddUnsupportedPlatformConsoleMessage(window);
+   CHECK(window->IsSecureContext());
+ 
++  if (PersonaSpoofingHelper::IsEnabled(window)) {
++    auto* resolver = MakeGarbageCollected<
++        ScriptPromiseResolver<IDLSequence<BluetoothDevice>>>(
++        script_state, exception_state.GetContext());
++    resolver->Resolve(HeapVector<Member<BluetoothDevice>>());
++    return resolver->Promise();
++  }
++
+   EnsureServiceConnection(window);
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<IDLSequence<BluetoothDevice>>>(
+@@ -428,8 +441,6 @@
+     return EmptyPromise();
+   }
+ 
+-  EnsureServiceConnection(window);
+-
+   // In order to convert the arguments from service names and aliases to just
+   // UUIDs, do the following substeps:
+   auto device_options = mojom::blink::WebBluetoothRequestDeviceOptions::New();
+@@ -439,6 +450,18 @@
+   if (exception_state.HadException())
+     return EmptyPromise();
+ 
++  if (PersonaSpoofingHelper::IsEnabled(window)) {
++    auto* resolver =
++        MakeGarbageCollected<ScriptPromiseResolver<BluetoothDevice>>(
++            script_state, exception_state.GetContext());
++    auto promise = resolver->Promise();
++    resolver->Reject(BluetoothError::CreateDOMException(
++        mojom::blink::WebBluetoothResult::CHOOSER_CANCELLED));
++    return promise;
++  }
++
++  EnsureServiceConnection(window);
++
+   // Subsequent steps are handled in the browser process.
+   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<BluetoothDevice>>(
+       script_state, exception_state.GetContext());
+@@ -544,14 +567,24 @@
+     return EmptyPromise();
+   }
+ 
+-  EnsureServiceConnection(window);
+-
+   auto scan_options = mojom::blink::WebBluetoothRequestLEScanOptions::New();
+   ConvertRequestLEScanOptions(options, scan_options, exception_state);
+ 
+   if (exception_state.HadException())
+     return EmptyPromise();
+ 
++  if (PersonaSpoofingHelper::IsEnabled(window)) {
++    auto* resolver =
++        MakeGarbageCollected<ScriptPromiseResolver<BluetoothLEScan>>(
++            script_state, exception_state.GetContext());
++    auto promise = resolver->Promise();
++    resolver->Reject(BluetoothError::CreateDOMException(
++        mojom::blink::WebBluetoothResult::CHOOSER_CANCELLED));
++    return promise;
++  }
++
++  EnsureServiceConnection(window);
++
+   // Subsequent steps are handled in the browser process.
+   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<BluetoothLEScan>>(
+       script_state, exception_state.GetContext());
+@@ -575,6 +608,9 @@
+ 
+ void Bluetooth::AdvertisingEvent(
+     mojom::blink::WebBluetoothAdvertisingEventPtr advertising_event) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   auto* event = MakeGarbageCollected<BluetoothAdvertisingEvent>(
+       event_type_names::kAdvertisementreceived,
+       GetBluetoothDeviceRepresentingDevice(std::move(advertising_event->device),
+diff --git a/third_party/blink/renderer/modules/bluetooth/bluetooth_device.cc b/third_party/blink/renderer/modules/bluetooth/bluetooth_device.cc
+--- a/third_party/blink/renderer/modules/bluetooth/bluetooth_device.cc
++++ b/third_party/blink/renderer/modules/bluetooth/bluetooth_device.cc
+@@ -14,6 +14,7 @@
+ #include "third_party/blink/renderer/core/dom/abort_signal.h"
+ #include "third_party/blink/renderer/core/dom/dom_exception.h"
+ #include "third_party/blink/renderer/core/dom/events/event.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
+ #include "third_party/blink/renderer/modules/bluetooth/bluetooth.h"
+ #include "third_party/blink/renderer/modules/bluetooth/bluetooth_attribute_instance_map.h"
+@@ -157,6 +158,16 @@
+   // 2. If this.[[watchAdvertisementsState]] is 'not-watching':
+   DCHECK(!client_receiver_.is_bound());
+ 
++  if (PersonaSpoofingHelper::IsEnabled(context)) {
++    auto* resolver =
++        MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
++            script_state, exception_state.GetContext());
++    auto promise = resolver->Promise();
++    resolver->Reject(BluetoothError::CreateDOMException(
++        mojom::blink::WebBluetoothResult::CHOOSER_CANCELLED));
++    return promise;
++  }
++
+   // 'not-watching' 2.1. Set this.[[watchAdvertisementsState]] to
+   // 'pending-watch'.
+   watch_advertisements_resolver_ =
+@@ -213,6 +224,11 @@
+   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+       script_state, exception_state.GetContext());
+   auto promise = resolver->Promise();
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    resolver->Resolve();
++    return promise;
++  }
++
+   bluetooth_->Service()->ForgetDevice(
+       device_->id, BindOnce(
+                        [](ScriptPromiseResolver<IDLUndefined>* resolver) {
+@@ -225,6 +241,9 @@
+ 
+ void BluetoothDevice::AdvertisingEvent(
+     mojom::blink::WebBluetoothAdvertisingEventPtr advertising_event) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   auto* event = MakeGarbageCollected<BluetoothAdvertisingEvent>(
+       event_type_names::kAdvertisementreceived, this,
+       std::move(advertising_event));
+diff --git a/third_party/blink/renderer/modules/bluetooth/bluetooth_remote_gatt_server.cc b/third_party/blink/renderer/modules/bluetooth/bluetooth_remote_gatt_server.cc
+--- a/third_party/blink/renderer/modules/bluetooth/bluetooth_remote_gatt_server.cc
++++ b/third_party/blink/renderer/modules/bluetooth/bluetooth_remote_gatt_server.cc
+@@ -14,6 +14,7 @@
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+ #include "third_party/blink/renderer/core/dom/dom_exception.h"
+ #include "third_party/blink/renderer/core/dom/events/event.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/modules/bluetooth/bluetooth.h"
+ #include "third_party/blink/renderer/modules/bluetooth/bluetooth_device.h"
+ #include "third_party/blink/renderer/modules/bluetooth/bluetooth_error.h"
+@@ -114,6 +115,12 @@
+       MakeGarbageCollected<ScriptPromiseResolver<BluetoothRemoteGATTServer>>(
+           script_state, exception_state.GetContext());
+   auto promise = resolver->Promise();
++
++  if (PersonaSpoofingHelper::IsEnabled(device_->GetExecutionContext())) {
++    resolver->Reject(BluetoothError::CreateDOMException(
++        mojom::blink::WebBluetoothResult::DEVICE_NO_LONGER_IN_RANGE));
++    return promise;
++  }
+ 
+   if (!device_->GetBluetooth()->IsServiceBound()) {
+     exception_state.ThrowDOMException(
+diff --git a/third_party/blink/renderer/modules/gamepad/DEPS b/third_party/blink/renderer/modules/gamepad/DEPS
+--- a/third_party/blink/renderer/modules/gamepad/DEPS
++++ b/third_party/blink/renderer/modules/gamepad/DEPS
+@@ -10,6 +10,7 @@
+     "+device/gamepad/public/mojom/gamepad_hardware_buffer.h",
+     "+mojo/public/cpp/system/buffer.h",
+     "-third_party/blink/renderer/modules",
++    "+third_party/blink/renderer/core/helium_persona",
+     "+third_party/blink/renderer/modules/event_modules.h",
+     "+third_party/blink/renderer/modules/gamepad",
+     "+third_party/blink/renderer/modules/modules_export.h",
+diff --git a/third_party/blink/renderer/modules/gamepad/gamepad_dispatcher.cc b/third_party/blink/renderer/modules/gamepad/gamepad_dispatcher.cc
+--- a/third_party/blink/renderer/modules/gamepad/gamepad_dispatcher.cc
++++ b/third_party/blink/renderer/modules/gamepad/gamepad_dispatcher.cc
+@@ -9,6 +9,7 @@
+ #include "device/gamepad/public/cpp/gamepads.h"
+ #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/modules/gamepad/gamepad_shared_memory_reader.h"
+ #include "third_party/blink/renderer/modules/gamepad/navigator_gamepad.h"
+ 
+@@ -17,6 +18,9 @@
+ using device::mojom::blink::GamepadHapticsManager;
+ 
+ void GamepadDispatcher::SampleGamepads(device::Gamepads& gamepads) {
++  if (PersonaSpoofingHelper::IsEnabled(execution_context_))
++    return;
++
+   if (reader_) {
+     reader_->SampleGamepads(&gamepads);
+   }
+@@ -27,6 +31,12 @@
+     device::mojom::blink::GamepadHapticEffectType type,
+     device::mojom::blink::GamepadEffectParametersPtr params,
+     GamepadHapticsManager::PlayVibrationEffectOnceCallback callback) {
++  if (PersonaSpoofingHelper::IsEnabled(execution_context_)) {
++    std::move(callback).Run(
++        device::mojom::GamepadHapticsResult::GamepadHapticsResultError);
++    return;
++  }
++
+   InitializeHaptics();
+   gamepad_haptics_manager_remote_->PlayVibrationEffectOnce(
+       pad_index, type, std::move(params), std::move(callback));
+@@ -35,6 +45,12 @@
+ void GamepadDispatcher::ResetVibrationActuator(
+     uint32_t pad_index,
+     GamepadHapticsManager::ResetVibrationActuatorCallback callback) {
++  if (PersonaSpoofingHelper::IsEnabled(execution_context_)) {
++    std::move(callback).Run(
++        device::mojom::GamepadHapticsResult::GamepadHapticsResultError);
++    return;
++  }
++
+   InitializeHaptics();
+   gamepad_haptics_manager_remote_->ResetVibrationActuator(pad_index,
+                                                           std::move(callback));
+@@ -65,17 +81,26 @@
+ 
+ void GamepadDispatcher::DidConnectGamepad(uint32_t index,
+                                           const device::Gamepad& gamepad) {
++  if (PersonaSpoofingHelper::IsEnabled(execution_context_))
++    return;
++
+   DispatchDidConnectOrDisconnectGamepad(index, gamepad, true);
+ }
+ 
+ void GamepadDispatcher::DidDisconnectGamepad(uint32_t index,
+                                              const device::Gamepad& gamepad) {
++  if (PersonaSpoofingHelper::IsEnabled(execution_context_))
++    return;
++
+   DispatchDidConnectOrDisconnectGamepad(index, gamepad, false);
+ }
+ 
+ void GamepadDispatcher::DidChangeGamepadRawInput(
+     uint32_t index,
+     const device::Gamepad& gamepad) {
++  if (PersonaSpoofingHelper::IsEnabled(execution_context_))
++    return;
++
+   if (!RuntimeEnabledFeatures::GamepadRawInputChangeEventEnabled(
+           execution_context_)) {
+     // Return early to avoid unnecessary work.
+@@ -100,6 +125,9 @@
+ }
+ 
+ void GamepadDispatcher::StartListening(LocalDOMWindow* window) {
++  if (PersonaSpoofingHelper::IsEnabled(execution_context_))
++    return;
++
+   if (!reader_) {
+     DCHECK(window);
+     reader_ = MakeGarbageCollected<GamepadSharedMemoryReader>(*window);
+diff --git a/third_party/blink/renderer/modules/gamepad/navigator_gamepad.cc b/third_party/blink/renderer/modules/gamepad/navigator_gamepad.cc
+--- a/third_party/blink/renderer/modules/gamepad/navigator_gamepad.cc
++++ b/third_party/blink/renderer/modules/gamepad/navigator_gamepad.cc
+@@ -33,6 +33,7 @@
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_gamepad_mapping_type.h"
+ #include "third_party/blink/renderer/core/dom/events/event.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/frame/navigator.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+ #include "third_party/blink/renderer/core/loader/document_loader.h"
+@@ -111,6 +112,12 @@
+     return HeapVector<Member<Gamepad>>();
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(context)) {
++    HeapVector<Member<Gamepad>> gamepads;
++    gamepads.resize(device::Gamepads::kItemsLengthCap);
++    return gamepads;
++  }
++
+   HeapVector<Member<Gamepad>> result =
+       NavigatorGamepad::From(navigator).Gamepads();
+   return result;
+@@ -148,6 +155,14 @@
+ }
+ 
+ void NavigatorGamepad::SampleGamepads() {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    if (gamepads_back_.size() == 0)
++      gamepads_back_.resize(device::Gamepads::kItemsLengthCap);
++    for (uint32_t i = 0; i < device::Gamepads::kItemsLengthCap; ++i)
++      gamepads_back_[i] = nullptr;
++    return;
++  }
++
+   device::Gamepads gamepads;
+   gamepad_dispatcher_->SampleGamepads(gamepads);
+ 
+@@ -308,6 +323,9 @@
+   }
+ 
+   if (has_connection_event_listener_ || has_input_changed_event_listener_) {
++    if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++      return;
++
+     bool first_event_listener = !has_event_listener_;
+     has_event_listener_ = true;
+ 
+@@ -346,6 +364,17 @@
+ }
+ 
+ void NavigatorGamepad::SampleAndCompareGamepadState() {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    if (gamepads_.size() == 0)
++      gamepads_.resize(device::Gamepads::kItemsLengthCap);
++    for (uint32_t i = 0; i < device::Gamepads::kItemsLengthCap; ++i) {
++      gamepads_[i] = nullptr;
++      if (gamepads_back_.size())
++        gamepads_back_[i] = nullptr;
++    }
++    return;
++  }
++
+   // Avoid re-entry. Do not fetch a new sample until we are finished dispatching
+   // events from the previous sample.
+   if (processing_events_)
+@@ -480,6 +509,11 @@
+ }
+ 
+ void NavigatorGamepad::PageVisibilityChanged() {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    StopUpdating();
++    return;
++  }
++
+   // Inform the embedder whether it needs to provide gamepad data for us.
+   bool visible = GetPage()->IsPageVisible();
+   if (visible && (has_event_listener_ || gamepads_.size())) {
+diff --git a/third_party/blink/renderer/modules/hid/DEPS b/third_party/blink/renderer/modules/hid/DEPS
+--- a/third_party/blink/renderer/modules/hid/DEPS
++++ b/third_party/blink/renderer/modules/hid/DEPS
+@@ -3,4 +3,5 @@
+     "+services/device/public/cpp/device_features.h",
+     "+services/device/public/mojom/hid.mojom-blink.h",
+     "+services/device/public/mojom/hid.mojom-blink-forward.h",
++    "+third_party/blink/renderer/core/helium_persona",
+ ]
+diff --git a/third_party/blink/renderer/modules/hid/hid.cc b/third_party/blink/renderer/modules/hid/hid.cc
+--- a/third_party/blink/renderer/modules/hid/hid.cc
++++ b/third_party/blink/renderer/modules/hid/hid.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <utility>
+ 
++#include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "services/device/public/cpp/device_features.h"
+ #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
+ #include "third_party/blink/public/mojom/service_worker/service_worker.mojom-blink.h"
+@@ -20,6 +21,7 @@
+ #include "third_party/blink/renderer/core/execution_context/navigator_base.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/workers/dedicated_worker_global_scope.h"
+ #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
+ #include "third_party/blink/renderer/modules/event_target_modules.h"
+@@ -150,6 +152,9 @@
+     return;
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(context))
++    return;
++
+   if (auto* service_worker_global_scope =
+           DynamicTo<ServiceWorkerGlobalScope>(context)) {
+     if (service_worker_global_scope->did_evaluate_script()) {
+@@ -168,6 +173,9 @@
+ }
+ 
+ void HID::DeviceAdded(device::mojom::blink::HidDeviceInfoPtr device_info) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   auto* device = GetOrCreateDevice(std::move(device_info));
+ 
+   DispatchEvent(*MakeGarbageCollected<HIDConnectionEvent>(
+@@ -175,6 +183,9 @@
+ }
+ 
+ void HID::DeviceRemoved(device::mojom::blink::HidDeviceInfoPtr device_info) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   auto* device = GetOrCreateDevice(std::move(device_info));
+ 
+   DispatchEvent(*MakeGarbageCollected<HIDConnectionEvent>(
+@@ -182,6 +193,9 @@
+ }
+ 
+ void HID::DeviceChanged(device::mojom::blink::HidDeviceInfoPtr device_info) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   auto it = device_cache_.find(device_info->guid);
+   if (it != device_cache_.end()) {
+     it->value->UpdateDeviceInfo(std::move(device_info));
+@@ -203,6 +217,11 @@
+ 
+   auto* resolver = MakeGarbageCollected<HIDDeviceResolver>(
+       script_state, exception_state.GetContext());
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    resolver->Resolve(HeapVector<Member<HIDDevice>>());
++    return resolver->Promise();
++  }
++
+   get_devices_promises_.insert(resolver);
+ 
+   EnsureServiceConnection();
+@@ -238,7 +257,6 @@
+   auto* resolver = MakeGarbageCollected<HIDDeviceResolver>(
+       script_state, exception_state.GetContext());
+   auto promise = resolver->Promise();
+-  request_device_promises_.insert(resolver);
+ 
+   Vector<mojom::blink::HidDeviceFilterPtr> mojo_filters;
+   if (options->hasFilters()) {
+@@ -274,6 +292,13 @@
+               mojo_exclusion_filters.size());
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    resolver->Resolve(HeapVector<Member<HIDDevice>>());
++    return promise;
++  }
++
++  request_device_promises_.insert(resolver);
++
+   EnsureServiceConnection();
+   service_->RequestDevice(
+       std::move(mojo_filters), std::move(mojo_exclusion_filters),
+@@ -286,12 +311,22 @@
+     const String& device_guid,
+     mojo::PendingRemote<device::mojom::blink::HidConnectionClient> client,
+     device::mojom::blink::HidManager::ConnectCallback callback) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    std::move(callback).Run(mojo::NullRemote());
++    return;
++  }
++
+   EnsureServiceConnection();
+   service_->Connect(device_guid, std::move(client), std::move(callback));
+ }
+ 
+ void HID::Forget(device::mojom::blink::HidDeviceInfoPtr device_info,
+                  mojom::blink::HidService::ForgetCallback callback) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    std::move(callback).Run();
++    return;
++  }
++
+   EnsureServiceConnection();
+   service_->Forget(std::move(device_info), std::move(callback));
+ }
+diff --git a/third_party/blink/renderer/modules/hid/hid_device.cc b/third_party/blink/renderer/modules/hid/hid_device.cc
+--- a/third_party/blink/renderer/modules/hid/hid_device.cc
++++ b/third_party/blink/renderer/modules/hid/hid_device.cc
+@@ -10,6 +10,7 @@
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_hid_collection_info.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_hid_report_info.h"
+ #include "third_party/blink/renderer/core/dom/dom_exception.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
+ #include "third_party/blink/renderer/core/typed_arrays/dom_array_piece.h"
+ #include "third_party/blink/renderer/core/typed_arrays/dom_data_view.h"
+@@ -229,12 +230,16 @@
+ 
+ void HIDDevice::OnInputReport(uint8_t report_id,
+                               const Vector<uint8_t>& buffer) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   DispatchEvent(*MakeGarbageCollected<HIDInputReportEvent>(
+       event_type_names::kInputreport, this, report_id, buffer));
+ }
+ 
+ bool HIDDevice::opened() const {
+-  return connection_.is_bound();
++  return connection_.is_bound() &&
++         !PersonaSpoofingHelper::IsEnabled(GetExecutionContext());
+ }
+ 
+ uint16_t HIDDevice::vendorId() const {
+@@ -275,6 +280,12 @@
+     return promise;
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    resolver->RejectWithDOMException(DOMExceptionCode::kNotAllowedError,
++                                     kOpenFailed);
++    return promise;
++  }
++
+   mojo::PendingRemote<device::mojom::blink::HidConnectionClient> client;
+   receiver_.Bind(client.InitWithNewPipeAndPassReceiver(),
+                  ExecutionContext::From(script_state)
+@@ -292,6 +303,13 @@
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(script_state);
+   auto promise = resolver->Promise();
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    connection_.reset();
++    receiver_.reset();
++    resolver->Resolve();
++    return promise;
++  }
++
+   if (!EnsureNoDeviceChangeInProgress(resolver) ||
+       !EnsureDeviceIsNotForgotten(resolver)) {
+     return promise;
+@@ -425,7 +443,7 @@
+ bool HIDDevice::HasPendingActivity() const {
+   // The object should be considered active if it is connected and has at least
+   // one event listener.
+-  return connection_.is_bound() && HasEventListeners();
++  return opened() && HasEventListeners();
+ }
+ 
+ void HIDDevice::UpdateDeviceInfo(device::mojom::blink::HidDeviceInfoPtr info) {
+diff --git a/third_party/blink/renderer/modules/serial/DEPS b/third_party/blink/renderer/modules/serial/DEPS
+--- a/third_party/blink/renderer/modules/serial/DEPS
++++ b/third_party/blink/renderer/modules/serial/DEPS
+@@ -1,6 +1,8 @@
+ include_rules = [
+   "+base/unguessable_token.h",
++  "+mojo/public/cpp/bindings",
+   "+mojo/public/cpp/system/data_pipe.h",
+   "+mojo/public/cpp/system/simple_watcher.h",
+   "+services/device/public/mojom",
++  "+third_party/blink/renderer/core/helium_persona",
+ ]
+diff --git a/third_party/blink/renderer/modules/serial/serial.cc b/third_party/blink/renderer/modules/serial/serial.cc
+--- a/third_party/blink/renderer/modules/serial/serial.cc
++++ b/third_party/blink/renderer/modules/serial/serial.cc
+@@ -9,6 +9,7 @@
+ #include <utility>
+ 
+ #include "base/unguessable_token.h"
++#include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
+ #include "third_party/blink/public/mojom/serial/serial.mojom-blink.h"
+ #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
+@@ -23,6 +24,7 @@
+ #include "third_party/blink/renderer/core/execution_context/navigator_base.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/workers/dedicated_worker_global_scope.h"
+ #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
+ #include "third_party/blink/renderer/modules/bluetooth/bluetooth_uuid.h"
+@@ -129,6 +131,9 @@
+ 
+ void Serial::OnPortConnectedStateChanged(
+     mojom::blink::SerialPortInfoPtr port_info) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   bool connected = port_info->connected;
+   SerialPort* port = GetOrCreatePort(std::move(port_info));
+   port->set_connected(connected);
+@@ -150,6 +155,11 @@
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<IDLSequence<SerialPort>>>(
+           script_state, exception_state.GetContext());
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    resolver->Resolve(HeapVector<Member<SerialPort>>());
++    return resolver->Promise();
++  }
++
+   get_ports_promises_.insert(resolver);
+ 
+   EnsureServiceConnection();
+@@ -244,6 +254,13 @@
+ 
+   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<SerialPort>>(
+       script_state, exception_state.GetContext());
++  auto promise = resolver->Promise();
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    resolver->RejectWithDOMException(DOMExceptionCode::kNotFoundError,
++                                     kNoPortSelected);
++    return promise;
++  }
++
+   request_port_promises_.insert(resolver);
+ 
+   EnsureServiceConnection();
+@@ -252,7 +269,7 @@
+                         resolver->WrapCallbackInScriptScope(BindOnce(
+                             &Serial::OnRequestPort, WrapPersistent(this))));
+ 
+-  return resolver->Promise();
++  return promise;
+ }
+ 
+ void Serial::OpenPort(
+@@ -260,6 +277,11 @@
+     device::mojom::blink::SerialConnectionOptionsPtr options,
+     mojo::PendingRemote<device::mojom::blink::SerialPortClient> client,
+     mojom::blink::SerialService::OpenPortCallback callback) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    std::move(callback).Run(mojo::NullRemote());
++    return;
++  }
++
+   EnsureServiceConnection();
+   service_->OpenPort(token, std::move(options), std::move(client),
+                      std::move(callback));
+@@ -268,6 +290,11 @@
+ void Serial::ForgetPort(
+     const base::UnguessableToken& token,
+     mojom::blink::SerialService::ForgetPortCallback callback) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    std::move(callback).Run();
++    return;
++  }
++
+   EnsureServiceConnection();
+   service_->ForgetPort(token, std::move(callback));
+ }
+@@ -296,6 +323,9 @@
+                                    GetExecutionContext(), nullptr)) {
+     return;
+   }
++
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
+ 
+   EnsureServiceConnection();
+ }
+diff --git a/third_party/blink/renderer/modules/serial/serial_port.cc b/third_party/blink/renderer/modules/serial/serial_port.cc
+--- a/third_party/blink/renderer/modules/serial/serial_port.cc
++++ b/third_party/blink/renderer/modules/serial/serial_port.cc
+@@ -18,6 +18,7 @@
+ #include "third_party/blink/renderer/core/dom/events/event.h"
+ #include "third_party/blink/renderer/core/dom/quota_exceeded_error.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+ #include "third_party/blink/renderer/core/streams/readable_stream.h"
+ #include "third_party/blink/renderer/core/streams/writable_stream.h"
+@@ -194,17 +195,32 @@
+   mojo::PendingRemote<device::mojom::blink::SerialPortClient> client;
+   open_resolver_ = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+       script_state, exception_state.GetContext());
++  auto promise = open_resolver_->Promise();
++
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    open_resolver_->RejectWithDOMException(DOMExceptionCode::kNetworkError,
++                                           kOpenError);
++    open_resolver_ = nullptr;
++    return promise;
++  }
++
+   auto callback = BindOnce(&SerialPort::OnOpen, WrapPersistent(this),
+                            client.InitWithNewPipeAndPassReceiver());
+ 
+   parent_->OpenPort(info_->token, std::move(mojo_options), std::move(client),
+                     std::move(callback));
+ 
+-  return open_resolver_->Promise();
++  return promise;
+ }
+ 
+ ReadableStream* SerialPort::readable(ScriptState* script_state,
+                                      ExceptionState& exception_state) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    if (port_.is_bound())
++      OnConnectionError();
++    return nullptr;
++  }
++
+   if (readable_)
+     return readable_.Get();
+ 
+@@ -230,6 +246,12 @@
+ 
+ WritableStream* SerialPort::writable(ScriptState* script_state,
+                                      ExceptionState& exception_state) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    if (port_.is_bound())
++      OnConnectionError();
++    return nullptr;
++  }
++
+   if (writable_)
+     return writable_.Get();
+ 
+@@ -270,6 +292,13 @@
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<SerialInputSignals>>(
+           script_state, exception_state.GetContext());
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    OnConnectionError();
++    resolver->RejectWithDOMException(DOMExceptionCode::kNetworkError,
++                                     kDeviceLostError);
++    return resolver->Promise();
++  }
++
+   signal_resolvers_.insert(resolver);
+   port_->GetControlSignals(resolver->WrapCallbackInScriptScope(
+       BindOnce(&SerialPort::OnGetSignals, WrapPersistent(this))));
+@@ -299,6 +328,15 @@
+     return EmptyPromise();
+   }
+ 
++  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
++      script_state, exception_state.GetContext());
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    OnConnectionError();
++    resolver->RejectWithDOMException(DOMExceptionCode::kNetworkError,
++                                     kDeviceLostError);
++    return resolver->Promise();
++  }
++
+   auto mojo_signals = device::mojom::blink::SerialHostControlSignals::New();
+   if (signals->hasDataTerminalReady()) {
+     mojo_signals->has_dtr = true;
+@@ -324,8 +362,6 @@
+     mojo_signals->brk = signals->brk();
+   }
+ 
+-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+-      script_state, exception_state.GetContext());
+   signal_resolvers_.insert(resolver);
+   port_->SetControlSignals(
+       std::move(mojo_signals),
+@@ -392,6 +428,11 @@
+ 
+   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+       script_state, exception_state.GetContext());
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    resolver->Resolve();
++    return resolver->Promise();
++  }
++
+   parent_->ForgetPort(info_->token,
+                       BindOnce(
+                           [](ScriptPromiseResolver<IDLUndefined>* resolver) {
+diff --git a/third_party/blink/renderer/modules/webusb/DEPS b/third_party/blink/renderer/modules/webusb/DEPS
+--- a/third_party/blink/renderer/modules/webusb/DEPS
++++ b/third_party/blink/renderer/modules/webusb/DEPS
+@@ -1,4 +1,5 @@
+ include_rules = [
+   "+services/device/public/mojom",
+   "+mojo/public/cpp/bindings",
++  "+third_party/blink/renderer/core/helium_persona",
+ ]
+diff --git a/third_party/blink/renderer/modules/webusb/usb.cc b/third_party/blink/renderer/modules/webusb/usb.cc
+--- a/third_party/blink/renderer/modules/webusb/usb.cc
++++ b/third_party/blink/renderer/modules/webusb/usb.cc
+@@ -22,6 +22,7 @@
+ #include "third_party/blink/renderer/core/execution_context/navigator_base.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/workers/dedicated_worker_global_scope.h"
+ #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
+ #include "third_party/blink/renderer/modules/event_target_modules.h"
+@@ -197,6 +198,14 @@
+     return ScriptPromise<IDLSequence<USBDevice>>();
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    auto* resolver =
++        MakeGarbageCollected<ScriptPromiseResolver<IDLSequence<USBDevice>>>(
++            script_state, exception_state.GetContext());
++    resolver->Resolve(HeapVector<Member<USBDevice>>());
++    return resolver->Promise();
++  }
++
+   EnsureServiceConnection();
+   auto* resolver =
+       MakeGarbageCollected<ScriptPromiseResolver<IDLSequence<USBDevice>>>(
+@@ -224,8 +233,6 @@
+     return EmptyPromise();
+   }
+ 
+-  EnsureServiceConnection();
+-
+   if (!LocalFrame::HasTransientUserActivation(DomWindow()->GetFrame())) {
+     exception_state.ThrowSecurityError(
+         "Must be handling a user gesture to show a permission request.");
+@@ -235,6 +242,7 @@
+   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<USBDevice>>(
+       script_state, exception_state.GetContext());
+   auto promise = resolver->Promise();
++
+   auto mojo_options = mojom::blink::WebUsbRequestDeviceOptions::New();
+   if (options->hasFilters()) {
+     mojo_options->filters.reserve(options->filters().size());
+@@ -258,6 +266,13 @@
+   DCHECK(options->filters().size() == mojo_options->filters.size());
+   DCHECK(options->exclusionFilters().size() ==
+          mojo_options->exclusion_filters.size());
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    resolver->RejectWithDOMException(DOMExceptionCode::kNotFoundError,
++                                     kNoDeviceSelected);
++    return promise;
++  }
++
++  EnsureServiceConnection();
+   get_permission_requests_.insert(resolver);
+   service_->GetPermission(std::move(mojo_options),
+                           resolver->WrapCallbackInScriptScope(BindOnce(
+@@ -296,6 +311,11 @@
+ void USB::ForgetDevice(
+     const String& device_guid,
+     mojom::blink::WebUsbService::ForgetDeviceCallback callback) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    std::move(callback).Run();
++    return;
++  }
++
+   EnsureServiceConnection();
+   service_->ForgetDevice(device_guid, std::move(callback));
+ }
+@@ -330,11 +350,17 @@
+   if (!service_.is_bound())
+     return;
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   DispatchEvent(*USBConnectionEvent::Create(
+       event_type_names::kConnect, GetOrCreateDevice(std::move(device_info))));
+ }
+ 
+ void USB::OnDeviceRemoved(UsbDeviceInfoPtr device_info) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext()))
++    return;
++
+   String guid = device_info->guid;
+   USBDevice* device = nullptr;
+   const auto it = device_cache_.find(guid);
+@@ -390,6 +416,9 @@
+                                 nullptr)) {
+     return;
+   }
++
++  if (PersonaSpoofingHelper::IsEnabled(context))
++    return;
+ 
+   if (auto* service_worker_global_scope =
+           DynamicTo<ServiceWorkerGlobalScope>(context)) {
+diff --git a/third_party/blink/renderer/modules/webusb/usb_device.cc b/third_party/blink/renderer/modules/webusb/usb_device.cc
+--- a/third_party/blink/renderer/modules/webusb/usb_device.cc
++++ b/third_party/blink/renderer/modules/webusb/usb_device.cc
+@@ -18,6 +18,7 @@
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_usb_control_transfer_parameters.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_usb_direction.h"
+ #include "third_party/blink/renderer/core/dom/dom_exception.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+ #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
+ #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_view.h"
+@@ -219,6 +220,11 @@
+       script_state, exception_state.GetContext());
+   auto promise = resolver->Promise();
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    resolver->RejectWithSecurityError(kAccessDeniedError, kAccessDeniedError);
++    return promise;
++  }
++
+   device_state_change_in_progress_ = true;
+   device_requests_.insert(resolver);
+   device_->Open(BindOnce(&USBDevice::AsyncOpen, WrapPersistent(this),
+@@ -228,6 +234,12 @@
+ 
+ ScriptPromise<IDLUndefined> USBDevice::close(ScriptState* script_state,
+                                              ExceptionState& exception_state) {
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    OnDeviceOpenedOrClosed(false);
++    device_.reset();
++    return ToResolvedUndefinedPromise(script_state);
++  }
++
+   EnsureNoDeviceOrInterfaceChangeInProgress(exception_state);
+   if (exception_state.HadException())
+     return EmptyPromise();
+@@ -733,6 +745,11 @@
+   if (device_state_change_in_progress_) {
+     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                       kDeviceStateChangeInProgress);
++    return;
++  }
++
++  if (opened_ && PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    exception_state.ThrowSecurityError(kAccessDeniedError, kAccessDeniedError);
+     return;
+   }
+ }

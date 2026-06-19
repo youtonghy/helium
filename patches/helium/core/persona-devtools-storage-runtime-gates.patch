@@ -1,0 +1,224 @@
+diff --git a/content/browser/devtools/protocol/storage_handler.cc b/content/browser/devtools/protocol/storage_handler.cc
+--- a/content/browser/devtools/protocol/storage_handler.cc
++++ b/content/browser/devtools/protocol/storage_handler.cc
+@@ -37,12 +37,15 @@
+ #include "content/browser/interest_group/interest_group_manager_impl.h"
+ #include "content/browser/renderer_host/frame_tree_node.h"
+ #include "content/browser/renderer_host/render_frame_host_impl.h"
++#include "content/browser/storage_partition_impl.h"
+ #include "content/public/browser/browser_context.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
++#include "content/public/browser/content_browser_client.h"
+ #include "content/public/browser/devtools_agent_host_client.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/storage_partition.h"
++#include "content/public/common/content_client.h"
+ #include "net/base/net_errors.h"
+ #include "net/base/schemeful_site.h"
+ #include "services/network/public/mojom/trust_tokens.mojom.h"
+@@ -56,6 +59,7 @@
+ #include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
+ #include "third_party/abseil-cpp/absl/functional/overload.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/interest_group/devtools_serialization.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+ #include "third_party/blink/public/mojom/buckets/bucket_manager_host.mojom-shared.h"
+ #include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
+@@ -156,6 +160,56 @@ std::unique_ptr<protocol::Storage::StorageBucketInfo> BuildBucketInfo(
+       .Build();
+ }
+ 
++BrowserContext* GetPersonaBrowserContext(RenderFrameHostImpl* frame_host,
++                                         StoragePartition* storage_partition) {
++  if (frame_host) {
++    return frame_host->GetBrowserContext();
++  }
++  if (!storage_partition) {
++    return nullptr;
++  }
++  return static_cast<StoragePartitionImpl*>(storage_partition)
++      ->browser_context();
++}
++
++blink::HeliumPersonaSnapshot GetDevToolsPersonaSnapshot(
++    RenderFrameHostImpl* frame_host,
++    StoragePartition* storage_partition) {
++  ContentBrowserClient* browser_client = GetContentClient()->browser();
++  if (!browser_client) {
++    return blink::HeliumPersonaSnapshot();
++  }
++  return browser_client->GetHeliumPersonaSnapshot(
++      GetPersonaBrowserContext(frame_host, storage_partition));
++}
++
++bool HeliumPersonaAllowsDevToolsPrivateStateTokens(
++    RenderFrameHostImpl* frame_host,
++    StoragePartition* storage_partition) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetDevToolsPersonaSnapshot(frame_host, storage_partition);
++  return !snapshot.IsEnabled() || snapshot.allow_private_state_tokens;
++}
++
++bool HeliumPersonaAllowsDevToolsPrivacySandboxApis(
++    RenderFrameHostImpl* frame_host,
++    StoragePartition* storage_partition) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetDevToolsPersonaSnapshot(frame_host, storage_partition);
++  return !snapshot.IsEnabled() || snapshot.allow_privacy_sandbox_apis;
++}
++
++Response PersonaDevToolsDisabledResponse(const char* feature) {
++  return Response::ServerError(base::StrCat(
++      {feature, " is disabled by the active persona."}));
++}
++
++std::unique_ptr<protocol::Array<protocol::Storage::TrustTokens>>
++MakeEmptyTrustTokenList() {
++  return std::make_unique<
++      protocol::Array<protocol::Storage::TrustTokens>>();
++}
++
+ }  // namespace
+ 
+ // Observer that listens on the UI thread for cache storage notifications and
+@@ -900,13 +951,17 @@ StorageHandler::IndexedDBObserver* StorageHandler::GetIndexedDBObserver() {
+ }
+ 
+ SharedStorageRuntimeManager* StorageHandler::GetSharedStorageRuntimeManager() {
+   if (!storage_partition_) {
+     return nullptr;
+   }
++  if (!HeliumPersonaAllowsDevToolsPrivacySandboxApis(frame_host_,
++                                                     storage_partition_)) {
++    return nullptr;
++  }
+   return static_cast<StoragePartitionImpl*>(storage_partition_)
+       ->GetSharedStorageRuntimeManager();
+ }
+ 
+ std::variant<protocol::Response, storage::SharedStorageManager*>
+ StorageHandler::GetSharedStorageManager() {
+   if (!storage_partition_) {
+@@ -913,5 +971,10 @@ StorageHandler::GetSharedStorageManager() {
+   }
+ 
++  if (!HeliumPersonaAllowsDevToolsPrivacySandboxApis(frame_host_,
++                                                     storage_partition_)) {
++    return PersonaDevToolsDisabledResponse("Shared storage");
++  }
++
+   if (auto* manager = static_cast<StoragePartitionImpl*>(storage_partition_)
+                           ->GetSharedStorageManager()) {
+     return manager;
+@@ -1012,7 +1075,13 @@ void StorageHandler::GetTrustTokens(
+     callback->sendFailure(Response::InternalError());
+     return;
+   }
+ 
++  if (!HeliumPersonaAllowsDevToolsPrivateStateTokens(frame_host_,
++                                                     storage_partition_)) {
++    callback->sendSuccess(MakeEmptyTrustTokenList());
++    return;
++  }
++
+   storage_partition_->GetNetworkContext()->GetStoredTrustTokenCounts(
+       base::BindOnce(&SendTrustTokens, std::move(callback)));
+ }
+@@ -1053,7 +1122,13 @@ void StorageHandler::ClearTrustTokens(
+     callback->sendFailure(Response::InternalError());
+     return;
+   }
+ 
++  if (!HeliumPersonaAllowsDevToolsPrivateStateTokens(frame_host_,
++                                                     storage_partition_)) {
++    callback->sendSuccess(/*didDeleteTokens=*/false);
++    return;
++  }
++
+   storage_partition_->GetNetworkContext()->DeleteStoredTrustTokens(
+       url::Origin::Create(GURL(issuerOrigin)),
+       base::BindOnce(&SendClearTrustTokensStatus, std::move(callback)));
+@@ -1065,5 +1140,9 @@ void StorageHandler::OnInterestGroupAccessed(
+     base::optional_ref<const std::string> bid_currency) {
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  if (!HeliumPersonaAllowsDevToolsPrivacySandboxApis(frame_host_,
++                                                     storage_partition_)) {
++    return;
++  }
+   using AccessType =
+       InterestGroupManagerImpl::InterestGroupObserver::AccessType;
+   std::string type_enum;
+@@ -1141,3 +1220,8 @@ Response StorageHandler::SetInterestGroupAuctionTracking(bool enable) {
++  if (enable && !HeliumPersonaAllowsDevToolsPrivacySandboxApis(
++                    frame_host_, storage_partition_)) {
++    interest_group_auction_tracking_enabled_ = false;
++    return Response::Success();
++  }
+   interest_group_auction_tracking_enabled_ = enable;
+   return Response::Success();
+ }
+@@ -1399,6 +1483,11 @@ Response StorageHandler::SetSharedStorageTracking(bool enable) {
+   // FIXME: this should remember the state and restore it
+   // once the StorageRunTimeManager or the storage partition is available.
+   if (enable) {
++    if (!HeliumPersonaAllowsDevToolsPrivacySandboxApis(frame_host_,
++                                                       storage_partition_)) {
++      return PersonaDevToolsDisabledResponse("Shared storage tracking");
++    }
++
+     auto* manager = GetSharedStorageRuntimeManager();
+     if (!manager) {
+       return Response::ServerError("Shared storage is disabled.");
+@@ -1517,4 +1610,8 @@ void StorageHandler::OnSharedStorageAccessed(
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  if (!HeliumPersonaAllowsDevToolsPrivacySandboxApis(frame_host_,
++                                                     storage_partition_)) {
++    return;
++  }
+ 
+   using AccessScope = blink::SharedStorageAccessScope;
+ 
+@@ -1702,5 +1799,9 @@ void StorageHandler::OnSharedStorageWorkletOperationExecutionFinished(
+     const std::string& owner_origin) {
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  if (!HeliumPersonaAllowsDevToolsPrivacySandboxApis(frame_host_,
++                                                     storage_partition_)) {
++    return;
++  }
+ 
+   frontend_->SharedStorageWorkletOperationExecutionFinished(
+       finished_time.InSecondsFSinceUnixEpoch(), execution_time.InMicroseconds(),
+@@ -1724,6 +1825,10 @@ void StorageHandler::NotifyInterestGroupAuctionEventOccurred(
+     const std::string& unique_auction_id,
+     base::optional_ref<const std::string> parent_auction_id,
+     const base::DictValue& auction_config) {
++  if (!HeliumPersonaAllowsDevToolsPrivacySandboxApis(frame_host_,
++                                                     storage_partition_)) {
++    return;
++  }
+   if (!interest_group_auction_tracking_enabled_) {
+     return;
+   }
+@@ -1748,6 +1853,10 @@ void StorageHandler::NotifyInterestGroupAuctionNetworkRequestCreated(
+     content::InterestGroupAuctionFetchType type,
+     const std::string& request_id,
+     const std::vector<std::string>& devtools_auction_ids) {
++  if (!HeliumPersonaAllowsDevToolsPrivacySandboxApis(frame_host_,
++                                                     storage_partition_)) {
++    return;
++  }
+   if (!interest_group_auction_tracking_enabled_) {
+     return;
+   }
+@@ -1779,6 +1888,10 @@ Response StorageHandler::SetProtectedAudienceKAnonymity(
+     const std::string& in_owner_origin,
+     const std::string& in_group_name,
+     std::unique_ptr<std::vector<Binary>> in_hashes) {
++  if (!HeliumPersonaAllowsDevToolsPrivacySandboxApis(frame_host_,
++                                                     storage_partition_)) {
++    return PersonaDevToolsDisabledResponse("Protected Audience");
++  }
+   url::Origin owner_origin = url::Origin::Create(GURL(in_owner_origin));
+ 
+   // Ensure we are in "test" mode.

@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 27a0f3f..fc0aa37 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -3168,7 +3168,15 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     if (persona.uaCh['model'] === undefined ||
+         persona.uaCh['model'] === null) {
+       persona.uaCh['model'] = '';
+     }
++    if (!Array.isArray(persona.uaCh['fullVersionList']) ||
++        !(persona.uaCh['fullVersionList'] as Array<Record<string, unknown>>)
++            .length) {
++      persona.uaCh['fullVersionList'] =
++          this.deriveUaChFullVersionList_(
++              persona.uaCh['brands'] as Array<Record<string, unknown>>,
++              persona.uaCh['fullVersion']);
++    }
+     if (persona.navigatorVendor === undefined) {
+       persona.navigatorVendor = 'Google Inc.';
+     }

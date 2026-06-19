@@ -1,0 +1,100 @@
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index 15d701e0..81e202b6 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -301,6 +301,13 @@ bool HeliumPersonaAllowsPayment(content::RenderFrameHost* render_frame_host) {
+   return !snapshot.IsEnabled() || snapshot.allow_payment_handler;
+ }
+ 
++bool HeliumPersonaAllowsProtectedMediaIdentifier(
++    content::RenderFrameHost* render_frame_host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(render_frame_host);
++  return !snapshot.IsEnabled() || snapshot.allow_protected_media_identifier;
++}
++
+ bool HeliumPersonaAllowsMediaCapture(
+     content::RenderFrameHost* render_frame_host) {
+   blink::HeliumPersonaSnapshot snapshot =
+@@ -606,8 +613,10 @@ void PopulateChromeFrameBinders(
+ #endif
+ 
+ #if BUILDFLAG(IS_WIN)
+-  map->Add<media::mojom::MediaFoundationPreferences>(
+-      &BindMediaFoundationPreferences);
++  if (HeliumPersonaAllowsProtectedMediaIdentifier(render_frame_host)) {
++    map->Add<media::mojom::MediaFoundationPreferences>(
++        &BindMediaFoundationPreferences);
++  }
+ #endif
+ 
+ #if BUILDFLAG(ENABLE_PDF)
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 9a2b7f54..245998b0 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -240,6 +240,8 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const maxTouchPoints = this.numberValue_(hardware['maxTouchPoints']);
+     const storageQuota = this.numberValue_(advanced['storageQuotaGb']);
+     const allowMediaCapture = Boolean(advanced['allowMediaCapture']);
++    const allowProtectedMediaIdentifier =
++        Boolean(advanced['allowProtectedMediaIdentifier']);
+     const allowDeviceApis = Boolean(advanced['allowDeviceApis']);
+     const allowPresentationApis = Boolean(advanced['allowPresentationApis']);
+     const allowRemotePlayback = Boolean(advanced['allowRemotePlayback']);
+@@ -566,6 +568,11 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+           warnings,
+           'allowMediaCapture exposes real camera, microphone, screen speech recognition, and on-device speech recognition service bindings.');
+     }
++    if (allowProtectedMediaIdentifier) {
++      this.addDraftWarning_(
++          warnings,
++          'allowProtectedMediaIdentifier exposes real protected media and hardware secure decryption capabilities.');
++    }
+     if (allowDeviceApis) {
+       this.addDraftWarning_(
+           warnings,
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index 15cc6109..0bd58f4e 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -829,6 +829,7 @@ TEST(HeliumPersonaPrefsTest, ValidationWarnsButAllowsConflicts) {
+   ASSERT_TRUE(advanced);
+   advanced->Set("storageQuotaGb", 1.0);
+   advanced->Set("allowMediaCapture", true);
++  advanced->Set("allowProtectedMediaIdentifier", true);
+   advanced->Set("allowDeviceApis", true);
+   advanced->Set("allowRemotePlayback", true);
+   advanced->Set("speechVoiceName", "Samantha");
+@@ -889,6 +890,7 @@ TEST(HeliumPersonaPrefsTest, ValidationWarnsButAllowsConflicts) {
+   EXPECT_TRUE(WarningsContain(warnings, "deviceMemory should use"));
+   EXPECT_TRUE(WarningsContain(warnings, "Storage quota is too small"));
+   EXPECT_TRUE(WarningsContain(warnings, "allowMediaCapture exposes real camera"));
++  EXPECT_TRUE(WarningsContain(warnings, "allowProtectedMediaIdentifier exposes real"));
+   EXPECT_TRUE(WarningsContain(warnings, "allowDeviceApis exposes real Bluetooth"));
+   EXPECT_TRUE(WarningsContain(warnings, "Remote Playback reuses"));
+   EXPECT_TRUE(WarningsContain(warnings, "maxTouchPoints should be 0"));
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index 96d50392..b171f562 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -683,6 +683,8 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+       GetNestedDouble(persona, "advanced", "storageQuotaGb");
+   const bool allow_media_capture =
+       GetNestedBool(persona, "advanced", "allowMediaCapture");
++  const bool allow_protected_media_identifier =
++      GetNestedBool(persona, "advanced", "allowProtectedMediaIdentifier");
+   const bool allow_device_apis =
+       GetNestedBool(persona, "advanced", "allowDeviceApis");
+   const bool allow_presentation_apis =
+@@ -1071,6 +1073,10 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+     AddWarning(warnings,
+                "allowMediaCapture exposes real camera, microphone, screen speech recognition, and on-device speech recognition service bindings.");
+   }
++  if (allow_protected_media_identifier) {
++    AddWarning(warnings,
++               "allowProtectedMediaIdentifier exposes real protected media and hardware secure decryption capabilities.");
++  }
+   if (allow_device_apis) {
+     AddWarning(warnings,
+                "allowDeviceApis exposes real Bluetooth, WebUSB, Web Serial, WebHID, and Smart Card service bindings.");

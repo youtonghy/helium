@@ -1,0 +1,28 @@
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
+@@ -328,6 +328,25 @@
+       return ShouldBlockWebXr(context);
+     case mojom::blink::PermissionName::SMART_CARD:
+       return ShouldBlockDeviceApis(context);
++    case mojom::blink::PermissionName::NOTIFICATIONS:
++    case mojom::blink::PermissionName::PROTECTED_MEDIA_IDENTIFIER:
++    case mojom::blink::PermissionName::PERSISTENT_STORAGE:
++    case mojom::blink::PermissionName::BACKGROUND_SYNC:
++    case mojom::blink::PermissionName::CLIPBOARD_READ:
++    case mojom::blink::PermissionName::CLIPBOARD_WRITE:
++    case mojom::blink::PermissionName::PAYMENT_HANDLER:
++    case mojom::blink::PermissionName::BACKGROUND_FETCH:
++    case mojom::blink::PermissionName::IDLE_DETECTION:
++    case mojom::blink::PermissionName::PERIODIC_BACKGROUND_SYNC:
++    case mojom::blink::PermissionName::SCREEN_WAKE_LOCK:
++    case mojom::blink::PermissionName::SYSTEM_WAKE_LOCK:
++    case mojom::blink::PermissionName::STORAGE_ACCESS:
++    case mojom::blink::PermissionName::TOP_LEVEL_STORAGE_ACCESS:
++    case mojom::blink::PermissionName::POINTER_LOCK:
++    case mojom::blink::PermissionName::FULLSCREEN:
++    case mojom::blink::PermissionName::WEB_APP_INSTALLATION:
++    case mojom::blink::PermissionName::WEB_PRINTING:
++      return IsEnabled(context);
+     default:
+       return false;
+   }

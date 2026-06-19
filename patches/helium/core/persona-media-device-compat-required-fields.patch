@@ -1,0 +1,179 @@
+diff --git a/components/helium_persona/persona_prefs.cc b/components/helium_persona/persona_prefs.cc
+index 74c5571b..1ff1d81d 100644
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -538,6 +538,32 @@ base::Value::Dict MakeDefaultGpuProfile() {
+   return gpu;
+ }
+ 
++base::Value::Dict MakeDefaultMediaDevicesProfile() {
++  base::Value::Dict media;
++  media.Set("audioInputDeviceId", "persona-audio-input-default");
++  media.Set("videoInputDeviceId", "persona-video-input-default");
++  media.Set("audioOutputDeviceId", "persona-audio-output-default");
++  media.Set("inputGroupId", "persona-media-group-input");
++  media.Set("outputGroupId", "persona-media-group-output");
++  media.Set("audioInputLabel", "Default Microphone");
++  media.Set("videoInputLabel", "Integrated Camera");
++  media.Set("audioOutputLabel", "Default Speakers");
++  media.Set("videoWidth", 1280);
++  media.Set("videoHeight", 720);
++  media.Set("videoFrameRate", 30.0);
++  media.Set("audioSampleRate", 48000);
++  media.Set("audioSampleSize", 16);
++  media.Set("audioChannelCount", 2);
++  media.Set("audioLatency", 0.01);
++  media.Set("audioBaseLatency", 0.01);
++  media.Set("audioOutputLatency", 0.02);
++  media.Set("echoCancellation", true);
++  media.Set("autoGainControl", true);
++  media.Set("noiseSuppression", true);
++  media.Set("voiceIsolation", false);
++  return media;
++}
++
+ base::Value::Dict MakeDefaultAdvancedProfile() {
+   base::Value::Dict advanced;
+   advanced.Set("clientHintsEnabled", true);
+@@ -784,6 +810,46 @@ void EnsureFontPackCompatibilityFields(base::Value::Dict& persona) {
+   }
+ }
+ 
++void EnsureMediaDevicesCompatibilityFields(base::Value::Dict& persona) {
++  if (!persona.FindDict("mediaDevices")) {
++    persona.Set("mediaDevices", MakeDefaultMediaDevicesProfile());
++    return;
++  }
++
++  base::Value::Dict* media = persona.FindDict("mediaDevices");
++  EnsureString(*media, "audioInputDeviceId", "persona-audio-input-default");
++  EnsureString(*media, "videoInputDeviceId", "persona-video-input-default");
++  EnsureString(*media, "audioOutputDeviceId", "persona-audio-output-default");
++  EnsureString(*media, "inputGroupId", "persona-media-group-input");
++  EnsureString(*media, "outputGroupId", "persona-media-group-output");
++  EnsureString(*media, "audioInputLabel", "Default Microphone");
++  EnsureString(*media, "videoInputLabel", "Integrated Camera");
++  EnsureString(*media, "audioOutputLabel", "Default Speakers");
++  if (!media->FindInt("videoWidth")) {
++    media->Set("videoWidth", 1280);
++  }
++  if (!media->FindInt("videoHeight")) {
++    media->Set("videoHeight", 720);
++  }
++  EnsureNumeric(*media, "videoFrameRate", 30.0);
++  if (!media->FindInt("audioSampleRate")) {
++    media->Set("audioSampleRate", 48000);
++  }
++  if (!media->FindInt("audioSampleSize")) {
++    media->Set("audioSampleSize", 16);
++  }
++  if (!media->FindInt("audioChannelCount")) {
++    media->Set("audioChannelCount", 2);
++  }
++  EnsureNumeric(*media, "audioLatency", 0.01);
++  EnsureNumeric(*media, "audioBaseLatency", 0.01);
++  EnsureNumeric(*media, "audioOutputLatency", 0.02);
++  EnsureBool(*media, "echoCancellation", true);
++  EnsureBool(*media, "autoGainControl", true);
++  EnsureBool(*media, "noiseSuppression", true);
++  EnsureBool(*media, "voiceIsolation", false);
++}
++
+ void EnsureAdvancedCompatibilityFields(base::Value::Dict& persona) {
+   if (!persona.FindDict("advanced")) {
+     persona.Set("advanced", MakeDefaultAdvancedProfile());
+@@ -997,6 +1063,7 @@ void EnsurePersonaCompatibilityFields(base::Value::Dict& persona) {
+   EnsureGpuCompatibilityFields(persona);
+   EnsureFontPackCompatibilityFields(persona);
+   EnsureFontRenderingCompatibilityFields(persona);
++  EnsureMediaDevicesCompatibilityFields(persona);
+   EnsureAdvancedCompatibilityFields(persona);
+ }
+ 
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index b4b62167..29dd0aa0 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -1833,6 +1833,40 @@ TEST(HeliumPersonaPrefsTest, ValidationRequiresAdvancedExposedApiFields) {
+   EXPECT_TRUE(WarningsContain(warnings, "missing one or more required fields"));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, CompatibilityRepairsMissingMediaDeviceFields) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict persona =
++      ClonePresetIntoProfile(prefs, "preset-windows-11-en-us-new-york");
++  persona.Remove("mediaDevices");
++
++  SavePersona(prefs, std::move(persona));
++  base::Value::Dict active = GetActivePersona(prefs);
++  ASSERT_TRUE(active.FindDict("mediaDevices"));
++  EXPECT_TRUE(PersonaHasRequiredFields(active));
++}
++
++TEST(HeliumPersonaPrefsTest, ValidationRequiresMediaDeviceFields) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict persona =
++      ClonePresetIntoProfile(prefs, "preset-windows-11-en-us-new-york");
++  base::Value::Dict* media_devices = persona.FindDict("mediaDevices");
++  ASSERT_TRUE(media_devices);
++  media_devices->Remove("videoInputDeviceId");
++  media_devices->Remove("audioOutputLabel");
++  media_devices->Remove("videoWidth");
++  media_devices->Remove("audioSampleRate");
++  media_devices->Remove("audioLatency");
++  media_devices->Remove("echoCancellation");
++
++  EXPECT_FALSE(PersonaHasRequiredFields(persona));
++  base::Value::List warnings = ValidatePersona(persona);
++  EXPECT_TRUE(WarningsContain(warnings, "missing one or more required fields"));
++}
++
+ TEST(HeliumPersonaPrefsTest, SnapshotRoundTripsCompleteFields) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index 16648fd4..29fc6e55 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -409,7 +409,8 @@ bool PersonaHasRequiredFields(const base::Value::Dict& persona) {
+       persona.FindDict("network") &&
+       persona.FindDict("gpu") && persona.FindDict("screen") &&
+       persona.FindDict("hardware") && persona.FindDict("fonts") &&
+-      persona.FindDict("fontRendering") && persona.FindDict("advanced");
++      persona.FindDict("fontRendering") && persona.FindDict("mediaDevices") &&
++      persona.FindDict("advanced");
+   if (!has_base_shape || IsPassthroughPersona(persona)) {
+     return has_base_shape;
+   }
+@@ -566,6 +567,27 @@ bool PersonaHasRequiredFields(const base::Value::Dict& persona) {
+          HasNestedBool(persona, "fontRendering", "useBitmaps") &&
+          HasNestedDoubleValue(persona, "fontRendering", "textGamma") &&
+          HasNestedDoubleValue(persona, "fontRendering", "textContrast") &&
++         HasNestedString(persona, "mediaDevices", "audioInputDeviceId") &&
++         HasNestedString(persona, "mediaDevices", "videoInputDeviceId") &&
++         HasNestedString(persona, "mediaDevices", "audioOutputDeviceId") &&
++         HasNestedString(persona, "mediaDevices", "inputGroupId") &&
++         HasNestedString(persona, "mediaDevices", "outputGroupId") &&
++         HasNestedString(persona, "mediaDevices", "audioInputLabel") &&
++         HasNestedString(persona, "mediaDevices", "videoInputLabel") &&
++         HasNestedString(persona, "mediaDevices", "audioOutputLabel") &&
++         HasNestedPositiveInt(persona, "mediaDevices", "videoWidth") &&
++         HasNestedPositiveInt(persona, "mediaDevices", "videoHeight") &&
++         HasNestedPositiveDouble(persona, "mediaDevices", "videoFrameRate") &&
++         HasNestedPositiveInt(persona, "mediaDevices", "audioSampleRate") &&
++         HasNestedPositiveInt(persona, "mediaDevices", "audioSampleSize") &&
++         HasNestedPositiveInt(persona, "mediaDevices", "audioChannelCount") &&
++         HasNestedPositiveDouble(persona, "mediaDevices", "audioLatency") &&
++         HasNestedPositiveDouble(persona, "mediaDevices", "audioBaseLatency") &&
++         HasNestedPositiveDouble(persona, "mediaDevices", "audioOutputLatency") &&
++         HasNestedBool(persona, "mediaDevices", "echoCancellation") &&
++         HasNestedBool(persona, "mediaDevices", "autoGainControl") &&
++         HasNestedBool(persona, "mediaDevices", "noiseSuppression") &&
++         HasNestedBool(persona, "mediaDevices", "voiceIsolation") &&
+          HasNestedBool(persona, "advanced", "clientHintsEnabled") &&
+          HasNestedBool(persona, "advanced", "reduceSystemInfo") &&
+          HasNestedBool(persona, "advanced", "canvasNoise") &&

@@ -1,0 +1,123 @@
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -165,6 +165,31 @@ void ExpectAdvancedExposedApiFields(const base::Value::Dict& advanced) {
+   EXPECT_TRUE(advanced.FindString("speechVoiceUri"));
+ }
+ 
++void ExpectPresetRegion(std::string_view id,
++                        const base::Value::Dict& preset,
++                        std::string_view expected_os,
++                        std::string_view expected_platform,
++                        std::string_view expected_timezone,
++                        std::string_view expected_locale,
++                        std::string_view expected_accept_language) {
++  SCOPED_TRACE(id);
++  EXPECT_EQ(std::string(expected_os), *preset.FindString("os"));
++  EXPECT_EQ(std::string(expected_platform), *preset.FindString("platform"));
++
++  const base::Value::Dict* region = preset.FindDict("region");
++  ASSERT_TRUE(region);
++  EXPECT_EQ(std::string(expected_timezone), *region->FindString("timezone"));
++  EXPECT_EQ(std::string(expected_locale), *region->FindString("locale"));
++  EXPECT_EQ(std::string(expected_accept_language),
++            *region->FindString("acceptLanguage"));
++
++  const base::Value::List* navigator_languages =
++      region->FindList("navigatorLanguages");
++  ASSERT_TRUE(navigator_languages);
++  ASSERT_FALSE(navigator_languages->empty());
++  EXPECT_EQ(std::string(expected_locale), (*navigator_languages)[0].GetString());
++}
++
+ void ExpectPresetSpeechVoice(const base::Value::List& presets,
+                              std::string_view id,
+                              std::string_view expected_name,
+@@ -373,6 +398,87 @@ TEST(HeliumPersonaPrefsTest, BuiltinPresetsContainCompleteSystemImage) {
+ 
+   const base::Value::Dict& linux = DictAt(presets, 4);
+   EXPECT_TRUE(linux.FindDict("uaCh")->FindString("platformVersion")->empty());
++}
++
++TEST(HeliumPersonaPrefsTest, BuiltinPresetsCoverCoreDeviceRegionPersonas) {
++  base::Value::List presets = GetBuiltinPersonaPresets();
++
++  struct ExpectedPreset {
++    std::string_view id;
++    std::string_view os;
++    std::string_view platform;
++    std::string_view timezone;
++    std::string_view locale;
++    std::string_view accept_language;
++  };
++
++  constexpr ExpectedPreset kExpectedPresets[] = {
++      {"preset-windows-11-en-us-new-york", "Windows 11", "Win32",
++       "America/New_York", "en-US", "en-US,en;q=0.9"},
++      {"preset-macos-en-au-melbourne", "macOS 15", "MacIntel",
++       "Australia/Melbourne", "en-AU", "en-AU,en;q=0.9"},
++      {"preset-windows-11-zh-cn-shanghai", "Windows 11", "Win32",
++       "Asia/Shanghai", "zh-CN", "zh-CN,zh;q=0.9,en;q=0.7"},
++      {"preset-linux-de-de-berlin", "Linux x86_64", "Linux x86_64",
++       "Europe/Berlin", "de-DE", "de-DE,de;q=0.9,en;q=0.7"},
++      {"preset-windows-11-ja-jp-tokyo", "Windows 11", "Win32",
++       "Asia/Tokyo", "ja-JP", "ja-JP,ja;q=0.9,en;q=0.7"},
++      {"preset-macos-en-gb-london", "macOS 15", "MacIntel",
++       "Europe/London", "en-GB", "en-GB,en;q=0.9"},
++      {"preset-linux-pt-pt-lisbon", "Linux x86_64", "Linux x86_64",
++       "Europe/Lisbon", "pt-PT", "pt-PT,pt;q=0.9,en;q=0.7"},
++      {"preset-windows-11-en-sg-singapore", "Windows 11", "Win32",
++       "Asia/Singapore", "en-SG", "en-SG,en;q=0.9"},
++  };
++
++  for (const ExpectedPreset& expected : kExpectedPresets) {
++    const base::Value::Dict* preset = FindProfileById(presets, expected.id);
++    ASSERT_TRUE(preset) << expected.id;
++    ExpectPresetRegion(expected.id, *preset, expected.os, expected.platform,
++                       expected.timezone, expected.locale,
++                       expected.accept_language);
++    EXPECT_TRUE(preset->FindString("userAgent"));
++    EXPECT_TRUE(preset->FindDict("uaCh"));
++    EXPECT_TRUE(preset->FindDict("gpu"));
++    EXPECT_TRUE(preset->FindDict("screen"));
++    EXPECT_TRUE(preset->FindDict("fonts"));
++    EXPECT_TRUE(preset->FindDict("fontRendering"));
++    EXPECT_TRUE(preset->FindDict("advanced"));
++  }
++}
++
++TEST(HeliumPersonaPrefsTest, BuiltinFontRenderingProfilesStayComplete) {
++  base::Value::List rendering_profiles = GetBuiltinFontRenderingProfiles();
++  ASSERT_EQ(17u, rendering_profiles.size());
++
++  constexpr std::string_view kExpectedRenderingIds[] = {
++      "windows-cleartype",
++      "windows-grayscale",
++      "windows-gdi-classic",
++      "windows-directwrite-lcd",
++      "windows-directwrite-high-contrast",
++      "macos-coretext",
++      "macos-coretext-legacy",
++      "macos-coretext-external",
++      "macos-coretext-non-retina",
++      "linux-freetype",
++      "linux-freetype-full",
++      "linux-freetype-grayscale",
++      "linux-ubuntu-subpixel",
++      "linux-fedora-grayscale",
++      "linux-kde-subpixel",
++      "linux-gnome-grayscale",
++      "generic-grayscale",
++  };
++
++  for (std::string_view id : kExpectedRenderingIds) {
++    const base::Value::Dict* profile = FindProfileById(rendering_profiles, id);
++    ASSERT_TRUE(profile) << id;
++    EXPECT_TRUE(profile->FindString("displayName"));
++    EXPECT_TRUE(profile->FindString("engine"));
++    EXPECT_TRUE(profile->FindString("hinting"));
++    ExpectFontRenderingProfileFields(*profile);
++  }
+ }
+ 
+ TEST(HeliumPersonaPrefsTest, ClonePresetPersistsAndBecomesActive) {

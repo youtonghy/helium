@@ -1,0 +1,456 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 0ea2ca20..976d9a01 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -907,6 +907,10 @@ blink::HeliumPersonaSnapshot ToBlinkPersonaSnapshot(
+   target.avail_top = source.avail_top;
+   target.avail_width = source.avail_width;
+   target.avail_height = source.avail_height;
++  target.outer_width = source.outer_width;
++  target.outer_height = source.outer_height;
++  target.window_screen_x = source.window_screen_x;
++  target.window_screen_y = source.window_screen_y;
+   target.device_scale_factor = source.device_scale_factor;
+   target.color_depth = source.color_depth;
+   target.pixel_depth = source.pixel_depth;
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.html b/chrome/browser/resources/settings/privacy_page/persona_page.html
+index 15281376..aececfcc 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -406,6 +406,14 @@
+         value="{{editablePersona_.screen.availWidth}}" type="number"></cr-input>
+     <cr-input label="Available height"
+         value="{{editablePersona_.screen.availHeight}}" type="number"></cr-input>
++    <cr-input label="Window outer width"
++        value="{{editablePersona_.screen.outerWidth}}" type="number"></cr-input>
++    <cr-input label="Window outer height"
++        value="{{editablePersona_.screen.outerHeight}}" type="number"></cr-input>
++    <cr-input label="Window screen X"
++        value="{{editablePersona_.screen.windowScreenX}}" type="number"></cr-input>
++    <cr-input label="Window screen Y"
++        value="{{editablePersona_.screen.windowScreenY}}" type="number"></cr-input>
+     <cr-input label="Device scale factor"
+         value="{{editablePersona_.screen.deviceScaleFactor}}"
+         type="number"></cr-input>
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 3219b0ba..a0311063 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -572,6 +572,18 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     if (persona.screen['availTop'] === undefined) {
+       persona.screen['availTop'] = 0;
+     }
++    if (persona.screen['outerWidth'] === undefined) {
++      persona.screen['outerWidth'] = persona.screen['width'] || 0;
++    }
++    if (persona.screen['outerHeight'] === undefined) {
++      persona.screen['outerHeight'] = persona.screen['height'] || 0;
++    }
++    if (persona.screen['windowScreenX'] === undefined) {
++      persona.screen['windowScreenX'] = persona.screen['availLeft'] || 0;
++    }
++    if (persona.screen['windowScreenY'] === undefined) {
++      persona.screen['windowScreenY'] = persona.screen['availTop'] || 0;
++    }
+     if (persona.screen['orientationType'] === undefined) {
+       persona.screen['orientationType'] = 'landscape-primary';
+     }
+@@ -715,6 +727,10 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     persona.screen['availTop'] = toNumber(persona.screen['availTop']);
+     persona.screen['availWidth'] = toNumber(persona.screen['availWidth']);
+     persona.screen['availHeight'] = toNumber(persona.screen['availHeight']);
++    persona.screen['outerWidth'] = toNumber(persona.screen['outerWidth']);
++    persona.screen['outerHeight'] = toNumber(persona.screen['outerHeight']);
++    persona.screen['windowScreenX'] = toNumber(persona.screen['windowScreenX']);
++    persona.screen['windowScreenY'] = toNumber(persona.screen['windowScreenY']);
+     persona.screen['deviceScaleFactor'] =
+         toNumber(persona.screen['deviceScaleFactor']);
+     persona.screen['colorDepth'] = toNumber(persona.screen['colorDepth']);
+diff --git a/components/helium_persona/persona_prefs.cc b/components/helium_persona/persona_prefs.cc
+index f930d00e..d4e0adc4 100644
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -225,6 +225,18 @@ void EnsurePersonaCompatibilityFields(base::Value::Dict& persona) {
+     if (!screen->FindInt("orientationAngle")) {
+       screen->Set("orientationAngle", 0);
+     }
++    if (!screen->FindInt("outerWidth")) {
++      screen->Set("outerWidth", screen->FindInt("width").value_or(0));
++    }
++    if (!screen->FindInt("outerHeight")) {
++      screen->Set("outerHeight", screen->FindInt("height").value_or(0));
++    }
++    if (!screen->FindInt("windowScreenX")) {
++      screen->Set("windowScreenX", screen->FindInt("availLeft").value_or(0));
++    }
++    if (!screen->FindInt("windowScreenY")) {
++      screen->Set("windowScreenY", screen->FindInt("availTop").value_or(0));
++    }
+   }
+   base::Value::Dict* gpu = persona.FindDict("gpu");
+   if (!gpu) {
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index d1326b46..0f0ea2a1 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -464,6 +464,10 @@ TEST(HeliumPersonaPrefsTest, ValidationWarnsButAllowsConflicts) {
+   ASSERT_TRUE(screen);
+   screen->Set("orientationType", "portrait-primary");
+   screen->Set("orientationAngle", 45);
++  screen->Set("outerWidth", 4000);
++  screen->Set("outerHeight", 2200);
++  screen->Set("windowScreenX", 4096);
++  screen->Set("windowScreenY", 2048);
+   base::Value::Dict* network = persona.FindDict("network");
+   ASSERT_TRUE(network);
+   network->Set("type", "none");
+@@ -488,6 +492,7 @@ TEST(HeliumPersonaPrefsTest, ValidationWarnsButAllowsConflicts) {
+   EXPECT_TRUE(WarningsContain(warnings, "unknown feature name"));
+   EXPECT_TRUE(WarningsContain(warnings, "Portrait screen orientation"));
+   EXPECT_TRUE(WarningsContain(warnings, "screen.orientation.angle"));
++  EXPECT_TRUE(WarningsContain(warnings, "Window outer dimensions"));
+   EXPECT_TRUE(WarningsContain(warnings, "Network RTT and downlink"));
+   EXPECT_TRUE(WarningsContain(warnings, "Network type none"));
+   EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
+@@ -533,6 +538,10 @@ TEST(HeliumPersonaPrefsTest, SnapshotRoundTripsCompleteFields) {
+   EXPECT_EQ(0, snapshot.avail_top);
+   EXPECT_EQ("landscape-primary", snapshot.orientation_type);
+   EXPECT_EQ(0, snapshot.orientation_angle);
++  EXPECT_EQ(snapshot.screen_width, snapshot.outer_width);
++  EXPECT_EQ(snapshot.screen_height, snapshot.outer_height);
++  EXPECT_EQ(0, snapshot.window_screen_x);
++  EXPECT_EQ(0, snapshot.window_screen_y);
+   ASSERT_EQ(1u, snapshot.webgpu_features.size());
+   EXPECT_EQ("texture-compression-bc", snapshot.webgpu_features[0]);
+ 
+@@ -683,6 +692,10 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   screen->Set("refreshRate", 120);
+   screen->Set("orientationType", "portrait-primary");
+   screen->Set("orientationAngle", 90);
++  screen->Set("outerWidth", 2800);
++  screen->Set("outerHeight", 1800);
++  screen->Set("windowScreenX", 44);
++  screen->Set("windowScreenY", 55);
+ 
+   base::Value::Dict* hardware = persona.FindDict("hardware");
+   ASSERT_TRUE(hardware);
+@@ -795,6 +808,12 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+             *runtime.FindDict("screen")->FindString("orientationType"));
+   EXPECT_EQ(90,
+             runtime.FindDict("screen")->FindInt("orientationAngle").value_or(-1));
++  EXPECT_EQ(2800, runtime.FindDict("screen")->FindInt("outerWidth").value_or(0));
++  EXPECT_EQ(1800, runtime.FindDict("screen")->FindInt("outerHeight").value_or(0));
++  EXPECT_EQ(44,
++            runtime.FindDict("screen")->FindInt("windowScreenX").value_or(-1));
++  EXPECT_EQ(55,
++            runtime.FindDict("screen")->FindInt("windowScreenY").value_or(-1));
+   EXPECT_EQ(6, runtime.FindDict("hardware")
+                    ->FindInt("hardwareConcurrency")
+                    .value_or(0));
+@@ -860,6 +879,10 @@ TEST(HeliumPersonaPrefsTest, ManualOverridesFlowIntoRuntimeSnapshot) {
+   EXPECT_EQ(3000, snapshot.screen_width);
+   EXPECT_EQ("portrait-primary", snapshot.orientation_type);
+   EXPECT_EQ(90, snapshot.orientation_angle);
++  EXPECT_EQ(2800, snapshot.outer_width);
++  EXPECT_EQ(1800, snapshot.outer_height);
++  EXPECT_EQ(44, snapshot.window_screen_x);
++  EXPECT_EQ(55, snapshot.window_screen_y);
+   EXPECT_EQ(6, snapshot.hardware_concurrency);
+   EXPECT_EQ(5, snapshot.max_touch_points);
+   EXPECT_EQ(4096, snapshot.webgl_max_texture_size);
+diff --git a/components/helium_persona/persona_presets.cc b/components/helium_persona/persona_presets.cc
+index 94dc9b17..6bb72bca 100644
+--- a/components/helium_persona/persona_presets.cc
++++ b/components/helium_persona/persona_presets.cc
+@@ -185,6 +185,10 @@ base::Value::Dict MakeScreen(int width,
+   screen.Set("availTop", 0);
+   screen.Set("availWidth", avail_width);
+   screen.Set("availHeight", avail_height);
++  screen.Set("outerWidth", width);
++  screen.Set("outerHeight", height);
++  screen.Set("windowScreenX", 0);
++  screen.Set("windowScreenY", 0);
+   screen.Set("deviceScaleFactor", dpr);
+   screen.Set("colorDepth", color_depth);
+   screen.Set("pixelDepth", color_depth);
+diff --git a/components/helium_persona/persona_snapshot.cc b/components/helium_persona/persona_snapshot.cc
+index 995841a5..6ee53ce2 100644
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -295,6 +295,10 @@ PersonaSnapshot MakePersonaSnapshot(const base::Value::Dict& persona) {
+   snapshot.avail_top = GetNestedInt(persona, "screen", "availTop");
+   snapshot.avail_width = GetNestedInt(persona, "screen", "availWidth");
+   snapshot.avail_height = GetNestedInt(persona, "screen", "availHeight");
++  snapshot.outer_width = GetNestedInt(persona, "screen", "outerWidth");
++  snapshot.outer_height = GetNestedInt(persona, "screen", "outerHeight");
++  snapshot.window_screen_x = GetNestedInt(persona, "screen", "windowScreenX");
++  snapshot.window_screen_y = GetNestedInt(persona, "screen", "windowScreenY");
+   snapshot.device_scale_factor =
+       GetNestedDouble(persona, "screen", "deviceScaleFactor");
+   snapshot.color_depth = GetNestedInt(persona, "screen", "colorDepth");
+@@ -574,6 +578,10 @@ base::Value::Dict PersonaSnapshotToValue(const PersonaSnapshot& snapshot) {
+   screen.Set("availTop", snapshot.avail_top);
+   screen.Set("availWidth", snapshot.avail_width);
+   screen.Set("availHeight", snapshot.avail_height);
++  screen.Set("outerWidth", snapshot.outer_width);
++  screen.Set("outerHeight", snapshot.outer_height);
++  screen.Set("windowScreenX", snapshot.window_screen_x);
++  screen.Set("windowScreenY", snapshot.window_screen_y);
+   screen.Set("deviceScaleFactor", snapshot.device_scale_factor);
+   screen.Set("colorDepth", snapshot.color_depth);
+   screen.Set("pixelDepth", snapshot.pixel_depth);
+diff --git a/components/helium_persona/persona_snapshot.h b/components/helium_persona/persona_snapshot.h
+index 3c46bc27..da51acdd 100644
+--- a/components/helium_persona/persona_snapshot.h
++++ b/components/helium_persona/persona_snapshot.h
+@@ -107,6 +107,10 @@ struct COMPONENT_EXPORT(HELIUM_PERSONA) PersonaSnapshot {
+   int avail_top = 0;
+   int avail_width = 0;
+   int avail_height = 0;
++  int outer_width = 0;
++  int outer_height = 0;
++  int window_screen_x = 0;
++  int window_screen_y = 0;
+   double device_scale_factor = 0;
+   int color_depth = 0;
+   int pixel_depth = 0;
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index daa79c9b..a3e81aa2 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -340,6 +340,10 @@ bool PersonaHasRequiredFields(const base::Value::Dict& persona) {
+          HasNestedInt(persona, "screen", "availTop") &&
+          HasNestedPositiveInt(persona, "screen", "availWidth") &&
+          HasNestedPositiveInt(persona, "screen", "availHeight") &&
++         HasNestedPositiveInt(persona, "screen", "outerWidth") &&
++         HasNestedPositiveInt(persona, "screen", "outerHeight") &&
++         HasNestedInt(persona, "screen", "windowScreenX") &&
++         HasNestedInt(persona, "screen", "windowScreenY") &&
+          HasNestedPositiveDouble(persona, "screen", "deviceScaleFactor") &&
+          HasNestedPositiveInt(persona, "screen", "colorDepth") &&
+          HasNestedPositiveInt(persona, "screen", "pixelDepth") &&
+@@ -430,6 +434,8 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+   const int height = GetNestedInt(persona, "screen", "height");
+   const int avail_width = GetNestedInt(persona, "screen", "availWidth");
+   const int avail_height = GetNestedInt(persona, "screen", "availHeight");
++  const int outer_width = GetNestedInt(persona, "screen", "outerWidth");
++  const int outer_height = GetNestedInt(persona, "screen", "outerHeight");
+   const double device_scale_factor =
+       GetNestedDouble(persona, "screen", "deviceScaleFactor");
+   const int color_depth = GetNestedInt(persona, "screen", "colorDepth");
+@@ -685,6 +691,16 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+     AddWarning(warnings,
+                "Available screen dimensions should not exceed total screen size.");
+   }
++  if ((width > 0 && outer_width > width) ||
++      (height > 0 && outer_height > height)) {
++    AddWarning(warnings,
++               "Window outer dimensions should usually fit within the selected screen size.");
++  }
++  if ((avail_width > 0 && outer_width > avail_width) ||
++      (avail_height > 0 && outer_height > avail_height)) {
++    AddWarning(warnings,
++               "Window outer dimensions larger than the available screen area may stand out.");
++  }
+   if (device_scale_factor > 0 &&
+       (device_scale_factor < 1.0 || device_scale_factor > 3.0)) {
+     AddWarning(warnings,
+diff --git a/content/browser/helium_noise/noise_token_data.cc b/content/browser/helium_noise/noise_token_data.cc
+index f54e14b2..4afd4801 100644
+--- a/content/browser/helium_noise/noise_token_data.cc
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -186,6 +186,10 @@ std::string PersonaNoiseSalt(
+   AppendSaltPart(salt, persona_snapshot.avail_top);
+   AppendSaltPart(salt, persona_snapshot.avail_width);
+   AppendSaltPart(salt, persona_snapshot.avail_height);
++  AppendSaltPart(salt, persona_snapshot.outer_width);
++  AppendSaltPart(salt, persona_snapshot.outer_height);
++  AppendSaltPart(salt, persona_snapshot.window_screen_x);
++  AppendSaltPart(salt, persona_snapshot.window_screen_y);
+   AppendSaltPart(salt, persona_snapshot.device_scale_factor);
+   AppendSaltPart(salt, persona_snapshot.color_depth);
+   AppendSaltPart(salt, persona_snapshot.pixel_depth);
+diff --git a/content/browser/helium_noise/noise_token_data_unittest.cc b/content/browser/helium_noise/noise_token_data_unittest.cc
+index d9c3269b..f6550f0f 100644
+--- a/content/browser/helium_noise/noise_token_data_unittest.cc
++++ b/content/browser/helium_noise/noise_token_data_unittest.cc
+@@ -65,6 +65,10 @@ blink::HeliumPersonaSnapshot MakeSeededPersona(std::string noise_seed) {
+   snapshot.avail_top = 0;
+   snapshot.avail_width = 1920;
+   snapshot.avail_height = 1040;
++  snapshot.outer_width = 1920;
++  snapshot.outer_height = 1080;
++  snapshot.window_screen_x = 0;
++  snapshot.window_screen_y = 0;
+   snapshot.device_scale_factor = 1.0;
+   snapshot.color_depth = 24;
+   snapshot.pixel_depth = 24;
+@@ -151,6 +155,10 @@ TEST_F(HeliumNoiseTokenDataTest,
+   different_network.network_save_data = true;
+   different_network.avail_left = 12;
+   different_network.avail_top = 28;
++  different_network.outer_width = 1600;
++  different_network.outer_height = 900;
++  different_network.window_screen_x = 12;
++  different_network.window_screen_y = 28;
+   different_network.orientation_type = "portrait-primary";
+   different_network.orientation_angle = 90;
+   blink::HeliumPersonaSnapshot different_seed =
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot.h b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+index 423bbf7a..8f0f45ca 100644
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -107,6 +107,10 @@ struct BLINK_COMMON_EXPORT HeliumPersonaSnapshot {
+   int avail_top = 0;
+   int avail_width = 0;
+   int avail_height = 0;
++  int outer_width = 0;
++  int outer_height = 0;
++  int window_screen_x = 0;
++  int window_screen_y = 0;
+   double device_scale_factor = 0;
+   int color_depth = 0;
+   int pixel_depth = 0;
+diff --git a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+index 7d15966a..6c8be67b 100644
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -349,6 +349,18 @@ struct BLINK_COMMON_EXPORT
+   static int avail_height(const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.avail_height;
+   }
++  static int outer_width(const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.outer_width;
++  }
++  static int outer_height(const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.outer_height;
++  }
++  static int window_screen_x(const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.window_screen_x;
++  }
++  static int window_screen_y(const blink::HeliumPersonaSnapshot& snapshot) {
++    return snapshot.window_screen_y;
++  }
+   static double device_scale_factor(
+       const blink::HeliumPersonaSnapshot& snapshot) {
+     return snapshot.device_scale_factor;
+@@ -651,6 +663,10 @@ inline bool StructTraits<blink::mojom::HeliumPersonaSnapshotDataView,
+   out->avail_top = data.avail_top();
+   out->avail_width = data.avail_width();
+   out->avail_height = data.avail_height();
++  out->outer_width = data.outer_width();
++  out->outer_height = data.outer_height();
++  out->window_screen_x = data.window_screen_x();
++  out->window_screen_y = data.window_screen_y();
+   out->device_scale_factor = data.device_scale_factor();
+   out->color_depth = data.color_depth();
+   out->pixel_depth = data.pixel_depth();
+diff --git a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+index 6141f5c8..ec1d2c99 100644
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -97,6 +97,10 @@ struct HeliumPersonaSnapshot {
+   int32 avail_top;
+   int32 avail_width;
+   int32 avail_height;
++  int32 outer_width;
++  int32 outer_height;
++  int32 window_screen_x;
++  int32 window_screen_y;
+   double device_scale_factor;
+   int32 color_depth;
+   int32 pixel_depth;
+diff --git a/third_party/blink/renderer/core/frame/local_dom_window.cc b/third_party/blink/renderer/core/frame/local_dom_window.cc
+index a3a5ce7b..4a743481 100644
+--- a/third_party/blink/renderer/core/frame/local_dom_window.cc
++++ b/third_party/blink/renderer/core/frame/local_dom_window.cc
+@@ -1590,6 +1590,9 @@ int LocalDOMWindow::outerHeight() const {
+   if (frame->IsInFencedFrameTree()) {
+     return innerHeight();
+   }
++  if (auto value = PersonaSpoofingHelper::WindowOuterHeight(this)) {
++    return *value;
++  }
+ 
+   Page* page = frame->GetPage();
+   if (!page)
+@@ -1615,6 +1618,9 @@ int LocalDOMWindow::outerWidth() const {
+   if (frame->IsInFencedFrameTree()) {
+     return innerWidth();
+   }
++  if (auto value = PersonaSpoofingHelper::WindowOuterWidth(this)) {
++    return *value;
++  }
+ 
+   Page* page = frame->GetPage();
+   if (!page)
+@@ -1684,6 +1690,9 @@ int LocalDOMWindow::screenX() const {
+   Page* page = frame->GetPage();
+   if (!page)
+     return 0;
++  if (auto value = PersonaSpoofingHelper::WindowScreenX(this)) {
++    return *value;
++  }
+ 
+   ChromeClient& chrome_client = page->GetChromeClient();
+   if (page->GetSettings().GetReportScreenSizeInPhysicalPixelsQuirk()) {
+@@ -1702,6 +1711,9 @@ int LocalDOMWindow::screenY() const {
+   Page* page = frame->GetPage();
+   if (!page)
+     return 0;
++  if (auto value = PersonaSpoofingHelper::WindowScreenY(this)) {
++    return *value;
++  }
+ 
+   ChromeClient& chrome_client = page->GetChromeClient();
+   if (page->GetSettings().GetReportScreenSizeInPhysicalPixelsQuirk()) {
+diff --git a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
+index f29f96f7..732a15bf 100644
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.cc
+@@ -466,6 +466,30 @@ std::optional<int> PersonaSpoofingHelper::ScreenAvailHeight(
+   return snapshot ? PositiveInt(snapshot->avail_height) : std::nullopt;
+ }
+ 
++std::optional<int> PersonaSpoofingHelper::WindowOuterWidth(
++    const ExecutionContext* context) {
++  const HeliumPersonaSnapshot* snapshot = Get(context);
++  return snapshot ? PositiveInt(snapshot->outer_width) : std::nullopt;
++}
++
++std::optional<int> PersonaSpoofingHelper::WindowOuterHeight(
++    const ExecutionContext* context) {
++  const HeliumPersonaSnapshot* snapshot = Get(context);
++  return snapshot ? PositiveInt(snapshot->outer_height) : std::nullopt;
++}
++
++std::optional<int> PersonaSpoofingHelper::WindowScreenX(
++    const ExecutionContext* context) {
++  const HeliumPersonaSnapshot* snapshot = Get(context);
++  return snapshot ? snapshot->window_screen_x : std::nullopt;
++}
++
++std::optional<int> PersonaSpoofingHelper::WindowScreenY(
++    const ExecutionContext* context) {
++  const HeliumPersonaSnapshot* snapshot = Get(context);
++  return snapshot ? snapshot->window_screen_y : std::nullopt;
++}
++
+ std::optional<unsigned> PersonaSpoofingHelper::ScreenColorDepth(
+     const ExecutionContext* context) {
+   const HeliumPersonaSnapshot* snapshot = Get(context);
+diff --git a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
+index 526c99c3..cd470e41 100644
+--- a/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
++++ b/third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h
+@@ -70,6 +70,10 @@ class CORE_EXPORT PersonaSpoofingHelper {
+   static std::optional<int> ScreenAvailTop(const ExecutionContext* context);
+   static std::optional<int> ScreenAvailWidth(const ExecutionContext* context);
+   static std::optional<int> ScreenAvailHeight(const ExecutionContext* context);
++  static std::optional<int> WindowOuterWidth(const ExecutionContext* context);
++  static std::optional<int> WindowOuterHeight(const ExecutionContext* context);
++  static std::optional<int> WindowScreenX(const ExecutionContext* context);
++  static std::optional<int> WindowScreenY(const ExecutionContext* context);
+   static std::optional<unsigned> ScreenColorDepth(
+       const ExecutionContext* context);
+   static std::optional<unsigned> ScreenPixelDepth(

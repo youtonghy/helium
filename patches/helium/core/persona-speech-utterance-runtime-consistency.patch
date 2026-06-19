@@ -1,0 +1,50 @@
+diff --git a/third_party/blink/renderer/modules/speech/speech_synthesis_utterance.cc b/third_party/blink/renderer/modules/speech/speech_synthesis_utterance.cc
+index 49a893c1..662c0c17 100644
+--- a/third_party/blink/renderer/modules/speech/speech_synthesis_utterance.cc
++++ b/third_party/blink/renderer/modules/speech/speech_synthesis_utterance.cc
+@@ -42,6 +42,8 @@ constexpr char kPersonaSpeechVoiceUriPrefix[] = "urn:helium:persona:speech:";
+ String PersonaSpeechLocale(ExecutionContext* context) {
+   if (const HeliumPersonaSnapshot* snapshot =
+           PersonaSpoofingHelper::Get(context)) {
++    if (!snapshot->speech_voice_lang.empty())
++      return String::FromUTF8(snapshot->speech_voice_lang);
+     if (!snapshot->locale.empty())
+       return String::FromUTF8(snapshot->locale);
+     if (!snapshot->navigator_languages.empty())
+@@ -50,8 +52,25 @@ String PersonaSpeechLocale(ExecutionContext* context) {
+   return "en-US";
+ }
+ 
+-bool IsPersonaSpeechVoice(const SpeechSynthesisVoice* voice) {
+-  return voice && voice->voiceURI().starts_with(kPersonaSpeechVoiceUriPrefix);
++bool IsPersonaSpeechVoice(ExecutionContext* context,
++                          const SpeechSynthesisVoice* voice) {
++  if (!voice)
++    return false;
++
++  if (voice->voiceURI().starts_with(kPersonaSpeechVoiceUriPrefix))
++    return true;
++
++  const HeliumPersonaSnapshot* snapshot = PersonaSpoofingHelper::Get(context);
++  if (!snapshot)
++    return false;
++
++  if (!snapshot->speech_voice_uri.empty() &&
++      voice->voiceURI() == String::FromUTF8(snapshot->speech_voice_uri)) {
++    return true;
++  }
++
++  return !snapshot->speech_voice_name.empty() &&
++         voice->name() == String::FromUTF8(snapshot->speech_voice_name);
+ }
+ 
+ }  // namespace
+@@ -183,7 +202,7 @@ void SpeechSynthesisUtterance::Start(SpeechSynthesis* synthesis) {
+   if (mojom_utterance_to_send->text.IsNull())
+     mojom_utterance_to_send->text = g_empty_string;
+   if (PersonaSpoofingHelper::IsEnabled(context)) {
+-    if (IsPersonaSpeechVoice(voice_.Get()))
++    if (IsPersonaSpeechVoice(context, voice_.Get()))
+       mojom_utterance_to_send->voice = g_empty_string;
+     if (mojom_utterance_to_send->lang.IsNull() ||
+         mojom_utterance_to_send->lang.empty()) {

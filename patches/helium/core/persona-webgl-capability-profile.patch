@@ -1,0 +1,209 @@
+--- a/third_party/blink/renderer/modules/webgl/DEPS
++++ b/third_party/blink/renderer/modules/webgl/DEPS
+@@ -25,6 +25,7 @@
+     "+media/video/mappable_shared_image_video_frame_pool.h",
+     "+partition_alloc/partition_alloc_constants.h",
+     "+skia/ext",
++    "+third_party/blink/renderer/core/helium_persona",
+     "+third_party/blink/renderer/modules/webcodecs",
+     "+ui/gfx/extension_set.h",
+     "+ui/gl/angle_platform_impl.h",
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -25,6 +25,7 @@
+ 
+ #include "third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h"
+ 
++#include <array>
+ #include <memory>
+ #include <utility>
+ 
+@@ -244,6 +245,70 @@
+   kMaxValue = kWebGL2_D3D11Warp,
+ };
+ 
++std::optional<ScriptValue> GetPersonaWebGLParameter(
++    ScriptState* script_state,
++    GLenum pname) {
++  if (!PersonaSpoofingHelper::IsEnabled(ExecutionContext::From(script_state))) {
++    return std::nullopt;
++  }
++
++  switch (pname) {
++    case GL_ALIASED_LINE_WIDTH_RANGE: {
++      const std::array<GLfloat, 2> value = {1.f, 1.f};
++      return WebGLAny(script_state, DOMFloat32Array::Create(value));
++    }
++    case GL_ALIASED_POINT_SIZE_RANGE: {
++      const std::array<GLfloat, 2> value = {1.f, 1024.f};
++      return WebGLAny(script_state, DOMFloat32Array::Create(value));
++    }
++    case GL_COMPRESSED_TEXTURE_FORMATS:
++      return WebGLAny(script_state, DOMUint32Array::Create(0));
++    case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS:
++      return WebGLAny(script_state, 32);
++    case GL_MAX_CUBE_MAP_TEXTURE_SIZE:
++    case GL_MAX_RENDERBUFFER_SIZE:
++    case GL_MAX_TEXTURE_SIZE:
++      return WebGLAny(script_state, 16384);
++    case GL_MAX_FRAGMENT_UNIFORM_VECTORS:
++    case GL_MAX_VERTEX_UNIFORM_VECTORS:
++      return WebGLAny(script_state, 1024);
++    case GL_MAX_TEXTURE_IMAGE_UNITS:
++      return WebGLAny(script_state, 16);
++    case GL_MAX_VARYING_VECTORS:
++      return WebGLAny(script_state, 30);
++    case GL_MAX_VERTEX_ATTRIBS:
++      return WebGLAny(script_state, 16);
++    case GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS:
++      return WebGLAny(script_state, 16);
++    case GL_MAX_VIEWPORT_DIMS: {
++      const std::array<GLint, 2> value = {16384, 16384};
++      return WebGLAny(script_state, DOMInt32Array::Create(value));
++    }
++    case GL_SAMPLES:
++      return WebGLAny(script_state, 4);
++    case GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT:
++      return WebGLAny(script_state, 16.f);
++    default:
++      return std::nullopt;
++  }
++}
++
++WebGLShaderPrecisionFormat* PersonaShaderPrecisionFormat(
++    GLenum precision_type) {
++  switch (precision_type) {
++    case GL_LOW_FLOAT:
++    case GL_MEDIUM_FLOAT:
++    case GL_HIGH_FLOAT:
++      return MakeGarbageCollected<WebGLShaderPrecisionFormat>(127, 127, 23);
++    case GL_LOW_INT:
++    case GL_MEDIUM_INT:
++    case GL_HIGH_INT:
++      return MakeGarbageCollected<WebGLShaderPrecisionFormat>(31, 30, 0);
++    default:
++      return nullptr;
++  }
++}
++
+ bool CopyVideoFrameTexturesToGLTextureViaIntermediateSI(
+     viz::RasterContextProvider* raster_context_provider,
+     gpu::gles2::GLES2Interface* destination_gl,
+@@ -3895,6 +3960,9 @@
+   if (isContextLost())
+     return ScriptValue::CreateNull(script_state->GetIsolate());
+   const int kIntZero = 0;
++  if (auto persona_value = GetPersonaWebGLParameter(script_state, pname)) {
++    return *persona_value;
++  }
+   switch (pname) {
+     case GL_ACTIVE_TEXTURE:
+       return GetUnsignedIntParameter(script_state, pname);
+@@ -4419,6 +4487,10 @@
+       return nullptr;
+   }
+ 
++  if (PersonaSpoofingHelper::IsEnabled(GetExecutionContext())) {
++    return PersonaShaderPrecisionFormat(precision_type);
++  }
++
+   GLint range[2] = {0, 0};
+   GLint precision = 0;
+   ContextGL()->GetShaderPrecisionFormat(shader_type, precision_type, range,
+--- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+@@ -5,6 +5,7 @@
+ #include "third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.h"
+ 
+ #include <memory>
++#include <optional>
+ 
+ #include "base/compiler_specific.h"
+ #include "base/containers/heap_array.h"
+@@ -13,6 +14,8 @@
+ #include "gpu/command_buffer/client/gles2_interface.h"
+ #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/webgl_any.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/dom/document.h"
+ #include "third_party/blink/renderer/core/dom/element.h"
+ #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
+@@ -110,6 +113,67 @@
+ namespace {
+ 
+ const GLuint64 kMaxClientWaitTimeout = 0u;
++
++std::optional<ScriptValue> GetPersonaWebGL2Parameter(
++    ScriptState* script_state,
++    GLenum pname) {
++  if (!PersonaSpoofingHelper::IsEnabled(ExecutionContext::From(script_state))) {
++    return std::nullopt;
++  }
++
++  switch (pname) {
++    case GL_MAX_3D_TEXTURE_SIZE:
++      return WebGLAny(script_state, 2048);
++    case GL_MAX_ARRAY_TEXTURE_LAYERS:
++      return WebGLAny(script_state, 2048);
++    case GL_MAX_COLOR_ATTACHMENTS:
++    case GL_MAX_DRAW_BUFFERS:
++      return WebGLAny(script_state, 8);
++    case GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS:
++    case GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS:
++      return WebGLAny(script_state, static_cast<GLint64>(229376));
++    case GL_MAX_COMBINED_UNIFORM_BLOCKS:
++      return WebGLAny(script_state, 24);
++    case GL_MAX_ELEMENT_INDEX:
++      return WebGLAny(script_state, static_cast<GLint64>(4294967294ULL));
++    case GL_MAX_ELEMENTS_INDICES:
++    case GL_MAX_ELEMENTS_VERTICES:
++      return WebGLAny(script_state, 2147483647);
++    case GL_MAX_FRAGMENT_INPUT_COMPONENTS:
++    case GL_MAX_VERTEX_OUTPUT_COMPONENTS:
++      return WebGLAny(script_state, 120);
++    case GL_MAX_FRAGMENT_UNIFORM_BLOCKS:
++    case GL_MAX_VERTEX_UNIFORM_BLOCKS:
++      return WebGLAny(script_state, 12);
++    case GL_MAX_FRAGMENT_UNIFORM_COMPONENTS:
++    case GL_MAX_VERTEX_UNIFORM_COMPONENTS:
++      return WebGLAny(script_state, 4096);
++    case GL_MAX_PROGRAM_TEXEL_OFFSET:
++      return WebGLAny(script_state, 7);
++    case GL_MIN_PROGRAM_TEXEL_OFFSET:
++      return WebGLAny(script_state, -8);
++    case GL_MAX_SAMPLES:
++      return WebGLAny(script_state, 4);
++    case GL_MAX_TEXTURE_LOD_BIAS:
++      return WebGLAny(script_state, 15.f);
++    case GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS:
++      return WebGLAny(script_state, 64);
++    case GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS:
++      return WebGLAny(script_state, 4);
++    case GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS:
++      return WebGLAny(script_state, 4);
++    case GL_MAX_UNIFORM_BLOCK_SIZE:
++      return WebGLAny(script_state, static_cast<GLint64>(65536));
++    case GL_MAX_UNIFORM_BUFFER_BINDINGS:
++      return WebGLAny(script_state, 24);
++    case GL_MAX_VARYING_COMPONENTS:
++      return WebGLAny(script_state, 120);
++    case GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT:
++      return WebGLAny(script_state, 256);
++    default:
++      return std::nullopt;
++  }
++}
+ 
+ // TODO(kainino): Change outByteLength to GLuint and change the associated
+ // range checking (and all uses) - overflow becomes possible in cases below
+@@ -4774,6 +4838,9 @@
+                                                      GLenum pname) {
+   if (isContextLost())
+     return ScriptValue::CreateNull(script_state->GetIsolate());
++  if (auto persona_value = GetPersonaWebGL2Parameter(script_state, pname)) {
++    return *persona_value;
++  }
+   switch (pname) {
+     case GL_SHADING_LANGUAGE_VERSION: {
+       return WebGLAny(

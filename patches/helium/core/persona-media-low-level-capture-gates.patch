@@ -1,0 +1,75 @@
+diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
+index cc27c43..10c5cc6 100644
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -731,9 +731,14 @@ void BindSocketManager(
+ }
+ #endif  // BUILDFLAG(IS_P2P_ENABLED)
+ 
++bool HeliumPersonaAllowsMediaCapture(RenderFrameHost* host);
++
+ void BindImageCaptureImpl(
+     RenderFrameHost* frame_host,
+     mojo::PendingReceiver<media::mojom::ImageCapture> receiver) {
++  if (!HeliumPersonaAllowsMediaCapture(frame_host)) {
++    return;
++  }
+   ImageCaptureImpl::Create(frame_host, std::move(receiver));
+ }
+ 
+@@ -1594,24 +1599,30 @@ void PopulateBinderMapWithContext(
+                             base::Unretained(media_stream_manager)),
+         GetIOThreadTaskRunner({}));
+ 
+-    map->Add<media::mojom::VideoCaptureHost>(
+-        base::BindRepeating(&VideoCaptureHost::Create, host->GetGlobalId(),
+-                            base::Unretained(media_stream_manager)),
+-        GetIOThreadTaskRunner({}));
++    if (HeliumPersonaAllowsMediaCapture(host)) {
++      map->Add<media::mojom::VideoCaptureHost>(
++          base::BindRepeating(&VideoCaptureHost::Create, host->GetGlobalId(),
++                              base::Unretained(media_stream_manager)),
++          GetIOThreadTaskRunner({}));
++    }
+   }
+ 
+   map->Add<blink::mojom::RTCLoggingDispatcher>(
+       base::BindRepeating(&RTCLoggingDispatcherImpl::Create));
+ 
+-  map->Add<blink::mojom::RendererAudioInputStreamFactory>(
+-      &BindRenderFrameHostImpl<
+-          &RenderFrameHostImpl::CreateAudioInputStreamFactory>);
++  if (HeliumPersonaAllowsMediaCapture(host)) {
++    map->Add<blink::mojom::RendererAudioInputStreamFactory>(
++        &BindRenderFrameHostImpl<
++            &RenderFrameHostImpl::CreateAudioInputStreamFactory>);
++  }
+ 
+   map->Add<blink::mojom::RendererAudioOutputStreamFactory>(
+       &BindRenderFrameHostImpl<
+           &RenderFrameHostImpl::CreateAudioOutputStreamFactory>);
+ 
+-  map->Add<media::mojom::ImageCapture>(&BindImageCaptureImpl);
++  if (HeliumPersonaAllowsMediaCapture(host)) {
++    map->Add<media::mojom::ImageCapture>(&BindImageCaptureImpl);
++  }
+ 
+   map->Add<media::mojom::InterfaceFactory>(
+       &BindRenderFrameHostImpl<
+diff --git a/content/browser/renderer_host/render_frame_host_impl.cc b/content/browser/renderer_host/render_frame_host_impl.cc
+index 417df2c..3693ef6 100644
+--- a/content/browser/renderer_host/render_frame_host_impl.cc
++++ b/content/browser/renderer_host/render_frame_host_impl.cc
+@@ -14339,6 +14339,12 @@ void RenderFrameHostImpl::ResetPermissionsPolicy(
+ void RenderFrameHostImpl::CreateAudioInputStreamFactory(
+     mojo::PendingReceiver<blink::mojom::RendererAudioInputStreamFactory>
+         receiver) {
++  const blink::HeliumPersonaSnapshot& persona_snapshot =
++      GetPage().persona_snapshot();
++  if (persona_snapshot.IsEnabled() && !persona_snapshot.allow_media_capture) {
++    return;
++  }
++
+   BrowserMainLoop* browser_main_loop = BrowserMainLoop::GetInstance();
+   CHECK(browser_main_loop);
+   MediaStreamManager* msm = browser_main_loop->media_stream_manager();

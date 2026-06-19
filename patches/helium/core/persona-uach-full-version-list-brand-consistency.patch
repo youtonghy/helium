@@ -1,0 +1,124 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index cddbe55..25bf594 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -408,6 +408,24 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     });
+   }
+ 
++  private uaChNonGreaseBrandNames_(brands: unknown): string[] {
++    if (!Array.isArray(brands)) {
++      return [];
++    }
++    return brands.map(brand => {
++      if (!brand || typeof brand !== 'object' || Array.isArray(brand)) {
++        return '';
++      }
++      return this.stringValue_(
++          (brand as Record<string, unknown>)['brand']);
++    }).filter(brand => brand && !this.isUaChGreaseBrand_(brand));
++  }
++
++  private stringListEquals_(left: string[], right: string[]): boolean {
++    return left.length === right.length &&
++        left.every((value, index) => value === right[index]);
++  }
++
+   private deriveDraftWarnings_(persona: PersonaRecord): string[] {
+     const warnings: string[] = [];
+     if (!persona || this.isPassthroughPersona_(persona)) {
+@@ -653,6 +671,13 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+           warnings,
+           'UA-CH fullVersionList versions should be set for non-GREASE brands.');
+     }
++    if (!this.stringListEquals_(
++            this.uaChNonGreaseBrandNames_(uaCh['brands']),
++            this.uaChNonGreaseBrandNames_(uaChFullVersionList))) {
++      this.addDraftWarning_(
++          warnings,
++          'UA-CH fullVersionList brands should match UA-CH brands in order.');
++    }
+     if (uaMajor > 0 && uaChFullMajor > 0 && uaMajor !== uaChFullMajor) {
+       this.addDraftWarning_(
+           warnings,
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index a34cc27..ec26a39 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -1596,6 +1596,36 @@ TEST(HeliumPersonaPrefsTest, ValidationRequiresCompleteUaChFields) {
+   EXPECT_TRUE(WarningsContain(warnings, "missing one or more required fields"));
+ }
+ 
++TEST(HeliumPersonaPrefsTest,
++     ValidationWarnsForUaChFullVersionListBrandMismatch) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict persona =
++      ClonePresetIntoProfile(prefs, "preset-windows-11-en-us-new-york");
++  base::Value::Dict* ua_ch = persona.FindDict("uaCh");
++  ASSERT_TRUE(ua_ch);
++
++  base::Value::List full_versions;
++  base::Value::Dict chrome_brand;
++  chrome_brand.Set("brand", "Google Chrome");
++  chrome_brand.Set("version", "149.0.7827.114");
++  full_versions.Append(std::move(chrome_brand));
++  base::Value::Dict chromium_brand;
++  chromium_brand.Set("brand", "Chromium");
++  chromium_brand.Set("version", "149.0.7827.114");
++  full_versions.Append(std::move(chromium_brand));
++  base::Value::Dict grease_brand;
++  grease_brand.Set("brand", "Not_A Brand");
++  grease_brand.Set("version", "24");
++  full_versions.Append(std::move(grease_brand));
++  ua_ch->Set("fullVersionList", std::move(full_versions));
++
++  base::Value::List warnings = ValidatePersona(persona);
++  EXPECT_TRUE(WarningsContain(warnings,
++                              "UA-CH fullVersionList brands should match"));
++}
++
+ TEST(HeliumPersonaPrefsTest, ValidationRequiresCompleteGpuProfileFields) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index aab9692..3e71c35 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -294,6 +294,23 @@ bool IsUaChGreaseBrand(std::string_view brand) {
+   return Contains(brand, "not") && Contains(brand, "brand");
+ }
+ 
++std::vector<std::string> NonGreaseUaChBrandNames(
++    const base::Value::List* brands) {
++  std::vector<std::string> names;
++  if (!brands) {
++    return names;
++  }
++  for (const base::Value& value : *brands) {
++    const base::Value::Dict* brand = value.GetIfDict();
++    const std::string* name = brand ? brand->FindString("brand") : nullptr;
++    if (!name || name->empty() || IsUaChGreaseBrand(*name)) {
++      continue;
++    }
++    names.push_back(*name);
++  }
++  return names;
++}
++
+ bool EqualsInsensitive(std::string_view lhs, std::string_view rhs) {
+   return base::ToLowerASCII(std::string(lhs)) ==
+          base::ToLowerASCII(std::string(rhs));
+@@ -961,6 +978,11 @@ base::Value::List ValidatePersona(const base::Value::Dict& persona) {
+     AddWarning(warnings,
+                "UA-CH brands should be set so Sec-CH-UA matches the persona.");
+   }
++  if (NonGreaseUaChBrandNames(ua_ch_brands) !=
++      NonGreaseUaChBrandNames(ua_ch_full_version_list)) {
++    AddWarning(warnings,
++               "UA-CH fullVersionList brands should match UA-CH brands in order.");
++  }
+   if (ua_ch_full_version.empty()) {
+     AddWarning(warnings,
+                "UA-CH fullVersion should be set so high-entropy hints match the UA.");

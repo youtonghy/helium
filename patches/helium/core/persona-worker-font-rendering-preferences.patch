@@ -1,0 +1,70 @@
+diff --git a/chrome/browser/renderer_preferences_util.cc b/chrome/browser/renderer_preferences_util.cc
+index 6f50be25..ef668394 100644
+--- a/chrome/browser/renderer_preferences_util.cc
++++ b/chrome/browser/renderer_preferences_util.cc
+@@ -35,6 +35,7 @@
+ #include "third_party/blink/public/public_buildflags.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/accessibility/platform/ax_platform.h"
+ #include "ui/base/ui_base_features.h"
++#include "ui/gfx/font_render_params.h"
+ #include "ui/native_theme/native_theme.h"
+ 
+@@ -104,6 +105,46 @@ std::string GetLanguageListForProfile(Profile* profile,
+       language_list);
+ }
+ 
++gfx::FontRenderParams::Hinting HeliumPersonaHintingToRendererHinting(
++    const std::string& hinting) {
++  if (base::EqualsCaseInsensitiveASCII(hinting, "none")) {
++    return gfx::FontRenderParams::HINTING_NONE;
++  }
++  if (base::EqualsCaseInsensitiveASCII(hinting, "slight")) {
++    return gfx::FontRenderParams::HINTING_SLIGHT;
++  }
++  if (base::EqualsCaseInsensitiveASCII(hinting, "full")) {
++    return gfx::FontRenderParams::HINTING_FULL;
++  }
++  return gfx::FontRenderParams::HINTING_MEDIUM;
++}
++
++void ApplyHeliumPersonaFontRenderingPreferences(
++    const helium_persona::PersonaSnapshot& persona_snapshot,
++    blink::RendererPreferences* prefs) {
++  if (persona_snapshot.font_rendering_id.empty()) {
++    return;
++  }
++
++  prefs->should_antialias_text = persona_snapshot.font_antialiasing;
++  prefs->hinting = HeliumPersonaHintingToRendererHinting(
++      persona_snapshot.font_rendering_hinting);
++  prefs->subpixel_rendering =
++      persona_snapshot.font_subpixel_rendering || persona_snapshot.font_lcd_text
++          ? gfx::FontRenderParams::SUBPIXEL_RENDERING_RGB
++          : gfx::FontRenderParams::SUBPIXEL_RENDERING_NONE;
++  prefs->use_subpixel_positioning =
++      persona_snapshot.font_subpixel_positioning;
++  prefs->use_autohinter = persona_snapshot.font_use_autohinter;
++  prefs->use_bitmaps = persona_snapshot.font_use_bitmaps;
++  if (persona_snapshot.font_text_gamma > 0) {
++    prefs->text_gamma = persona_snapshot.font_text_gamma;
++  }
++  if (persona_snapshot.font_text_contrast >= 0) {
++    prefs->text_contrast = persona_snapshot.font_text_contrast;
++  }
++}
++
+ }  // namespace
+ 
+ namespace renderer_preferences_util {
+@@ -156,7 +198,9 @@ void UpdateFromSystemSettings(blink::RendererPreferences* prefs,
+       helium_persona::MakePersonaSnapshot(*pref_service);
+   const bool persona_enabled = !persona_snapshot.passthrough;
+-  if (persona_enabled)
++  if (persona_enabled) {
+     prefs->enable_do_not_track = persona_snapshot.do_not_track_enabled;
++    ApplyHeliumPersonaFontRenderingPreferences(persona_snapshot, prefs);
++  }
+   prefs->enable_encrypted_media =
+       pref_service->GetBoolean(prefs::kEnableEncryptedMedia);
+ 

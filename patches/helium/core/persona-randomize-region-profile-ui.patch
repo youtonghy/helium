@@ -1,0 +1,33 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 2d9f77b3..3fc402dd 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -938,6 +938,20 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     persona.fontRendering = JSON.parse(JSON.stringify(rendering));
+   }
+ 
++  private applyRandomRegion_(persona: PersonaRecord) {
++    const osFamily = this.personaOsFamily_(persona);
++    const candidates = (this.presets_ || [])
++        .filter(item => !this.isPassthroughPersona_(item))
++        .filter(item => this.personaOsFamily_(item) === osFamily)
++        .filter(item => {
++          const region = item.region || {};
++          return Boolean(region['timezone']) && Boolean(region['locale']) &&
++              Boolean(region['acceptLanguage']);
++        });
++    const source = this.randomFrom_(candidates, persona);
++    persona.region = JSON.parse(JSON.stringify(source.region || persona.region));
++  }
++
+   private applyRandomHardware_(persona: PersonaRecord) {
+     const osFamily = this.personaOsFamily_(persona);
+     const windowsProfiles = [
+@@ -1378,6 +1392,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     persona.passthrough = false;
+     persona.noiseSeed = this.makeRandomNoiseSeed_();
+     this.applyRandomUaVersion_(persona);
++    this.applyRandomRegion_(persona);
+     this.applyRandomHardware_(persona);
+     this.applyRandomGpu_(persona);
+     this.applyRandomScreen_(persona);

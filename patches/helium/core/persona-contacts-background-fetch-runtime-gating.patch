@@ -1,0 +1,91 @@
+diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
+index 5d5ee78c..8f2e2f4a 100644
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -138,6 +138,7 @@
+ #include "storage/browser/quota/quota_manager_proxy.h"
+ #include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/common/features_generated.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+ #include "third_party/blink/public/mojom/ai/ai_manager.mojom.h"
+ #include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom.h"
+@@ -753,7 +754,39 @@ void BindRenderFrameHostImpl(RenderFrameHost* host,
+ {
+   (RenderFrameHostImpl::From(host)->*Method)(std::move(receiver));
+ }
+ 
++blink::HeliumPersonaSnapshot GetHeliumPersonaSnapshot(
++    BrowserContext* browser_context) {
++  if (!browser_context) {
++    return blink::HeliumPersonaSnapshot();
++  }
++  return GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++      browser_context);
++}
++
++bool HeliumPersonaAllowsContacts(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_contacts;
++}
++
++bool HeliumPersonaAllowsBackgroundFetch(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_background_sync;
++}
++
++bool HeliumPersonaAllowsBackgroundFetch(ServiceWorkerHost* host) {
++  if (!host) {
++    return true;
++  }
++  BrowserContext* browser_context =
++      host->version()->context()->wrapper()->browser_context();
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(browser_context);
++  return !snapshot.IsEnabled() || snapshot.allow_background_sync;
++}
++
+ }  // namespace
+ 
+ // Documents/frames
+@@ -833,7 +866,9 @@ void PopulateBinderMapWithContext(
+   }
+ #endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
+ 
+-  map->Add<blink::mojom::ContactsManager>(&ContactsManagerImpl::Create);
++  if (HeliumPersonaAllowsContacts(host)) {
++    map->Add<blink::mojom::ContactsManager>(&ContactsManagerImpl::Create);
++  }
+ 
+   map->Add<blink::mojom::ContentSecurityNotifier>(base::BindRepeating(
+       [](RenderFrameHost* host,
+@@ -1224,8 +1259,10 @@ void PopulateBinderMapWithContext(
+                 std::move(receiver));
+           }));
+ 
+-  map->Add<blink::mojom::BackgroundFetchService>(
+-      &BackgroundFetchServiceImpl::CreateForFrame);
++  if (HeliumPersonaAllowsBackgroundFetch(host)) {
++    map->Add<blink::mojom::BackgroundFetchService>(
++        &BackgroundFetchServiceImpl::CreateForFrame);
++  }
+   map->Add<device::mojom::BatteryMonitor>(&BindBatteryMonitor);
+   map->Add<blink::mojom::ColorChooserFactory>(&BindColorChooserFactoryForFrame);
+   map->Add<blink::mojom::EyeDropperChooser>(&EyeDropperChooserImpl::Create);
+@@ -1813,9 +1850,11 @@ void PopulateBinderMapWithContext(
+   // static binders
+   // Use a task runner if ServiceWorkerHost lives on the IO thread, as
+   // CreateForWorker() needs to be called on the UI thread.
+-  map->Add<blink::mojom::BackgroundFetchService>(
+-      base::BindRepeating(&BackgroundFetchServiceImpl::CreateForWorker,
+-                          host->GetNetworkIsolationKey()));
++  if (HeliumPersonaAllowsBackgroundFetch(host)) {
++    map->Add<blink::mojom::BackgroundFetchService>(
++        base::BindRepeating(&BackgroundFetchServiceImpl::CreateForWorker,
++                            host->GetNetworkIsolationKey()));
++  }
+   map->Add<blink::mojom::ContentIndexService>(
+       &ContentIndexServiceImpl::CreateForWorker);
+   map->Add<blink::mojom::CookieStore>(

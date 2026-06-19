@@ -1,0 +1,16 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index 8f3e466..a2128ec 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -2119,7 +2119,10 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const labels = osFamily === 'mac' ? macLabels :
+         osFamily === 'linux' ? linuxLabels : windowsLabels;
+     const selectedLabels = this.randomFrom_(labels, labels[0]);
+-    const video = this.randomFrom_(commonVideoProfiles, commonVideoProfiles[0]);
++    const fallbackVideo = screenWidth >= 1280 && screenHeight >= 720 ?
++        {width: 1280, height: 720, frameRate: 30} :
++        {width: 640, height: 480, frameRate: 30};
++    const video = this.randomFrom_(commonVideoProfiles, fallbackVideo);
+     const sampleRate = this.randomFrom_([48000, 48000, 44100], 48000);
+     const channelCount = this.randomFrom_([1, 2, 2], 2);
+     const audioLatency =

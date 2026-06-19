@@ -1,0 +1,186 @@
+--- a/third_party/blink/renderer/core/exported/web_view_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
+@@ -30,6 +30,8 @@
+ #include "third_party/blink/renderer/core/exported/web_view_impl.h"
+ 
+ #include <algorithm>
++#include <map>
++#include <string>
+ #include <memory>
+ #include <optional>
+ #include <utility>
+@@ -593,51 +595,17 @@ class HeliumPersonaRuntimeOverride final {
+   HeliumPersonaRuntimeOverride& operator=(const HeliumPersonaRuntimeOverride&) =
+       delete;
+   ~HeliumPersonaRuntimeOverride() {
+-    ResetLocale();
+-    timezone_override_.reset();
++    ClearGlobalOverrides();
+   }
+ 
+   void Apply(const HeliumPersonaSnapshot& snapshot,
+              RendererPreferences& preferences) {
+-    ApplyTimezone(snapshot);
+-    ApplyLocale(snapshot);
++    ApplyGlobalOverrides(snapshot);
+     ApplyDoNotTrack(snapshot, preferences);
+     ApplyFontRendering(snapshot, preferences);
+   }
+ 
+  private:
+-  void ApplyTimezone(const HeliumPersonaSnapshot& snapshot) {
+-    if (!snapshot.IsEnabled() || snapshot.timezone.empty()) {
+-      timezone_override_.reset();
+-      return;
+-    }
+-
+-    String timezone = String::FromUTF8(snapshot.timezone);
+-    if (timezone_override_) {
+-      timezone_override_->change(timezone);
+-      return;
+-    }
+-
+-    auto result = TimeZoneController::SetTimeZoneOverride(timezone);
+-    if (result.status == TimeZoneController::TimeZoneOverrideStatus::kSuccess) {
+-      timezone_override_ = std::move(result.handle);
+-    }
+-  }
+-
+-  void ApplyLocale(const HeliumPersonaSnapshot& snapshot) {
+-    if (!snapshot.IsEnabled() || snapshot.locale.empty()) {
+-      ResetLocale();
+-      return;
+-    }
+-
+-    String locale = String::FromUTF8(snapshot.locale);
+-    String error = LocaleController::instance().SetLocaleOverride(
+-        locale, !locale_override_active_);
+-    if (error.empty()) {
+-      locale_override_active_ = true;
+-    }
+-  }
+-
+   void ApplyDoNotTrack(const HeliumPersonaSnapshot& snapshot,
+                        RendererPreferences& preferences) {
+     if (!do_not_track_baseline_) {
+@@ -679,18 +647,114 @@ class HeliumPersonaRuntimeOverride final {
+     }
+   }
+ 
+-  void ResetLocale() {
+-    if (!locale_override_active_) {
++  struct GlobalOverrideState {
++    std::map<HeliumPersonaRuntimeOverride*, std::string> requested_timezones;
++    std::map<HeliumPersonaRuntimeOverride*, std::string> requested_locales;
++    std::unique_ptr<TimeZoneController::TimeZoneOverride> timezone_override;
++    std::string active_timezone;
++    std::string active_locale;
++    bool locale_override_active = false;
++  };
++
++  static GlobalOverrideState& GetGlobalOverrideState() {
++    DEFINE_STATIC_LOCAL(GlobalOverrideState, state, ());
++    return state;
++  }
++
++  static std::string PreferredRequestedValue(
++      const std::map<HeliumPersonaRuntimeOverride*, std::string>& requests,
++      const std::string& active_value) {
++    if (!active_value.empty()) {
++      for (const auto& entry : requests) {
++        if (entry.second == active_value) {
++          return active_value;
++        }
++      }
++    }
++    for (const auto& entry : requests) {
++      if (!entry.second.empty()) {
++        return entry.second;
++      }
++    }
++    return std::string();
++  }
++
++  static void ReconcileTimezone(GlobalOverrideState& state) {
++    const std::string timezone = PreferredRequestedValue(
++        state.requested_timezones, state.active_timezone);
++    if (timezone.empty()) {
++      state.timezone_override.reset();
++      state.active_timezone.clear();
+       return;
+     }
+-    LocaleController::instance().SetLocaleOverride(String(), false);
+-    locale_override_active_ = false;
++    if (timezone == state.active_timezone) {
++      return;
++    }
++
++    String blink_timezone = String::FromUTF8(timezone);
++    if (state.timezone_override) {
++      state.timezone_override->change(blink_timezone);
++      state.active_timezone = timezone;
++      return;
++    }
++
++    auto result = TimeZoneController::SetTimeZoneOverride(blink_timezone);
++    if (result.status == TimeZoneController::TimeZoneOverrideStatus::kSuccess) {
++      state.timezone_override = std::move(result.handle);
++      state.active_timezone = timezone;
++    }
++  }
++
++  static void ReconcileLocale(GlobalOverrideState& state) {
++    const std::string locale =
++        PreferredRequestedValue(state.requested_locales, state.active_locale);
++    if (locale.empty()) {
++      if (state.locale_override_active) {
++        LocaleController::instance().SetLocaleOverride(String(), false);
++        state.locale_override_active = false;
++      }
++      state.active_locale.clear();
++      return;
++    }
++    if (locale == state.active_locale) {
++      return;
++    }
++
++    String blink_locale = String::FromUTF8(locale);
++    String error = LocaleController::instance().SetLocaleOverride(
++        blink_locale, !state.locale_override_active);
++    if (error.empty()) {
++      state.locale_override_active = true;
++      state.active_locale = locale;
++    }
++  }
++
++  void ApplyGlobalOverrides(const HeliumPersonaSnapshot& snapshot) {
++    GlobalOverrideState& state = GetGlobalOverrideState();
++    if (snapshot.IsEnabled() && !snapshot.timezone.empty()) {
++      state.requested_timezones[this] = snapshot.timezone;
++    } else {
++      state.requested_timezones.erase(this);
++    }
++    if (snapshot.IsEnabled() && !snapshot.locale.empty()) {
++      state.requested_locales[this] = snapshot.locale;
++    } else {
++      state.requested_locales.erase(this);
++    }
++    ReconcileTimezone(state);
++    ReconcileLocale(state);
++  }
++
++  void ClearGlobalOverrides() {
++    GlobalOverrideState& state = GetGlobalOverrideState();
++    state.requested_timezones.erase(this);
++    state.requested_locales.erase(this);
++    ReconcileTimezone(state);
++    ReconcileLocale(state);
+   }
+ 
+-  std::unique_ptr<TimeZoneController::TimeZoneOverride> timezone_override_;
+   std::optional<bool> do_not_track_baseline_;
+   std::optional<RendererPreferences> font_rendering_baseline_;
+-  bool locale_override_active_ = false;
+ };
+ 
+ // WebView ----------------------------------------------------------------

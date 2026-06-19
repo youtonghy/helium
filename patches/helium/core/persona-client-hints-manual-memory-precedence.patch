@@ -1,0 +1,34 @@
+--- a/content/browser/client_hints/client_hints.cc
++++ b/content/browser/client_hints/client_hints.cc
+@@ -480,22 +480,20 @@ void AddPersonaDeviceMemoryHeader(
+     net::HttpRequestHeaders* headers,
+     const blink::HeliumPersonaSnapshot& persona_snapshot,
+     bool use_deprecated_version = false) {
+-  if (persona_snapshot.reduce_system_info) {
+-    SetHeaderToDouble(headers,
+-                      use_deprecated_version
+-                          ? WebClientHintsType::kDeviceMemory_DEPRECATED
+-                          : WebClientHintsType::kDeviceMemory,
+-                      2);
++  const WebClientHintsType header =
++      use_deprecated_version ? WebClientHintsType::kDeviceMemory_DEPRECATED
++                             : WebClientHintsType::kDeviceMemory;
++  if (persona_snapshot.device_memory > 0) {
++    SetHeaderToDouble(headers, header, persona_snapshot.device_memory);
++    return;
++  }
++  if (persona_snapshot.reduce_system_info) {
++    SetHeaderToDouble(headers, header, 2);
+     return;
+   }
+   if (persona_snapshot.device_memory <= 0) {
+     AddDeviceMemoryHeader(headers, use_deprecated_version);
+     return;
+   }
+-  SetHeaderToDouble(headers,
+-                    use_deprecated_version
+-                        ? WebClientHintsType::kDeviceMemory_DEPRECATED
+-                        : WebClientHintsType::kDeviceMemory,
+-                    persona_snapshot.device_memory);
+ }
+ 

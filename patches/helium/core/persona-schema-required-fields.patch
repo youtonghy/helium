@@ -1,0 +1,1190 @@
+diff --git a/components/helium_persona/persona_prefs.cc b/components/helium_persona/persona_prefs.cc
+index 8e2886fd..fc9a4a95 100644
+--- a/components/helium_persona/persona_prefs.cc
++++ b/components/helium_persona/persona_prefs.cc
+@@ -96,6 +96,72 @@ base::Value::Dict MakeDefaultFontRenderingProfile() {
+   return rendering;
+ }
+ 
++base::Value::List MakeDefaultFontFamilies() {
++  base::Value::List families;
++  families.Append("Arial");
++  families.Append("Calibri");
++  families.Append("Cambria");
++  families.Append("Candara");
++  families.Append("Consolas");
++  families.Append("Georgia");
++  families.Append("Segoe UI");
++  families.Append("Times New Roman");
++  families.Append("Verdana");
++  return families;
++}
++
++base::Value::Dict MakeDefaultFontPackProfile() {
++  base::Value::Dict fonts;
++  fonts.Set("id", "windows-11-core");
++  fonts.Set("displayName", "Windows 11 core fonts");
++  fonts.Set("families", MakeDefaultFontFamilies());
++  base::Value::List aliases;
++  aliases.Append("sans-serif=Arial");
++  aliases.Append("serif=Times New Roman");
++  aliases.Append("monospace=Consolas");
++  aliases.Append("system-ui=Segoe UI");
++  fonts.Set("aliases", std::move(aliases));
++  return fonts;
++}
++
++base::Value::List MakeDefaultUaChBrands() {
++  base::Value::List brands;
++  base::Value::Dict chromium_brand;
++  chromium_brand.Set("brand", "Chromium");
++  chromium_brand.Set("version", "149");
++  brands.Append(std::move(chromium_brand));
++  base::Value::Dict chrome_brand;
++  chrome_brand.Set("brand", "Google Chrome");
++  chrome_brand.Set("version", "149");
++  brands.Append(std::move(chrome_brand));
++  base::Value::Dict grease_brand;
++  grease_brand.Set("brand", "Not_A Brand");
++  grease_brand.Set("version", "24");
++  brands.Append(std::move(grease_brand));
++  return brands;
++}
++
++base::Value::List MakeDefaultUaChFormFactors() {
++  base::Value::List form_factors;
++  form_factors.Append("Desktop");
++  return form_factors;
++}
++
++base::Value::Dict MakeDefaultUaChProfile() {
++  base::Value::Dict ua_ch;
++  ua_ch.Set("platform", "Windows");
++  ua_ch.Set("platformVersion", "19.0.0");
++  ua_ch.Set("architecture", "x86");
++  ua_ch.Set("bitness", "64");
++  ua_ch.Set("model", "");
++  ua_ch.Set("brands", MakeDefaultUaChBrands());
++  ua_ch.Set("fullVersion", "149.0.7827.114");
++  ua_ch.Set("wow64", false);
++  ua_ch.Set("formFactors", MakeDefaultUaChFormFactors());
++  ua_ch.Set("mobile", false);
++  return ua_ch;
++}
++
+ base::Value::Dict MakeDefaultWebGLProfile() {
+   base::Value::Dict profile;
+   profile.Set("maxTextureSize", 16384);
+@@ -139,10 +205,97 @@ base::Value::Dict MakeDefaultNetworkProfile() {
+   return network;
+ }
+ 
++base::Value::List MakeDefaultNavigatorLanguages() {
++  base::Value::List languages;
++  languages.Append("en-US");
++  languages.Append("en");
++  return languages;
++}
++
++base::Value::Dict MakeDefaultRegionProfile() {
++  base::Value::Dict region;
++  region.Set("timezone", "America/New_York");
++  region.Set("locale", "en-US");
++  region.Set("acceptLanguage", "en-US,en;q=0.9");
++  region.Set("navigatorLanguages", MakeDefaultNavigatorLanguages());
++  return region;
++}
++
++base::Value::Dict MakeDefaultHardwareProfile() {
++  base::Value::Dict hardware;
++  hardware.Set("hardwareConcurrency", 8);
++  hardware.Set("deviceMemory", 8.0);
++  hardware.Set("touchEnabled", false);
++  hardware.Set("maxTouchPoints", 0);
++  return hardware;
++}
++
++base::Value::Dict MakeDefaultScreenProfile() {
++  base::Value::Dict screen;
++  screen.Set("width", 1920);
++  screen.Set("height", 1080);
++  screen.Set("availLeft", 0);
++  screen.Set("availTop", 0);
++  screen.Set("availWidth", 1920);
++  screen.Set("availHeight", 1032);
++  screen.Set("outerWidth", 1920);
++  screen.Set("outerHeight", 1080);
++  screen.Set("windowScreenX", 0);
++  screen.Set("windowScreenY", 0);
++  screen.Set("deviceScaleFactor", 1.0);
++  screen.Set("colorDepth", 24);
++  screen.Set("pixelDepth", 24);
++  screen.Set("refreshRate", 60);
++  screen.Set("orientationType", "landscape-primary");
++  screen.Set("orientationAngle", 0);
++  screen.Set("colorScheme", "light");
++  screen.Set("reducedMotion", "no-preference");
++  screen.Set("reducedTransparency", "no-preference");
++  screen.Set("preferredContrast", "no-preference");
++  screen.Set("forcedColors", "none");
++  screen.Set("invertedColors", "none");
++  screen.Set("colorGamut", "srgb");
++  screen.Set("dynamicRange", "standard");
++  screen.Set("monochromeDepth", 0);
++  return screen;
++}
++
+ bool HasNumericValue(const base::Value::Dict& dict, std::string_view key) {
+   return dict.FindDouble(key).has_value() || dict.FindInt(key).has_value();
+ }
+ 
++bool HasStringListValue(const base::Value::Dict& dict, std::string_view key) {
++  const base::Value::List* list = dict.FindList(key);
++  if (!list) {
++    return false;
++  }
++  for (const base::Value& value : *list) {
++    const std::string* item = value.GetIfString();
++    if (item && !item->empty()) {
++      return true;
++    }
++  }
++  return false;
++}
++
++bool HasUaChBrandListValue(const base::Value::Dict& ua_ch) {
++  const base::Value::List* brands = ua_ch.FindList("brands");
++  if (!brands || brands->empty()) {
++    return false;
++  }
++  for (const base::Value& value : *brands) {
++    const base::Value::Dict* brand = value.GetIfDict();
++    const std::string* brand_name =
++        brand ? brand->FindString("brand") : nullptr;
++    const std::string* version =
++        brand ? brand->FindString("version") : nullptr;
++    if (!brand_name || brand_name->empty() || !version || version->empty()) {
++      return false;
++    }
++  }
++  return true;
++}
++
+ void EnsureNetworkCompatibilityFields(base::Value::Dict& persona) {
+   if (!persona.FindDict("network")) {
+     persona.Set("network", MakeDefaultNetworkProfile());
+@@ -198,77 +351,325 @@ base::Value::List MakeDefaultWebGPUFeatures() {
+   return features;
+ }
+ 
+-void EnsurePersonaCompatibilityFields(base::Value::Dict& persona) {
+-  const std::string* noise_seed = persona.FindString("noiseSeed");
+-  if (!noise_seed || noise_seed->empty()) {
+-    const std::string* id = persona.FindString("id");
+-    persona.Set("noiseSeed", id && !id->empty() ? *id : MakeNoiseSeed());
++base::Value::Dict MakeDefaultGpuProfile() {
++  base::Value::Dict gpu;
++  gpu.Set("vendor", "Intel Inc.");
++  gpu.Set("renderer",
++          "ANGLE (Intel, Intel(R) UHD Graphics 770 Direct3D11 vs_5_0 "
++          "ps_5_0, D3D11)");
++  gpu.Set("webgpuAdapter", "Intel UHD Graphics 770");
++  gpu.Set("driver", "D3D11");
++  gpu.Set("webglProfile", MakeDefaultWebGLProfile());
++  gpu.Set("webgl2Profile", MakeDefaultWebGL2Profile());
++  gpu.Set("webgpuProfile", MakeDefaultWebGPUProfile());
++  gpu.Set("webgpuFeatures", MakeDefaultWebGPUFeatures());
++  return gpu;
++}
++
++base::Value::Dict MakeDefaultAdvancedProfile() {
++  base::Value::Dict advanced;
++  advanced.Set("clientHintsEnabled", true);
++  advanced.Set("reduceSystemInfo", false);
++  advanced.Set("canvasNoise", true);
++  advanced.Set("audioNoise", true);
++  advanced.Set("fontMetricNoise", true);
++  advanced.Set("pdfViewerEnabled", true);
++  advanced.Set("cookieEnabled", true);
++  advanced.Set("storageQuotaGb", 0.0);
++  advanced.Set("doNotTrackEnabled", false);
++  advanced.Set("speechVoiceName", "");
++  advanced.Set("speechVoiceLang", "");
++  advanced.Set("speechVoiceUri", "");
++  advanced.Set("speechVoiceLocalService", true);
++  advanced.Set("speechVoiceDefault", true);
++  advanced.Set("allowGeolocation", false);
++  advanced.Set("allowMediaCapture", false);
++  advanced.Set("virtualMediaDevices", true);
++  advanced.Set("allowDisplayCapture", false);
++  advanced.Set("allowDeviceApis", false);
++  advanced.Set("allowGamepads", false);
++  advanced.Set("allowSensorApis", false);
++  advanced.Set("allowMidi", false);
++  advanced.Set("allowLocalNetworkApis", false);
++  advanced.Set("allowWebNfc", false);
++  advanced.Set("allowWindowManagement", false);
++  advanced.Set("allowPresentationApis", false);
++  advanced.Set("allowRemotePlayback", false);
++  advanced.Set("allowWebXr", false);
++  advanced.Set("allowPlatformCredentials", false);
++  advanced.Set("allowKeyboardLayout", false);
++  advanced.Set("allowRealBatteryStatus", false);
++  advanced.Set("allowLocalFonts", false);
++  advanced.Set("allowPersistentDeviceId", false);
++  advanced.Set("allowInstalledApps", false);
++  advanced.Set("allowManagedDevice", false);
++  advanced.Set("allowNotifications", false);
++  advanced.Set("allowProtectedMediaIdentifier", false);
++  advanced.Set("allowPersistentStorage", false);
++  advanced.Set("allowBackgroundSync", false);
++  advanced.Set("allowClipboard", false);
++  advanced.Set("allowPaymentHandler", false);
++  advanced.Set("allowIdleDetection", false);
++  advanced.Set("allowWakeLock", false);
++  advanced.Set("allowStorageAccess", false);
++  advanced.Set("allowPointerLock", false);
++  advanced.Set("allowFullscreen", false);
++  advanced.Set("allowWebAppInstallation", false);
++  advanced.Set("allowWebPrinting", false);
++  return advanced;
++}
++
++void EnsureString(base::Value::Dict& dict,
++                  std::string_view key,
++                  std::string_view default_value) {
++  const std::string* value = dict.FindString(key);
++  if (!value || value->empty()) {
++    dict.Set(key, default_value);
++  }
++}
++
++void EnsureBool(base::Value::Dict& dict,
++                std::string_view key,
++                bool default_value) {
++  if (!dict.FindBool(key).has_value()) {
++    dict.Set(key, default_value);
++  }
++}
++
++void EnsureNumeric(base::Value::Dict& dict,
++                   std::string_view key,
++                   double default_value) {
++  if (!HasNumericValue(dict, key)) {
++    dict.Set(key, default_value);
++  }
++}
++
++void EnsureUaChCompatibilityFields(base::Value::Dict& persona) {
++  if (!persona.FindDict("uaCh")) {
++    persona.Set("uaCh", MakeDefaultUaChProfile());
++    return;
++  }
++
++  base::Value::Dict* ua_ch = persona.FindDict("uaCh");
++  EnsureString(*ua_ch, "platform", "Windows");
++  EnsureString(*ua_ch, "platformVersion", "");
++  EnsureString(*ua_ch, "architecture", "x86");
++  EnsureString(*ua_ch, "bitness", "64");
++  EnsureString(*ua_ch, "model", "");
++  if (!HasUaChBrandListValue(*ua_ch)) {
++    ua_ch->Set("brands", MakeDefaultUaChBrands());
++  }
++  EnsureString(*ua_ch, "fullVersion", "149.0.7827.114");
++  EnsureBool(*ua_ch, "wow64", false);
++  if (!HasStringListValue(*ua_ch, "formFactors")) {
++    ua_ch->Set("formFactors", MakeDefaultUaChFormFactors());
++  }
++  EnsureBool(*ua_ch, "mobile", false);
++}
++
++void EnsureRegionCompatibilityFields(base::Value::Dict& persona) {
++  if (!persona.FindDict("region")) {
++    persona.Set("region", MakeDefaultRegionProfile());
++    return;
++  }
++
++  base::Value::Dict* region = persona.FindDict("region");
++  EnsureString(*region, "timezone", "America/New_York");
++  EnsureString(*region, "locale", "en-US");
++  EnsureString(*region, "acceptLanguage", "en-US,en;q=0.9");
++  if (!HasStringListValue(*region, "navigatorLanguages")) {
++    region->Set("navigatorLanguages", MakeDefaultNavigatorLanguages());
+   }
++}
++
++void EnsureFontRenderingCompatibilityFields(base::Value::Dict& persona) {
+   if (!persona.FindDict("fontRendering")) {
+     persona.Set("fontRendering", MakeDefaultFontRenderingProfile());
++    return;
+   }
+-  if (!persona.FindString("navigatorVendor")) {
+-    persona.Set("navigatorVendor", "Google Inc.");
++
++  base::Value::Dict* font_rendering = persona.FindDict("fontRendering");
++  EnsureString(*font_rendering, "id", "generic-grayscale");
++  EnsureString(*font_rendering, "displayName", "Generic grayscale");
++  EnsureString(*font_rendering, "engine", "Skia");
++  EnsureString(*font_rendering, "hinting", "medium");
++  EnsureBool(*font_rendering, "antialiasing", true);
++  EnsureBool(*font_rendering, "subpixelRendering", false);
++  EnsureBool(*font_rendering, "subpixelPositioning", false);
++  EnsureBool(*font_rendering, "lcdText", false);
++  EnsureBool(*font_rendering, "useAutohinter", false);
++  EnsureBool(*font_rendering, "useBitmaps", false);
++  EnsureNumeric(*font_rendering, "textGamma", 1.4);
++  EnsureNumeric(*font_rendering, "textContrast", 0.0);
++}
++
++void EnsureFontPackCompatibilityFields(base::Value::Dict& persona) {
++  base::Value::Dict* fonts = persona.FindDict("fonts");
++  if (!fonts) {
++    persona.Set("fonts", MakeDefaultFontPackProfile());
++    return;
+   }
+-  if (!persona.FindString("navigatorProductSub")) {
+-    persona.Set("navigatorProductSub", "20030107");
++  EnsureString(*fonts, "id", "windows-11-core");
++  EnsureString(*fonts, "displayName", "Windows 11 core fonts");
++  if (!HasStringListValue(*fonts, "families")) {
++    fonts->Set("families", MakeDefaultFontFamilies());
+   }
+-  if (!persona.FindString("navigatorVendorSub")) {
+-    persona.Set("navigatorVendorSub", "");
++  if (!fonts->FindList("aliases")) {
++    fonts->Set("aliases", base::Value::List());
+   }
+-  EnsureNetworkCompatibilityFields(persona);
++}
++
++void EnsureAdvancedCompatibilityFields(base::Value::Dict& persona) {
++  if (!persona.FindDict("advanced")) {
++    persona.Set("advanced", MakeDefaultAdvancedProfile());
++    return;
++  }
++
++  base::Value::Dict* advanced = persona.FindDict("advanced");
++  EnsureBool(*advanced, "clientHintsEnabled", true);
++  EnsureBool(*advanced, "reduceSystemInfo", false);
++  EnsureBool(*advanced, "canvasNoise", true);
++  EnsureBool(*advanced, "audioNoise", true);
++  EnsureBool(*advanced, "fontMetricNoise", true);
++  EnsureBool(*advanced, "pdfViewerEnabled", true);
++  EnsureBool(*advanced, "cookieEnabled", true);
++  EnsureNumeric(*advanced, "storageQuotaGb", 0.0);
++  EnsureBool(*advanced, "doNotTrackEnabled", false);
++  EnsureString(*advanced, "speechVoiceName", "");
++  EnsureString(*advanced, "speechVoiceLang", "");
++  EnsureString(*advanced, "speechVoiceUri", "");
++  EnsureBool(*advanced, "speechVoiceLocalService", true);
++  EnsureBool(*advanced, "speechVoiceDefault", true);
++  EnsureBool(*advanced, "allowGeolocation", false);
++  EnsureBool(*advanced, "allowMediaCapture", false);
++  EnsureBool(*advanced, "virtualMediaDevices", true);
++  EnsureBool(*advanced, "allowDisplayCapture", false);
++  EnsureBool(*advanced, "allowDeviceApis", false);
++  EnsureBool(*advanced, "allowGamepads", false);
++  EnsureBool(*advanced, "allowSensorApis", false);
++  EnsureBool(*advanced, "allowMidi", false);
++  EnsureBool(*advanced, "allowLocalNetworkApis", false);
++  EnsureBool(*advanced, "allowWebNfc", false);
++  EnsureBool(*advanced, "allowWindowManagement", false);
++  EnsureBool(*advanced, "allowPresentationApis", false);
++  EnsureBool(*advanced, "allowRemotePlayback", false);
++  EnsureBool(*advanced, "allowWebXr", false);
++  EnsureBool(*advanced, "allowPlatformCredentials", false);
++  EnsureBool(*advanced, "allowKeyboardLayout", false);
++  EnsureBool(*advanced, "allowRealBatteryStatus", false);
++  EnsureBool(*advanced, "allowLocalFonts", false);
++  EnsureBool(*advanced, "allowPersistentDeviceId", false);
++  EnsureBool(*advanced, "allowInstalledApps", false);
++  EnsureBool(*advanced, "allowManagedDevice", false);
++  EnsureBool(*advanced, "allowNotifications", false);
++  EnsureBool(*advanced, "allowProtectedMediaIdentifier", false);
++  EnsureBool(*advanced, "allowPersistentStorage", false);
++  EnsureBool(*advanced, "allowBackgroundSync", false);
++  EnsureBool(*advanced, "allowClipboard", false);
++  EnsureBool(*advanced, "allowPaymentHandler", false);
++  EnsureBool(*advanced, "allowIdleDetection", false);
++  EnsureBool(*advanced, "allowWakeLock", false);
++  EnsureBool(*advanced, "allowStorageAccess", false);
++  EnsureBool(*advanced, "allowPointerLock", false);
++  EnsureBool(*advanced, "allowFullscreen", false);
++  EnsureBool(*advanced, "allowWebAppInstallation", false);
++  EnsureBool(*advanced, "allowWebPrinting", false);
++}
++
++void EnsureHardwareCompatibilityFields(base::Value::Dict& persona) {
++  if (!persona.FindDict("hardware")) {
++    persona.Set("hardware", MakeDefaultHardwareProfile());
++    return;
++  }
++
++  base::Value::Dict* hardware = persona.FindDict("hardware");
++  if (!hardware->FindInt("hardwareConcurrency")) {
++    hardware->Set("hardwareConcurrency", 8);
++  }
++  EnsureNumeric(*hardware, "deviceMemory", 8.0);
++  EnsureBool(*hardware, "touchEnabled", false);
++  if (!hardware->FindInt("maxTouchPoints")) {
++    hardware->Set("maxTouchPoints", 0);
++  }
++}
++
++void EnsureScreenCompatibilityFields(base::Value::Dict& persona) {
++  if (!persona.FindDict("screen")) {
++    persona.Set("screen", MakeDefaultScreenProfile());
++    return;
++  }
++
+   base::Value::Dict* screen = persona.FindDict("screen");
+-  if (screen) {
+-    if (!screen->FindString("orientationType")) {
+-      screen->Set("orientationType", "landscape-primary");
+-    }
+-    if (!screen->FindInt("orientationAngle")) {
+-      screen->Set("orientationAngle", 0);
+-    }
+-    if (!screen->FindString("colorScheme")) {
+-      screen->Set("colorScheme", "light");
+-    }
+-    if (!screen->FindString("reducedMotion")) {
+-      screen->Set("reducedMotion", "no-preference");
+-    }
+-    if (!screen->FindString("reducedTransparency")) {
+-      screen->Set("reducedTransparency", "no-preference");
+-    }
+-    if (!screen->FindString("preferredContrast")) {
+-      screen->Set("preferredContrast", "no-preference");
+-    }
+-    if (!screen->FindString("forcedColors")) {
+-      screen->Set("forcedColors", "none");
+-    }
+-    if (!screen->FindString("invertedColors")) {
+-      screen->Set("invertedColors", "none");
+-    }
+-    if (!screen->FindString("colorGamut")) {
+-      screen->Set("colorGamut", "srgb");
+-    }
+-    if (!screen->FindString("dynamicRange")) {
+-      screen->Set("dynamicRange", "standard");
+-    }
+-    if (!screen->FindInt("monochromeDepth")) {
+-      screen->Set("monochromeDepth", 0);
+-    }
+-    if (!screen->FindInt("outerWidth")) {
+-      screen->Set("outerWidth", screen->FindInt("width").value_or(0));
+-    }
+-    if (!screen->FindInt("outerHeight")) {
+-      screen->Set("outerHeight", screen->FindInt("height").value_or(0));
+-    }
+-    if (!screen->FindInt("windowScreenX")) {
+-      screen->Set("windowScreenX", screen->FindInt("availLeft").value_or(0));
+-    }
+-    if (!screen->FindInt("windowScreenY")) {
+-      screen->Set("windowScreenY", screen->FindInt("availTop").value_or(0));
+-    }
++  if (!screen->FindInt("width")) {
++    screen->Set("width", 1920);
+   }
+-  base::Value::Dict* gpu = persona.FindDict("gpu");
+-  if (!gpu) {
++  if (!screen->FindInt("height")) {
++    screen->Set("height", 1080);
++  }
++  if (!screen->FindInt("availLeft")) {
++    screen->Set("availLeft", 0);
++  }
++  if (!screen->FindInt("availTop")) {
++    screen->Set("availTop", 0);
++  }
++  if (!screen->FindInt("availWidth")) {
++    screen->Set("availWidth", screen->FindInt("width").value_or(1920));
++  }
++  if (!screen->FindInt("availHeight")) {
++    screen->Set("availHeight", screen->FindInt("height").value_or(1080));
++  }
++  if (!screen->FindInt("outerWidth")) {
++    screen->Set("outerWidth", screen->FindInt("width").value_or(1920));
++  }
++  if (!screen->FindInt("outerHeight")) {
++    screen->Set("outerHeight", screen->FindInt("height").value_or(1080));
++  }
++  if (!screen->FindInt("windowScreenX")) {
++    screen->Set("windowScreenX", screen->FindInt("availLeft").value_or(0));
++  }
++  if (!screen->FindInt("windowScreenY")) {
++    screen->Set("windowScreenY", screen->FindInt("availTop").value_or(0));
++  }
++  EnsureNumeric(*screen, "deviceScaleFactor", 1.0);
++  if (!screen->FindInt("colorDepth")) {
++    screen->Set("colorDepth", 24);
++  }
++  if (!screen->FindInt("pixelDepth")) {
++    screen->Set("pixelDepth", screen->FindInt("colorDepth").value_or(24));
++  }
++  if (!screen->FindInt("refreshRate")) {
++    screen->Set("refreshRate", 60);
++  }
++  EnsureString(*screen, "orientationType", "landscape-primary");
++  if (!screen->FindInt("orientationAngle")) {
++    screen->Set("orientationAngle", 0);
++  }
++  EnsureString(*screen, "colorScheme", "light");
++  EnsureString(*screen, "reducedMotion", "no-preference");
++  EnsureString(*screen, "reducedTransparency", "no-preference");
++  EnsureString(*screen, "preferredContrast", "no-preference");
++  EnsureString(*screen, "forcedColors", "none");
++  EnsureString(*screen, "invertedColors", "none");
++  EnsureString(*screen, "colorGamut", "srgb");
++  EnsureString(*screen, "dynamicRange", "standard");
++  if (!screen->FindInt("monochromeDepth")) {
++    screen->Set("monochromeDepth", 0);
++  }
++}
++
++void EnsureGpuCompatibilityFields(base::Value::Dict& persona) {
++  if (!persona.FindDict("gpu")) {
++    persona.Set("gpu", MakeDefaultGpuProfile());
+     return;
+   }
++
++  base::Value::Dict* gpu = persona.FindDict("gpu");
++  EnsureString(*gpu, "vendor", "Intel Inc.");
++  EnsureString(*gpu, "renderer",
++               "ANGLE (Intel, Intel(R) UHD Graphics 770 Direct3D11 vs_5_0 "
++               "ps_5_0, D3D11)");
++  EnsureString(*gpu, "webgpuAdapter", "Intel UHD Graphics 770");
++  EnsureString(*gpu, "driver", "D3D11");
+   if (!gpu->FindDict("webglProfile")) {
+     gpu->Set("webglProfile", MakeDefaultWebGLProfile());
+   }
+@@ -278,11 +679,37 @@ void EnsurePersonaCompatibilityFields(base::Value::Dict& persona) {
+   if (!gpu->FindDict("webgpuProfile")) {
+     gpu->Set("webgpuProfile", MakeDefaultWebGPUProfile());
+   }
+-  if (!gpu->FindList("webgpuFeatures")) {
++  if (!HasStringListValue(*gpu, "webgpuFeatures")) {
+     gpu->Set("webgpuFeatures", MakeDefaultWebGPUFeatures());
+   }
+ }
+ 
++void EnsurePersonaCompatibilityFields(base::Value::Dict& persona) {
++  const std::string* noise_seed = persona.FindString("noiseSeed");
++  if (!noise_seed || noise_seed->empty()) {
++    const std::string* id = persona.FindString("id");
++    persona.Set("noiseSeed", id && !id->empty() ? *id : MakeNoiseSeed());
++  }
++  if (!persona.FindString("navigatorVendor")) {
++    persona.Set("navigatorVendor", "Google Inc.");
++  }
++  if (!persona.FindString("navigatorProductSub")) {
++    persona.Set("navigatorProductSub", "20030107");
++  }
++  if (!persona.FindString("navigatorVendorSub")) {
++    persona.Set("navigatorVendorSub", "");
++  }
++  EnsureUaChCompatibilityFields(persona);
++  EnsureRegionCompatibilityFields(persona);
++  EnsureNetworkCompatibilityFields(persona);
++  EnsureHardwareCompatibilityFields(persona);
++  EnsureScreenCompatibilityFields(persona);
++  EnsureGpuCompatibilityFields(persona);
++  EnsureFontPackCompatibilityFields(persona);
++  EnsureFontRenderingCompatibilityFields(persona);
++  EnsureAdvancedCompatibilityFields(persona);
++}
++
+ base::Value::Dict MakeEditablePersona(base::Value::Dict persona) {
+   const std::string* preset_id = persona.FindString("id");
+   const std::string* preset_name = persona.FindString("name");
+@@ -315,6 +742,16 @@ base::Value::List CloneUserPersonas(const PrefService& pref_service) {
+   return pref_service.GetList(prefs::kHeliumPersonaRecords).Clone();
+ }
+ 
++base::Value::List CloneCompatibleUserPersonas(const PrefService& pref_service) {
++  base::Value::List personas = CloneUserPersonas(pref_service);
++  for (base::Value& value : personas) {
++    if (base::Value::Dict* persona = value.GetIfDict()) {
++      EnsurePersonaCompatibilityFields(*persona);
++    }
++  }
++  return personas;
++}
++
+ base::Value::List CloneCustomFontRenderingProfiles(
+     const PrefService& pref_service) {
+   return pref_service.GetList(
+@@ -537,7 +974,7 @@ base::Value::Dict GetPersonaState(const PrefService& pref_service) {
+   state.Set("activePersonaId",
+             pref_service.GetString(prefs::kHeliumActivePersonaId));
+   state.Set("presets", GetCompatibleBuiltinPersonaPresets());
+-  state.Set("personas", CloneUserPersonas(pref_service));
++  state.Set("personas", CloneCompatibleUserPersonas(pref_service));
+   state.Set("fontPackProfiles", GetAllFontPackProfiles(pref_service));
+   state.Set("customFontPackProfiles",
+             CloneCustomFontPackProfiles(pref_service));
+@@ -588,10 +1025,6 @@ bool SetActivePersona(PrefService& pref_service, std::string_view persona_id) {
+ 
+ bool SavePersona(PrefService& pref_service, base::Value::Dict persona) {
+   EnsurePersonaCompatibilityFields(persona);
+-  if (!PersonaHasRequiredFields(persona) || IsPassthroughPersona(persona)) {
+-    return false;
+-  }
+-
+   std::string id = GetPersonaId(persona);
+   if (id.empty()) {
+     id = MakeCustomPersonaId();
+@@ -605,6 +1038,10 @@ bool SavePersona(PrefService& pref_service, base::Value::Dict persona) {
+     }
+   }
+ 
++  if (!PersonaHasRequiredFields(persona) || IsPassthroughPersona(persona)) {
++    return false;
++  }
++
+   if (FindBuiltinPersona(id).empty() == false) {
+     const std::string builtin_id = id;
+     // Built-in presets are immutable. Saving a built-in id creates a copy.
+diff --git a/components/helium_persona/persona_prefs_unittest.cc b/components/helium_persona/persona_prefs_unittest.cc
+index 8a167266..3f38e72b 100644
+--- a/components/helium_persona/persona_prefs_unittest.cc
++++ b/components/helium_persona/persona_prefs_unittest.cc
+@@ -5,6 +5,7 @@
+ #include "components/helium_persona/persona_prefs.h"
+ 
+ #include <string>
++#include <string_view>
+ 
+ #include "base/values.h"
+ #include "components/helium_persona/persona_presets.h"
+@@ -51,6 +52,95 @@ bool ProfilesContainId(const base::Value::List& profiles,
+   return false;
+ }
+ 
++void ExpectFontRenderingProfileFields(const base::Value::Dict& font_rendering) {
++  EXPECT_TRUE(font_rendering.FindBool("antialiasing").has_value());
++  EXPECT_TRUE(font_rendering.FindBool("subpixelRendering").has_value());
++  EXPECT_TRUE(font_rendering.FindBool("subpixelPositioning").has_value());
++  EXPECT_TRUE(font_rendering.FindBool("lcdText").has_value());
++  EXPECT_TRUE(font_rendering.FindBool("useAutohinter").has_value());
++  EXPECT_TRUE(font_rendering.FindBool("useBitmaps").has_value());
++  EXPECT_TRUE(font_rendering.FindDouble("textGamma").has_value() ||
++              font_rendering.FindInt("textGamma").has_value());
++  EXPECT_TRUE(font_rendering.FindDouble("textContrast").has_value() ||
++              font_rendering.FindInt("textContrast").has_value());
++}
++
++void ExpectUaChFields(const base::Value::Dict& ua_ch) {
++  EXPECT_TRUE(ua_ch.FindString("platformVersion"));
++  EXPECT_TRUE(ua_ch.FindString("model"));
++  const base::Value::List* brands = ua_ch.FindList("brands");
++  ASSERT_TRUE(brands);
++  ASSERT_FALSE(brands->empty());
++  for (const base::Value& value : *brands) {
++    const base::Value::Dict* brand = value.GetIfDict();
++    ASSERT_TRUE(brand);
++    EXPECT_TRUE(brand->FindString("brand"));
++    EXPECT_TRUE(brand->FindString("version"));
++  }
++  EXPECT_TRUE(ua_ch.FindString("fullVersion"));
++  EXPECT_TRUE(ua_ch.FindBool("wow64").has_value());
++  EXPECT_TRUE(ua_ch.FindList("formFactors"));
++  EXPECT_TRUE(ua_ch.FindBool("mobile").has_value());
++}
++
++void ExpectAdvancedExposedApiFields(const base::Value::Dict& advanced) {
++  constexpr std::string_view kBoolFields[] = {
++      "clientHintsEnabled",
++      "reduceSystemInfo",
++      "canvasNoise",
++      "audioNoise",
++      "fontMetricNoise",
++      "pdfViewerEnabled",
++      "cookieEnabled",
++      "doNotTrackEnabled",
++      "speechVoiceLocalService",
++      "speechVoiceDefault",
++      "allowGeolocation",
++      "allowMediaCapture",
++      "virtualMediaDevices",
++      "allowDisplayCapture",
++      "allowDeviceApis",
++      "allowGamepads",
++      "allowSensorApis",
++      "allowMidi",
++      "allowLocalNetworkApis",
++      "allowWebNfc",
++      "allowWindowManagement",
++      "allowPresentationApis",
++      "allowRemotePlayback",
++      "allowWebXr",
++      "allowPlatformCredentials",
++      "allowKeyboardLayout",
++      "allowRealBatteryStatus",
++      "allowLocalFonts",
++      "allowPersistentDeviceId",
++      "allowInstalledApps",
++      "allowManagedDevice",
++      "allowNotifications",
++      "allowProtectedMediaIdentifier",
++      "allowPersistentStorage",
++      "allowBackgroundSync",
++      "allowClipboard",
++      "allowPaymentHandler",
++      "allowIdleDetection",
++      "allowWakeLock",
++      "allowStorageAccess",
++      "allowPointerLock",
++      "allowFullscreen",
++      "allowWebAppInstallation",
++      "allowWebPrinting",
++  };
++  for (std::string_view field : kBoolFields) {
++    SCOPED_TRACE(field);
++    EXPECT_TRUE(advanced.FindBool(field).has_value());
++  }
++  EXPECT_TRUE(advanced.FindDouble("storageQuotaGb").has_value() ||
++              advanced.FindInt("storageQuotaGb").has_value());
++  EXPECT_TRUE(advanced.FindString("speechVoiceName"));
++  EXPECT_TRUE(advanced.FindString("speechVoiceLang"));
++  EXPECT_TRUE(advanced.FindString("speechVoiceUri"));
++}
++
+ }  // namespace
+ 
+ TEST(HeliumPersonaPrefsTest, BuiltinPresetsContainCompleteSystemImage) {
+@@ -74,6 +164,22 @@ TEST(HeliumPersonaPrefsTest, BuiltinPresetsContainCompleteSystemImage) {
+     EXPECT_TRUE(preset->FindDict("network"));
+     EXPECT_TRUE(PersonaHasRequiredFields(*preset));
+     EXPECT_TRUE(preset->FindString("noiseSeed"));
++    EXPECT_TRUE(preset->FindString("navigatorVendor"));
++    EXPECT_TRUE(preset->FindString("navigatorProductSub"));
++    EXPECT_TRUE(preset->FindString("navigatorVendorSub"));
++
++    const base::Value::Dict* ua_ch = preset->FindDict("uaCh");
++    ASSERT_TRUE(ua_ch);
++    ExpectUaChFields(*ua_ch);
++
++    const base::Value::Dict* font_rendering =
++        preset->FindDict("fontRendering");
++    ASSERT_TRUE(font_rendering);
++    ExpectFontRenderingProfileFields(*font_rendering);
++
++    const base::Value::Dict* advanced = preset->FindDict("advanced");
++    ASSERT_TRUE(advanced);
++    ExpectAdvancedExposedApiFields(*advanced);
+   }
+ 
+   const base::Value::Dict& windows = DictAt(presets, 1);
+@@ -226,6 +332,100 @@ TEST(HeliumPersonaPrefsTest, SaveNewCustomPersonaReplacesEmptyNoiseSeed) {
+   EXPECT_TRUE(active.FindBool("modified").value_or(false));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, SavePersonaMigratesLegacyManualShape) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++  base::Value::List presets = GetBuiltinPersonaPresets();
++  base::Value::Dict persona = DictAt(presets, 1).Clone();
++  persona.Set("id", "");
++  persona.Set("source", "custom");
++  persona.Set("builtin", false);
++  persona.Set("modified", true);
++  persona.Remove("noiseSeed");
++  persona.Remove("navigatorVendor");
++  persona.Remove("region");
++  persona.Remove("hardware");
++  persona.Remove("screen");
++  persona.Remove("gpu");
++  persona.Remove("fonts");
++
++  base::Value::Dict* ua_ch = persona.FindDict("uaCh");
++  ASSERT_TRUE(ua_ch);
++  ua_ch->Remove("fullVersion");
++  ua_ch->Remove("formFactors");
++  base::Value::List broken_brands;
++  base::Value::Dict incomplete_brand;
++  incomplete_brand.Set("brand", "Chromium");
++  broken_brands.Append(std::move(incomplete_brand));
++  ua_ch->Set("brands", std::move(broken_brands));
++
++  base::Value::Dict* font_rendering = persona.FindDict("fontRendering");
++  ASSERT_TRUE(font_rendering);
++  font_rendering->Remove("lcdText");
++  font_rendering->Remove("textGamma");
++
++  base::Value::Dict* advanced = persona.FindDict("advanced");
++  ASSERT_TRUE(advanced);
++  advanced->Remove("cookieEnabled");
++  advanced->Remove("storageQuotaGb");
++  advanced->Remove("allowWebPrinting");
++  advanced->Remove("speechVoiceUri");
++
++  EXPECT_TRUE(SavePersona(prefs, std::move(persona)));
++  base::Value::Dict active = GetActivePersona(prefs);
++  EXPECT_TRUE(PersonaHasRequiredFields(active));
++  ASSERT_TRUE(active.FindDict("uaCh"));
++  ExpectUaChFields(*active.FindDict("uaCh"));
++  ASSERT_TRUE(active.FindDict("fontRendering"));
++  ExpectFontRenderingProfileFields(*active.FindDict("fontRendering"));
++  ASSERT_TRUE(active.FindDict("advanced"));
++  ExpectAdvancedExposedApiFields(*active.FindDict("advanced"));
++  EXPECT_EQ("America/New_York",
++            *active.FindDict("region")->FindString("timezone"));
++  EXPECT_EQ(8, active.FindDict("hardware")
++                   ->FindInt("hardwareConcurrency")
++                   .value_or(0));
++  EXPECT_EQ(1920, active.FindDict("screen")->FindInt("width").value_or(0));
++  EXPECT_EQ("Intel Inc.", *active.FindDict("gpu")->FindString("vendor"));
++  ASSERT_TRUE(active.FindDict("fonts"));
++  EXPECT_TRUE(active.FindDict("fonts")->FindList("aliases"));
++}
++
++TEST(HeliumPersonaPrefsTest, PersonaStateNormalizesLegacyPersonaList) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++  base::Value::List presets = GetBuiltinPersonaPresets();
++  base::Value::Dict persona = DictAt(presets, 1).Clone();
++  persona.Set("id", "legacy-persona");
++  persona.Set("source", "custom");
++  persona.Set("builtin", false);
++  persona.Remove("advanced");
++  persona.Remove("fontRendering");
++  persona.Remove("gpu");
++  base::Value::Dict* ua_ch = persona.FindDict("uaCh");
++  ASSERT_TRUE(ua_ch);
++  ua_ch->Remove("brands");
++
++  base::Value::List personas;
++  personas.Append(std::move(persona));
++  prefs.SetList(prefs::kHeliumPersonaRecords, std::move(personas));
++
++  base::Value::Dict state = GetPersonaState(prefs);
++  const base::Value::List* state_personas = state.FindList("personas");
++  ASSERT_TRUE(state_personas);
++  ASSERT_EQ(1u, state_personas->size());
++  const base::Value::Dict& normalized = DictAt(*state_personas, 0);
++  EXPECT_TRUE(PersonaHasRequiredFields(normalized));
++  ASSERT_TRUE(normalized.FindDict("uaCh"));
++  ExpectUaChFields(*normalized.FindDict("uaCh"));
++  ASSERT_TRUE(normalized.FindDict("advanced"));
++  ExpectAdvancedExposedApiFields(*normalized.FindDict("advanced"));
++  ASSERT_TRUE(normalized.FindDict("fontRendering"));
++  ExpectFontRenderingProfileFields(*normalized.FindDict("fontRendering"));
++  ASSERT_TRUE(normalized.FindDict("gpu"));
++  EXPECT_EQ("Intel Inc.", *normalized.FindDict("gpu")->FindString("vendor"));
++}
++
+ TEST(HeliumPersonaPrefsTest, SaveBuiltinIdCreatesCustomPersona) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);
+@@ -555,6 +755,83 @@ TEST(HeliumPersonaPrefsTest, ValidationRequiresNetworkSaveDataField) {
+   EXPECT_TRUE(WarningsContain(warnings, "missing one or more required fields"));
+ }
+ 
++TEST(HeliumPersonaPrefsTest, ValidationRequiresCompleteUaChFields) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict persona =
++      ClonePresetIntoProfile(prefs, "preset-windows-11-en-us-new-york");
++  base::Value::Dict* ua_ch = persona.FindDict("uaCh");
++  ASSERT_TRUE(ua_ch);
++  ua_ch->Remove("brands");
++  ua_ch->Remove("fullVersion");
++  ua_ch->Remove("formFactors");
++  ua_ch->Remove("mobile");
++
++  EXPECT_FALSE(PersonaHasRequiredFields(persona));
++  base::Value::List warnings = ValidatePersona(persona);
++  EXPECT_TRUE(WarningsContain(warnings, "missing one or more required fields"));
++}
++
++TEST(HeliumPersonaPrefsTest, ValidationRequiresCompleteGpuProfileFields) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict persona =
++      ClonePresetIntoProfile(prefs, "preset-windows-11-en-us-new-york");
++  base::Value::Dict* gpu = persona.FindDict("gpu");
++  ASSERT_TRUE(gpu);
++  gpu->Remove("webgpuAdapter");
++  base::Value::Dict* webgl_profile = gpu->FindDict("webglProfile");
++  ASSERT_TRUE(webgl_profile);
++  webgl_profile->Remove("maxCubeMapTextureSize");
++  webgl_profile->Remove("maxVertexUniformVectors");
++  base::Value::Dict* webgpu_profile = gpu->FindDict("webgpuProfile");
++  ASSERT_TRUE(webgpu_profile);
++  webgpu_profile->Remove("maxTextureDimension1D");
++  webgpu_profile->Remove("maxComputeWorkgroupSizeZ");
++
++  EXPECT_FALSE(PersonaHasRequiredFields(persona));
++  base::Value::List warnings = ValidatePersona(persona);
++  EXPECT_TRUE(WarningsContain(warnings, "missing one or more required fields"));
++}
++
++TEST(HeliumPersonaPrefsTest, ValidationRequiresIdentityAndRenderingFields) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict persona =
++      ClonePresetIntoProfile(prefs, "preset-windows-11-en-us-new-york");
++  persona.Remove("noiseSeed");
++  persona.Remove("navigatorVendor");
++  base::Value::Dict* font_rendering = persona.FindDict("fontRendering");
++  ASSERT_TRUE(font_rendering);
++  font_rendering->Remove("lcdText");
++  font_rendering->Remove("textGamma");
++
++  EXPECT_FALSE(PersonaHasRequiredFields(persona));
++  base::Value::List warnings = ValidatePersona(persona);
++  EXPECT_TRUE(WarningsContain(warnings, "missing one or more required fields"));
++}
++
++TEST(HeliumPersonaPrefsTest, ValidationRequiresAdvancedExposedApiFields) {
++  sync_preferences::TestingPrefServiceSyncable prefs;
++  RegisterTestPrefs(prefs);
++
++  base::Value::Dict persona =
++      ClonePresetIntoProfile(prefs, "preset-windows-11-en-us-new-york");
++  base::Value::Dict* advanced = persona.FindDict("advanced");
++  ASSERT_TRUE(advanced);
++  advanced->Remove("cookieEnabled");
++  advanced->Remove("storageQuotaGb");
++  advanced->Remove("allowWebPrinting");
++  advanced->Remove("speechVoiceUri");
++
++  EXPECT_FALSE(PersonaHasRequiredFields(persona));
++  base::Value::List warnings = ValidatePersona(persona);
++  EXPECT_TRUE(WarningsContain(warnings, "missing one or more required fields"));
++}
++
+ TEST(HeliumPersonaPrefsTest, SnapshotRoundTripsCompleteFields) {
+   sync_preferences::TestingPrefServiceSyncable prefs;
+   RegisterTestPrefs(prefs);
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index 7b31898f..3c54be2c 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -38,6 +38,10 @@ bool HasString(const base::Value::Dict& dict, std::string_view key) {
+   return value && !value->empty();
+ }
+ 
++bool HasStringValue(const base::Value::Dict& dict, std::string_view key) {
++  return dict.FindString(key) != nullptr;
++}
++
+ bool HasNestedString(const base::Value::Dict& dict,
+                      std::string_view dict_key,
+                      std::string_view key) {
+@@ -45,6 +49,30 @@ bool HasNestedString(const base::Value::Dict& dict,
+   return nested && HasString(*nested, key);
+ }
+ 
++bool HasNestedStringValue(const base::Value::Dict& dict,
++                          std::string_view dict_key,
++                          std::string_view key) {
++  const base::Value::Dict* nested = dict.FindDict(dict_key);
++  return nested && HasStringValue(*nested, key);
++}
++
++bool HasNestedUaChBrands(const base::Value::Dict& persona) {
++  const base::Value::Dict* ua_ch = persona.FindDict("uaCh");
++  const base::Value::List* brands = ua_ch ? ua_ch->FindList("brands")
++                                          : nullptr;
++  if (!brands || brands->empty()) {
++    return false;
++  }
++  for (const base::Value& value : *brands) {
++    const base::Value::Dict* brand = value.GetIfDict();
++    if (!brand || !HasString(*brand, "brand") ||
++        !HasString(*brand, "version")) {
++      return false;
++    }
++  }
++  return true;
++}
++
+ int GetNestedInt(const base::Value::Dict& dict,
+                  std::string_view dict_key,
+                  std::string_view key) {
+@@ -127,6 +155,13 @@ bool HasNestedStringList(const base::Value::Dict& dict,
+   return !GetNestedStringList(dict, dict_key, key).empty();
+ }
+ 
++bool HasNestedListValue(const base::Value::Dict& dict,
++                        std::string_view dict_key,
++                        std::string_view key) {
++  const base::Value::Dict* nested = dict.FindDict(dict_key);
++  return nested && nested->FindList(key);
++}
++
+ bool HasNestedPositiveInt(const base::Value::Dict& dict,
+                           std::string_view dict_key,
+                           std::string_view key) {
+@@ -336,9 +371,20 @@ bool PersonaHasRequiredFields(const base::Value::Dict& persona) {
+   }
+ 
+   return HasString(persona, "userAgent") && HasString(persona, "platform") &&
++         HasStringValue(persona, "navigatorVendor") &&
++         HasString(persona, "navigatorProductSub") &&
++         HasStringValue(persona, "navigatorVendorSub") &&
++         HasString(persona, "noiseSeed") &&
+          HasNestedString(persona, "uaCh", "platform") &&
++         HasNestedStringValue(persona, "uaCh", "platformVersion") &&
+          HasNestedString(persona, "uaCh", "architecture") &&
+          HasNestedString(persona, "uaCh", "bitness") &&
++         HasNestedStringValue(persona, "uaCh", "model") &&
++         HasNestedUaChBrands(persona) &&
++         HasNestedString(persona, "uaCh", "fullVersion") &&
++         HasNestedBool(persona, "uaCh", "wow64") &&
++         HasNestedStringList(persona, "uaCh", "formFactors") &&
++         HasNestedBool(persona, "uaCh", "mobile") &&
+          HasNestedString(persona, "region", "timezone") &&
+          HasNestedString(persona, "region", "locale") &&
+          HasNestedString(persona, "region", "acceptLanguage") &&
+@@ -351,24 +397,73 @@ bool PersonaHasRequiredFields(const base::Value::Dict& persona) {
+          HasNestedBool(persona, "network", "saveData") &&
+          HasNestedBool(persona, "network", "online") &&
+          HasNestedString(persona, "gpu", "vendor") &&
+          HasNestedString(persona, "gpu", "renderer") &&
++         HasNestedString(persona, "gpu", "webgpuAdapter") &&
+          HasNestedString(persona, "gpu", "driver") &&
+          HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
+                                      "maxTextureSize") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
++                                     "maxCubeMapTextureSize") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
++                                     "maxRenderbufferSize") &&
+          HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
+                                      "maxViewportWidth") &&
+          HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
+                                      "maxViewportHeight") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
++                                     "maxTextureImageUnits") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
++                                     "maxCombinedTextureImageUnits") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
++                                     "maxVertexAttribs") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
++                                     "maxVertexTextureImageUnits") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
++                                     "maxVertexUniformVectors") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
++                                     "maxFragmentUniformVectors") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webglProfile",
++                                     "maxVaryingVectors") &&
+          HasNestedProfilePositiveDouble(persona, "gpu", "webglProfile",
+                                         "maxAnisotropy") &&
+          HasNestedProfilePositiveInt(persona, "gpu", "webgl2Profile",
+                                      "max3DTextureSize") &&
+          HasNestedProfilePositiveInt(persona, "gpu", "webgl2Profile",
+                                      "maxUniformBlockSize") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxTextureDimension1D") &&
+          HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
+                                      "maxTextureDimension2D") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxTextureDimension3D") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxTextureArrayLayers") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxBindGroups") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxBindingsPerBindGroup") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxUniformBufferBindingSize") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxStorageBufferBindingSize") &&
+          HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
+                                      "maxBufferSize") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxVertexBuffers") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxVertexAttributes") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxComputeWorkgroupStorageSize") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxComputeInvocationsPerWorkgroup") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxComputeWorkgroupSizeX") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxComputeWorkgroupSizeY") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxComputeWorkgroupSizeZ") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
++                                     "maxComputeWorkgroupsPerDimension") &&
+          HasNestedStringList(persona, "gpu", "webgpuFeatures") &&
+          HasNestedPositiveInt(persona, "screen", "width") &&
+          HasNestedPositiveInt(persona, "screen", "height") &&
+@@ -401,11 +496,68 @@ bool PersonaHasRequiredFields(const base::Value::Dict& persona) {
+          HasNestedString(persona, "fonts", "id") &&
+          HasNestedString(persona, "fonts", "displayName") &&
+          HasNestedStringList(persona, "fonts", "families") &&
+-         HasNestedStringList(persona, "fonts", "aliases") &&
++         HasNestedListValue(persona, "fonts", "aliases") &&
+          HasNestedString(persona, "fontRendering", "id") &&
+          HasNestedString(persona, "fontRendering", "displayName") &&
+          HasNestedString(persona, "fontRendering", "engine") &&
+-         HasNestedString(persona, "fontRendering", "hinting");
++         HasNestedString(persona, "fontRendering", "hinting") &&
++         HasNestedBool(persona, "fontRendering", "antialiasing") &&
++         HasNestedBool(persona, "fontRendering", "subpixelRendering") &&
++         HasNestedBool(persona, "fontRendering", "subpixelPositioning") &&
++         HasNestedBool(persona, "fontRendering", "lcdText") &&
++         HasNestedBool(persona, "fontRendering", "useAutohinter") &&
++         HasNestedBool(persona, "fontRendering", "useBitmaps") &&
++         HasNestedDoubleValue(persona, "fontRendering", "textGamma") &&
++         HasNestedDoubleValue(persona, "fontRendering", "textContrast") &&
++         HasNestedBool(persona, "advanced", "clientHintsEnabled") &&
++         HasNestedBool(persona, "advanced", "reduceSystemInfo") &&
++         HasNestedBool(persona, "advanced", "canvasNoise") &&
++         HasNestedBool(persona, "advanced", "audioNoise") &&
++         HasNestedBool(persona, "advanced", "fontMetricNoise") &&
++         HasNestedBool(persona, "advanced", "pdfViewerEnabled") &&
++         HasNestedBool(persona, "advanced", "cookieEnabled") &&
++         HasNestedDoubleValue(persona, "advanced", "storageQuotaGb") &&
++         HasNestedBool(persona, "advanced", "doNotTrackEnabled") &&
++         HasNestedStringValue(persona, "advanced", "speechVoiceName") &&
++         HasNestedStringValue(persona, "advanced", "speechVoiceLang") &&
++         HasNestedStringValue(persona, "advanced", "speechVoiceUri") &&
++         HasNestedBool(persona, "advanced", "speechVoiceLocalService") &&
++         HasNestedBool(persona, "advanced", "speechVoiceDefault") &&
++         HasNestedBool(persona, "advanced", "allowGeolocation") &&
++         HasNestedBool(persona, "advanced", "allowMediaCapture") &&
++         HasNestedBool(persona, "advanced", "virtualMediaDevices") &&
++         HasNestedBool(persona, "advanced", "allowDisplayCapture") &&
++         HasNestedBool(persona, "advanced", "allowDeviceApis") &&
++         HasNestedBool(persona, "advanced", "allowGamepads") &&
++         HasNestedBool(persona, "advanced", "allowSensorApis") &&
++         HasNestedBool(persona, "advanced", "allowMidi") &&
++         HasNestedBool(persona, "advanced", "allowLocalNetworkApis") &&
++         HasNestedBool(persona, "advanced", "allowWebNfc") &&
++         HasNestedBool(persona, "advanced", "allowWindowManagement") &&
++         HasNestedBool(persona, "advanced", "allowPresentationApis") &&
++         HasNestedBool(persona, "advanced", "allowRemotePlayback") &&
++         HasNestedBool(persona, "advanced", "allowWebXr") &&
++         HasNestedBool(persona, "advanced", "allowPlatformCredentials") &&
++         HasNestedBool(persona, "advanced", "allowKeyboardLayout") &&
++         HasNestedBool(persona, "advanced", "allowRealBatteryStatus") &&
++         HasNestedBool(persona, "advanced", "allowLocalFonts") &&
++         HasNestedBool(persona, "advanced", "allowPersistentDeviceId") &&
++         HasNestedBool(persona, "advanced", "allowInstalledApps") &&
++         HasNestedBool(persona, "advanced", "allowManagedDevice") &&
++         HasNestedBool(persona, "advanced", "allowNotifications") &&
++         HasNestedBool(persona, "advanced",
++                       "allowProtectedMediaIdentifier") &&
++         HasNestedBool(persona, "advanced", "allowPersistentStorage") &&
++         HasNestedBool(persona, "advanced", "allowBackgroundSync") &&
++         HasNestedBool(persona, "advanced", "allowClipboard") &&
++         HasNestedBool(persona, "advanced", "allowPaymentHandler") &&
++         HasNestedBool(persona, "advanced", "allowIdleDetection") &&
++         HasNestedBool(persona, "advanced", "allowWakeLock") &&
++         HasNestedBool(persona, "advanced", "allowStorageAccess") &&
++         HasNestedBool(persona, "advanced", "allowPointerLock") &&
++         HasNestedBool(persona, "advanced", "allowFullscreen") &&
++         HasNestedBool(persona, "advanced", "allowWebAppInstallation") &&
++         HasNestedBool(persona, "advanced", "allowWebPrinting");
+ }
+ 
+ base::Value::List ValidatePersona(const base::Value::Dict& persona) {

@@ -1,0 +1,600 @@
+diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
+index 5ed2445..cc27c43 100644
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -1159,6 +1159,116 @@ bool HeliumPersonaAllowsMediaPerformanceMetrics(RenderFrameHost* host) {
+          (snapshot.allow_media_capture && !snapshot.reduce_system_info);
+ }
+ 
++bool HeliumPersonaAllowsMediaCapture(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_media_capture;
++}
++
++bool HeliumPersonaAllowsLocalFonts(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_local_fonts;
++}
++
++bool HeliumPersonaAllowsPresentationService(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_presentation_apis ||
++         snapshot.allow_remote_playback;
++}
++
++bool HeliumPersonaAllowsProtectedMediaIdentifier(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() ||
++         snapshot.allow_protected_media_identifier;
++}
++
++bool HeliumPersonaAllowsRemotePlayback(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_remote_playback;
++}
++
++bool HeliumPersonaAllowsPrivateStateTokens(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_private_state_tokens;
++}
++
++bool HeliumPersonaAllowsPrivacySandboxApis(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_privacy_sandbox_apis;
++}
++
++bool HeliumPersonaAllowsStorageAccess(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_storage_access;
++}
++
++bool HeliumPersonaAllowsWebNfc(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_web_nfc;
++}
++
++bool HeliumPersonaAllowsSpeechSynthesis(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_speech_synthesis;
++}
++
++bool HeliumPersonaAllowsHandwritingRecognition(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_handwriting_recognition;
++}
++
++bool HeliumPersonaAllowsAiApis(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_ai_apis;
++}
++
++bool HeliumPersonaAllowsAiApis(DedicatedWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_ai_apis;
++}
++
++bool HeliumPersonaAllowsAiApis(SharedWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_ai_apis;
++}
++
++bool HeliumPersonaAllowsAiApis(ServiceWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_ai_apis;
++}
++
++bool HeliumPersonaAllowsWebNn(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_web_nn;
++}
++
++bool HeliumPersonaAllowsWebNn(DedicatedWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_web_nn;
++}
++
++bool HeliumPersonaAllowsWebNn(SharedWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_web_nn;
++}
++
++bool HeliumPersonaAllowsWebNn(ServiceWorkerHost* host) {
++  blink::HeliumPersonaSnapshot snapshot = GetHeliumPersonaSnapshot(host);
++  return !snapshot.IsEnabled() || snapshot.allow_web_nn;
++}
++
+ }  // namespace
+ 
+ // Documents/frames
+@@ -1198,7 +1308,8 @@ void PopulateBinderMapWithContext(
+ 
+   if (base::FeatureList::IsEnabled(network::features::kBrowsingTopics) &&
+       base::FeatureList::IsEnabled(
+-          blink::features::kBrowsingTopicsDocumentAPI)) {
++          blink::features::kBrowsingTopicsDocumentAPI) &&
++      HeliumPersonaAllowsPrivacySandboxApis(host)) {
+     map->Add<blink::mojom::BrowsingTopicsDocumentService>(
+         &BrowsingTopicsDocumentHost::CreateMojoService);
+   }
+@@ -1274,7 +1385,8 @@ void PopulateBinderMapWithContext(
+   map->Add<blink::mojom::FileSystemManager>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetFileSystemManager>);
+ 
+-  if (base::FeatureList::IsEnabled(blink::features::kFontAccess)) {
++  if (base::FeatureList::IsEnabled(blink::features::kFontAccess) &&
++      HeliumPersonaAllowsLocalFonts(host)) {
+     map->Add<blink::mojom::FontAccessManager>(
+         &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetFontAccessManager>);
+   }
+@@ -1351,8 +1463,10 @@ void PopulateBinderMapWithContext(
+   map->Add<blink::mojom::PermissionService>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::CreatePermissionService>);
+ 
+-  map->Add<blink::mojom::PresentationService>(
+-      &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetPresentationService>);
++  if (HeliumPersonaAllowsPresentationService(host)) {
++    map->Add<blink::mojom::PresentationService>(
++        &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetPresentationService>);
++  }
+ 
+   map->Add<blink::mojom::QuotaManagerHost>(&BindQuotaManagerHost);
+ 
+@@ -1361,13 +1475,17 @@ void PopulateBinderMapWithContext(
+ 
+   map->Add<blink::mojom::SharedWorkerConnector>(&BindSharedWorkerConnector);
+ 
+-  map->Add<media::mojom::SpeechRecognizer>(
+-      base::BindRepeating(&SpeechRecognitionDispatcherHost::Create,
+-                          host->GetGlobalId()),
+-      GetIOThreadTaskRunner({}));
++  if (HeliumPersonaAllowsMediaCapture(host)) {
++    map->Add<media::mojom::SpeechRecognizer>(
++        base::BindRepeating(&SpeechRecognitionDispatcherHost::Create,
++                            host->GetGlobalId()),
++        GetIOThreadTaskRunner({}));
++  }
+ 
+-  map->Add<blink::mojom::SpeechSynthesis>(
+-      &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetSpeechSynthesis>);
++  if (HeliumPersonaAllowsSpeechSynthesis(host)) {
++    map->Add<blink::mojom::SpeechSynthesis>(
++        &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetSpeechSynthesis>);
++  }
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+   if (HeliumPersonaAllowsDeviceApis(host)) {
+@@ -1424,11 +1542,14 @@ void PopulateBinderMapWithContext(
+         &BindRenderFrameHostImpl<&RenderFrameHostImpl::CreatePaymentManager>);
+   }
+ 
+-  map->Add<handwriting::mojom::HandwritingRecognitionService>(
+-      &CreateHandwritingRecognitionService);
++  if (HeliumPersonaAllowsHandwritingRecognition(host)) {
++    map->Add<handwriting::mojom::HandwritingRecognitionService>(
++        &CreateHandwritingRecognitionService);
++  }
+ 
+   if (base::FeatureList::IsEnabled(
+-          webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
++          webnn::mojom::features::kWebMachineLearningNeuralNetwork) &&
++      HeliumPersonaAllowsWebNn(host)) {
+     map->Add<webnn::mojom::WebNNContextProvider>(
+         &BindWebNNContextProviderForRenderFrame);
+     map->Add<webnn::mojom::WebNNWeightsFileCreator>(
+@@ -1497,9 +1618,11 @@ void PopulateBinderMapWithContext(
+           &RenderFrameHostImpl::BindMediaInterfaceFactoryReceiver>);
+ 
+ #if BUILDFLAG(ENABLE_LIBRARY_CDMS) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+-  map->Add<media::mojom::KeySystemSupport>(
+-      &BindRenderFrameHostImpl<
+-          &RenderFrameHostImpl::BindKeySystemSupportReceiver>);
++  if (HeliumPersonaAllowsProtectedMediaIdentifier(host)) {
++    map->Add<media::mojom::KeySystemSupport>(
++        &BindRenderFrameHostImpl<
++            &RenderFrameHostImpl::BindKeySystemSupportReceiver>);
++  }
+ #endif
+ 
+   if (HeliumPersonaAllowsMediaPerformanceMetrics(host)) {
+@@ -1533,9 +1656,11 @@ void PopulateBinderMapWithContext(
+   }
+ 
+ #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
+-  map->Add<media::mojom::RemoterFactory>(
+-      &BindRenderFrameHostImpl<
+-          &RenderFrameHostImpl::BindMediaRemoterFactoryReceiver>);
++  if (HeliumPersonaAllowsRemotePlayback(host)) {
++    map->Add<media::mojom::RemoterFactory>(
++        &BindRenderFrameHostImpl<
++            &RenderFrameHostImpl::BindMediaRemoterFactoryReceiver>);
++  }
+ #endif
+ 
+   if (HeliumPersonaAllowsBackgroundFetch(host)) {
+@@ -1568,9 +1693,11 @@ void PopulateBinderMapWithContext(
+       &BindRenderFrameHostImpl<
+           &RenderFrameHostImpl::BindRestrictedCookieManager>);
+ 
+-  map->Add<network::mojom::TrustTokenQueryAnswerer>(
+-      &BindRenderFrameHostImpl<
+-          &RenderFrameHostImpl::BindTrustTokenQueryAnswerer>);
++  if (HeliumPersonaAllowsPrivateStateTokens(host)) {
++    map->Add<network::mojom::TrustTokenQueryAnswerer>(
++        &BindRenderFrameHostImpl<
++            &RenderFrameHostImpl::BindTrustTokenQueryAnswerer>);
++  }
+ 
+   if (HeliumPersonaAllowsShapeDetection(host)) {
+     map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+@@ -1600,8 +1727,10 @@ void PopulateBinderMapWithContext(
+   }
+ 
+ #if BUILDFLAG(IS_ANDROID) || (BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_IOS_TVOS))
+-  map->Add<device::mojom::NFC>(
+-      &BindRenderFrameHostImpl<&RenderFrameHostImpl::BindNFCReceiver>);
++  if (HeliumPersonaAllowsWebNfc(host)) {
++    map->Add<device::mojom::NFC>(
++        &BindRenderFrameHostImpl<&RenderFrameHostImpl::BindNFCReceiver>);
++  }
+ #else
+   if (HeliumPersonaAllowsDeviceApis(host)) {
+     map->Add<blink::mojom::HidService>(
+@@ -1621,12 +1750,16 @@ void PopulateBinderMapWithContext(
+         &BindRenderFrameHostImpl<&RenderFrameHostImpl::BindSerialService>);
+   }
+ 
+-  map->Add<blink::mojom::ModelContextHost>(
+-      &BindRenderFrameHostImpl<&RenderFrameHostImpl::BindModelContextHost>);
++  if (HeliumPersonaAllowsAiApis(host)) {
++    map->Add<blink::mojom::ModelContextHost>(
++        &BindRenderFrameHostImpl<&RenderFrameHostImpl::BindModelContextHost>);
++  }
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+-  map->Add<blink::mojom::SmartCardService>(
+-      &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetSmartCardService>);
++  if (HeliumPersonaAllowsDeviceApis(host)) {
++    map->Add<blink::mojom::SmartCardService>(
++        &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetSmartCardService>);
++  }
+ #endif
+ 
+ #if BUILDFLAG(IS_MAC)
+@@ -1645,15 +1778,17 @@ void PopulateBinderMapWithContext(
+       &BindRenderFrameHostImpl<
+           &RenderFrameHostImpl::BindNonAssociatedLocalFrameHost>);
+ 
+-  map->Add<blink::mojom::AIManager>(base::BindRepeating(
+-      [](ContentBrowserClient* browser_client, RenderFrameHost* host,
+-         mojo::PendingReceiver<blink::mojom::AIManager> receiver) {
+-        browser_client->BindAIManager(
+-            host->GetBrowserContext(),
+-            &RenderFrameHostImpl::From(host)->document_associated_data(), host,
+-            std::move(receiver));
+-      },
+-      base::Unretained(GetContentClient()->browser())));
++  if (HeliumPersonaAllowsAiApis(host)) {
++    map->Add<blink::mojom::AIManager>(base::BindRepeating(
++        [](ContentBrowserClient* browser_client, RenderFrameHost* host,
++           mojo::PendingReceiver<blink::mojom::AIManager> receiver) {
++          browser_client->BindAIManager(
++              host->GetBrowserContext(),
++              &RenderFrameHostImpl::From(host)->document_associated_data(), host,
++              std::move(receiver));
++        },
++        base::Unretained(GetContentClient()->browser())));
++  }
+ 
+ #if BUILDFLAG(IS_FUCHSIA)
+   map->Add<media::mojom::FuchsiaMediaCodecProvider>(base::BindRepeating(
+@@ -1664,26 +1799,28 @@ void PopulateBinderMapWithContext(
+       }));
+ #endif
+ 
+-  map->Add<blink::mojom::TranslationManager>(base::BindRepeating(
+-      [](RenderFrameHost* host,
+-         mojo::PendingReceiver<blink::mojom::TranslationManager> receiver) {
+-        GetContentClient()->browser()->BindTranslationManager(
+-            host->GetProcess(), host->GetBrowserContext(),
+-            &RenderFrameHostImpl::From(host)->document_associated_data(),
+-            host->GetLastCommittedOrigin(), std::move(receiver));
+-      }));
++  if (HeliumPersonaAllowsAiApis(host)) {
++    map->Add<blink::mojom::TranslationManager>(base::BindRepeating(
++        [](RenderFrameHost* host,
++           mojo::PendingReceiver<blink::mojom::TranslationManager> receiver) {
++          GetContentClient()->browser()->BindTranslationManager(
++              host->GetProcess(), host->GetBrowserContext(),
++              &RenderFrameHostImpl::From(host)->document_associated_data(),
++              host->GetLastCommittedOrigin(), std::move(receiver));
++        }));
+ 
+-  map->Add<language_detection::mojom::ContentLanguageDetectionDriver>(
+-      base::BindRepeating(
+-          [](RenderFrameHost* host,
+-             mojo::PendingReceiver<
+-                 language_detection::mojom::ContentLanguageDetectionDriver>
+-                 receiver) {
+-            GetContentClient()->browser()->BindLanguageDetectionDriver(
+-                host->GetBrowserContext(),
+-                &RenderFrameHostImpl::From(host)->document_associated_data(),
+-                std::move(receiver));
+-          }));
++    map->Add<language_detection::mojom::ContentLanguageDetectionDriver>(
++        base::BindRepeating(
++            [](RenderFrameHost* host,
++               mojo::PendingReceiver<
++                   language_detection::mojom::ContentLanguageDetectionDriver>
++                   receiver) {
++              GetContentClient()->browser()->BindLanguageDetectionDriver(
++                  host->GetBrowserContext(),
++                  &RenderFrameHostImpl::From(host)->document_associated_data(),
++                  std::move(receiver));
++            }));
++  }
+ 
+   if (HeliumPersonaAllowsBackgroundFetch(host)) {
+     map->Add<blink::mojom::BackgroundFetchService>(
+@@ -1708,7 +1845,8 @@ void PopulateBinderMapWithContext(
+     map->Add<blink::mojom::KeyboardLockService>(
+         &KeyboardLockServiceImpl::CreateMojoService);
+   }
+-  if (base::FeatureList::IsEnabled(network::features::kInterestGroupStorage)) {
++  if (base::FeatureList::IsEnabled(network::features::kInterestGroupStorage) &&
++      HeliumPersonaAllowsPrivacySandboxApis(host)) {
+     map->Add<blink::mojom::AdAuctionService>(
+         &AdAuctionServiceImpl::CreateMojoService);
+   }
+@@ -1827,7 +1965,9 @@ void PopulateBinderMapWithContext(
+ 
+   map->Add<blink::mojom::OriginTrialStateHost>(
+       &OriginTrialStateHostImpl::Create);
+-  map->Add<blink::mojom::StorageAccessHandle>(&StorageAccessHandle::Create);
++  if (HeliumPersonaAllowsStorageAccess(host)) {
++    map->Add<blink::mojom::StorageAccessHandle>(&StorageAccessHandle::Create);
++  }
+ 
+   map->Add<optimization_guide::mojom::ModelBroker>(
+       &EmptyBinderForFrame<optimization_guide::mojom::ModelBroker>);
+@@ -1890,7 +2030,8 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
+           {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
+ 
+   if (base::FeatureList::IsEnabled(
+-          webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
++          webnn::mojom::features::kWebMachineLearningNeuralNetwork) &&
++      HeliumPersonaAllowsWebNn(host)) {
+     // base::Unretained(host->GetProcessHost()) is safe because the map is owned
+     // by |DedicatedWorkerHost::broker_|.
+     map->Add<webnn::mojom::WebNNContextProvider>(base::BindRepeating(
+@@ -1989,31 +2130,33 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
+         RenderProcessHost::NotificationServiceCreatorType::kDedicatedWorker,
+         host));
+   }
+-  map->Add<blink::mojom::AIManager>(
+-      base::BindRepeating(&ContentBrowserClient::BindAIManager,
+-                          base::Unretained(GetContentClient()->browser()),
+-                          host->GetProcessHost()->GetBrowserContext(),
+-                          base::Unretained(host), /*rfh=*/nullptr));
+-  map->Add<blink::mojom::TranslationManager>(base::BindRepeating(
+-      [](DedicatedWorkerHost* host,
+-         mojo::PendingReceiver<blink::mojom::TranslationManager> receiver) {
+-        auto* process_host = host->GetProcessHost();
+-        GetContentClient()->browser()->BindTranslationManager(
+-            process_host, process_host->GetBrowserContext(), host,
+-            host->GetWorkerStorageKey().origin(), std::move(receiver));
+-      },
+-      base::Unretained(host)));
+-  map->Add<language_detection::mojom::ContentLanguageDetectionDriver>(
+-      base::BindRepeating(
+-          [](DedicatedWorkerHost* host,
+-             mojo::PendingReceiver<
+-                 language_detection::mojom::ContentLanguageDetectionDriver>
+-                 receiver) {
+-            GetContentClient()->browser()->BindLanguageDetectionDriver(
+-                host->GetProcessHost()->GetBrowserContext(), host,
+-                std::move(receiver));
+-          },
+-          base::Unretained(host)));
++  if (HeliumPersonaAllowsAiApis(host)) {
++    map->Add<blink::mojom::AIManager>(
++        base::BindRepeating(&ContentBrowserClient::BindAIManager,
++                            base::Unretained(GetContentClient()->browser()),
++                            host->GetProcessHost()->GetBrowserContext(),
++                            base::Unretained(host), /*rfh=*/nullptr));
++    map->Add<blink::mojom::TranslationManager>(base::BindRepeating(
++        [](DedicatedWorkerHost* host,
++           mojo::PendingReceiver<blink::mojom::TranslationManager> receiver) {
++          auto* process_host = host->GetProcessHost();
++          GetContentClient()->browser()->BindTranslationManager(
++              process_host, process_host->GetBrowserContext(), host,
++              host->GetWorkerStorageKey().origin(), std::move(receiver));
++        },
++        base::Unretained(host)));
++    map->Add<language_detection::mojom::ContentLanguageDetectionDriver>(
++        base::BindRepeating(
++            [](DedicatedWorkerHost* host,
++               mojo::PendingReceiver<
++                   language_detection::mojom::ContentLanguageDetectionDriver>
++                   receiver) {
++              GetContentClient()->browser()->BindLanguageDetectionDriver(
++                  host->GetProcessHost()->GetBrowserContext(), host,
++                  std::move(receiver));
++            },
++            base::Unretained(host)));
++  }
+ }
+ 
+ void PopulateBinderMapWithContext(
+@@ -2103,11 +2246,13 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
+       &CreateReportingServiceProxyForSharedWorker, base::Unretained(host)));
+   map->Add<blink::mojom::BucketManagerHost>(base::BindRepeating(
+       &SharedWorkerHost::CreateBucketManagerHost, base::Unretained(host)));
+-  map->Add<blink::mojom::AIManager>(
+-      base::BindRepeating(&ContentBrowserClient::BindAIManager,
+-                          base::Unretained(GetContentClient()->browser()),
+-                          host->GetProcessHost()->GetBrowserContext(),
+-                          base::Unretained(host), /*rfh=*/nullptr));
++  if (HeliumPersonaAllowsAiApis(host)) {
++    map->Add<blink::mojom::AIManager>(
++        base::BindRepeating(&ContentBrowserClient::BindAIManager,
++                            base::Unretained(GetContentClient()->browser()),
++                            host->GetProcessHost()->GetBrowserContext(),
++                            base::Unretained(host), /*rfh=*/nullptr));
++  }
+   if (HeliumPersonaAllowsWebLocks(host)) {
+     map->Add<blink::mojom::LockManager>(base::BindRepeating(
+         &SharedWorkerHost::CreateLockManager, base::Unretained(host)));
+@@ -2121,7 +2266,8 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
+   }
+ #endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
+   if (base::FeatureList::IsEnabled(
+-          webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
++          webnn::mojom::features::kWebMachineLearningNeuralNetwork) &&
++      HeliumPersonaAllowsWebNn(host)) {
+     map->Add<webnn::mojom::WebNNContextProvider>(base::BindRepeating(
+         &BindWebNNContextProviderForWorker<SharedWorkerHost>,
+         base::Unretained(host)));
+@@ -2129,26 +2275,28 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
+         &BindWebNNWeightsFileCreatorForWorker<SharedWorkerHost>,
+         base::Unretained(host)));
+   }
+-  map->Add<blink::mojom::TranslationManager>(base::BindRepeating(
+-      [](SharedWorkerHost* host,
+-         mojo::PendingReceiver<blink::mojom::TranslationManager> receiver) {
+-        auto* process_host = host->GetProcessHost();
+-        GetContentClient()->browser()->BindTranslationManager(
+-            process_host, process_host->GetBrowserContext(), host,
+-            host->GetWorkerStorageKey().origin(), std::move(receiver));
+-      },
+-      base::Unretained(host)));
+-  map->Add<language_detection::mojom::ContentLanguageDetectionDriver>(
+-      base::BindRepeating(
+-          [](SharedWorkerHost* host,
+-             mojo::PendingReceiver<
+-                 language_detection::mojom::ContentLanguageDetectionDriver>
+-                 receiver) {
+-            GetContentClient()->browser()->BindLanguageDetectionDriver(
+-                host->GetProcessHost()->GetBrowserContext(), host,
+-                std::move(receiver));
+-          },
+-          base::Unretained(host)));
++  if (HeliumPersonaAllowsAiApis(host)) {
++    map->Add<blink::mojom::TranslationManager>(base::BindRepeating(
++        [](SharedWorkerHost* host,
++           mojo::PendingReceiver<blink::mojom::TranslationManager> receiver) {
++          auto* process_host = host->GetProcessHost();
++          GetContentClient()->browser()->BindTranslationManager(
++              process_host, process_host->GetBrowserContext(), host,
++              host->GetWorkerStorageKey().origin(), std::move(receiver));
++        },
++        base::Unretained(host)));
++    map->Add<language_detection::mojom::ContentLanguageDetectionDriver>(
++        base::BindRepeating(
++            [](SharedWorkerHost* host,
++               mojo::PendingReceiver<
++                   language_detection::mojom::ContentLanguageDetectionDriver>
++                   receiver) {
++              GetContentClient()->browser()->BindLanguageDetectionDriver(
++                  host->GetProcessHost()->GetBrowserContext(), host,
++                  std::move(receiver));
++            },
++            base::Unretained(host)));
++  }
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+   if (HeliumPersonaAllowsLocalNetworkApis(host)) {
+@@ -2313,11 +2461,14 @@ void PopulateServiceWorkerBinders(ServiceWorkerHost* host,
+     map->Add<blink::mojom::WebUsbService>(base::BindRepeating(
+         &ServiceWorkerHost::BindUsbService, base::Unretained(host)));
+   }
+-  map->Add<blink::mojom::AIManager>(base::BindRepeating(
+-      &ServiceWorkerHost::BindAIManager, base::Unretained(host)));
++  if (HeliumPersonaAllowsAiApis(host)) {
++    map->Add<blink::mojom::AIManager>(base::BindRepeating(
++        &ServiceWorkerHost::BindAIManager, base::Unretained(host)));
++  }
+ 
+   if (base::FeatureList::IsEnabled(
+-          webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
++          webnn::mojom::features::kWebMachineLearningNeuralNetwork) &&
++      HeliumPersonaAllowsWebNn(host)) {
+     map->Add<webnn::mojom::WebNNContextProvider>(base::BindRepeating(
+         &BindWebNNContextProviderForWorker<ServiceWorkerHost>,
+         base::Unretained(host)));
+@@ -2325,30 +2476,32 @@ void PopulateServiceWorkerBinders(ServiceWorkerHost* host,
+         &BindWebNNWeightsFileCreatorForWorker<ServiceWorkerHost>,
+         base::Unretained(host)));
+   }
+-  map->Add<blink::mojom::TranslationManager>(base::BindRepeating(
+-      [](ServiceWorkerHost* host,
+-         mojo::PendingReceiver<blink::mojom::TranslationManager> receiver) {
+-        if (auto* process_host = static_cast<RenderProcessHostImpl*>(
+-                RenderProcessHost::FromID(host->worker_process_id()))) {
+-          GetContentClient()->browser()->BindTranslationManager(
+-              process_host, process_host->GetBrowserContext(), host,
+-              host->GetBucketStorageKey().origin(), std::move(receiver));
+-        }
+-      },
+-      base::Unretained(host)));
+-  map->Add<language_detection::mojom::ContentLanguageDetectionDriver>(
+-      base::BindRepeating(
+-          [](ServiceWorkerHost* host,
+-             mojo::PendingReceiver<
+-                 language_detection::mojom::ContentLanguageDetectionDriver>
+-                 receiver) {
+-            if (auto* process_host = static_cast<RenderProcessHostImpl*>(
+-                    RenderProcessHost::FromID(host->worker_process_id()))) {
+-              GetContentClient()->browser()->BindLanguageDetectionDriver(
+-                  process_host->GetBrowserContext(), host, std::move(receiver));
+-            }
+-          },
+-          base::Unretained(host)));
++  if (HeliumPersonaAllowsAiApis(host)) {
++    map->Add<blink::mojom::TranslationManager>(base::BindRepeating(
++        [](ServiceWorkerHost* host,
++           mojo::PendingReceiver<blink::mojom::TranslationManager> receiver) {
++          if (auto* process_host = static_cast<RenderProcessHostImpl*>(
++                  RenderProcessHost::FromID(host->worker_process_id()))) {
++            GetContentClient()->browser()->BindTranslationManager(
++                process_host, process_host->GetBrowserContext(), host,
++                host->GetBucketStorageKey().origin(), std::move(receiver));
++          }
++        },
++        base::Unretained(host)));
++    map->Add<language_detection::mojom::ContentLanguageDetectionDriver>(
++        base::BindRepeating(
++            [](ServiceWorkerHost* host,
++               mojo::PendingReceiver<
++                   language_detection::mojom::ContentLanguageDetectionDriver>
++                   receiver) {
++              if (auto* process_host = static_cast<RenderProcessHostImpl*>(
++                      RenderProcessHost::FromID(host->worker_process_id()))) {
++                GetContentClient()->browser()->BindLanguageDetectionDriver(
++                    process_host->GetBrowserContext(), host, std::move(receiver));
++              }
++            },
++            base::Unretained(host)));
++  }
+ 
+   // RenderProcessHost binders
+   map->Add<media::mojom::VideoDecodePerfHistory>(BindServiceWorkerReceiver(
+@@ -2448,4 +2601,4 @@ void PopulateBinderMap(ServiceWorkerHost* host, mojo::BinderMap* map) {
+ }
+ 
+ }  // namespace internal
+-}  // namespace content
+\ No newline at end of file
++}  // namespace content

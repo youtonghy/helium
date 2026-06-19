@@ -1,0 +1,36 @@
+diff --git a/third_party/blink/renderer/core/dom/document.cc b/third_party/blink/renderer/core/dom/document.cc
+index db5ba4fb..a85e7e54 100644
+--- a/third_party/blink/renderer/core/dom/document.cc
++++ b/third_party/blink/renderer/core/dom/document.cc
+@@ -9076,6 +9076,9 @@ void Document::DidChangeFormRelatedElementDynamically(Element* element) {
+ }
+ 
+ float Document::DevicePixelRatio() const {
++  if (auto value = PersonaSpoofingHelper::DeviceScaleFactor(
++          GetExecutionContext()))
++    return static_cast<float>(*value);
+   return GetFrame() ? GetFrame()->DevicePixelRatio() : 1.0;
+ }
+ 
+diff --git a/third_party/blink/renderer/modules/csspaint/paint_worklet_global_scope.cc b/third_party/blink/renderer/modules/csspaint/paint_worklet_global_scope.cc
+index 53b0da3d..d9e9d34c 100644
+--- a/third_party/blink/renderer/modules/csspaint/paint_worklet_global_scope.cc
++++ b/third_party/blink/renderer/modules/csspaint/paint_worklet_global_scope.cc
+@@ -15,6 +15,7 @@
+ #include "third_party/blink/renderer/core/dom/document.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/helium_persona/persona_spoofing_helper.h"
+ #include "third_party/blink/renderer/core/inspector/main_thread_debugger.h"
+ #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
+ #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
+@@ -247,6 +248,9 @@ CSSPaintDefinition* PaintWorkletGlobalScope::FindDefinition(
+ }
+ 
+ double PaintWorkletGlobalScope::devicePixelRatio() const {
++  if (auto value = PersonaSpoofingHelper::DeviceScaleFactor(this)) {
++    return *value;
++  }
+   return IsMainThread()
+              ? GetFrame()->DevicePixelRatio()
+              : PaintWorkletProxyClient::From(Clients())->DevicePixelRatio();

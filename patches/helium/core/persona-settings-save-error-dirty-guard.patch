@@ -1,0 +1,280 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.html b/chrome/browser/resources/settings/privacy_page/persona_page.html
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -105,6 +105,12 @@
+           <li>[[warning]]</li>
+         </template>
+       </ul>
++    </div>
++  </template>
++
++  <template is="dom-if" if="[[statusMessage_]]">
++    <div class="warning-box">
++      [[statusMessage_]]
+     </div>
+   </template>
+ 
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -34,6 +34,7 @@
+       activePersonaId_: String,
+       activePersonaSummary_: String,
+       warnings_: Array,
++      statusMessage_: String,
+       navigatorLanguagesText_: String,
+       uaChBrandsText_: String,
+       uaChFormFactorsText_: String,
+@@ -59,6 +60,7 @@
+   declare private activePersonaId_: string;
+   declare private activePersonaSummary_: string;
+   declare private warnings_: string[];
++  declare private statusMessage_: string;
+   declare private navigatorLanguagesText_: string;
+   declare private uaChBrandsText_: string;
+   declare private uaChFormFactorsText_: string;
+@@ -68,6 +70,8 @@
+ 
+   private browserProxy_ = HeliumPersonaBrowserProxyImpl.getInstance();
+   private suppressDraftWarningUpdate_ = false;
++  private lastLoadedEditorState_ = '';
++  private lastLoadedActivePersonaId_ = '';
+ 
+   override connectedCallback() {
+     super.connectedCallback();
+@@ -86,12 +90,14 @@
+     this.fontPackProfiles_ = state.fontPackProfiles || [];
+     this.fontRenderingProfiles_ = state.fontRenderingProfiles || [];
+     this.activePersonaId_ = state.activePersonaId || state.activePersona?.id || '';
++    this.lastLoadedActivePersonaId_ = this.activePersonaId_;
+     this.suppressDraftWarningUpdate_ = true;
+     this.editablePersona_ = this.clonePersona_(state.activePersona);
+     this.suppressDraftWarningUpdate_ = false;
+     this.activePersonaSummary_ = this.formatPersonaSummary_(this.editablePersona_);
+     this.warnings_ = state.warnings || [];
+     this.syncTextFields_();
++    this.captureEditorState_();
+     this.updateDraftWarnings_();
+   }
+ 
+@@ -126,7 +132,35 @@
+   private onEditablePersonaChanged_() {
+     if (!this.suppressDraftWarningUpdate_) {
+       this.updateDraftWarnings_();
++    }
++  }
++
++  private showStatus_(message: string) {
++    this.statusMessage_ = message;
++  }
++
++  private clearStatus_() {
++    this.statusMessage_ = '';
++  }
++
++  private editorState_(): string {
++    this.flushTextFieldsToEditablePersona_();
++    return JSON.stringify(this.editablePersona_ || {});
++  }
++
++  private captureEditorState_() {
++    this.lastLoadedEditorState_ = this.editorState_();
++  }
++
++  private hasDirtyEditor_(): boolean {
++    return this.editorState_() !== this.lastLoadedEditorState_;
++  }
++
++  private confirmDiscardDirtyEditor_(): boolean {
++    if (!this.hasDirtyEditor_()) {
++      return true;
+     }
++    return window.confirm('Discard unsaved persona edits?');
+   }
+ 
+   private contains_(value: unknown, needle: string): boolean {
+@@ -1082,24 +1116,50 @@
+     if (!select.value) {
+       return;
+     }
+-    await this.browserProxy_.setActivePersona(select.value);
++    if (!this.confirmDiscardDirtyEditor_()) {
++      select.value = this.lastLoadedActivePersonaId_;
++      this.activePersonaId_ = this.lastLoadedActivePersonaId_;
++      return;
++    }
++    this.clearStatus_();
++    if (!await this.browserProxy_.setActivePersona(select.value)) {
++      this.showStatus_('Could not switch persona.');
++      select.value = this.lastLoadedActivePersonaId_;
++      this.activePersonaId_ = this.lastLoadedActivePersonaId_;
++      return;
++    }
+     await this.loadState_();
+   }
+ 
+   private async onUsePresetClick_(event: Event) {
++    if (!this.confirmDiscardDirtyEditor_()) {
++      return;
++    }
+     const model = (event as CustomEvent).model;
+     const preset = model.preset as PersonaRecord;
+-    await this.browserProxy_.setActivePersona(preset.id);
++    this.clearStatus_();
++    if (!await this.browserProxy_.setActivePersona(preset.id)) {
++      this.showStatus_('Could not activate preset.');
++      return;
++    }
+     await this.loadState_();
+   }
+ 
+   private async onClonePresetClick_(event: Event) {
++    if (!this.confirmDiscardDirtyEditor_()) {
++      return;
++    }
+     const model = (event as CustomEvent).model;
+     const preset = model.preset as PersonaRecord;
+     if (this.isPassthroughPersona_(preset)) {
+       return;
+     }
+-    await this.browserProxy_.clonePreset(preset.id);
++    this.clearStatus_();
++    const cloned = await this.browserProxy_.clonePreset(preset.id);
++    if (!cloned || !cloned.id) {
++      this.showStatus_('Could not copy preset.');
++      return;
++    }
+     await this.loadState_();
+   }
+ 
+@@ -2102,7 +2162,11 @@
+     persona.modified = true;
+     persona.passthrough = false;
+     this.normalizeNumbers_(persona);
+-    await this.browserProxy_.savePersona(persona);
++    this.clearStatus_();
++    if (!await this.browserProxy_.savePersona(persona)) {
++      this.showStatus_('Could not create persona.');
++      return;
++    }
+     await this.loadState_();
+   }
+ 
+@@ -2282,6 +2346,7 @@
+     this.activePersonaSummary_ = this.formatPersonaSummary_(this.editablePersona_);
+     this.warnings_ = state.warnings || [];
+     this.syncTextFields_();
++    this.captureEditorState_();
+     this.updateDraftWarnings_();
+   }
+ 
+@@ -2292,7 +2357,11 @@
+     this.normalizeFontRenderingProfile_(profile);
+     const editablePersona = this.clonePersona_(this.editablePersona_);
+     editablePersona.fontRendering = JSON.parse(JSON.stringify(profile));
+-    await this.browserProxy_.saveFontRenderingProfile(profile);
++    this.clearStatus_();
++    if (!await this.browserProxy_.saveFontRenderingProfile(profile)) {
++      this.showStatus_('Could not save font rendering profile.');
++      return;
++    }
+     await this.reloadStateKeepingEditor_(editablePersona);
+   }
+ 
+@@ -2303,7 +2372,11 @@
+     this.normalizeFontPackProfile_(profile);
+     const editablePersona = this.clonePersona_(this.editablePersona_);
+     editablePersona.fonts = JSON.parse(JSON.stringify(profile));
+-    await this.browserProxy_.saveFontPackProfile(profile);
++    this.clearStatus_();
++    if (!await this.browserProxy_.saveFontPackProfile(profile)) {
++      this.showStatus_('Could not save font pack profile.');
++      return;
++    }
+     await this.reloadStateKeepingEditor_(editablePersona);
+   }
+ 
+@@ -2319,7 +2392,11 @@
+             'Delete this font pack profile? Saved personas that already use it keep their embedded font list.')) {
+       return;
+     }
+-    await this.browserProxy_.deleteFontPackProfile(profileId);
++    this.clearStatus_();
++    if (!await this.browserProxy_.deleteFontPackProfile(profileId)) {
++      this.showStatus_('Could not delete font pack profile.');
++      return;
++    }
+     await this.loadState_();
+   }
+ 
+@@ -2335,18 +2412,32 @@
+             'Delete this rendering profile? Saved personas that already use it keep their embedded rendering settings.')) {
+       return;
+     }
+-    await this.browserProxy_.deleteFontRenderingProfile(profileId);
++    this.clearStatus_();
++    if (!await this.browserProxy_.deleteFontRenderingProfile(profileId)) {
++      this.showStatus_('Could not delete rendering profile.');
++      return;
++    }
+     await this.loadState_();
+   }
+ 
+   private async onUsePersonaClick_(event: Event) {
+     const model = (event as CustomEvent).model;
+     const persona = model.persona as PersonaRecord;
+-    await this.browserProxy_.setActivePersona(persona.id);
++    if (!this.confirmDiscardDirtyEditor_()) {
++      return;
++    }
++    this.clearStatus_();
++    if (!await this.browserProxy_.setActivePersona(persona.id)) {
++      this.showStatus_('Could not activate persona.');
++      return;
++    }
+     await this.loadState_();
+   }
+ 
+   private onEditPersonaClick_(event: Event) {
++    if (!this.confirmDiscardDirtyEditor_()) {
++      return;
++    }
+     const model = (event as CustomEvent).model;
+     const persona = model.persona as PersonaRecord;
+     this.suppressDraftWarningUpdate_ = true;
+@@ -2356,13 +2445,21 @@
+     this.suppressDraftWarningUpdate_ = false;
+     this.activePersonaSummary_ = this.formatPersonaSummary_(this.editablePersona_);
+     this.syncTextFields_();
++    this.captureEditorState_();
+     this.updateDraftWarnings_();
+   }
+ 
+   private async onDeletePersonaClick_(event: Event) {
+     const model = (event as CustomEvent).model;
+     const persona = model.persona as PersonaRecord;
+-    await this.browserProxy_.deletePersona(persona.id);
++    if (!window.confirm(`Delete persona "${persona.name || persona.id}"?`)) {
++      return;
++    }
++    this.clearStatus_();
++    if (!await this.browserProxy_.deletePersona(persona.id)) {
++      this.showStatus_('Could not delete persona.');
++      return;
++    }
+     await this.loadState_();
+   }
+ 
+@@ -2716,7 +2815,11 @@
+     this.flushTextFieldsToEditablePersona_();
+     const persona = this.clonePersona_(this.editablePersona_);
+     this.normalizeNumbers_(persona);
+-    await this.browserProxy_.savePersona(persona);
++    this.clearStatus_();
++    if (!await this.browserProxy_.savePersona(persona)) {
++      this.showStatus_('Could not save persona.');
++      return;
++    }
+     await this.loadState_();
+   }
+ }

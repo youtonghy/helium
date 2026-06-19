@@ -1,0 +1,450 @@
+diff --git a/chrome/browser/resources/settings/privacy_page/persona_page.ts b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+index c13e7c3..57db5d0 100644
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -1324,27 +1324,46 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     };
+   }
+ 
++  private randomChromePlatformVersion_(osFamily: string): string {
++    if (osFamily === 'mac') {
++      return this.randomFrom_([
++        '14.7.0',
++        '15.3.0',
++        '15.4.0',
++        '15.5.0',
++        '15.6.0',
++      ], '15.6.0');
++    }
++    if (osFamily === 'linux') {
++      return this.randomFrom_(['', '', '6.8.0', '6.12.0'], '');
++    }
++    return this.randomFrom_(['15.0.0', '19.0.0', '19.0.0'], '19.0.0');
++  }
++
+   private applyConsistentRandomUaChIdentity_(persona: PersonaRecord) {
+     persona.uaCh = persona.uaCh || {};
+     const osFamily = this.personaOsFamily_(persona);
+     if (osFamily === 'mac') {
+       persona.uaCh['platform'] = 'macOS';
+-      persona.uaCh['platformVersion'] = '15.6.0';
+-      persona.uaCh['architecture'] = 'arm';
++      persona.uaCh['platformVersion'] =
++          this.randomChromePlatformVersion_(osFamily);
++      persona.uaCh['architecture'] = this.randomFrom_(['arm', 'x86'], 'arm');
+       persona.uaCh['bitness'] = '64';
+       persona.uaCh['wow64'] = false;
+     } else if (osFamily === 'linux') {
+       persona.uaCh['platform'] = 'Linux';
+-      persona.uaCh['platformVersion'] = '';
++      persona.uaCh['platformVersion'] =
++          this.randomChromePlatformVersion_(osFamily);
+       persona.uaCh['architecture'] = 'x86';
+       persona.uaCh['bitness'] = '64';
+       persona.uaCh['wow64'] = false;
+     } else {
+       persona.uaCh['platform'] = 'Windows';
+-      persona.uaCh['platformVersion'] = '19.0.0';
++      persona.uaCh['platformVersion'] =
++          this.randomChromePlatformVersion_(osFamily);
+       persona.uaCh['architecture'] = 'x86';
+       persona.uaCh['bitness'] = '64';
+-      persona.uaCh['wow64'] = false;
++      persona.uaCh['wow64'] = this.randomInt_(1, 100) <= 2;
+     }
+     persona.uaCh['model'] = '';
+     persona.uaCh['mobile'] = false;
+@@ -1579,14 +1598,16 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+   private makeWebGlProfile_(
+       maxTextureSize: number, maxSamples: number,
+       maxAnisotropy: number): Record<string, unknown> {
++    const highTier = maxTextureSize >= 16384;
+     return {
+       maxTextureSize,
+       maxCubeMapTextureSize: maxTextureSize,
+       maxRenderbufferSize: maxTextureSize,
+       maxViewportWidth: maxTextureSize,
+       maxViewportHeight: maxTextureSize,
+-      maxTextureImageUnits: 16,
+-      maxCombinedTextureImageUnits: 32,
++      maxTextureImageUnits: highTier ? 16 : 8,
++      maxCombinedTextureImageUnits:
++          highTier ? this.randomFrom_([32, 48], 32) : 24,
+       maxVertexAttribs: 16,
+       maxVertexTextureImageUnits: 16,
+       maxVertexUniformVectors: 1024,
+@@ -1600,14 +1621,19 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+   private makeWebGl2Profile_(
+       max3DTextureSize: number, maxArrayTextureLayers: number,
+       maxColorAttachments: number, maxSamples: number): Record<string, unknown> {
++    const uniformBlockSize =
++        this.randomFrom_([16384, 32768, 65536], 65536);
++    const uniformAlignment = this.randomFrom_([256, 256, 512], 256);
+     return {
+       max3DTextureSize,
+       maxArrayTextureLayers,
+       maxColorAttachments,
+-      maxDrawBuffers: maxColorAttachments,
+-      maxUniformBlockSize: 65536,
+-      uniformBufferOffsetAlignment: 256,
+-      maxTextureLodBias: 15,
++      maxDrawBuffers: this.randomFrom_(
++          [maxColorAttachments, Math.max(4, maxColorAttachments - 1)],
++          maxColorAttachments),
++      maxUniformBlockSize: uniformBlockSize,
++      uniformBufferOffsetAlignment: uniformAlignment,
++      maxTextureLodBias: this.randomFrom_([12, 15, 16], 15),
+       maxSamples,
+     };
+   }
+@@ -1616,22 +1642,30 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       maxTextureDimension2D: number, maxTextureDimension3D: number,
+       maxBufferSize: number,
+       maxComputeInvocationsPerWorkgroup: number): Record<string, unknown> {
++    const bindGroups = this.randomFrom_([4, 4, 6, 8], 4);
++    const vertexBuffers = this.randomFrom_([8, 8, 12, 16], 8);
++    const storageBufferBindingSize =
++        Math.min(maxBufferSize, this.randomFrom_(
++            [134217728, 268435456, maxBufferSize], 134217728));
+     return {
+       maxTextureDimension1D: maxTextureDimension2D,
+       maxTextureDimension2D,
+       maxTextureDimension3D,
+-      maxTextureArrayLayers: 256,
+-      maxBindGroups: 4,
++      maxTextureArrayLayers: this.randomFrom_([256, 512], 256),
++      maxBindGroups: bindGroups,
+       maxBindingsPerBindGroup: 1000,
+       maxUniformBufferBindingSize: 65536,
+-      maxStorageBufferBindingSize: 134217728,
++      maxStorageBufferBindingSize: storageBufferBindingSize,
+       maxBufferSize,
+-      maxVertexBuffers: 8,
+-      maxVertexAttributes: 16,
+-      maxComputeWorkgroupStorageSize: 16384,
++      maxVertexBuffers: vertexBuffers,
++      maxVertexAttributes: this.randomFrom_([16, 24, 32], 16),
++      maxComputeWorkgroupStorageSize:
++          this.randomFrom_([16384, 32768], 16384),
+       maxComputeInvocationsPerWorkgroup,
+       maxComputeWorkgroupSizeX: maxComputeInvocationsPerWorkgroup,
+-      maxComputeWorkgroupSizeY: maxComputeInvocationsPerWorkgroup,
++      maxComputeWorkgroupSizeY: Math.min(
++          maxComputeInvocationsPerWorkgroup,
++          this.randomFrom_([128, 256], 256)),
+       maxComputeWorkgroupSizeZ: 64,
+       maxComputeWorkgroupsPerDimension: 65535,
+     };
+@@ -1642,6 +1676,14 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       maxTextureSize: number, maxSamples: number, maxAnisotropy: number,
+       maxBufferSize: number,
+       webgpuFeatures: string[]): Record<string, unknown> {
++    const max3DTextureSize = this.randomFrom_([1024, 2048, 4096], 2048);
++    const maxArrayTextureLayers = this.randomFrom_([256, 512, 2048], 2048);
++    const maxColorAttachments = this.randomFrom_([4, 8], 8);
++    const webgpuTexture2D = this.randomFrom_(
++        [8192, 8192, maxTextureSize], 8192);
++    const webgpuTexture3D = this.randomFrom_(
++        [1024, 2048, max3DTextureSize], 2048);
++    const computeInvocations = this.randomFrom_([128, 256], 256);
+     return {
+       vendor,
+       renderer,
+@@ -1649,9 +1691,11 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       driver,
+       webglProfile: this.makeWebGlProfile_(
+           maxTextureSize, maxSamples, maxAnisotropy),
+-      webgl2Profile: this.makeWebGl2Profile_(2048, 2048, 8, maxSamples),
++      webgl2Profile: this.makeWebGl2Profile_(
++          max3DTextureSize, maxArrayTextureLayers, maxColorAttachments,
++          maxSamples),
+       webgpuProfile: this.makeWebGpuProfile_(
+-          8192, 2048, maxBufferSize, 256),
++          webgpuTexture2D, webgpuTexture3D, maxBufferSize, computeInvocations),
+       webgpuFeatures,
+     };
+   }
+@@ -1712,20 +1756,24 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+   private makeScreenProfile_(
+       width: number, height: number, deviceScaleFactor: number,
+       refreshRate: number, reservedHeight: number): Record<string, unknown> {
+-    const availHeight = Math.max(1, height - reservedHeight);
++    const portrait = width > height && this.randomInt_(1, 100) <= 2;
++    const portraitSecondary = portrait && this.randomInt_(1, 100) <= 30;
++    const screenWidth = portrait ? height : width;
++    const screenHeight = portrait ? width : height;
++    const availHeight = Math.max(1, screenHeight - reservedHeight);
+     const outerWidth = this.randomInt_(
+-        Math.max(1, Math.floor(width * 0.72)), width);
++        Math.max(1, Math.floor(screenWidth * 0.72)), screenWidth);
+     const outerHeight = this.randomInt_(
+         Math.max(1, Math.floor(availHeight * 0.72)), availHeight);
+-    const maxX = Math.max(0, width - outerWidth);
++    const maxX = Math.max(0, screenWidth - outerWidth);
+     const maxY = Math.max(0, availHeight - outerHeight);
+-    const secondaryLandscape = this.randomInt_(1, 100) <= 3;
++    const secondaryLandscape = !portrait && this.randomInt_(1, 100) <= 3;
+     return {
+-      width,
+-      height,
++      width: screenWidth,
++      height: screenHeight,
+       availLeft: 0,
+       availTop: 0,
+-      availWidth: width,
++      availWidth: screenWidth,
+       availHeight,
+       outerWidth,
+       outerHeight,
+@@ -1735,9 +1783,11 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       colorDepth: 24,
+       pixelDepth: 24,
+       refreshRate,
+-      orientationType: secondaryLandscape ? 'landscape-secondary' :
+-          'landscape-primary',
+-      orientationAngle: secondaryLandscape ? 180 : 0,
++      orientationType: portrait ?
++          (portraitSecondary ? 'portrait-secondary' : 'portrait-primary') :
++          (secondaryLandscape ? 'landscape-secondary' : 'landscape-primary'),
++      orientationAngle: portrait ? (portraitSecondary ? 270 : 90) :
++          (secondaryLandscape ? 180 : 0),
+       colorScheme: this.randomInt_(1, 10) <= 3 ? 'dark' : 'light',
+       reducedMotion: 'no-preference',
+       reducedTransparency: 'no-preference',
+@@ -2046,6 +2096,52 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+     const protectedPresentation = chance(1);
+     const balancedPresentation = chance(3);
+     const compatiblePresentation = chance(6);
++    const rareProtected = (protectedPercent: number, balancedPercent: number,
++        compatiblePercent: number): [boolean, boolean, boolean] => {
++      return [
++        chance(protectedPercent),
++        chance(balancedPercent),
++        chance(compatiblePercent),
++      ];
++    };
++    const [protectedGeolocation, balancedGeolocation, compatibleGeolocation] =
++        rareProtected(0, 1, 3);
++    const [protectedMediaCapture, balancedMediaCapture, compatibleMediaCapture] =
++        rareProtected(0, 1, 3);
++    const [protectedDisplayCapture, balancedDisplayCapture,
++      compatibleDisplayCapture] = rareProtected(0, 1, 2);
++    const [protectedDeviceApis, balancedDeviceApis, compatibleDeviceApis] =
++        rareProtected(0, 1, 2);
++    const [protectedSensorApis, balancedSensorApis, compatibleSensorApis] =
++        rareProtected(0, 1, 2);
++    const [protectedMidi, balancedMidi, compatibleMidi] =
++        rareProtected(0, 1, 3);
++    const [protectedLocalNetwork, balancedLocalNetwork,
++      compatibleLocalNetwork] = rareProtected(0, 1, 4);
++    const [protectedWebNfc, balancedWebNfc, compatibleWebNfc] =
++        rareProtected(0, 0, 1);
++    const [protectedWebXr, balancedWebXr, compatibleWebXr] =
++        rareProtected(0, 0, 1);
++    const [protectedPlatformCredentials, balancedPlatformCredentials,
++      compatiblePlatformCredentials] = rareProtected(0, 1, 4);
++    const [protectedLocalFonts, balancedLocalFonts, compatibleLocalFonts] =
++        rareProtected(0, 1, 3);
++    const [protectedPrivacySandbox, balancedPrivacySandbox,
++      compatiblePrivacySandbox] = rareProtected(0, 1, 4);
++    const [protectedRealBattery, balancedRealBattery, compatibleRealBattery] =
++        rareProtected(0, 0, 1);
++    const [protectedPersistentDeviceId, balancedPersistentDeviceId,
++      compatiblePersistentDeviceId] = rareProtected(0, 0, 1);
++    const [protectedInstalledApps, balancedInstalledApps,
++      compatibleInstalledApps] = rareProtected(0, 0, 1);
++    const [protectedManagedDevice, balancedManagedDevice,
++      compatibleManagedDevice] = rareProtected(0, 0, 1);
++    const [protectedMediaIdentifier, balancedMediaIdentifier,
++      compatibleMediaIdentifier] = rareProtected(0, 0, 2);
++    const [protectedFileSystemAccess, balancedFileSystemAccess,
++      compatibleFileSystemAccess] = rareProtected(0, 1, 4);
++    const [protectedContacts, balancedContacts, compatibleContacts] =
++        rareProtected(0, 0, 1);
+     const protectedProfile: Record<string, boolean> = {
+       clientHintsEnabled: true,
+       reduceSystemInfo: chance(8),
+@@ -2057,29 +2153,29 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       webdriverEnabled: false,
+       speechVoiceLocalService: true,
+       speechVoiceDefault: true,
+-      allowGeolocation: false,
+-      allowMediaCapture: false,
++      allowGeolocation: protectedGeolocation,
++      allowMediaCapture: protectedMediaCapture,
+       virtualMediaDevices: true,
+-      allowDisplayCapture: false,
+-      allowDeviceApis: false,
++      allowDisplayCapture: protectedDisplayCapture,
++      allowDeviceApis: protectedDeviceApis,
+       allowGamepads: chance(1),
+-      allowSensorApis: false,
+-      allowMidi: false,
+-      allowLocalNetworkApis: false,
+-      allowWebNfc: false,
++      allowSensorApis: protectedSensorApis,
++      allowMidi: protectedMidi,
++      allowLocalNetworkApis: protectedLocalNetwork,
++      allowWebNfc: protectedWebNfc,
+       allowWindowManagement: false,
+       allowPresentationApis: protectedPresentation,
+       allowRemotePlayback: protectedPresentation && chance(40),
+-      allowWebXr: false,
+-      allowPlatformCredentials: false,
++      allowWebXr: protectedWebXr,
++      allowPlatformCredentials: protectedPlatformCredentials,
+       allowKeyboardLayout: false,
+-      allowRealBatteryStatus: false,
+-      allowLocalFonts: false,
+-      allowPersistentDeviceId: false,
+-      allowInstalledApps: false,
+-      allowManagedDevice: false,
++      allowRealBatteryStatus: protectedRealBattery,
++      allowLocalFonts: protectedLocalFonts,
++      allowPersistentDeviceId: protectedPersistentDeviceId,
++      allowInstalledApps: protectedInstalledApps,
++      allowManagedDevice: protectedManagedDevice,
+       allowNotifications: chance(1),
+-      allowProtectedMediaIdentifier: false,
++      allowProtectedMediaIdentifier: protectedMediaIdentifier,
+       allowPersistentStorage: memoryRich && chance(2),
+       allowBackgroundSync: chance(3),
+       allowClipboard: chance(1),
+@@ -2091,9 +2187,9 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       allowFullscreen: chance(10),
+       allowWebAppInstallation: chance(1),
+       allowWebPrinting: chance(2),
+-      allowFileSystemAccess: false,
++      allowFileSystemAccess: protectedFileSystemAccess,
+       allowWebLocks: chance(2),
+-      allowContacts: false,
++      allowContacts: protectedContacts,
+       allowBadging: chance(2),
+       allowWebShare: chance(1),
+       allowEyeDropper: false,
+@@ -2105,7 +2201,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       allowWebTransport: chance(80),
+       allowAiApis: false,
+       allowWebNn: false,
+-      allowPrivacySandboxApis: false,
++      allowPrivacySandboxApis: protectedPrivacySandbox,
+       allowPrivateStateTokens: false,
+       allowSpeechSynthesis: chance(1),
+       allowHandwritingRecognition: false,
+@@ -2114,10 +2210,26 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       ...protectedProfile,
+       reduceSystemInfo: chance(15),
+       pdfViewerEnabled: chance(97),
++      allowGeolocation: balancedGeolocation,
++      allowMediaCapture: balancedMediaCapture,
++      allowDisplayCapture: balancedDisplayCapture,
++      allowDeviceApis: balancedDeviceApis,
+       allowGamepads: chance(3),
++      allowSensorApis: balancedSensorApis,
++      allowMidi: balancedMidi,
++      allowLocalNetworkApis: balancedLocalNetwork,
++      allowWebNfc: balancedWebNfc,
+       allowPresentationApis: balancedPresentation,
+       allowRemotePlayback: balancedPresentation && chance(55),
++      allowWebXr: balancedWebXr,
++      allowPlatformCredentials: balancedPlatformCredentials,
++      allowLocalFonts: balancedLocalFonts,
++      allowRealBatteryStatus: balancedRealBattery,
++      allowPersistentDeviceId: balancedPersistentDeviceId,
++      allowInstalledApps: balancedInstalledApps,
++      allowManagedDevice: balancedManagedDevice,
+       allowNotifications: chance(4),
++      allowProtectedMediaIdentifier: balancedMediaIdentifier,
+       allowPersistentStorage: memoryRich && chance(7),
+       allowBackgroundSync: chance(8),
+       allowClipboard: chance(4),
+@@ -2128,7 +2240,9 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       allowFullscreen: chance(20),
+       allowWebAppInstallation: chance(3),
+       allowWebPrinting: chance(4),
++      allowFileSystemAccess: balancedFileSystemAccess,
+       allowWebLocks: chance(5),
++      allowContacts: balancedContacts,
+       allowBadging: chance(6),
+       allowWebShare: chance(5),
+       allowEyeDropper: chance(1),
+@@ -2138,18 +2252,35 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       allowShapeDetection: chance(2),
+       allowWebSockets: chance(98),
+       allowWebTransport: chance(90),
++      allowPrivacySandboxApis: balancedPrivacySandbox,
+       allowSpeechSynthesis: chance(4),
+     };
+     const compatibleProfile: Record<string, boolean> = {
+       ...balancedProfile,
+       reduceSystemInfo: false,
+       pdfViewerEnabled: true,
++      allowGeolocation: compatibleGeolocation,
++      allowMediaCapture: compatibleMediaCapture,
++      allowDisplayCapture: compatibleDisplayCapture,
++      allowDeviceApis: compatibleDeviceApis,
+       allowGamepads: chance(8),
++      allowSensorApis: compatibleSensorApis,
++      allowMidi: compatibleMidi,
++      allowLocalNetworkApis: compatibleLocalNetwork,
++      allowWebNfc: compatibleWebNfc,
+       allowWindowManagement: chance(3),
+       allowPresentationApis: compatiblePresentation,
+       allowRemotePlayback: compatiblePresentation && chance(60),
++      allowWebXr: compatibleWebXr,
++      allowPlatformCredentials: compatiblePlatformCredentials,
+       allowKeyboardLayout: chance(3),
++      allowLocalFonts: compatibleLocalFonts,
++      allowRealBatteryStatus: compatibleRealBattery,
++      allowPersistentDeviceId: compatiblePersistentDeviceId,
++      allowInstalledApps: compatibleInstalledApps,
++      allowManagedDevice: compatibleManagedDevice,
+       allowNotifications: chance(10),
++      allowProtectedMediaIdentifier: compatibleMediaIdentifier,
+       allowPersistentStorage: memoryRich && chance(14),
+       allowBackgroundSync: chance(18),
+       allowClipboard: chance(8),
+@@ -2161,7 +2292,9 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       allowFullscreen: chance(35),
+       allowWebAppInstallation: chance(5),
+       allowWebPrinting: chance(8),
++      allowFileSystemAccess: compatibleFileSystemAccess,
+       allowWebLocks: chance(8),
++      allowContacts: compatibleContacts,
+       allowBadging: chance(14),
+       allowWebShare: chance(12),
+       allowEyeDropper: chance(3),
+@@ -2173,7 +2306,7 @@ export class SettingsHeliumPersonaPageElement extends PolymerElement {
+       allowWebTransport: chance(96),
+       allowAiApis: chance(1),
+       allowWebNn: chance(1),
+-      allowPrivacySandboxApis: chance(1),
++      allowPrivacySandboxApis: compatiblePrivacySandbox,
+       allowPrivateStateTokens: chance(2),
+       allowSpeechSynthesis: chance(10),
+       allowHandwritingRecognition: chance(2),
+diff --git a/components/helium_persona/persona_validation.cc b/components/helium_persona/persona_validation.cc
+index ea06fa3..278d3c3 100644
+--- a/components/helium_persona/persona_validation.cc
++++ b/components/helium_persona/persona_validation.cc
+@@ -445,8 +445,20 @@ bool PersonaHasRequiredFields(const base::Value::Dict& persona) {
+                                         "maxAnisotropy") &&
+          HasNestedProfilePositiveInt(persona, "gpu", "webgl2Profile",
+                                      "max3DTextureSize") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgl2Profile",
++                                     "maxArrayTextureLayers") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgl2Profile",
++                                     "maxColorAttachments") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgl2Profile",
++                                     "maxDrawBuffers") &&
+          HasNestedProfilePositiveInt(persona, "gpu", "webgl2Profile",
+                                      "maxUniformBlockSize") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgl2Profile",
++                                     "uniformBufferOffsetAlignment") &&
++         HasNestedProfilePositiveDouble(persona, "gpu", "webgl2Profile",
++                                        "maxTextureLodBias") &&
++         HasNestedProfilePositiveInt(persona, "gpu", "webgl2Profile",
++                                     "maxSamples") &&
+          HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
+                                      "maxTextureDimension1D") &&
+          HasNestedProfilePositiveInt(persona, "gpu", "webgpuProfile",
