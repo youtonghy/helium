@@ -1,0 +1,4 @@
+interface:
+  display_name: "Helium Validate"
+  short_description: "Run Helium CI-equivalent checks"
+  default_prompt: "Use $helium-validate after editing this repository to run the right local validation checks."
