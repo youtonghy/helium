@@ -104,42 +104,6 @@
    <template is="dom-if" if="[[isAdPrivacyAvailable_]]" restamp>
      <template is="dom-if" if="[[renderView_(
          routes_.PRIVACY_SANDBOX, currentRoute, inSearchMode)]]"
---- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
-+++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
-@@ -165,6 +165,12 @@ export class SettingsPrivacyPageElement
-     Router.getInstance().navigateTo(routes.SITE_SETTINGS);
-   }
- 
-+  private onHeliumServicesPageClick_() {
-+    this.interactedWithPage_();
-+
-+    Router.getInstance().navigateTo(routes.HELIUM_SERVICES);
-+  }
-+
-   private onSecurityPageClick_() {
-     this.interactedWithPage_();
-     this.metricsBrowserProxy_.recordAction(
-@@ -227,6 +233,10 @@ export class SettingsPrivacyPageElement
-   override getFocusConfig() {
-     const map = new Map();
- 
-+    if (routes.HELIUM_SERVICES) {
-+      map.set(routes.HELIUM_SERVICES.path, '#heliumServicesLinkRow');
-+    }
-+
-     if (routes.COOKIES) {
-       map.set(routes.COOKIES.path, '#thirdPartyCookiesLinkRow');
-     }
-@@ -254,6 +264,9 @@ export class SettingsPrivacyPageElement
-   override getAssociatedControlFor(childViewId: string): HTMLElement {
-     let triggerId: string|null = null;
-     switch (childViewId) {
-+      case 'heliumServices':
-+        triggerId = 'heliumServicesLinkRow';
-+        break;
-       case 'cookies':
-         triggerId = 'thirdPartyCookiesLinkRow';
-         break;
 --- a/chrome/browser/resources/settings/router.ts
 +++ b/chrome/browser/resources/settings/router.ts
 @@ -34,6 +34,7 @@ export interface SettingsRoutes {
