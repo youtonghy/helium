@@ -1,12 +1,12 @@
-# Contributing to Helium
+# Contributing to Nitrous
 
-This repository contains Helium's shared Chromium patches, resources, and
+This repository contains Nitrous's shared Chromium patches, resources, and
 development tooling. Platform-specific packaging and build environments live in
 the platform repositories:
 
-- [Helium for macOS](https://github.com/imputnet/helium-macos)
-- [Helium for Linux](https://github.com/imputnet/helium-linux)
-- [Helium for Windows](https://github.com/imputnet/helium-windows)
+- [Nitrous for macOS](https://github.com/imputnet/helium-macos)
+- [Nitrous for Linux](https://github.com/imputnet/helium-linux)
+- [Nitrous for Windows](https://github.com/imputnet/helium-windows)
 
 The same contribution guidelines apply to all platform repos.
 
@@ -69,12 +69,12 @@ When working in a platform repository, the usual workflow is:
 ## Code style
 
 - Follow Chromium style and conventions.
-- Prefer existing Chromium or Helium patterns over introducing new abstractions.
+- Prefer existing Chromium or Nitrous patterns over introducing new abstractions.
 - Keep changes focused and minimal.
 - Proofread surrounding code before submitting.
 - When adding new Helium-authored files to the Chromium tree, include the Helium
   copyright header used in other patches.
-- Refer to existing Helium patches for guidance if necessary.
+- Refer to existing Nitrous patches for guidance if necessary.
 
 ## Git style
 
@@ -154,7 +154,7 @@ changes into several follow-up PRs if necessary.
 
 ## Licensing
 
-By contributing to Helium, you agree that your changes will be licensed under
+By contributing to Nitrous, you agree that your changes will be licensed under
 the repository's existing licensing terms.
 
 <!-- Long referenced links -->
