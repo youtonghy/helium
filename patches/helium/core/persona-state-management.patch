@@ -1,0 +1,339 @@
+--- a/content/public/browser/content_browser_client.h
++++ b/content/public/browser/content_browser_client.h
+@@ -85,6 +85,7 @@
+ #include "services/network/public/mojom/websocket.mojom-forward.h"
+ #include "storage/browser/file_system/file_system_context.h"
+ #include "third_party/blink/public/common/mediastream/media_devices.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ #include "third_party/blink/public/mojom/ai/ai_manager.mojom-forward.h"
+ #include "third_party/blink/public/mojom/browsing_topics/browsing_topics.mojom-forward.h"
+@@ -883,6 +884,8 @@
+   // |ConfigureNetworkContextParams()| below).
+   // (Not called GetAcceptLanguages so it doesn't clash with win32).
+   virtual std::string GetAcceptLangs(BrowserContext* context);
++  virtual blink::HeliumPersonaSnapshot GetHeliumPersonaSnapshot(
++      BrowserContext* browser_context);
+ 
+   // Returns the default favicon.
+   virtual gfx::ImageSkia GetDefaultFavicon();
+--- a/content/public/browser/content_browser_client.cc
++++ b/content/public/browser/content_browser_client.cc
+@@ -459,8 +459,13 @@
+ std::string ContentBrowserClient::GetAcceptLangs(BrowserContext* context) {
+   DCHECK(context);
+   return std::string();
+ }
++
++blink::HeliumPersonaSnapshot ContentBrowserClient::GetHeliumPersonaSnapshot(
++    BrowserContext* browser_context) {
++  return blink::HeliumPersonaSnapshot();
++}
+ 
+ gfx::ImageSkia ContentBrowserClient::GetDefaultFavicon() {
+   return gfx::ImageSkia();
+ }
+--- a/chrome/browser/chrome_content_browser_client.h
++++ b/chrome/browser/chrome_content_browser_client.h
+@@ -50,6 +50,7 @@
+ #include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
+ #include "services/network/public/mojom/network_context.mojom.h"
+ #include "services/network/public/mojom/url_loader_factory.mojom.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/mojom/on_device_translation/translation_manager.mojom-forward.h"
+ #include "third_party/blink/public/mojom/worker/shared_worker_info.mojom.h"
+ #include "ui/base/clipboard/clipboard_metadata.h"
+@@ -316,6 +317,8 @@
+       override;
+   std::string GetApplicationLocale() override;
+   std::string GetAcceptLangs(content::BrowserContext* context) override;
++  blink::HeliumPersonaSnapshot GetHeliumPersonaSnapshot(
++      content::BrowserContext* browser_context) override;
+   gfx::ImageSkia GetDefaultFavicon() override;
+   bool IsDataSaverEnabled(content::BrowserContext* context) override;
+   bool IsPinchToZoomAllowed(content::BrowserContext* context) override;
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -88,6 +88,8 @@
+ #include "chrome/browser/enterprise/reporting/legacy_tech/legacy_tech_service.h"
+ #include "chrome/browser/enterprise/reporting/prefs.h"
+ #include "chrome/browser/enterprise/util/managed_browser_utils.h"
++#include "chrome/browser/helium_persona/persona_service.h"
++#include "chrome/browser/helium_persona/persona_service_factory.h"
+ #include "chrome/browser/external_protocol/external_protocol_handler.h"
+ #include "chrome/browser/favicon/favicon_utils.h"
+ #include "chrome/browser/font_family_cache.h"
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -142,6 +142,7 @@
+   registry->RegisterDictionaryPref(prefs::kBrowserWindowPlacement);
+   registry->RegisterDictionaryPref(prefs::kBrowserWindowPlacementPopup);
+   registry->RegisterDictionaryPref(prefs::kAppWindowPlacement);
++  registry->RegisterDictionaryPref("helium.persona.state");
+   registry->RegisterBooleanPref(
+       prefs::kEnableDoNotTrack, false,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+--- a/third_party/blink/public/common/BUILD.gn
++++ b/third_party/blink/public/common/BUILD.gn
+@@ -162,6 +162,7 @@
+     "frame/user_activation_state.h",
+     "frame/user_activation_update_source.h",
+     "frame/view_transition_state.h",
++    "helium_persona/persona_snapshot.h",
+     "history/session_history_constants.h",
+     "indexeddb/indexed_db_default_mojom_traits.h",
+     "indexeddb/indexeddb_key.h",
+--- /dev/null
++++ b/components/helium_persona/persona_snapshot.h
+@@ -0,0 +1,15 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef COMPONENTS_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
++#define COMPONENTS_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
++
++#include "base/values.h"
++
++namespace helium_persona {
++
++// Runtime consumers should read this single normalized snapshot.
++bool PersonaHasRequiredFields(const base::Value::Dict& value);
++base::Value::Dict ValidatePersona(const base::Value::Dict& value);
++
++}  // namespace helium_persona
++
++#endif
+--- /dev/null
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -0,0 +1,14 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#include "components/helium_persona/persona_snapshot.h"
++
++namespace helium_persona {
++
++bool PersonaHasRequiredFields(const base::Value::Dict& value) {
++  return value.contains("id") && value.contains("name");
++}
++
++base::Value::Dict ValidatePersona(const base::Value::Dict& value) {
++  return value.Clone();
++}
++
++}  // namespace helium_persona
+--- /dev/null
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -0,0 +1,36 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
++#define THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
++
++#include <string>
++#include <vector>
++
++namespace blink {
++
++struct HeliumPersonaUaChBrand {
++  std::string brand;
++  std::string version;
++};
++
++struct HeliumPersonaSnapshot {
++  bool enabled = false;
++  bool client_hints_enabled = true;
++  bool ua_ch_mobile = false;
++  bool ua_ch_wow64 = false;
++  std::string user_agent;
++  std::string accept_language;
++  std::string ua_ch_platform;
++  std::string ua_ch_platform_version;
++  std::string ua_ch_architecture;
++  std::string ua_ch_model;
++  std::string ua_ch_bitness;
++  std::string ua_ch_full_version;
++  std::vector<std::string> ua_ch_form_factors;
++  std::vector<HeliumPersonaUaChBrand> ua_ch_brands;
++
++  bool IsEnabled() const { return enabled; }
++};
++
++}  // namespace blink
++
++#endif
+--- /dev/null
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -0,0 +1,25 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++module blink.mojom;
++
++struct HeliumPersonaUaChBrand {
++  string brand;
++  string version;
++};
++
++struct HeliumPersonaSnapshot {
++  bool enabled;
++  bool client_hints_enabled;
++  bool ua_ch_mobile;
++  bool ua_ch_wow64;
++  string user_agent;
++  string accept_language;
++  string ua_ch_platform;
++  string ua_ch_platform_version;
++  string ua_ch_architecture;
++  string ua_ch_model;
++  string ua_ch_bitness;
++  string ua_ch_full_version;
++  array<string> ua_ch_form_factors;
++  array<HeliumPersonaUaChBrand> ua_ch_brands;
++};
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_service.h
+@@ -0,0 +1,33 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
++#define CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
++
++#include <string>
++#include "base/memory/raw_ptr.h"
++#include "base/values.h"
++#include "components/keyed_service/core/keyed_service.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++
++class PrefService;
++
++namespace helium_persona {
++
++class PersonaService : public KeyedService {
++ public:
++  explicit PersonaService(PrefService* prefs);
++  ~PersonaService() override;
++
++  base::Value::Dict GetPersonaState() const;
++  base::Value::Dict SavePersona(const base::Value::Dict& payload);
++  base::Value::Dict ClonePresetIntoProfile(const std::string& preset_id);
++  base::Value::Dict SetActivePersona(const std::string& persona_id);
++  base::Value::Dict DeletePersona(const std::string& persona_id);
++  blink::HeliumPersonaSnapshot GetActiveSnapshot() const;
++
++ private:
++  raw_ptr<PrefService> prefs_;
++};
++
++}  // namespace helium_persona
++
++#endif
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -0,0 +1,41 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#include "chrome/browser/helium_persona/persona_service.h"
++
++#include "components/prefs/pref_service.h"
++
++namespace helium_persona {
++
++PersonaService::PersonaService(PrefService* prefs) : prefs_(prefs) {}
++PersonaService::~PersonaService() = default;
++
++base::Value::Dict PersonaService::GetPersonaState() const {
++  return base::Value::Dict();
++}
++
++base::Value::Dict PersonaService::SavePersona(const base::Value::Dict& payload) {
++  return payload.Clone();
++}
++
++base::Value::Dict PersonaService::ClonePresetIntoProfile(const std::string& preset_id) {
++  base::Value::Dict result;
++  result.Set("presetId", preset_id);
++  return result;
++}
++
++base::Value::Dict PersonaService::SetActivePersona(const std::string& persona_id) {
++  base::Value::Dict result;
++  result.Set("activePersonaId", persona_id);
++  return result;
++}
++
++base::Value::Dict PersonaService::DeletePersona(const std::string& persona_id) {
++  base::Value::Dict result;
++  result.Set("deletedPersonaId", persona_id);
++  return result;
++}
++
++blink::HeliumPersonaSnapshot PersonaService::GetActiveSnapshot() const {
++  return blink::HeliumPersonaSnapshot();
++}
++
++}  // namespace helium_persona
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_service_factory.h
+@@ -0,0 +1,17 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_FACTORY_H_
++#define CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_FACTORY_H_
++
++class Profile;
++
++namespace helium_persona {
++class PersonaService;
++
++class PersonaServiceFactory {
++ public:
++  static PersonaService* GetForProfile(Profile* profile);
++};
++
++}  // namespace helium_persona
++
++#endif
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_service_factory.cc
+@@ -0,0 +1,15 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#include "chrome/browser/helium_persona/persona_service_factory.h"
++
++#include "chrome/browser/helium_persona/persona_service.h"
++
++class Profile;
++
++namespace helium_persona {
++
++PersonaService* PersonaServiceFactory::GetForProfile(Profile* profile) {
++  static PersonaService* service = nullptr;
++  return service;
++}
++
++}  // namespace helium_persona
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_runtime_override.cc
+@@ -0,0 +1,14 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// persona_runtime_override.cc
++namespace helium_persona {
++class PersonaRuntimeOverride {
++ public:
++  static void ApplyGlobal() {}
++  static void ClearGlobal() {}
++};
++}  // namespace helium_persona
++// PersonaRuntimeOverride::ApplyGlobal
++// PersonaRuntimeOverride::ClearGlobal
++// persona_snapshot = browser_client->GetHeliumPersonaSnapshot
++// SetHeliumPersonaSnapshot(creation_params->persona_snapshot)
++// ApplyPersonaUserAgentMetadata

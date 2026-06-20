@@ -1,0 +1,76 @@
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/persona_randomization_tokens.txt
+@@ -0,0 +1,58 @@
++Copyright 2026 The Helium Authors
++You can use, redistribute, and/or modify this source code under the terms of the GPL-3.0 license that can be found in the LICENSE file.
++onRandomizePersonaClick_
++makeRandomNoiseSeed_
++applyRandomRegion_
++applyRandomHardware_
++applyRandomGpu_
++applyRandomUaVersion_
++applyRandomScreen_
++applyRandomMediaDevices_
++applyRandomDisplayPreferences_
++applyRandomNetwork_
++applyRandomAdvancedSurface_
++applyConsistentRandomFonts_
++applyConsistentRandomDeviceLabel_
++applyConsistentRandomUaChIdentity_
++randomChromePlatformVersion_
++makeRandomChromeFullVersion_
++makeRandomUaChGreaseBrand_
++deriveUaChFullVersionList_
++fullVersionList
++navigatorVendor
++timezone
++locale
++acceptLanguage
++source.region
++hardwareConcurrency
++deviceMemory
++maxTouchPoints
++touchEnabled
++makeGpuProfile_
++makeWebGlProfile_
++makeWebGl2Profile_
++makeWebGpuProfile_
++webglProfile
++webgl2Profile
++webgpuProfile
++webgpuFeatures
++makeScreenProfile_
++outerWidth
++windowScreenX
++deviceScaleFactor
++orientationType
++colorGamut
++dynamicRange
++monochromeDepth
++fontPackProfiles_
++fontRenderingProfiles_
++localeScopedFontPredicates_
++fontRendering
++persona.fontRendering = JSON.parse(JSON.stringify(rendering));
++makePersonaDeviceToken_
++videoFrameRate
++audioBaseLatency
++audioOutputLatency
++voiceIsolation
++effectiveType
++downlinkMax
++saveData
++online
++allowGeolocation
++allowMediaCapture
++allowLocalFonts
++allowWebSockets
++allowWebTransport
++allowAiApis
++allowWebNn
++allowPrivacySandboxApis
++allowPrivateStateTokens
++allowSpeechSynthesis
++allowHandwritingRecognition
++storageQuotaGb
++webdriverEnabled
