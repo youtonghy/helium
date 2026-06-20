@@ -4,41 +4,41 @@
        </message>
      </if>
  
-+    <!-- Helium Services Privacy Settings (helium://settings/privacy/services) -->
-+    <message name="IDS_SETTINGS_HELIUM_SERVICES" desc="Name of the page which controls connectivity to Helium services">
-+      Helium services
++    <!-- Nitrous Services Privacy Settings (nitrous://settings/privacy/services) -->
++    <message name="IDS_SETTINGS_HELIUM_SERVICES" desc="Name of the page which controls connectivity to Nitrous services">
++      Nitrous services
 +    </message>
-+    <message name="IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION" desc="Description of the controls available on the Helium services settings page">
-+      Manage what Helium services are allowed in your browser
++    <message name="IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION" desc="Description of the controls available on the Nitrous services settings page">
++      Manage what Nitrous services are allowed in your browser
 +    </message>
-+    <message name="IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE" desc="Title of the alert shown when Helium services have a change in behavior">
-+      Updates to Helium services:
++    <message name="IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE" desc="Title of the alert shown when Nitrous services have a change in behavior">
++      Updates to Nitrous services:
 +    </message>
-+    <message name="IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION" desc="Description of the alert shown when Helium services have a change in behavior">
++    <message name="IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION" desc="Description of the alert shown when Nitrous services have a change in behavior">
 +      These changes are not active until you dismiss this notice.
 +    </message>
 +    <message name="IDS_SETTINGS_HELIUM_SCHEMA_IGNORE" desc="Checkbox label to ignore any future services change alerts">
 +      Don't notify me again
 +    </message>
-+    <message name="IDS_SETTINGS_HELIUM_SERVICES_TOGGLE" desc="Global toggle for enabling/disabling of all Helium services">
-+      Allow connecting to Helium services
++    <message name="IDS_SETTINGS_HELIUM_SERVICES_TOGGLE" desc="Global toggle for enabling/disabling of all Nitrous services">
++      Allow connecting to Nitrous services
 +    </message>
-+    <message name="IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION" desc="Description of the toggle for enabling/disabling of all Helium services">
-+      When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.
++    <message name="IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION" desc="Description of the toggle for enabling/disabling of all Nitrous services">
++      When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.
 +    </message>
-+    <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE" desc="Text input for overriding the Helium services server">
-+      Use your own instance of Helium services
++    <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE" desc="Text input for overriding the Nitrous services server">
++      Use your own instance of Nitrous services
 +    </message>
-+    <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION" desc="Description of the text input for overriding the Helium services server">
-+      You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.
++    <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION" desc="Description of the text input for overriding the Nitrous services server">
++      You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.
 +    </message>
-+    <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING" desc="Warning section of description for overriding the Helium services server">
++    <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING" desc="Warning section of description for overriding the Nitrous services server">
 +      Do not use this field unless you know exactly what you are doing. Never paste URLs from other people here, they are trying to steal your data. We are not responsible for any damages caused by using a custom server and will not be able to help you.
 +    </message>
-+    <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL" desc="ARIA label of the text input for overriding the Helium services server">
-+      Custom origin URL for Helium services
++    <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL" desc="ARIA label of the text input for overriding the Nitrous services server">
++      Custom origin URL for Nitrous services
 +    </message>
-+    <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN" desc="Validation error shown when the custom Helium services origin is invalid.">
++    <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN" desc="Validation error shown when the custom Nitrous services origin is invalid.">
 +      Invalid origin
 +    </message>
 +
@@ -197,12 +197,12 @@
 +          </div>
 +        </template>
 +    <settings-toggle-button id="servicesToggleButton"
-+        pref="{{prefs.helium.services.enabled}}"
++        pref="{{prefs.nitrous.services.enabled}}"
 +        label="$i18n{heliumServicesToggle}"
 +        sub-label="$i18n{heliumServicesToggleDescription}">
 +    </settings-toggle-button>
 +    <div class="cr-col">
-+        <cr-collapse id="servicesCollapse" opened="[[prefs.helium.services.enabled.value]]">
++        <cr-collapse id="servicesCollapse" opened="[[prefs.nitrous.services.enabled.value]]">
 +        </cr-collapse>
 +    </div>
 +</div>
@@ -221,7 +221,7 @@
 +    <cr-input
 +        id="heliumOriginOverride"
 +        placeholder="https://services.helium.imput.net"
-+        value="[[prefs.helium.services.origin_override.value]]"
++        value="[[prefs.nitrous.services.origin_override.value]]"
 +        pattern="https://.*"
 +        on-keydown="onOriginOverrideKeydown_"
 +        on-change="onOriginOverrideChange_"
@@ -332,7 +332,7 @@
 +      target.value = origin;
 +    }
 +
-+    this.setPrefValue('helium.services.origin_override', target.value);
++    this.setPrefValue('nitrous.services.origin_override', target.value);
 +  }
 +}
 +
@@ -549,16 +549,16 @@
 +namespace prefs {
 +
 +inline constexpr char kHeliumSchemaVersion[] =
-+    "helium.services.schema_version";
++    "nitrous.services.schema_version";
 +
 +inline constexpr char kHeliumDisableSchemaAlerts[] =
-+    "helium.services.disable_schema_alerts";
++    "nitrous.services.disable_schema_alerts";
 +
 +inline constexpr char kHeliumServicesEnabled[] =
-+    "helium.services.enabled";
++    "nitrous.services.enabled";
 +
 +inline constexpr char kHeliumServicesOrigin[] =
-+    "helium.services.origin_override";
++    "nitrous.services.origin_override";
 +
 +}  // namespace prefs
 +
@@ -680,7 +680,7 @@
 +          {
 +            1,
 +            "Automatic component updates are now available. They're managed by the same toggle that enables automatic browser updates.\n"
-+            "From now on, you'll be notified about major changes to Helium services. Even though these notifications are extremely rare, you can choose to ignore them and accept all future changes automatically."
++            "From now on, you'll be notified about major changes to Nitrous services. Even though these notifications are extremely rare, you can choose to ignore them and accept all future changes automatically."
 +          }
 +      });
 +
