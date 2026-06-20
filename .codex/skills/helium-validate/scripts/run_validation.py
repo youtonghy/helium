@@ -78,6 +78,13 @@ def run_status(command, *, cwd=ROOT):
     return subprocess.run([str(part) for part in command], cwd=cwd, check=False).returncode
 
 
+def git_check_ignore(path):
+    result = subprocess.run(['git', 'check-ignore', '-q', str(path)],
+                            cwd=ROOT,
+                            check=False)
+    return result.returncode == 0
+
+
 def git_lines(args):
     result = subprocess.run(['git', *args],
                             cwd=ROOT,
@@ -109,9 +116,28 @@ def path_in(paths):
     return lambda path: path in paths
 
 
+def non_ignored_python_files(prefix):
+    return sorted(str(path) for path in (ROOT / prefix).rglob('*.py') if not git_check_ignore(path))
+
+
+def yapf_check_command(python, prefix):
+    files = non_ignored_python_files(prefix)
+    return [
+        python,
+        '-m',
+        'yapf',
+        '--style',
+        '.style.yapf',
+        '-e',
+        '*/third_party/*',
+        '-dp',
+        *files,
+    ]
+
+
 def utils_checks(python):
     return [
-        [python, '-m', 'yapf', '--style', '.style.yapf', '-e', '*/third_party/*', '-rpd', 'utils'],
+        yapf_check_command(python, 'utils'),
         ['./devutils/run_utils_pylint.py', '--hide-fixme'],
         ['./devutils/run_utils_tests.sh'],
     ]
@@ -119,7 +145,7 @@ def utils_checks(python):
 
 def devutils_checks(python):
     return [
-        [python, '-m', 'yapf', '--style', '.style.yapf', '-e', '*/third_party/*', '-rpd', 'devutils'],
+        yapf_check_command(python, 'devutils'),
         ['./devutils/run_devutils_pylint.py', '--hide-fixme'],
         ['./devutils/run_devutils_tests.sh'],
     ]

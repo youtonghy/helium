@@ -8,6 +8,7 @@
 import argparse
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -30,6 +31,14 @@ class ChangeDir:
         os.chdir(self._orig_path)
 
 
+def _is_git_ignored(path):
+    result = subprocess.run(['git', 'check-ignore', '-q', str(path)],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            check=False)
+    return result.returncode == 0
+
+
 def run_pylint(module_path, pylint_options, ignore_prefixes=tuple()):
     """Runs Pylint. Returns a boolean indicating success"""
     pylint_stats = Path(f'/run/user/{os.getuid()}/pylint_stats')
@@ -43,6 +52,8 @@ def run_pylint(module_path, pylint_options, ignore_prefixes=tuple()):
         sys.exit(1)
     if module_path.is_dir():
         for path in module_path.rglob('*.py'):
+            if _is_git_ignored(path):
+                continue
             ignore_matched = False
             for prefix in ignore_prefixes:
                 if path.parts[:len(prefix)] == prefix:

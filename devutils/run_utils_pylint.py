@@ -39,7 +39,7 @@ def main():
     ]
 
     sys.path.insert(1, str(Path(__file__).resolve().parent.parent / 'utils' / 'third_party'))
-    sys.path.append(Path(__file__).resolve().parent.parent / 'utils')
+    sys.path.append(str(Path(__file__).resolve().parent.parent / 'utils'))
     with ChangeDir(Path(__file__).resolve().parent.parent / 'utils'):
         result = run_pylint(
             Path(),
