@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium ដោះលែងមេម៉ូរីពីថេបអសកម្ម។ នេះបណ្តាលឱ្យថេបសកម្ម និងកម្មវិធីផ្សេងៗទៀតនូវធនធានកុំព្យូទ័រកាន់តែច្រើន និងរក្សា Helium ឱ្យលឿន។ ថេបអសកម្មរបស់អ្នកនឹងសកម្មឡើងវិញដោយស្វ័យប្រវត្តិនៅពេលអ្នកត្រឡប់ទៅកាន់វា។"
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous ដោះលែងមេម៉ូរីពីថេបអសកម្ម។ នេះបណ្តាលឱ្យថេបសកម្ម និងកម្មវិធីផ្សេងៗទៀតនូវធនធានកុំព្យូទ័រកាន់តែច្រើន និងរក្សា Nitrous ឱ្យលឿន។ ថេបអសកម្មរបស់អ្នកនឹងសកម្មឡើងវិញដោយស្វ័យប្រវត្តិនៅពេលអ្នកត្រឡប់ទៅកាន់វា។"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium សន្សំថាមពលថ្មដោយកំណត់សកម្មភាពនៃកម្មវិធីផ្សេងៗទៀត និង Visual Effects ដូចជាការអូសដោយរលូន និងហ្វ្រេមរ៉េតវីដេអូ។"
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous សន្សំថាមពលថ្មដោយកំណត់សកម្មភាពនៃកម្មវិធីផ្សេងៗទៀត និង Visual Effects ដូចជាការអូសដោយរលូន និងហ្វ្រេមរ៉េតវីដេអូ។"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium ផ្ទុកទំព័រជាមុន ដែលធ្វើឱ្យការរុករក និងការស្វែងរកលឿនជាងមុន។"
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous ផ្ទុកទំព័រជាមុន ដែលធ្វើឱ្យការរុករក និងការស្វែងរកលឿនជាងមុន។"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "នាំចូលពី <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "នាំចូលពី <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "សេវាកម្ម Helium"
+    "source": "Nitrous services",
+    "message": "សេវាកម្ម Nitrous"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "គ្រប់គ្រងសេវាកម្ម Helium ណាមួយដែលត្រូវបានអនុញ្ញាតក្នុង Browser របស់អ្នក"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "គ្រប់គ្រងសេវាកម្ម Nitrous ណាមួយដែលត្រូវបានអនុញ្ញាតក្នុង Browser របស់អ្នក"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "បច្ចុប្បន្នភាពសេវាកម្ម Helium៖"
+    "source": "Updates to Nitrous services:",
+    "message": "បច្ចុប្បន្នភាពសេវាកម្ម Nitrous៖"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "អនុញ្ញាតការតភ្ជាប់ទៅសេវាកម្ម Helium"
+    "source": "Allow connecting to Nitrous services",
+    "message": "អនុញ្ញាតការតភ្ជាប់ទៅសេវាកម្ម Nitrous"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "នៅពេលបើក Helium នឹងអាចតភ្ជាប់ទៅសេវាកម្មបណ្ដាញអនាមិកដើម្បីផ្តល់មុខងារបន្ថែម។ នៅពេលបិទ មុខងារបន្ថែមនឹងមិនដំណើរការទេ។"
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "នៅពេលបើក Nitrous នឹងអាចតភ្ជាប់ទៅសេវាកម្មបណ្ដាញអនាមិកដើម្បីផ្តល់មុខងារបន្ថែម។ នៅពេលបិទ មុខងារបន្ថែមនឹងមិនដំណើរការទេ។"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "ប្រើម៉ាស៊ីនបម្រើសេវាកម្ម Helium ផ្ទាល់ខ្លួនរបស់អ្នក"
+    "source": "Use your own instance of Nitrous services",
+    "message": "ប្រើម៉ាស៊ីនបម្រើសេវាកម្ម Nitrous ផ្ទាល់ខ្លួនរបស់អ្នក"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "អ្នកអាចបង្ហោះម៉ាស៊ីនបម្រើសេវាកម្ម Helium ផ្ទាល់ខ្លួនរបស់អ្នក ហើយប្រើវាក្នុង Browser របស់អ្នកជំនួសម៉ាស៊ីនបម្រើដើម។ HTTPS តែប៉ុណ្ណោះ។"
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "អ្នកអាចបង្ហោះម៉ាស៊ីនបម្រើសេវាកម្ម Nitrous ផ្ទាល់ខ្លួនរបស់អ្នក ហើយប្រើវាក្នុង Browser របស់អ្នកជំនួសម៉ាស៊ីនបម្រើដើម។ HTTPS តែប៉ុណ្ណោះ។"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "URL ប្រភពផ្ទាល់ខ្លួនសម្រាប់សេវាកម្ម Helium"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "URL ប្រភពផ្ទាល់ខ្លួនសម្រាប់សេវាកម្ម Nitrous"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "សេវាកម្ម Helium ត្រូវបានធ្វើបច្ចុប្បន្នភាព។ សូមពិនិត្យមើលការផ្លាស់ប្តូរ។"
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "សេវាកម្ម Nitrous ត្រូវបានធ្វើបច្ចុប្បន្នភាព។ សូមពិនិត្យមើលការផ្លាស់ប្តូរ។"
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "ពិនិត្យបច្ចុប្បន្នភាពសេវាកម្ម Helium"
+    "source": "Review Nitrous services updates",
+    "message": "ពិនិត្យបច្ចុប្បន្នភាពសេវាកម្ម Nitrous"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "លំនាំដើម Helium"
+    "source": "Nitrous defaults",
+    "message": "លំនាំដើម Nitrous"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Helium ត្រូវការការចូលប្រើថាសពេញលេញ ដើម្បីនាំចូលចំណាំរបស់អ្នកពី Safari។"
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Nitrous ត្រូវការការចូលប្រើថាសពេញលេញ ដើម្បីនាំចូលចំណាំរបស់អ្នកពី Safari។"
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

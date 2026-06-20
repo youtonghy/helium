@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium သည် အသုံးမပြုသော တက်ဘ်များမှ မမ်မိုရီကို လွတ်ပေးပါသည်။ ၎င်းသည် အသုံးပြုနေသော တက်ဘ်များနှင့် အခြားအက်ပ်များအတွက် ကွန်ပျူတာ အရင်းအမြစ်များကို ပိုမိုရရှိစေပြီး Helium ကို မြန်ဆန်စေပါသည်။ အသုံးမပြုသော တက်ဘ်များသို့ ပြန်သွားသောအခါ ၎င်းတို့သည် အလိုအလျောက် ပြန်လည်အသက်ဝင်ပါသည်။"
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous သည် အသုံးမပြုသော တက်ဘ်များမှ မမ်မိုရီကို လွတ်ပေးပါသည်။ ၎င်းသည် အသုံးပြုနေသော တက်ဘ်များနှင့် အခြားအက်ပ်များအတွက် ကွန်ပျူတာ အရင်းအမြစ်များကို ပိုမိုရရှိစေပြီး Nitrous ကို မြန်ဆန်စေပါသည်။ အသုံးမပြုသော တက်ဘ်များသို့ ပြန်သွားသောအခါ ၎င်းတို့သည် အလိုအလျောက် ပြန်လည်အသက်ဝင်ပါသည်။"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium သည် နောက်ခံလုပ်ဆောင်ချက်များနှင့် ချောမွေ့စွာ scroll လုပ်ခြင်း၊ ဗီဒီယို frame rate များကဲ့သို့ အမြင်အာနိသင်များကို ကန့်သတ်ခြင်းဖြင့် ဘက်ထရီပါဝါကို ချွေတာပါသည်။"
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous သည် နောက်ခံလုပ်ဆောင်ချက်များနှင့် ချောမွေ့စွာ scroll လုပ်ခြင်း၊ ဗီဒီယို frame rate များကဲ့သို့ အမြင်အာနိသင်များကို ကန့်သတ်ခြင်းဖြင့် ဘက်ထရီပါဝါကို ချွေတာပါသည်။"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium သည် စာမျက်နှာများကို ကြိုတင်ဖွင့်ထားပေးပြီး ဝဘ်ကြည့်ရှုခြင်းနှင့် ရှာဖွေခြင်းကို ပိုမြန်ဆန်စေပါသည်။"
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous သည် စာမျက်နှာများကို ကြိုတင်ဖွင့်ထားပေးပြီး ဝဘ်ကြည့်ရှုခြင်းနှင့် ရှာဖွေခြင်းကို ပိုမြန်ဆန်စေပါသည်။"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph> မှ တင်သွင်းထားသည်"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph> မှ တင်သွင်းထားသည်"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium ဝန်ဆောင်မှုများ"
+    "source": "Nitrous services",
+    "message": "Nitrous ဝန်ဆောင်မှုများ"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "သင့်ဘရောက်ဇာတွင် Helium ဝန်ဆောင်မှုများ ခွင့်ပြုထားသည်များကို စီမံပါ"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "သင့်ဘရောက်ဇာတွင် Nitrous ဝန်ဆောင်မှုများ ခွင့်ပြုထားသည်များကို စီမံပါ"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Helium ဝန်ဆောင်မှုများ အပ်ဒိတ်များ-"
+    "source": "Updates to Nitrous services:",
+    "message": "Nitrous ဝန်ဆောင်မှုများ အပ်ဒိတ်များ-"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Helium ဝန်ဆောင်မှုများသို့ ချိတ်ဆက်ခွင့်ပြုပါ"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Nitrous ဝန်ဆောင်မှုများသို့ ချိတ်ဆက်ခွင့်ပြုပါ"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "ဖွင့်ထားသောအခါ Helium သည် အပိုလုပ်ဆောင်ချက်များ ပံ့ပိုးရန် အမည်မသိ ဝဘ်ဝန်ဆောင်မှုများသို့ ချိတ်ဆက်နိုင်ပါသည်။ ပိတ်ထားသောအခါ အပိုလုပ်ဆောင်ချက်များ အလုပ်လုပ်မည်မဟုတ်ပါ။"
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "ဖွင့်ထားသောအခါ Nitrous သည် အပိုလုပ်ဆောင်ချက်များ ပံ့ပိုးရန် အမည်မသိ ဝဘ်ဝန်ဆောင်မှုများသို့ ချိတ်ဆက်နိုင်ပါသည်။ ပိတ်ထားသောအခါ အပိုလုပ်ဆောင်ချက်များ အလုပ်လုပ်မည်မဟုတ်ပါ။"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "သင့်ကိုယ်ပိုင် Helium ဝန်ဆောင်မှု instance ကို အသုံးပြုပါ"
+    "source": "Use your own instance of Nitrous services",
+    "message": "သင့်ကိုယ်ပိုင် Nitrous ဝန်ဆောင်မှု instance ကို အသုံးပြုပါ"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "သင်သည် သင့်ကိုယ်ပိုင် Helium ဝန်ဆောင်မှု instance ကို host လုပ်ပြီး ပုံမှန်အစား သင့်ဘရောက်ဇာတွင် အသုံးပြုနိုင်ပါသည်။ HTTPS သာ။"
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "သင်သည် သင့်ကိုယ်ပိုင် Nitrous ဝန်ဆောင်မှု instance ကို host လုပ်ပြီး ပုံမှန်အစား သင့်ဘရောက်ဇာတွင် အသုံးပြုနိုင်ပါသည်။ HTTPS သာ။"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "Helium ဝန်ဆောင်မှုများအတွက် စိတ်ကြိုက် မူရင်းလိပ်စာ (origin URL)"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "Nitrous ဝန်ဆောင်မှုများအတွက် စိတ်ကြိုက် မူရင်းလိပ်စာ (origin URL)"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Helium ဝန်ဆောင်မှုများ အပ်ဒိတ်လုပ်ပြီးပါပြီ။ အပြောင်းအလဲများကို ပြန်လည်စစ်ဆေးပါ။"
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Nitrous ဝန်ဆောင်မှုများ အပ်ဒိတ်လုပ်ပြီးပါပြီ။ အပြောင်းအလဲများကို ပြန်လည်စစ်ဆေးပါ။"
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "Helium ဝန်ဆောင်မှု အပ်ဒိတ်များကို ပြန်လည်စစ်ဆေးပါ"
+    "source": "Review Nitrous services updates",
+    "message": "Nitrous ဝန်ဆောင်မှု အပ်ဒိတ်များကို ပြန်လည်စစ်ဆေးပါ"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Helium မူရင်းဆက်တင်များ"
+    "source": "Nitrous defaults",
+    "message": "Nitrous မူရင်းဆက်တင်များ"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Safari မှ သင့်စာညှပ်များကို တင်သွင်းရန် Helium သည် Full Disk Access လိုအပ်သည်။"
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Safari မှ သင့်စာညှပ်များကို တင်သွင်းရန် Nitrous သည် Full Disk Access လိုအပ်သည်။"
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

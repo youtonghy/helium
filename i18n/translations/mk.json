@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium ослободува меморија од неактивните јазичиња. Ова им дава повеќе ресурси на активните јазичиња и на другите апликации и го одржува Helium брз. Вашите неактивни јазичиња автоматски стануваат активни повторно кога ќе се вратите на нив."
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous ослободува меморија од неактивните јазичиња. Ова им дава повеќе ресурси на активните јазичиња и на другите апликации и го одржува Nitrous брз. Вашите неактивни јазичиња автоматски стануваат активни повторно кога ќе се вратите на нив."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium ја штеди батеријата со ограничување на активностите во заднина и визуелните ефекти, како мазно лизгање и стапки на видео-кадри."
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous ја штеди батеријата со ограничување на активностите во заднина и визуелните ефекти, како мазно лизгање и стапки на видео-кадри."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium претходно ги вчитува страниците, што го забрзува прелистувањето и пребарувањето."
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous претходно ги вчитува страниците, што го забрзува прелистувањето и пребарувањето."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "Увезено од <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "Увезено од <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Услуги на Helium"
+    "source": "Nitrous services",
+    "message": "Услуги на Nitrous"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "Управувајте со тоа кои услуги на Helium се дозволени во вашиот прелистувач"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "Управувајте со тоа кои услуги на Nitrous се дозволени во вашиот прелистувач"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Ажурирања на услугите на Helium:"
+    "source": "Updates to Nitrous services:",
+    "message": "Ажурирања на услугите на Nitrous:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Дозволи поврзување со услугите на Helium"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Дозволи поврзување со услугите на Nitrous"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "Кога е овозможено, Helium ќе може да се поврзува со анонимни веб-услуги за да обезбеди дополнителна функционалност. Кога е оневозможено, дополнителните функции нема да работат."
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Кога е овозможено, Nitrous ќе може да се поврзува со анонимни веб-услуги за да обезбеди дополнителна функционалност. Кога е оневозможено, дополнителните функции нема да работат."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "Користете своја инстанца на услугите на Helium"
+    "source": "Use your own instance of Nitrous services",
+    "message": "Користете своја инстанца на услугите на Nitrous"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "Можете да хостирате своја инстанца на услугите на Helium и да ја користите во прелистувачот наместо стандардната. Само HTTPS."
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Можете да хостирате своја инстанца на услугите на Nitrous и да ја користите во прелистувачот наместо стандардната. Само HTTPS."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "Сопствена URL-адреса за потекло на услугите на Helium"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "Сопствена URL-адреса за потекло на услугите на Nitrous"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Услугите на Helium се ажурирани. Ве молиме прегледајте ги промените."
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Услугите на Nitrous се ажурирани. Ве молиме прегледајте ги промените."
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "Прегледајте ги ажурирањата на услугите на Helium"
+    "source": "Review Nitrous services updates",
+    "message": "Прегледајте ги ажурирањата на услугите на Nitrous"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Стандардни поставки на Helium"
+    "source": "Nitrous defaults",
+    "message": "Стандардни поставки на Nitrous"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "На Helium му е потребен целосен пристап до дискот за да ги увезе вашите обележувачи од Safari."
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "На Nitrous му е потребен целосен пристап до дискот за да ги увезе вашите обележувачи од Safari."
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

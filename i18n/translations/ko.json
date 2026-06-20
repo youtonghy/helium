@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium은 비활성 탭에서 메모리를 확보합니다. 이를 통해 활성 탭과 다른 앱에 더 많은 컴퓨터 리소스를 제공하고 Helium을 빠르게 유지합니다. 비활성 탭은 다시 돌아가면 자동으로 활성화됩니다."
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous은 비활성 탭에서 메모리를 확보합니다. 이를 통해 활성 탭과 다른 앱에 더 많은 컴퓨터 리소스를 제공하고 Nitrous을 빠르게 유지합니다. 비활성 탭은 다시 돌아가면 자동으로 활성화됩니다."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium은 백그라운드 활동과 부드러운 스크롤 및 동영상 프레임 속도 등의 시각 효과를 제한하여 배터리를 절약합니다."
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous은 백그라운드 활동과 부드러운 스크롤 및 동영상 프레임 속도 등의 시각 효과를 제한하여 배터리를 절약합니다."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium이 페이지를 미리 로드하여 탐색 및 검색 속도를 높입니다."
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous이 페이지를 미리 로드하여 탐색 및 검색 속도를 높입니다."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>에서 가져옴"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>에서 가져옴"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium 서비스"
+    "source": "Nitrous services",
+    "message": "Nitrous 서비스"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "브라우저에서 허용할 Helium 서비스를 관리합니다"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "브라우저에서 허용할 Nitrous 서비스를 관리합니다"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Helium 서비스 업데이트:"
+    "source": "Updates to Nitrous services:",
+    "message": "Nitrous 서비스 업데이트:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Helium 서비스에 연결 허용"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Nitrous 서비스에 연결 허용"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "사용 설정하면 Helium이 익명 웹 서비스에 연결하여 추가 기능을 제공합니다. 사용 중지하면 추가 기능이 작동하지 않습니다."
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "사용 설정하면 Nitrous이 익명 웹 서비스에 연결하여 추가 기능을 제공합니다. 사용 중지하면 추가 기능이 작동하지 않습니다."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "자체 Helium 서비스 인스턴스 사용"
+    "source": "Use your own instance of Nitrous services",
+    "message": "자체 Nitrous 서비스 인스턴스 사용"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "Helium 서비스의 자체 인스턴스를 호스팅하여 기본 인스턴스 대신 브라우저에서 사용할 수 있습니다. HTTPS만 지원됩니다."
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Nitrous 서비스의 자체 인스턴스를 호스팅하여 기본 인스턴스 대신 브라우저에서 사용할 수 있습니다. HTTPS만 지원됩니다."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "Helium 서비스의 맞춤 원본 URL"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "Nitrous 서비스의 맞춤 원본 URL"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Helium 서비스가 업데이트되었습니다. 변경사항을 검토해 주세요."
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Nitrous 서비스가 업데이트되었습니다. 변경사항을 검토해 주세요."
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "Helium 서비스 업데이트 검토"
+    "source": "Review Nitrous services updates",
+    "message": "Nitrous 서비스 업데이트 검토"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Helium 기본값"
+    "source": "Nitrous defaults",
+    "message": "Nitrous 기본값"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Safari에서 북마크를 가져오려면 Helium에 전체 디스크 접근 권한이 필요합니다."
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Safari에서 북마크를 가져오려면 Nitrous에 전체 디스크 접근 권한이 필요합니다."
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

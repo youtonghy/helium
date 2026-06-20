@@ -3,19 +3,19 @@
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
     "source": "chrome/app/settings_chromium_strings.grdp",
     "context": "Description for the memory saver mode setting",
-    "message": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them."
+    "message": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
     "source": "chrome/app/settings_chromium_strings.grdp",
     "context": "Description for the energy saver mode setting",
-    "message": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates."
+    "message": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
     "source": "chrome/app/settings_chromium_strings.grdp",
     "context": "Summary for the preload pages setting",
-    "message": "Helium preloads pages which makes browsing and searching faster."
+    "message": "Nitrous preloads pages which makes browsing and searching faster."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -45,7 +45,7 @@
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
     "source": "chrome/app/generated_resources.grd",
     "context": "Message for the dialog shown when Full Disk Access is needed to import bookmarks from Safari.",
-    "message": "Helium needs Full Disk Access to import your Bookmarks from Safari."
+    "message": "Nitrous needs Full Disk Access to import your Bookmarks from Safari."
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",
@@ -63,7 +63,7 @@
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
     "source": "chrome/app/generated_resources.grd",
     "context": "Name for bookmark panel folder imported from another browser",
-    "message": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+    "message": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -80,25 +80,25 @@
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
     "source": "chrome/app/settings_strings.grdp",
-    "context": "Name of the page which controls connectivity to Helium services",
-    "message": "Helium services"
+    "context": "Name of the page which controls connectivity to Nitrous services",
+    "message": "Nitrous services"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
     "source": "chrome/app/settings_strings.grdp",
-    "context": "Description of the controls available on the Helium services settings page",
-    "message": "Manage what Helium services are allowed in your browser"
+    "context": "Description of the controls available on the Nitrous services settings page",
+    "message": "Manage what Nitrous services are allowed in your browser"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
     "source": "chrome/app/settings_strings.grdp",
-    "context": "Title of the alert shown when Helium services have a change in behavior",
-    "message": "Updates to Helium services:"
+    "context": "Title of the alert shown when Nitrous services have a change in behavior",
+    "message": "Updates to Nitrous services:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
     "source": "chrome/app/settings_strings.grdp",
-    "context": "Description of the alert shown when Helium services have a change in behavior",
+    "context": "Description of the alert shown when Nitrous services have a change in behavior",
     "message": "These changes are not active until you dismiss this notice."
   },
   {
@@ -110,61 +110,61 @@
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
     "source": "chrome/app/settings_strings.grdp",
-    "context": "Global toggle for enabling/disabling of all Helium services",
-    "message": "Allow connecting to Helium services"
+    "context": "Global toggle for enabling/disabling of all Nitrous services",
+    "message": "Allow connecting to Nitrous services"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
     "source": "chrome/app/settings_strings.grdp",
-    "context": "Description of the toggle for enabling/disabling of all Helium services",
-    "message": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work."
+    "context": "Description of the toggle for enabling/disabling of all Nitrous services",
+    "message": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
     "source": "chrome/app/settings_strings.grdp",
-    "context": "Text input for overriding the Helium services server",
-    "message": "Use your own instance of Helium services"
+    "context": "Text input for overriding the Nitrous services server",
+    "message": "Use your own instance of Nitrous services"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
     "source": "chrome/app/settings_strings.grdp",
-    "context": "Description of the text input for overriding the Helium services server",
-    "message": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only."
+    "context": "Description of the text input for overriding the Nitrous services server",
+    "message": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
     "source": "chrome/app/settings_strings.grdp",
-    "context": "Warning section of description for overriding the Helium services server",
+    "context": "Warning section of description for overriding the Nitrous services server",
     "message": "Do not use this field unless you know exactly what you are doing. Never paste URLs from other people here, they are trying to steal your data. We are not responsible for any damages caused by using a custom server and will not be able to help you."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
     "source": "chrome/app/settings_strings.grdp",
-    "context": "ARIA label of the text input for overriding the Helium services server",
-    "message": "Custom origin URL for Helium services"
+    "context": "ARIA label of the text input for overriding the Nitrous services server",
+    "message": "Custom origin URL for Nitrous services"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
     "source": "chrome/app/settings_strings.grdp",
-    "context": "Validation error shown when the custom Helium services origin is invalid.",
+    "context": "Validation error shown when the custom Nitrous services origin is invalid.",
     "message": "Invalid origin"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
     "source": "chrome/app/chromium_strings.grd",
-    "context": "The tooltip to show for the browser menu when Helium services schema changes",
-    "message": "Helium services have been updated. Please review the changes."
+    "context": "The tooltip to show for the browser menu when Nitrous services schema changes",
+    "message": "Nitrous services have been updated. Please review the changes."
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
     "source": "chrome/app/chromium_strings.grd",
-    "context": "Text for the bubble that notifies the user of a schema change in Helium services.",
-    "message": "Review Helium services updates"
+    "context": "Text for the bubble that notifies the user of a schema change in Nitrous services.",
+    "message": "Review Nitrous services updates"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
     "source": "chrome/app/generated_resources.grd",
-    "context": "Short label next to app-menu button when Helium services behavior changes.",
+    "context": "Short label next to app-menu button when Nitrous services behavior changes.",
     "message": "Services updated"
   },
   {
@@ -176,8 +176,8 @@
   {
     "name": "IDS_POLICY_SOURCE_HOP",
     "source": "components/policy_strings.grdp",
-    "context": "Indicates that the policy originates from Helium defaults.",
-    "message": "Helium defaults"
+    "context": "Indicates that the policy originates from Nitrous defaults.",
+    "message": "Nitrous defaults"
   },
   {
     "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",

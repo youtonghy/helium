@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium 会释放非活动标签页占用的内存，从而为活动标签页和其他应用提供更多计算机资源，并保持 Helium 的流畅运行。当您返回非活动标签页时，它们会自动重新变为活动状态。"
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous 会释放非活动标签页占用的内存，从而为活动标签页和其他应用提供更多计算机资源，并保持 Nitrous 的流畅运行。当您返回非活动标签页时，它们会自动重新变为活动状态。"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium 通过限制后台活动和视觉效果（例如平滑滚动和视频帧率）来节省电池电量。"
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous 通过限制后台活动和视觉效果（例如平滑滚动和视频帧率）来节省电池电量。"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium 会预加载页面，使浏览和搜索更快。"
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous 会预加载页面，使浏览和搜索更快。"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "从 <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph> 导入"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "从 <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph> 导入"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium 服务"
+    "source": "Nitrous services",
+    "message": "Nitrous 服务"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "管理浏览器中允许使用的 Helium 服务"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "管理浏览器中允许使用的 Nitrous 服务"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Helium 服务更新："
+    "source": "Updates to Nitrous services:",
+    "message": "Nitrous 服务更新："
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "允许连接到 Helium 服务"
+    "source": "Allow connecting to Nitrous services",
+    "message": "允许连接到 Nitrous 服务"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "启用后，Helium 将能够连接到匿名网络服务以提供附加功能。禁用后，附加功能将无法使用。"
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "启用后，Nitrous 将能够连接到匿名网络服务以提供附加功能。禁用后，附加功能将无法使用。"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "使用您自己的 Helium 服务实例"
+    "source": "Use your own instance of Nitrous services",
+    "message": "使用您自己的 Nitrous 服务实例"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "您可以自行托管 Helium 服务实例，并在浏览器中使用它来替代默认实例。仅支持 HTTPS。"
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "您可以自行托管 Nitrous 服务实例，并在浏览器中使用它来替代默认实例。仅支持 HTTPS。"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "自定义 Helium 服务的源 URL"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "自定义 Nitrous 服务的源 URL"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Helium 服务已更新，请查看相关更改。"
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Nitrous 服务已更新，请查看相关更改。"
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "查看 Helium 服务更新"
+    "source": "Review Nitrous services updates",
+    "message": "查看 Nitrous 服务更新"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Helium 默认值"
+    "source": "Nitrous defaults",
+    "message": "Nitrous 默认值"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Helium 需要完全磁盘访问权限，才能从 Safari 导入您的书签。"
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Nitrous 需要完全磁盘访问权限，才能从 Safari 导入您的书签。"
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

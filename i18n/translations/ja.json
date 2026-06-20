@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium は非アクティブなタブからメモリを解放します。これにより、アクティブなタブや他のアプリがより多くのコンピュータリソースを使用でき、Helium の動作が高速に保たれます。非アクティブなタブは、再度開くと自動的にアクティブになります。"
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous は非アクティブなタブからメモリを解放します。これにより、アクティブなタブや他のアプリがより多くのコンピュータリソースを使用でき、Nitrous の動作が高速に保たれます。非アクティブなタブは、再度開くと自動的にアクティブになります。"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium はバックグラウンドアクティビティやスムーズスクロール、動画フレームレートなどの視覚効果を制限してバッテリーを節約します。"
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous はバックグラウンドアクティビティやスムーズスクロール、動画フレームレートなどの視覚効果を制限してバッテリーを節約します。"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium がページをプリロードすることで、ブラウジングと検索が高速になります。"
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous がページをプリロードすることで、ブラウジングと検索が高速になります。"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>からインポート"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>からインポート"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium サービス"
+    "source": "Nitrous services",
+    "message": "Nitrous サービス"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "ブラウザで許可する Helium サービスを管理します"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "ブラウザで許可する Nitrous サービスを管理します"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Helium サービスの更新:"
+    "source": "Updates to Nitrous services:",
+    "message": "Nitrous サービスの更新:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Helium サービスへの接続を許可する"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Nitrous サービスへの接続を許可する"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "有効にすると、Helium は匿名化されたウェブサービスに接続して追加の機能を提供できるようになります。無効にすると、追加機能は動作しません。"
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "有効にすると、Nitrous は匿名化されたウェブサービスに接続して追加の機能を提供できるようになります。無効にすると、追加機能は動作しません。"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "独自の Helium サービスインスタンスを使用する"
+    "source": "Use your own instance of Nitrous services",
+    "message": "独自の Nitrous サービスインスタンスを使用する"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "独自の Helium サービスインスタンスをホストし、デフォルトの代わりにブラウザで使用できます。HTTPS のみ。"
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "独自の Nitrous サービスインスタンスをホストし、デフォルトの代わりにブラウザで使用できます。HTTPS のみ。"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "Helium サービスのカスタムオリジン URL"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "Nitrous サービスのカスタムオリジン URL"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Helium サービスが更新されました。変更内容を確認してください。"
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Nitrous サービスが更新されました。変更内容を確認してください。"
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "Helium サービスの更新を確認"
+    "source": "Review Nitrous services updates",
+    "message": "Nitrous サービスの更新を確認"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Helium の既定値"
+    "source": "Nitrous defaults",
+    "message": "Nitrous の既定値"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Safari からブックマークをインポートするには、Helium にフルディスクアクセスが必要です。"
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Safari からブックマークをインポートするには、Nitrous にフルディスクアクセスが必要です。"
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

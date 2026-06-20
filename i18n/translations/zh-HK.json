@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium 會釋放閒置分頁的記憶體，讓使用中的分頁和其他應用程式獲得更多電腦資源，保持 Helium 運行流暢。當您返回閒置分頁時，它們會自動重新啟用。"
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous 會釋放閒置分頁的記憶體，讓使用中的分頁和其他應用程式獲得更多電腦資源，保持 Nitrous 運行流暢。當您返回閒置分頁時，它們會自動重新啟用。"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium 會透過限制背景活動和視覺效果（例如平滑捲動和影片幀率）來節省電池電量。"
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous 會透過限制背景活動和視覺效果（例如平滑捲動和影片幀率）來節省電池電量。"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium 會預先載入網頁，讓瀏覽和搜尋更快速。"
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous 會預先載入網頁，讓瀏覽和搜尋更快速。"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "從 <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph> 匯入"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "從 <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph> 匯入"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium 服務"
+    "source": "Nitrous services",
+    "message": "Nitrous 服務"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "管理瀏覽器中允許使用的 Helium 服務"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "管理瀏覽器中允許使用的 Nitrous 服務"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Helium 服務更新："
+    "source": "Updates to Nitrous services:",
+    "message": "Nitrous 服務更新："
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "允許連線至 Helium 服務"
+    "source": "Allow connecting to Nitrous services",
+    "message": "允許連線至 Nitrous 服務"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "啟用後，Helium 將可以連線至匿名網路服務，以提供額外功能。停用後，額外功能將無法運作。"
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "啟用後，Nitrous 將可以連線至匿名網路服務，以提供額外功能。停用後，額外功能將無法運作。"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "使用自行架設的 Helium 服務"
+    "source": "Use your own instance of Nitrous services",
+    "message": "使用自行架設的 Nitrous 服務"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "您可以自行架設 Helium 服務，並在瀏覽器中使用它來取代預設服務。僅限 HTTPS。"
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "您可以自行架設 Nitrous 服務，並在瀏覽器中使用它來取代預設服務。僅限 HTTPS。"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "Helium 服務的自訂來源 URL"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "Nitrous 服務的自訂來源 URL"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Helium 服務已更新。請檢閱相關變更。"
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Nitrous 服務已更新。請檢閱相關變更。"
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "檢閱 Helium 服務更新"
+    "source": "Review Nitrous services updates",
+    "message": "檢閱 Nitrous 服務更新"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Helium 預設值"
+    "source": "Nitrous defaults",
+    "message": "Nitrous 預設值"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Helium 需要完整磁碟存取權，才能從 Safari 匯入您的書籤。"
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Nitrous 需要完整磁碟存取權，才能從 Safari 匯入您的書籤。"
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

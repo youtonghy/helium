@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium активдүү эмес өтмөктөрдөн эстутумду бошотот. Бул активдүү өтмөктөргө жана башка колдонмолорго көбүрөөк компьютер ресурстарын берет жана Helium тез иштешин камсыздайт. Активдүү эмес өтмөктөргө кайтып келгениңизде, алар автоматтык түрдө кайра активдешет."
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous активдүү эмес өтмөктөрдөн эстутумду бошотот. Бул активдүү өтмөктөргө жана башка колдонмолорго көбүрөөк компьютер ресурстарын берет жана Nitrous тез иштешин камсыздайт. Активдүү эмес өтмөктөргө кайтып келгениңизде, алар автоматтык түрдө кайра активдешет."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium фондук аракеттерди жана визуалдык эффекттерди, мисалы, жылмакай жылдырууну жана видео кадр ылдамдыгын чектөө аркылуу батарея кубатын үнөмдөйт."
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous фондук аракеттерди жана визуалдык эффекттерди, мисалы, жылмакай жылдырууну жана видео кадр ылдамдыгын чектөө аркылуу батарея кубатын үнөмдөйт."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium барактарды алдын ала жүктөйт, бул серептөөнү жана издөөнү тездетет."
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous барактарды алдын ала жүктөйт, бул серептөөнү жана издөөнү тездетет."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,10 +31,10 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph> браузеринен импорттолгон",
-    "feminine": "<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph> браузеринен импорттолгон",
-    "masculine": "<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph> браузеринен импорттолгон"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph> браузеринен импорттолгон",
+    "feminine": "<ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph> браузеринен импорттолгон",
+    "masculine": "<ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph> браузеринен импорттолгон"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -48,18 +48,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium кызматтары"
+    "source": "Nitrous services",
+    "message": "Nitrous кызматтары"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "Браузериңизде Helium кызматтарына уруксат берүүнү башкарыңыз"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "Браузериңизде Nitrous кызматтарына уруксат берүүнү башкарыңыз"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Helium кызматтарынын жаңыртуулары:"
+    "source": "Updates to Nitrous services:",
+    "message": "Nitrous кызматтарынын жаңыртуулары:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -73,23 +73,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Helium кызматтарына туташууга уруксат берүү"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Nitrous кызматтарына туташууга уруксат берүү"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "Иштетилгенде, Helium кошумча функцияларды камсыз кылуу үчүн купуялыкты сактаган веб-кызматтарга туташа алат. Өчүрүлгөндө, кошумча функциялар иштебейт."
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Иштетилгенде, Nitrous кошумча функцияларды камсыз кылуу үчүн купуялыкты сактаган веб-кызматтарга туташа алат. Өчүрүлгөндө, кошумча функциялар иштебейт."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "Helium кызматтарынын өз нускаңызды колдонуңуз"
+    "source": "Use your own instance of Nitrous services",
+    "message": "Nitrous кызматтарынын өз нускаңызды колдонуңуз"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "Helium кызматтарынын өз нускаңызды жайгаштырып, демейки нусканын ордуна браузериңизде колдоно аласыз. HTTPS гана колдоого алынат."
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Nitrous кызматтарынын өз нускаңызды жайгаштырып, демейки нусканын ордуна браузериңизде колдоно аласыз. HTTPS гана колдоого алынат."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -98,18 +98,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "Helium кызматтары үчүн ыңгайлаштырылган булак URL"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "Nitrous кызматтары үчүн ыңгайлаштырылган булак URL"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Helium кызматтары жаңыртылды. Өзгөртүүлөрдү карап чыгыңыз."
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Nitrous кызматтары жаңыртылды. Өзгөртүүлөрдү карап чыгыңыз."
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "Helium кызматтарынын жаңыртууларын карап чыгуу"
+    "source": "Review Nitrous services updates",
+    "message": "Nitrous кызматтарынын жаңыртууларын карап чыгуу"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -123,8 +123,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Helium демейки жөндөөлөрү"
+    "source": "Nitrous defaults",
+    "message": "Nitrous демейки жөндөөлөрү"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -138,8 +138,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Safari'ден кыстармаларыңызды импорттоо үчүн Helium'ге Дискке толук мүмкүнчүлүк керек."
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Safari'ден кыстармаларыңызды импорттоо үчүн Nitrous'ге Дискке толук мүмкүнчүлүк керек."
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

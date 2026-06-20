@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium-ek memoria askatzen du fitxa inaktiboetatik. Honek fitxa aktiboei eta beste aplikazioei ordenagailuaren baliabide gehiago ematen dizkie eta Helium azkarra mantentzen du. Zure fitxa inaktiboak automatikoki aktibatzen dira berriro haietara itzultzen zarenean."
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous-ek memoria askatzen du fitxa inaktiboetatik. Honek fitxa aktiboei eta beste aplikazioei ordenagailuaren baliabide gehiago ematen dizkie eta Nitrous azkarra mantentzen du. Zure fitxa inaktiboak automatikoki aktibatzen dira berriro haietara itzultzen zarenean."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium-ek bateria aurrezten du atzeko planoko jarduera eta efektu bisualak mugatuz, hala nola korritze leuna eta bideo-fotograma-tasak."
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous-ek bateria aurrezten du atzeko planoko jarduera eta efektu bisualak mugatuz, hala nola korritze leuna eta bideo-fotograma-tasak."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium-ek orriak aurrez kargatzen ditu, nabigazioa eta bilaketa azkarragoak eginez."
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous-ek orriak aurrez kargatzen ditu, nabigazioa eta bilaketa azkarragoak eginez."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,10 +31,10 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>-etik inportatua",
-    "feminine": "<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>-etik inportatua",
-    "masculine": "<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>-etik inportatua"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>-etik inportatua",
+    "feminine": "<ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>-etik inportatua",
+    "masculine": "<ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>-etik inportatua"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -48,18 +48,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium zerbitzuak"
+    "source": "Nitrous services",
+    "message": "Nitrous zerbitzuak"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "Kudeatu zure nabigatzailean baimendutako Helium zerbitzuak"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "Kudeatu zure nabigatzailean baimendutako Nitrous zerbitzuak"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Helium zerbitzuen eguneraketak:"
+    "source": "Updates to Nitrous services:",
+    "message": "Nitrous zerbitzuen eguneraketak:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -73,23 +73,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Baimendu Helium zerbitzuetara konektatzea"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Baimendu Nitrous zerbitzuetara konektatzea"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "Gaituta dagoenean, Helium web-zerbitzu anonimotara konektatu ahal izango da funtzionalitate gehigarria eskaintzeko. Desgaituta dagoenean, funtzio gehigarriek ez dute funtzionatuko."
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Gaituta dagoenean, Nitrous web-zerbitzu anonimotara konektatu ahal izango da funtzionalitate gehigarria eskaintzeko. Desgaituta dagoenean, funtzio gehigarriek ez dute funtzionatuko."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "Erabili Helium zerbitzuen zure instantzia propioa"
+    "source": "Use your own instance of Nitrous services",
+    "message": "Erabili Nitrous zerbitzuen zure instantzia propioa"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "Helium zerbitzuen zure instantzia propioa ostatu dezakezu eta zure nabigatzailean erabili lehenetsiaren ordez. HTTPS soilik."
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Nitrous zerbitzuen zure instantzia propioa ostatu dezakezu eta zure nabigatzailean erabili lehenetsiaren ordez. HTTPS soilik."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -98,18 +98,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "Helium zerbitzuetarako jatorri URL pertsonalizatua"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "Nitrous zerbitzuetarako jatorri URL pertsonalizatua"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Helium zerbitzuak eguneratu dira. Mesedez, berrikusi aldaketak."
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Nitrous zerbitzuak eguneratu dira. Mesedez, berrikusi aldaketak."
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "Berrikusi Helium zerbitzuen eguneraketak"
+    "source": "Review Nitrous services updates",
+    "message": "Berrikusi Nitrous zerbitzuen eguneraketak"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -123,8 +123,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Helium lehenetsiak"
+    "source": "Nitrous defaults",
+    "message": "Nitrous lehenetsiak"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -138,8 +138,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Heliumek Disko osorako sarbidea behar du Safari-tik zure laster-markak inportatzeko."
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Nitrousek Disko osorako sarbidea behar du Safari-tik zure laster-markak inportatzeko."
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

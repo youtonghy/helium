@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium huondoa kumbukumbu kutoka kwa vichupo visivyotumika. Hii hupa vichupo vinavyotumika na programu nyingine rasilimali zaidi za kompyuta na kuweka Helium kuwa ya kasi. Vichupo vyako visivyotumika huwa hai tena moja kwa moja unapovirudi."
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous huondoa kumbukumbu kutoka kwa vichupo visivyotumika. Hii hupa vichupo vinavyotumika na programu nyingine rasilimali zaidi za kompyuta na kuweka Nitrous kuwa ya kasi. Vichupo vyako visivyotumika huwa hai tena moja kwa moja unapovirudi."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium huhifadhi nishati ya betri kwa kupunguza shughuli za nyuma na madoido ya kuona, kama vile kusogeza laini na kasi ya fremu za video."
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous huhifadhi nishati ya betri kwa kupunguza shughuli za nyuma na madoido ya kuona, kama vile kusogeza laini na kasi ya fremu za video."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium hupakia kurasa mapema ambayo hufanya kuvinjari na kutafuta kuwa haraka zaidi."
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous hupakia kurasa mapema ambayo hufanya kuvinjari na kutafuta kuwa haraka zaidi."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "Imeagizwa kutoka <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "Imeagizwa kutoka <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Huduma za Helium"
+    "source": "Nitrous services",
+    "message": "Huduma za Nitrous"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "Dhibiti huduma zipi za Helium zinaruhusiwa katika kivinjari chako"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "Dhibiti huduma zipi za Nitrous zinaruhusiwa katika kivinjari chako"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Masasisho ya huduma za Helium:"
+    "source": "Updates to Nitrous services:",
+    "message": "Masasisho ya huduma za Nitrous:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Ruhusu kuunganisha na huduma za Helium"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Ruhusu kuunganisha na huduma za Nitrous"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "Ikiwashwa, Helium itaweza kuunganisha na huduma za wavuti zisizo na utambulisho ili kutoa utendaji wa ziada. Ikizimwa, vipengele vya ziada havitafanya kazi."
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Ikiwashwa, Nitrous itaweza kuunganisha na huduma za wavuti zisizo na utambulisho ili kutoa utendaji wa ziada. Ikizimwa, vipengele vya ziada havitafanya kazi."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "Tumia seva yako mwenyewe ya huduma za Helium"
+    "source": "Use your own instance of Nitrous services",
+    "message": "Tumia seva yako mwenyewe ya huduma za Nitrous"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "Unaweza kuendesha seva yako mwenyewe ya huduma za Helium na kuitumia katika kivinjari chako badala ya ile ya chaguo-msingi. HTTPS pekee."
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Unaweza kuendesha seva yako mwenyewe ya huduma za Nitrous na kuitumia katika kivinjari chako badala ya ile ya chaguo-msingi. HTTPS pekee."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "URL ya asili maalum ya huduma za Helium"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "URL ya asili maalum ya huduma za Nitrous"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Huduma za Helium zimesasishwa. Tafadhali kagua mabadiliko."
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Huduma za Nitrous zimesasishwa. Tafadhali kagua mabadiliko."
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "Kagua masasisho ya huduma za Helium"
+    "source": "Review Nitrous services updates",
+    "message": "Kagua masasisho ya huduma za Nitrous"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Chaguo-msingi za Helium"
+    "source": "Nitrous defaults",
+    "message": "Chaguo-msingi za Nitrous"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Helium inahitaji Ufikiaji Kamili wa Diski ili kuagiza Alamisho zako kutoka Safari."
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Nitrous inahitaji Ufikiaji Kamili wa Diski ili kuagiza Alamisho zako kutoka Safari."
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

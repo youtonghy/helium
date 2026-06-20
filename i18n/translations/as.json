@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium-এ নিষ্ক্ৰিয় টেবসমূহৰ পৰা মেম'ৰি মুক্ত কৰে। ই সক্ৰিয় টেব আৰু অন্যান্য এপসমূহক অধিক কম্পিউটাৰ সম্পদ দিয়ে আৰু Helium দ্ৰুত ৰাখে। আপোনাৰ নিষ্ক্ৰিয় টেবসমূহ আপুনি সেইবোৰলৈ উভতি গ'লে স্বয়ংক্ৰিয়ভাৱে পুনৰ সক্ৰিয় হয়।"
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous-এ নিষ্ক্ৰিয় টেবসমূহৰ পৰা মেম'ৰি মুক্ত কৰে। ই সক্ৰিয় টেব আৰু অন্যান্য এপসমূহক অধিক কম্পিউটাৰ সম্পদ দিয়ে আৰু Nitrous দ্ৰুত ৰাখে। আপোনাৰ নিষ্ক্ৰিয় টেবসমূহ আপুনি সেইবোৰলৈ উভতি গ'লে স্বয়ংক্ৰিয়ভাৱে পুনৰ সক্ৰিয় হয়।"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium-এ পটভূমিৰ কাৰ্যকলাপ আৰু দৃশ্যগত প্ৰভাৱ, যেনে মসৃণ স্ক্ৰলিং আৰু ভিডিঅ' ফ্ৰেম ৰেট সীমিত কৰি বেটাৰি শক্তি সংৰক্ষণ কৰে।"
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous-এ পটভূমিৰ কাৰ্যকলাপ আৰু দৃশ্যগত প্ৰভাৱ, যেনে মসৃণ স্ক্ৰলিং আৰু ভিডিঅ' ফ্ৰেম ৰেট সীমিত কৰি বেটাৰি শক্তি সংৰক্ষণ কৰে।"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium-এ পৃষ্ঠাসমূহ প্ৰিলোড কৰে যিয়ে ব্ৰাউজিং আৰু সন্ধান দ্ৰুততৰ কৰে।"
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous-এ পৃষ্ঠাসমূহ প্ৰিলোড কৰে যিয়ে ব্ৰাউজিং আৰু সন্ধান দ্ৰুততৰ কৰে।"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>ৰ পৰা আমদানি কৰা হৈছে"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>ৰ পৰা আমদানি কৰা হৈছে"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium সেৱাসমূহ"
+    "source": "Nitrous services",
+    "message": "Nitrous সেৱাসমূহ"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "আপোনাৰ ব্ৰাউজাৰত কোনবোৰ Helium সেৱা অনুমোদিত সেয়া পৰিচালনা কৰক"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "আপোনাৰ ব্ৰাউজাৰত কোনবোৰ Nitrous সেৱা অনুমোদিত সেয়া পৰিচালনা কৰক"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Helium সেৱাসমূহৰ আপডেট:"
+    "source": "Updates to Nitrous services:",
+    "message": "Nitrous সেৱাসমূহৰ আপডেট:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Helium সেৱাসমূহলৈ সংযোগ কৰিবলৈ অনুমতি দিয়ক"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Nitrous সেৱাসমূহলৈ সংযোগ কৰিবলৈ অনুমতি দিয়ক"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "সক্ষম কৰিলে, Helium-এ অতিৰিক্ত কাৰ্যকাৰিতা প্ৰদান কৰিবলৈ নামবিহীন ৱেব সেৱাসমূহলৈ সংযোগ কৰিব পাৰিব। নিষ্ক্ৰিয় কৰিলে, অতিৰিক্ত বৈশিষ্ট্যসমূহে কাম নকৰিব।"
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "সক্ষম কৰিলে, Nitrous-এ অতিৰিক্ত কাৰ্যকাৰিতা প্ৰদান কৰিবলৈ নামবিহীন ৱেব সেৱাসমূহলৈ সংযোগ কৰিব পাৰিব। নিষ্ক্ৰিয় কৰিলে, অতিৰিক্ত বৈশিষ্ট্যসমূহে কাম নকৰিব।"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "আপোনাৰ নিজৰ Helium সেৱাসমূহৰ ইনষ্টেন্স ব্যৱহাৰ কৰক"
+    "source": "Use your own instance of Nitrous services",
+    "message": "আপোনাৰ নিজৰ Nitrous সেৱাসমূহৰ ইনষ্টেন্স ব্যৱহাৰ কৰক"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "আপুনি আপোনাৰ নিজৰ Helium সেৱাসমূহৰ ইনষ্টেন্স হ'ষ্ট কৰি ডিফল্টৰ সলনি আপোনাৰ ব্ৰাউজাৰত ব্যৱহাৰ কৰিব পাৰে। কেৱল HTTPS।"
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "আপুনি আপোনাৰ নিজৰ Nitrous সেৱাসমূহৰ ইনষ্টেন্স হ'ষ্ট কৰি ডিফল্টৰ সলনি আপোনাৰ ব্ৰাউজাৰত ব্যৱহাৰ কৰিব পাৰে। কেৱল HTTPS।"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "Helium সেৱাসমূহৰ বাবে কাষ্টম অৰিজিন URL"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "Nitrous সেৱাসমূহৰ বাবে কাষ্টম অৰিজিন URL"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Helium সেৱাসমূহ আপডেট কৰা হৈছে। অনুগ্ৰহ কৰি পৰিৱৰ্তনসমূহ পৰ্যালোচনা কৰক।"
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Nitrous সেৱাসমূহ আপডেট কৰা হৈছে। অনুগ্ৰহ কৰি পৰিৱৰ্তনসমূহ পৰ্যালোচনা কৰক।"
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "Helium সেৱাসমূহৰ আপডেট পৰ্যালোচনা কৰক"
+    "source": "Review Nitrous services updates",
+    "message": "Nitrous সেৱাসমূহৰ আপডেট পৰ্যালোচনা কৰক"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Helium ডিফল্ট"
+    "source": "Nitrous defaults",
+    "message": "Nitrous ডিফল্ট"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Safari-ৰ পৰা আপোনাৰ বুকমাৰ্কসমূহ আমদানি কৰিবলৈ Helium-ক সম্পূৰ্ণ ডিস্ক অভিগমৰ প্ৰয়োজন।"
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Safari-ৰ পৰা আপোনাৰ বুকমাৰ্কসমূহ আমদানি কৰিবলৈ Nitrous-ক সম্পূৰ্ণ ডিস্ক অভিগমৰ প্ৰয়োজন।"
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

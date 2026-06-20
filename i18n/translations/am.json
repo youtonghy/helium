@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium ከንቁ ያልሆኑ ትሮች ማህደረ ትውስታን ያስለቅቃል። ይህ ለንቁ ትሮች እና ለሌሎች መተግበሪያዎች ተጨማሪ የኮምፒውተር ሀብቶችን ይሰጣል እና Heliumን ፈጣን ያደርገዋል። ንቁ ያልሆኑ ትሮችዎ ወደ እነሱ ሲመለሱ በራስ-ሰር እንደገና ንቁ ይሆናሉ።"
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous ከንቁ ያልሆኑ ትሮች ማህደረ ትውስታን ያስለቅቃል። ይህ ለንቁ ትሮች እና ለሌሎች መተግበሪያዎች ተጨማሪ የኮምፒውተር ሀብቶችን ይሰጣል እና Nitrousን ፈጣን ያደርገዋል። ንቁ ያልሆኑ ትሮችዎ ወደ እነሱ ሲመለሱ በራስ-ሰር እንደገና ንቁ ይሆናሉ።"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium የበስተጀርባ እንቅስቃሴን እና የእይታ ውጤቶችን (እንደ ለስላሳ ማሸብለል እና የቪዲዮ ፍሬም ፍጥነቶች ያሉ) በመገደብ የባትሪ ኃይልን ይቆጥባል።"
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous የበስተጀርባ እንቅስቃሴን እና የእይታ ውጤቶችን (እንደ ለስላሳ ማሸብለል እና የቪዲዮ ፍሬም ፍጥነቶች ያሉ) በመገደብ የባትሪ ኃይልን ይቆጥባል።"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium ገጾችን አስቀድሞ ይጭናል ይህም ማሰስን እና መፈለግን ፈጣን ያደርገዋል።"
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous ገጾችን አስቀድሞ ይጭናል ይህም ማሰስን እና መፈለግን ፈጣን ያደርገዋል።"
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "ከ<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph> የተመጡ"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "ከ<ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph> የተመጡ"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium አገልግሎቶች"
+    "source": "Nitrous services",
+    "message": "Nitrous አገልግሎቶች"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "በአሳሽዎ ውስጥ የትኞቹ Helium አገልግሎቶች እንደሚፈቀዱ ያስተዳድሩ"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "በአሳሽዎ ውስጥ የትኞቹ Nitrous አገልግሎቶች እንደሚፈቀዱ ያስተዳድሩ"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "በHelium አገልግሎቶች ላይ ማዘመኛዎች፡"
+    "source": "Updates to Nitrous services:",
+    "message": "በNitrous አገልግሎቶች ላይ ማዘመኛዎች፡"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "ከHelium አገልግሎቶች ጋር መገናኘት ይፍቀዱ"
+    "source": "Allow connecting to Nitrous services",
+    "message": "ከNitrous አገልግሎቶች ጋር መገናኘት ይፍቀዱ"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "ሲነቃ Helium ተጨማሪ ተግባራት ለማቅረብ ከማንነት-አልባ የድር አገልግሎቶች ጋር ይገናኛል። ሲጠፋ ተጨማሪ ባህሪያት አይሰሩም።"
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "ሲነቃ Nitrous ተጨማሪ ተግባራት ለማቅረብ ከማንነት-አልባ የድር አገልግሎቶች ጋር ይገናኛል። ሲጠፋ ተጨማሪ ባህሪያት አይሰሩም።"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "የራስዎን Helium አገልግሎቶች ምሳሌ ይጠቀሙ"
+    "source": "Use your own instance of Nitrous services",
+    "message": "የራስዎን Nitrous አገልግሎቶች ምሳሌ ይጠቀሙ"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "የራስዎን Helium አገልግሎቶች ምሳሌ አስተናግደው ከነባሪው ይልቅ በአሳሽዎ ውስጥ መጠቀም ይችላሉ። HTTPS ብቻ።"
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "የራስዎን Nitrous አገልግሎቶች ምሳሌ አስተናግደው ከነባሪው ይልቅ በአሳሽዎ ውስጥ መጠቀም ይችላሉ። HTTPS ብቻ።"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "ለHelium አገልግሎቶች ብጁ ምንጭ URL"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "ለNitrous አገልግሎቶች ብጁ ምንጭ URL"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Helium አገልግሎቶች ተዘምነዋል። እባክዎ ለውጦቹን ይገምግሙ።"
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Nitrous አገልግሎቶች ተዘምነዋል። እባክዎ ለውጦቹን ይገምግሙ።"
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "የHelium አገልግሎቶች ማዘመኛዎችን ይገምግሙ"
+    "source": "Review Nitrous services updates",
+    "message": "የNitrous አገልግሎቶች ማዘመኛዎችን ይገምግሙ"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Helium ነባሪዎች"
+    "source": "Nitrous defaults",
+    "message": "Nitrous ነባሪዎች"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Helium ዕልባቶችዎን ከSafari ለማስመጣት ሙሉ የዲስክ መዳረሻ ያስፈልገዋል።"
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Nitrous ዕልባቶችዎን ከSafari ለማስመጣት ሙሉ የዲስክ መዳረሻ ያስፈልገዋል።"
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

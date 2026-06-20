@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium allibera memòria de les pestanyes inactives. Això proporciona més recursos a l'ordinador per a les pestanyes actives i a altres aplicacions i manté Helium ràpid. Les pestanyes inactives es tornen a activar automàticament quan hi tornes a la pestanya."
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous allibera memòria de les pestanyes inactives. Això proporciona més recursos a l'ordinador per a les pestanyes actives i a altres aplicacions i manté Nitrous ràpid. Les pestanyes inactives es tornen a activar automàticament quan hi tornes a la pestanya."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium conserva l'energia de la bateria limitant l'activitat en segon pla i els efectes visuals, com ara el desplaçament suau i els fotogrames del vídeo."
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous conserva l'energia de la bateria limitant l'activitat en segon pla i els efectes visuals, com ara el desplaçament suau i els fotogrames del vídeo."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium precarrega les pàgines, cosa que fa que la navegació i la cerca siguin més ràpides."
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous precarrega les pàgines, cosa que fa que la navegació i la cerca siguin més ràpides."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,9 +31,9 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "Importat de <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "feminine": "Importada de <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "Importat de <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "feminine": "Importada de <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -47,18 +47,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Serveis de Helium"
+    "source": "Nitrous services",
+    "message": "Serveis de Nitrous"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "Gestiona quins serveis de Helium estan permesos al teu navegador"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "Gestiona quins serveis de Nitrous estan permesos al teu navegador"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Actualitzacions dels serveis de Helium:"
+    "source": "Updates to Nitrous services:",
+    "message": "Actualitzacions dels serveis de Nitrous:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -72,23 +72,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Permet connectar als serveis de Helium"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Permet connectar als serveis de Nitrous"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "Quan està activat, Helium es podrà connectar a serveis web anònims per proporcionar funcionalitats addicionals. Quan està desactivat aquestes no funcionaran."
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Quan està activat, Nitrous es podrà connectar a serveis web anònims per proporcionar funcionalitats addicionals. Quan està desactivat aquestes no funcionaran."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "Utilitza la teva pròpia instància dels serveis de Helium"
+    "source": "Use your own instance of Nitrous services",
+    "message": "Utilitza la teva pròpia instància dels serveis de Nitrous"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "Pots allotjar la teva pròpia instància dels serveis de Helium i utilitzar-la al navegador en lloc de la predeterminada. Només s'accepta HTTPS."
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Pots allotjar la teva pròpia instància dels serveis de Nitrous i utilitzar-la al navegador en lloc de la predeterminada. Només s'accepta HTTPS."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -97,18 +97,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "URL d'origen personalitzada per als serveis de Helium"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "URL d'origen personalitzada per als serveis de Nitrous"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Els serveis de Helium s'han actualitzat. Revisa els canvis."
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Els serveis de Nitrous s'han actualitzat. Revisa els canvis."
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "Revisa les actualitzacions dels serveis de Helium"
+    "source": "Review Nitrous services updates",
+    "message": "Revisa les actualitzacions dels serveis de Nitrous"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -122,8 +122,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Valors predeterminats de Helium"
+    "source": "Nitrous defaults",
+    "message": "Valors predeterminats de Nitrous"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -137,8 +137,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Helium necessita accés complet al disc per importar els teus marcadors de Safari."
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Nitrous necessita accés complet al disc per importar els teus marcadors de Safari."
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

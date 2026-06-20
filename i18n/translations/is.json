@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium losar um minni frá óvirkum flipum. Þetta gefur virkum flipum og öðrum forritum meiri tölvuauðlindir og heldur Helium hraðvirku. Óvirkir flipar verða sjálfkrafa virkir aftur þegar þú ferð aftur á þá."
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous losar um minni frá óvirkum flipum. Þetta gefur virkum flipum og öðrum forritum meiri tölvuauðlindir og heldur Nitrous hraðvirku. Óvirkir flipar verða sjálfkrafa virkir aftur þegar þú ferð aftur á þá."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium sparar rafhlöðuorku með því að takmarka bakgrunnsvinnslu og sjónræn áhrif, svo sem mjúka skrun og rammahraða myndbanda."
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous sparar rafhlöðuorku með því að takmarka bakgrunnsvinnslu og sjónræn áhrif, svo sem mjúka skrun og rammahraða myndbanda."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium forhleður síður sem gerir vafra- og leitarnotkun hraðari."
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous forhleður síður sem gerir vafra- og leitarnotkun hraðari."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "Flutt inn frá <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "Flutt inn frá <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium þjónustur"
+    "source": "Nitrous services",
+    "message": "Nitrous þjónustur"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "Stjórnaðu hvaða Helium þjónustur eru leyfðar í vafranum þínum"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "Stjórnaðu hvaða Nitrous þjónustur eru leyfðar í vafranum þínum"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Uppfærslur á Helium þjónustum:"
+    "source": "Updates to Nitrous services:",
+    "message": "Uppfærslur á Nitrous þjónustum:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Leyfa tengingu við Helium þjónustur"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Leyfa tengingu við Nitrous þjónustur"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "Þegar kveikt er á þessu getur Helium tengst nafnlausum vefþjónustum til að veita viðbótarvirkni. Þegar slökkt er á þessu munu viðbótareiginleikar ekki virka."
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Þegar kveikt er á þessu getur Nitrous tengst nafnlausum vefþjónustum til að veita viðbótarvirkni. Þegar slökkt er á þessu munu viðbótareiginleikar ekki virka."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "Nota eigin tilvik af Helium þjónustum"
+    "source": "Use your own instance of Nitrous services",
+    "message": "Nota eigin tilvik af Nitrous þjónustum"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "Þú getur hýst þitt eigið tilvik af Helium þjónustum og notað það í vafranum í stað sjálfgefna tilviksins. Aðeins HTTPS."
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Þú getur hýst þitt eigið tilvik af Nitrous þjónustum og notað það í vafranum í stað sjálfgefna tilviksins. Aðeins HTTPS."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "Sérsniðin upprunavefslóð fyrir Helium þjónustur"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "Sérsniðin upprunavefslóð fyrir Nitrous þjónustur"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Helium þjónustur hafa verið uppfærðar. Vinsamlegast skoðaðu breytingarnar."
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Nitrous þjónustur hafa verið uppfærðar. Vinsamlegast skoðaðu breytingarnar."
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "Skoða uppfærslur á Helium þjónustum"
+    "source": "Review Nitrous services updates",
+    "message": "Skoða uppfærslur á Nitrous þjónustum"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Sjálfgefnar stillingar Helium"
+    "source": "Nitrous defaults",
+    "message": "Sjálfgefnar stillingar Nitrous"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Helium þarf fullan aðgang að diski til að flytja inn bókamerkin þín úr Safari."
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Nitrous þarf fullan aðgang að diski til að flytja inn bókamerkin þín úr Safari."
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

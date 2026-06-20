@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "Helium ათავისუფლებს მეხსიერებას არააქტიური ჩანართებიდან. ეს აქტიურ ჩანართებსა და სხვა აპლიკაციებს მეტ კომპიუტერულ რესურსს აძლევს და Helium-ს სწრაფად ინარჩუნებს. თქვენი არააქტიური ჩანართები ავტომატურად ხდება ისევ აქტიური, როცა მათ უბრუნდებით."
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Nitrous ათავისუფლებს მეხსიერებას არააქტიური ჩანართებიდან. ეს აქტიურ ჩანართებსა და სხვა აპლიკაციებს მეტ კომპიუტერულ რესურსს აძლევს და Nitrous-ს სწრაფად ინარჩუნებს. თქვენი არააქტიური ჩანართები ავტომატურად ხდება ისევ აქტიური, როცა მათ უბრუნდებით."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "Helium ზოგავს ბატარეის ენერგიას ფონური აქტივობისა და ვიზუალური ეფექტების შეზღუდვით, როგორიცაა გლუვი გადახვევა და ვიდეოს კადრების სიხშირე."
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Nitrous ზოგავს ბატარეის ენერგიას ფონური აქტივობისა და ვიზუალური ეფექტების შეზღუდვით, როგორიცაა გლუვი გადახვევა და ვიდეოს კადრების სიხშირე."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "Helium წინასწარ ტვირთავს გვერდებს, რაც ინტერნეტის დათვალიერებასა და ძიებას აჩქარებს."
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "Nitrous წინასწარ ტვირთავს გვერდებს, რაც ინტერნეტის დათვალიერებასა და ძიებას აჩქარებს."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "იმპორტირებულია <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>-დან"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "იმპორტირებულია <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>-დან"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium სერვისები"
+    "source": "Nitrous services",
+    "message": "Nitrous სერვისები"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "მართეთ რომელი Helium სერვისებია დაშვებული თქვენს ბრაუზერში"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "მართეთ რომელი Nitrous სერვისებია დაშვებული თქვენს ბრაუზერში"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "Helium სერვისების განახლებები:"
+    "source": "Updates to Nitrous services:",
+    "message": "Nitrous სერვისების განახლებები:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Helium სერვისებთან დაკავშირების ნებართვა"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Nitrous სერვისებთან დაკავშირების ნებართვა"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "ჩართვის შემთხვევაში, Helium შეძლებს ანონიმურ ვებ-სერვისებთან დაკავშირებას დამატებითი ფუნქციონალის უზრუნველსაყოფად. გამორთვის შემთხვევაში, დამატებითი ფუნქციები არ იმუშავებს."
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "ჩართვის შემთხვევაში, Nitrous შეძლებს ანონიმურ ვებ-სერვისებთან დაკავშირებას დამატებითი ფუნქციონალის უზრუნველსაყოფად. გამორთვის შემთხვევაში, დამატებითი ფუნქციები არ იმუშავებს."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "გამოიყენეთ Helium სერვისების საკუთარი ინსტანცია"
+    "source": "Use your own instance of Nitrous services",
+    "message": "გამოიყენეთ Nitrous სერვისების საკუთარი ინსტანცია"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "შეგიძლიათ განათავსოთ Helium სერვისების საკუთარი ინსტანცია და გამოიყენოთ ის თქვენს ბრაუზერში ნაგულისხმევის ნაცვლად. მხოლოდ HTTPS."
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "შეგიძლიათ განათავსოთ Nitrous სერვისების საკუთარი ინსტანცია და გამოიყენოთ ის თქვენს ბრაუზერში ნაგულისხმევის ნაცვლად. მხოლოდ HTTPS."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "მორგებული წყაროს URL Helium სერვისებისთვის"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "მორგებული წყაროს URL Nitrous სერვისებისთვის"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "Helium სერვისები განახლდა. გთხოვთ, გადახედოთ ცვლილებებს."
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "Nitrous სერვისები განახლდა. გთხოვთ, გადახედოთ ცვლილებებს."
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "Helium სერვისების განახლებების გადახედვა"
+    "source": "Review Nitrous services updates",
+    "message": "Nitrous სერვისების განახლებების გადახედვა"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Helium ნაგულისხმევი პარამეტრები"
+    "source": "Nitrous defaults",
+    "message": "Nitrous ნაგულისხმევი პარამეტრები"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "Safari-დან თქვენი სანიშნეების იმპორტისთვის Helium-ს დისკზე სრული წვდომა სჭირდება."
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Safari-დან თქვენი სანიშნეების იმპორტისთვის Nitrous-ს დისკზე სრული წვდომა სჭირდება."
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",

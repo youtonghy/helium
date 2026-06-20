@@ -1,18 +1,18 @@
 [
   {
     "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
-    "message": "A Helium felszabadítja az inaktív lapok által használt memóriát. Így az aktív lapok és más alkalmazások több számítógépes erőforrást kapnak, és a Helium gyors marad. Az inaktív lapok automatikusan újra aktívvá válnak, amikor visszatér hozzájuk."
+    "source": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "A Nitrous felszabadítja az inaktív lapok által használt memóriát. Így az aktív lapok és más alkalmazások több számítógépes erőforrást kapnak, és a Nitrous gyors marad. Az inaktív lapok automatikusan újra aktívvá válnak, amikor visszatér hozzájuk."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
-    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
-    "message": "A Helium kíméli az akkumulátort a háttértevékenység és a vizuális effektusok, például a sima görgetés és a videók képkockasebességének korlátozásával."
+    "source": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "A Nitrous kíméli az akkumulátort a háttértevékenység és a vizuális effektusok, például a sima görgetés és a videók képkockasebességének korlátozásával."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
-    "source": "Helium preloads pages which makes browsing and searching faster.",
-    "message": "A Helium előre betölti az oldalakat, ami gyorsabbá teszi a böngészést és a keresést."
+    "source": "Nitrous preloads pages which makes browsing and searching faster.",
+    "message": "A Nitrous előre betölti az oldalakat, ami gyorsabbá teszi a böngészést és a keresést."
   },
   {
     "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
@@ -31,8 +31,8 @@
   },
   {
     "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
-    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
-    "message": "Importálva innen: <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>",
+    "message": "Importálva innen: <ph name=\"BROWSER_NAME\">$1<ex>Nitrous</ex></ph>"
   },
   {
     "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
@@ -46,18 +46,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES",
-    "source": "Helium services",
-    "message": "Helium szolgáltatások"
+    "source": "Nitrous services",
+    "message": "Nitrous szolgáltatások"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
-    "source": "Manage what Helium services are allowed in your browser",
-    "message": "A böngészőjében engedélyezett Helium szolgáltatások kezelése"
+    "source": "Manage what Nitrous services are allowed in your browser",
+    "message": "A böngészőjében engedélyezett Nitrous szolgáltatások kezelése"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
-    "source": "Updates to Helium services:",
-    "message": "A Helium szolgáltatások frissítései:"
+    "source": "Updates to Nitrous services:",
+    "message": "A Nitrous szolgáltatások frissítései:"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
@@ -71,23 +71,23 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
-    "source": "Allow connecting to Helium services",
-    "message": "Csatlakozás engedélyezése a Helium szolgáltatásokhoz"
+    "source": "Allow connecting to Nitrous services",
+    "message": "Csatlakozás engedélyezése a Nitrous szolgáltatásokhoz"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
-    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
-    "message": "Ha engedélyezve van, a Helium anonim webszolgáltatásokhoz csatlakozhat, hogy kiegészítő funkciókat biztosítson. Ha le van tiltva, ezek a funkciók nem működnek."
+    "source": "When enabled, Nitrous will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Ha engedélyezve van, a Nitrous anonim webszolgáltatásokhoz csatlakozhat, hogy kiegészítő funkciókat biztosítson. Ha le van tiltva, ezek a funkciók nem működnek."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
-    "source": "Use your own instance of Helium services",
-    "message": "Saját Helium szolgáltatáspéldány használata"
+    "source": "Use your own instance of Nitrous services",
+    "message": "Saját Nitrous szolgáltatáspéldány használata"
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
-    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
-    "message": "Használhatja saját Helium szolgáltatási példányát is, amelyet Ön maga üzemeltet, és ezt a böngészőjében az alapértelmezett helyett használhatja. Kizárólag HTTPS kapcsolaton keresztül működik."
+    "source": "You can host your own instance of Nitrous services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Használhatja saját Nitrous szolgáltatási példányát is, amelyet Ön maga üzemeltet, és ezt a böngészőjében az alapértelmezett helyett használhatja. Kizárólag HTTPS kapcsolaton keresztül működik."
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
@@ -96,18 +96,18 @@
   },
   {
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
-    "source": "Custom origin URL for Helium services",
-    "message": "Egyéni origin URL a Helium szolgáltatásokhoz"
+    "source": "Custom origin URL for Nitrous services",
+    "message": "Egyéni origin URL a Nitrous szolgáltatásokhoz"
   },
   {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
-    "source": "Helium services have been updated. Please review the changes.",
-    "message": "A Helium szolgáltatások frissültek. Kérjük, tekintse át a módosításokat."
+    "source": "Nitrous services have been updated. Please review the changes.",
+    "message": "A Nitrous szolgáltatások frissültek. Kérjük, tekintse át a módosításokat."
   },
   {
     "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
-    "source": "Review Helium services updates",
-    "message": "A Helium szolgáltatások frissítéseinek áttekintése"
+    "source": "Review Nitrous services updates",
+    "message": "A Nitrous szolgáltatások frissítéseinek áttekintése"
   },
   {
     "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
@@ -121,8 +121,8 @@
   },
   {
     "name": "IDS_POLICY_SOURCE_HOP",
-    "source": "Helium defaults",
-    "message": "Helium alapértelmezések"
+    "source": "Nitrous defaults",
+    "message": "Nitrous alapértelmezések"
   },
   {
     "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
@@ -136,8 +136,8 @@
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
-    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
-    "message": "A Heliumnek teljes lemezhozzáférésre van szüksége a könyvjelzőid Safariból való importálásához."
+    "source": "Nitrous needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "A Nitrousnek teljes lemezhozzáférésre van szüksége a könyvjelzőid Safariból való importálásához."
   },
   {
     "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",
