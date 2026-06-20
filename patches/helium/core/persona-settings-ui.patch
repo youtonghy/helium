@@ -14,18 +14,18 @@
      </cr-toast>
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
-@@ -168,6 +168,11 @@
-     this.interactedWithPage_();
- 
+@@ -170,6 +170,11 @@
      Router.getInstance().navigateTo(routes.SITE_SETTINGS);
-+  }
-+
+   }
+ 
 +  private onPersonaPageClick_() {
 +    this.interactedWithPage_();
 +    Router.getInstance().navigateTo(routes.PERSONA);
-   }
- 
++  }
++
    private onSecurityPageClick_() {
+     this.interactedWithPage_();
+     this.metricsBrowserProxy_.recordAction(
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
 @@ -103,6 +103,14 @@
