@@ -14,7 +14,7 @@
      </cr-toast>
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
-@@ -170,6 +170,11 @@
+@@ -165,6 +165,11 @@
      Router.getInstance().navigateTo(routes.SITE_SETTINGS);
    }
  
