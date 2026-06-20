@@ -1,63 +1,8 @@
---- a/chrome/app/settings_strings.grdp
-+++ b/chrome/app/settings_strings.grdp
-@@ -1705,6 +1705,34 @@
-       </message>
-     </if>
- 
-+    <message name="IDS_SETTINGS_PERSONA_TITLE" desc="Name of the page that manages browser personas.">
-+      Persona
-+    </message>
-+    <message name="IDS_SETTINGS_PERSONA_DESCRIPTION" desc="Description of the persona settings page.">
-+      Manage browser identity, region, language, hardware, display, network and exposed APIs
-+    </message>
-+    <message name="IDS_SETTINGS_PERSONA_ENABLED" desc="Label for the persona enabled toggle.">
-+      Enable persona overrides
-+    </message>
-+    <message name="IDS_SETTINGS_PERSONA_PASSTHROUGH" desc="Label for the persona passthrough toggle.">
-+      Passthrough current browser identity
-+    </message>
-+    <message name="IDS_SETTINGS_PERSONA_RANDOMIZE" desc="Text for the persona randomize action.">
-+      Randomize persona
-+    </message>
-+    <message name="IDS_SETTINGS_PERSONA_SAVE" desc="Text for the persona save action.">
-+      Save persona
-+    </message>
-+    <message name="IDS_SETTINGS_PERSONA_REVERT" desc="Text for the persona revert action.">
-+      Revert changes
-+    </message>
-+    <message name="IDS_SETTINGS_PERSONA_CLONE" desc="Text for the persona clone action.">
-+      Clone preset
-+    </message>
-+    <message name="IDS_SETTINGS_PERSONA_DELETE" desc="Text for the persona delete action.">
-+      Delete persona
-+    </message>
-+
-     <!-- Safety check -->
-     <message name="IDS_SETTINGS_SAFETY_CHECK_ICON_INFO_ARIA_LABEL" desc="Accessibility text for a safety check child icon, that indicates info for the child check.">
-       Info
---- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-+++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -2258,6 +2258,15 @@
-       {"siteSettingsSublabel", IDS_SETTINGS_PERMISSIONS_DESCRIPTION},
-       {"securityPageTitle", IDS_SETTINGS_SECURITY},
-       {"securityPageDescription", IDS_SETTINGS_SECURITY_DESCRIPTION},
-+      {"personaTitle", IDS_SETTINGS_PERSONA_TITLE},
-+      {"personaDescription", IDS_SETTINGS_PERSONA_DESCRIPTION},
-+      {"personaEnabled", IDS_SETTINGS_PERSONA_ENABLED},
-+      {"personaPassthrough", IDS_SETTINGS_PERSONA_PASSTHROUGH},
-+      {"personaRandomize", IDS_SETTINGS_PERSONA_RANDOMIZE},
-+      {"personaSave", IDS_SETTINGS_PERSONA_SAVE},
-+      {"personaRevert", IDS_SETTINGS_PERSONA_REVERT},
-+      {"personaClone", IDS_SETTINGS_PERSONA_CLONE},
-+      {"personaDelete", IDS_SETTINGS_PERSONA_DELETE},
-       {"advancedProtectionProgramTitle",
-        IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM},
-       {"advancedProtectionProgramDesc",
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
-@@ -55,6 +55,11 @@
-         sub-label="$i18n{siteSettingsSublabel}"
-         on-click="onSiteSettingsLinkRowClick_"
+@@ -51,6 +51,11 @@
+         sub-label="$i18n{heliumServicesDescription}"
+         on-click="onHeliumServicesPageClick_"
          role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
 +    <cr-link-row id="personaLinkRow" start-icon="privacy:person"
 +        class="hr" label="$i18n{personaTitle}"
@@ -100,7 +45,7 @@
      <settings-cookies-page slot="view" id="cookies"
 --- a/chrome/browser/resources/settings/router.ts
 +++ b/chrome/browser/resources/settings/router.ts
-@@ -43,6 +43,7 @@
+@@ -44,6 +44,7 @@
    PAYMENTS: Route;
    PEOPLE: Route;
    PERFORMANCE: Route;
@@ -110,7 +55,7 @@
    PRIVACY_GUIDE: Route;
 --- a/chrome/browser/resources/settings/route.ts
 +++ b/chrome/browser/resources/settings/route.ts
-@@ -27,6 +27,7 @@
+@@ -29,6 +29,7 @@
    if (loadTimeData.getBoolean('showPrivacyGuide')) {
      r.PRIVACY_GUIDE = r.PRIVACY.createChild('guide');
    }
@@ -128,10 +73,10 @@
      "privacy_page/privacy_page.ts",
      "privacy_page/privacy_page_index.ts",
      "privacy_page/security/fingerprint_progress_arc.ts",
-@@ -395,6 +396,7 @@
-       "languages_page/languages_util.ts",
+@@ -397,6 +398,7 @@
        "people_page/import_data_browser_proxy.ts",
        "people_page/manage_profile_browser_proxy.ts",
+       "privacy_page/changelog_proxy.ts",
 +      "privacy_page/persona_browser_proxy.ts",
        "system_page/system_page_browser_proxy.ts",
      ]
@@ -146,7 +91,7 @@
  import './privacy_page/privacy_guide/privacy_guide_dialog.js';
  import './privacy_page/privacy_guide/privacy_guide_page.js';
  import './privacy_page/security/security_keys_subpage.js';
-@@ -244,6 +245,7 @@
+@@ -245,6 +246,7 @@
  export {SettingsSyncPageElement} from './people_page/sync_page.js';
  export {NetworkPredictionOptions} from './performance_page/constants.js';
  export {SettingsCookiesPageElement} from './privacy_page/cookies_page.js';
@@ -156,7 +101,7 @@
  export {PrivacyGuideStep} from './privacy_page/privacy_guide/constants.js';
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1480,6 +1480,8 @@
+@@ -1484,6 +1484,8 @@
        "webui/settings/on_startup_handler.h",
        "webui/settings/password_manager_handler.cc",
        "webui/settings/password_manager_handler.h",
@@ -167,7 +112,7 @@
        "webui/settings/performance_handler.cc",
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -71,6 +71,7 @@
+@@ -72,6 +72,7 @@
  #include "chrome/browser/ui/webui/settings/metrics_reporting_handler.h"
  #include "chrome/browser/ui/webui/settings/on_startup_handler.h"
  #include "chrome/browser/ui/webui/settings/password_manager_handler.h"
@@ -175,17 +120,18 @@
  #include "chrome/browser/ui/webui/settings/people_handler.h"
  #include "chrome/browser/ui/webui/settings/performance_handler.h"
  #include "chrome/browser/ui/webui/settings/privacy_sandbox_handler.h"
-@@ -270,6 +271,7 @@
+@@ -272,6 +273,7 @@
    AddSettingsPageUIHandler(std::make_unique<ProfileInfoHandler>(profile));
    AddSettingsPageUIHandler(std::make_unique<ProtocolHandlersHandler>(profile));
    AddSettingsPageUIHandler(std::make_unique<PrivacySandboxHandler>());
 +  AddSettingsPageUIHandler(std::make_unique<PersonaHandler>(profile));
    AddSettingsPageUIHandler(std::make_unique<SearchEnginesHandler>(profile));
-   AddSettingsPageUIHandler(std::make_unique<SecureDnsHandler>());
+   AddSettingsPageUIHandler(
+       std::make_unique<HeliumServicesSchemaHandler>(profile));
    AddSettingsPageUIHandler(std::make_unique<SiteSettingsHandler>(profile));
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,31 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -259,7 +205,7 @@
 +</settings-subpage>
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,104 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -366,7 +312,7 @@
 +customElements.define(SettingsPersonaPageElement.is, SettingsPersonaPageElement);
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.h
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,29 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -398,7 +344,7 @@
 +#endif
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.cc
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,28 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.

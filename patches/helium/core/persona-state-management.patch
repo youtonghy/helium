@@ -63,16 +63,6 @@
  #include "chrome/browser/external_protocol/external_protocol_handler.h"
  #include "chrome/browser/favicon/favicon_utils.h"
  #include "chrome/browser/font_family_cache.h"
---- a/chrome/browser/ui/browser_ui_prefs.cc
-+++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -142,6 +142,7 @@
-   registry->RegisterDictionaryPref(prefs::kBrowserWindowPlacement);
-   registry->RegisterDictionaryPref(prefs::kBrowserWindowPlacementPopup);
-   registry->RegisterDictionaryPref(prefs::kAppWindowPlacement);
-+  registry->RegisterDictionaryPref("helium.persona.state");
-   registry->RegisterBooleanPref(
-       prefs::kEnableDoNotTrack, false,
-       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 --- a/third_party/blink/public/common/BUILD.gn
 +++ b/third_party/blink/public/common/BUILD.gn
 @@ -162,6 +162,7 @@
