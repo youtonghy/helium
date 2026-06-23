@@ -63,19 +63,98 @@
  #include "chrome/browser/external_protocol/external_protocol_handler.h"
  #include "chrome/browser/favicon/favicon_utils.h"
  #include "chrome/browser/font_family_cache.h"
+@@ -3201,6 +3203,19 @@
+   return profile->GetPrefs()->GetString(language::prefs::kAcceptLanguages);
+ }
+ 
++blink::HeliumPersonaSnapshot ChromeContentBrowserClient::GetHeliumPersonaSnapshot(
++    content::BrowserContext* browser_context) {
++  if (!browser_context) {
++    return blink::HeliumPersonaSnapshot();
++  }
++  Profile* profile = Profile::FromBrowserContext(browser_context);
++  auto* service = helium_persona::PersonaServiceFactory::GetForProfile(profile);
++  if (!service) {
++    return blink::HeliumPersonaSnapshot();
++  }
++  return service->GetActiveSnapshot();
++}
++
+ gfx::ImageSkia ChromeContentBrowserClient::GetDefaultFavicon() {
+   return favicon::GetDefaultFavicon().AsImageSkia();
+ }
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -250,6 +250,12 @@ static_library("browser") {
+     "font_family_cache.h",
+     "global_features.cc",
++    "global_features.h",
++    "helium_persona/persona_runtime_override.cc",
++    "helium_persona/persona_service.cc",
++    "helium_persona/persona_service.h",
++    "helium_persona/persona_service_factory.cc",
++    "helium_persona/persona_service_factory.h",
+     "icon_loader.cc",
+     "icon_loader.h",
+     "icon_manager.cc",
+     "icon_manager.h",
 --- a/third_party/blink/public/common/BUILD.gn
 +++ b/third_party/blink/public/common/BUILD.gn
-@@ -162,6 +162,7 @@
+@@ -162,6 +162,8 @@
      "frame/user_activation_state.h",
      "frame/user_activation_update_source.h",
      "frame/view_transition_state.h",
 +    "helium_persona/persona_snapshot.h",
++    "helium_persona/persona_snapshot_mojom_traits.h",
      "history/session_history_constants.h",
      "indexeddb/indexed_db_default_mojom_traits.h",
      "indexeddb/indexeddb_key.h",
+--- a/third_party/blink/public/mojom/BUILD.gn
++++ b/third_party/blink/public/mojom/BUILD.gn
+@@ -1356,6 +1356,9 @@
+     # Depends on frame_policy.mojom.
+     "fenced_frame/fenced_frame.mojom",
+     "navigation/navigation_params.mojom",
++
++    # Helium persona snapshot.
++    "helium_persona/persona_snapshot.mojom",
+ 
+     # Note that service_worker_object.mojom and service_worker.mojom depend on
+     # transferable_message.mojom, and controller_service_worker.mojom and
+@@ -1523,17 +1526,30 @@
+       traits_deps = [ "//gpu/ipc/common" ]
+     },
+   ]
+ 
+   cpp_typemaps = [
++    {
++      types = [
++        {
++          mojom = "blink.mojom.HeliumPersonaUaChBrand"
++          cpp = "::blink::HeliumPersonaUaChBrand"
++        },
++        {
++          mojom = "blink.mojom.HeliumPersonaSnapshot"
++          cpp = "::blink::HeliumPersonaSnapshot"
++        },
++      ]
++      traits_headers = [ "//third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h" ]
++    },
+     {
+       types = [
+         {
+           mojom = "blink.mojom.CloneableMessage"
+           cpp = "::blink::CloneableMessage"
+           move_only = true
+         },
+       ]
+       traits_headers =
+           [ "//third_party/blink/public/common/messaging/cloneable_message.h" ]
+       traits_private_headers = [ "//third_party/blink/public/common/messaging/cloneable_message_mojom_traits.h" ]
+     },
 --- /dev/null
 +++ b/components/helium_persona/persona_snapshot.h
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,17 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -87,15 +166,15 @@
 +namespace helium_persona {
 +
 +// Runtime consumers should read this single normalized snapshot.
-+bool PersonaHasRequiredFields(const base::Value::Dict& value);
-+base::Value::Dict ValidatePersona(const base::Value::Dict& value);
++bool PersonaHasRequiredFields(const base::DictValue& value);
++base::DictValue ValidatePersona(const base::DictValue& value);
 +
 +}  // namespace helium_persona
 +
 +#endif
 --- /dev/null
 +++ b/components/helium_persona/persona_snapshot.cc
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,16 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -103,18 +182,18 @@
 +
 +namespace helium_persona {
 +
-+bool PersonaHasRequiredFields(const base::Value::Dict& value) {
++bool PersonaHasRequiredFields(const base::DictValue& value) {
 +  return value.contains("id") && value.contains("name");
 +}
 +
-+base::Value::Dict ValidatePersona(const base::Value::Dict& value) {
++base::DictValue ValidatePersona(const base::DictValue& value) {
 +  return value.Clone();
 +}
 +
 +}  // namespace helium_persona
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,41 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -134,6 +213,9 @@
 +struct HeliumPersonaSnapshot {
 +  bool enabled = false;
 +  bool client_hints_enabled = true;
++  bool allow_background_sync = false;
++  bool allow_contacts = false;
++  bool allow_privacy_sandbox_apis = true;
 +  bool ua_ch_mobile = false;
 +  bool ua_ch_wow64 = false;
 +  std::string user_agent;
@@ -154,8 +236,154 @@
 +
 +#endif
 --- /dev/null
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -0,0 +1,143 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_MOJOM_TRAITS_H_
++#define THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_MOJOM_TRAITS_H_
++
++#include <string>
++#include <vector>
++
++#include "mojo/public/cpp/bindings/struct_traits.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom-shared.h"
++
++namespace mojo {
++
++template <>
++struct StructTraits<blink::mojom::HeliumPersonaUaChBrandDataView,
++                    ::blink::HeliumPersonaUaChBrand> {
++  static const std::string& brand(
++      const ::blink::HeliumPersonaUaChBrand& data) {
++    return data.brand;
++  }
++
++  static const std::string& version(
++      const ::blink::HeliumPersonaUaChBrand& data) {
++    return data.version;
++  }
++
++  static bool Read(blink::mojom::HeliumPersonaUaChBrandDataView data,
++                   ::blink::HeliumPersonaUaChBrand* out) {
++    return data.ReadBrand(&out->brand) && data.ReadVersion(&out->version);
++  }
++};
++
++template <>
++struct StructTraits<blink::mojom::HeliumPersonaSnapshotDataView,
++                    ::blink::HeliumPersonaSnapshot> {
++  static bool enabled(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.enabled;
++  }
++
++  static bool client_hints_enabled(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.client_hints_enabled;
++  }
++
++  static bool allow_background_sync(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_background_sync;
++  }
++
++  static bool allow_contacts(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_contacts;
++  }
++
++  static bool allow_privacy_sandbox_apis(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_privacy_sandbox_apis;
++  }
++
++  static bool ua_ch_mobile(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.ua_ch_mobile;
++  }
++
++  static bool ua_ch_wow64(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.ua_ch_wow64;
++  }
++
++  static const std::string& user_agent(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.user_agent;
++  }
++
++  static const std::string& accept_language(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.accept_language;
++  }
++
++  static const std::string& ua_ch_platform(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.ua_ch_platform;
++  }
++
++  static const std::string& ua_ch_platform_version(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.ua_ch_platform_version;
++  }
++
++  static const std::string& ua_ch_architecture(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.ua_ch_architecture;
++  }
++
++  static const std::string& ua_ch_model(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.ua_ch_model;
++  }
++
++  static const std::string& ua_ch_bitness(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.ua_ch_bitness;
++  }
++
++  static const std::string& ua_ch_full_version(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.ua_ch_full_version;
++  }
++
++  static const std::vector<std::string>& ua_ch_form_factors(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.ua_ch_form_factors;
++  }
++
++  static const std::vector<::blink::HeliumPersonaUaChBrand>& ua_ch_brands(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.ua_ch_brands;
++  }
++
++  static bool Read(blink::mojom::HeliumPersonaSnapshotDataView data,
++                   ::blink::HeliumPersonaSnapshot* out) {
++    out->enabled = data.enabled();
++    out->client_hints_enabled = data.client_hints_enabled();
++    out->allow_background_sync = data.allow_background_sync();
++    out->allow_contacts = data.allow_contacts();
++    out->allow_privacy_sandbox_apis = data.allow_privacy_sandbox_apis();
++    out->ua_ch_mobile = data.ua_ch_mobile();
++    out->ua_ch_wow64 = data.ua_ch_wow64();
++    return data.ReadUserAgent(&out->user_agent) &&
++           data.ReadAcceptLanguage(&out->accept_language) &&
++           data.ReadUaChPlatform(&out->ua_ch_platform) &&
++           data.ReadUaChPlatformVersion(&out->ua_ch_platform_version) &&
++           data.ReadUaChArchitecture(&out->ua_ch_architecture) &&
++           data.ReadUaChModel(&out->ua_ch_model) &&
++           data.ReadUaChBitness(&out->ua_ch_bitness) &&
++           data.ReadUaChFullVersion(&out->ua_ch_full_version) &&
++           data.ReadUaChFormFactors(&out->ua_ch_form_factors) &&
++           data.ReadUaChBrands(&out->ua_ch_brands);
++  }
++};
++
++}  // namespace mojo
++
++#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_MOJOM_TRAITS_H_
+--- /dev/null
 +++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,29 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -169,6 +397,9 @@
 +struct HeliumPersonaSnapshot {
 +  bool enabled;
 +  bool client_hints_enabled;
++  bool allow_background_sync;
++  bool allow_contacts;
++  bool allow_privacy_sandbox_apis;
 +  bool ua_ch_mobile;
 +  bool ua_ch_wow64;
 +  string user_agent;
@@ -184,7 +415,7 @@
 +};
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.h
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,35 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -206,11 +437,11 @@
 +  explicit PersonaService(PrefService* prefs);
 +  ~PersonaService() override;
 +
-+  base::Value::Dict GetPersonaState() const;
-+  base::Value::Dict SavePersona(const base::Value::Dict& payload);
-+  base::Value::Dict ClonePresetIntoProfile(const std::string& preset_id);
-+  base::Value::Dict SetActivePersona(const std::string& persona_id);
-+  base::Value::Dict DeletePersona(const std::string& persona_id);
++  base::DictValue GetPersonaState() const;
++  base::DictValue SavePersona(const base::DictValue& payload);
++  base::DictValue ClonePresetIntoProfile(const std::string& preset_id);
++  base::DictValue SetActivePersona(const std::string& persona_id);
++  base::DictValue DeletePersona(const std::string& persona_id);
 +  blink::HeliumPersonaSnapshot GetActiveSnapshot() const;
 +
 + private:
@@ -222,7 +453,7 @@
 +#endif
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,43 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -235,28 +466,28 @@
 +PersonaService::PersonaService(PrefService* prefs) : prefs_(prefs) {}
 +PersonaService::~PersonaService() = default;
 +
-+base::Value::Dict PersonaService::GetPersonaState() const {
-+  return base::Value::Dict();
++base::DictValue PersonaService::GetPersonaState() const {
++  return base::DictValue();
 +}
 +
-+base::Value::Dict PersonaService::SavePersona(const base::Value::Dict& payload) {
++base::DictValue PersonaService::SavePersona(const base::DictValue& payload) {
 +  return payload.Clone();
 +}
 +
-+base::Value::Dict PersonaService::ClonePresetIntoProfile(const std::string& preset_id) {
-+  base::Value::Dict result;
++base::DictValue PersonaService::ClonePresetIntoProfile(const std::string& preset_id) {
++  base::DictValue result;
 +  result.Set("presetId", preset_id);
 +  return result;
 +}
 +
-+base::Value::Dict PersonaService::SetActivePersona(const std::string& persona_id) {
-+  base::Value::Dict result;
++base::DictValue PersonaService::SetActivePersona(const std::string& persona_id) {
++  base::DictValue result;
 +  result.Set("activePersonaId", persona_id);
 +  return result;
 +}
 +
-+base::Value::Dict PersonaService::DeletePersona(const std::string& persona_id) {
-+  base::Value::Dict result;
++base::DictValue PersonaService::DeletePersona(const std::string& persona_id) {
++  base::DictValue result;
 +  result.Set("deletedPersonaId", persona_id);
 +  return result;
 +}
@@ -268,7 +499,7 @@
 +}  // namespace helium_persona
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service_factory.h
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,19 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -290,7 +521,7 @@
 +#endif
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service_factory.cc
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,17 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -310,7 +541,7 @@
 +}  // namespace helium_persona
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_runtime_override.cc
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,16 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.

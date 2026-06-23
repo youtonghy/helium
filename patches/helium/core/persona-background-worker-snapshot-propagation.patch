@@ -468,6 +468,24 @@
    start_data->script_type = params.script_type;
    start_data->wait_for_debugger_mode =
        params.wait_for_debugger
+--- a/third_party/blink/renderer/core/workers/global_scope_creation_params.h
++++ b/third_party/blink/renderer/core/workers/global_scope_creation_params.h
+@@ -15,6 +15,7 @@
+ #include "services/metrics/public/cpp/ukm_source_id.h"
+ #include "services/network/public/cpp/permissions_policy/permissions_policy.h"
+ #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/permissions_policy/document_policy.h"
+ #include "third_party/blink/public/common/tokens/tokens.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+@@ -122,6 +123,7 @@
+   String global_scope_name;
+   String user_agent;
+   UserAgentMetadata ua_metadata;
++  HeliumPersonaSnapshot persona_snapshot;
+ 
+   scoped_refptr<WebWorkerFetchContext> web_worker_fetch_context;
+ 
 --- a/third_party/blink/public/web/web_embedded_worker_start_data.h	2026-06-14 19:35:14
 +++ b/third_party/blink/public/web/web_embedded_worker_start_data.h	2026-06-15 13:28:20
 @@ -34,6 +34,7 @@

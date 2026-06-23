@@ -43,15 +43,24 @@
      "//components/search_engines:test_support",
 --- a/chrome/browser/content_settings/generated_javascript_optimizer_pref.cc
 +++ b/chrome/browser/content_settings/generated_javascript_optimizer_pref.cc
-@@ -30,15 +30,10 @@ GeneratedJavascriptOptimizerPref::Genera
+@@ -13,7 +13,6 @@
+ #include "components/content_settings/browser/ui/javascript_optimizer_setting.h"
+ #include "components/content_settings/core/common/features.h"
+ #include "components/prefs/pref_service.h"
+-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ 
+ using extensions::api::settings_private::Enforcement;
+ using extensions::api::settings_private::PrefObject;
+@@ -28,17 +27,6 @@
+     Profile* profile)
+     : profile_(profile) {
    user_prefs_registrar_.Init(profile->GetPrefs());
-   user_prefs_registrar_.AddMultiple(
-       {prefs::kJavascriptOptimizerBlockedForUnfamiliarSites,
+-  user_prefs_registrar_.AddMultiple(
+-      {prefs::kJavascriptOptimizerBlockedForUnfamiliarSites,
 -       prefs::kSafeBrowsingEnabled},
-+       },
-       base::BindRepeating(
-           &GeneratedJavascriptOptimizerPref::OnPreferencesChanged,
-           base::Unretained(this)));
+-      base::BindRepeating(
+-          &GeneratedJavascriptOptimizerPref::OnPreferencesChanged,
+-          base::Unretained(this)));
 -  user_prefs_registrar_.Add(
 -      prefs::kSecuritySettingsBundle,
 -      base::BindRepeating(
@@ -60,7 +69,31 @@
  
    host_content_settings_map_ =
        HostContentSettingsMapFactory::GetForProfile(profile_);
-@@ -103,7 +98,6 @@ PrefObject GeneratedJavascriptOptimizerP
+@@ -64,10 +52,7 @@
+ 
+   auto selection = static_cast<int>(value->GetInt());
+   if (selection != static_cast<int>(JavascriptOptimizerSetting::kBlocked) &&
+-      selection != static_cast<int>(JavascriptOptimizerSetting::kAllowed) &&
+-      selection !=
+-          static_cast<int>(
+-              JavascriptOptimizerSetting::kBlockedForUnfamiliarSites)) {
++      selection != static_cast<int>(JavascriptOptimizerSetting::kAllowed)) {
+     return SetPrefResult::PREF_TYPE_MISMATCH;
+   }
+ 
+@@ -76,11 +61,6 @@
+       selection == static_cast<int>(JavascriptOptimizerSetting::kBlocked)
+           ? ContentSetting::CONTENT_SETTING_BLOCK
+           : ContentSetting::CONTENT_SETTING_ALLOW);
+-  profile_->GetPrefs()->SetBoolean(
+-      prefs::kJavascriptOptimizerBlockedForUnfamiliarSites,
+-      selection == static_cast<int>(
+-                       JavascriptOptimizerSetting::kBlockedForUnfamiliarSites));
+-
+   return SetPrefResult::SUCCESS;
+ }
+ 
+@@ -103,7 +83,6 @@
          &pref_object, SettingSource::kPolicy);
    }
  
@@ -68,7 +101,7 @@
      pref_object.enforcement =
          extensions::api::settings_private::Enforcement::kEnforced;
      pref_object.controlled_by =
-@@ -114,7 +108,6 @@ PrefObject GeneratedJavascriptOptimizerP
+@@ -114,7 +93,6 @@
      user_selectable_values.Append(
          base::Value(static_cast<int>(JavascriptOptimizerSetting::kBlocked)));
      pref_object.user_selectable_values = std::move(user_selectable_values);
@@ -76,7 +109,7 @@
  
    return pref_object;
  }
-@@ -124,35 +117,7 @@ void GeneratedJavascriptOptimizerPref::O
+@@ -124,35 +102,7 @@
  }
  
  void GeneratedJavascriptOptimizerPref::OnSettingsBundleChanged() {
@@ -1702,7 +1735,15 @@
  scoped_refptr<network::SharedURLLoaderFactory>
 --- a/chrome/browser/site_protection/site_familiarity_utils.cc
 +++ b/chrome/browser/site_protection/site_familiarity_utils.cc
-@@ -41,10 +41,6 @@ bool AreV8OptimizationsDisabledOnUnfamil
+@@ -12,7 +12,6 @@
+ #include "components/content_settings/core/common/features.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/safe_browsing/core/common/features.h"
+-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/search_engines/template_url_service.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_process_host.h"
+@@ -41,10 +40,6 @@ bool AreV8OptimizationsDisabledOnUnfamil
  }
  
  bool CanEnableBlockingJavascriptOptimizersForUnfamiliarSites(Profile* profile) {
@@ -1713,6 +1754,29 @@
  
    if (!(base::FeatureList::IsEnabled(
              features::kProcessSelectionDeferringConditions) &&
+@@ -93,22 +88,6 @@ ComputeDefaultJavascriptOptimizerSetting(Profile* profile) {
+     return content_settings::JavascriptOptimizerSetting::kAllowed;
+   }
+ 
+-  PrefService* prefs = profile->GetPrefs();
+-  if (prefs->HasPrefPath(
+-          prefs::kJavascriptOptimizerBlockedForUnfamiliarSites)) {
+-    return prefs->GetBoolean(
+-               prefs::kJavascriptOptimizerBlockedForUnfamiliarSites)
+-               ? content_settings::JavascriptOptimizerSetting::
+-                     kBlockedForUnfamiliarSites
+-               : content_settings::JavascriptOptimizerSetting::kAllowed;
+-  }
+-
+-  if (base::FeatureList::IsEnabled(
+-          safe_browsing::kMigrateToBlockV8OptimizerOnUnfamiliarSites)) {
+-    return content_settings::JavascriptOptimizerSetting::
+-        kBlockedForUnfamiliarSites;
+-  }
+-
+   return content_settings::JavascriptOptimizerSetting::kAllowed;
+ }
+ 
 --- a/chrome/browser/ssl/chrome_security_blocking_page_factory.cc
 +++ b/chrome/browser/ssl/chrome_security_blocking_page_factory.cc
 @@ -125,15 +125,6 @@ CreateSettingsPageHelper() {

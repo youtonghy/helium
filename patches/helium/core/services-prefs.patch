@@ -723,7 +723,15 @@
 +#endif  // COMPONENTS_HELIUM_SERVICES_SCHEMA_H_
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1504,6 +1504,8 @@ static_library("ui") {
+@@ -535,6 +535,7 @@ static_library("ui") {
+     "//components/download/content/factory",
+     "//components/download/content/public",
+     "//components/embedder_support",
++    "//components/helium_services",
+     "//components/embedder_support:user_agent",
+     "//components/encrypted_messages:encrypted_message_proto",
+     "//components/enterprise",
+@@ -1505,6 +1505,8 @@ static_library("ui") {
        "webui/settings/search_engines_handler.h",
        "webui/settings/security_settings_provider.cc",
        "webui/settings/security_settings_provider.h",

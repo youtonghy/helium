@@ -101,7 +101,7 @@
  export {PrivacyGuideStep} from './privacy_page/privacy_guide/constants.js';
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1484,6 +1484,8 @@
+@@ -1485,6 +1485,8 @@
        "webui/settings/on_startup_handler.h",
        "webui/settings/password_manager_handler.cc",
        "webui/settings/password_manager_handler.h",
@@ -330,13 +330,15 @@
 +  explicit PersonaHandler(Profile* profile);
 +  ~PersonaHandler() override;
 +  void RegisterMessages() override;
++  void OnJavascriptAllowed() override;
++  void OnJavascriptDisallowed() override;
 +
 + private:
-+  void HandleGetPersonaState(const base::Value::List& args);
-+  void HandleSavePersona(const base::Value::List& args);
-+  void HandleSetActivePersona(const base::Value::List& args);
-+  void HandleClonePresetIntoProfile(const base::Value::List& args);
-+  void HandleDeletePersona(const base::Value::List& args);
++  void HandleGetPersonaState(const base::ListValue& args);
++  void HandleSavePersona(const base::ListValue& args);
++  void HandleSetActivePersona(const base::ListValue& args);
++  void HandleClonePresetIntoProfile(const base::ListValue& args);
++  void HandleDeletePersona(const base::ListValue& args);
 +};
 +
 +}  // namespace settings
@@ -355,7 +357,7 @@
 +
 +namespace settings {
 +
-+PersonaHandler::PersonaHandler(Profile* profile) = default;
++PersonaHandler::PersonaHandler(Profile* profile) {}
 +PersonaHandler::~PersonaHandler() = default;
 +
 +void PersonaHandler::RegisterMessages() {
@@ -366,10 +368,14 @@
 +  web_ui()->RegisterMessageCallback("deletePersona", base::BindRepeating(&PersonaHandler::HandleDeletePersona, base::Unretained(this)));
 +}
 +
-+void PersonaHandler::HandleGetPersonaState(const base::Value::List& args) {}
-+void PersonaHandler::HandleSavePersona(const base::Value::List& args) {}
-+void PersonaHandler::HandleSetActivePersona(const base::Value::List& args) {}
-+void PersonaHandler::HandleClonePresetIntoProfile(const base::Value::List& args) {}
-+void PersonaHandler::HandleDeletePersona(const base::Value::List& args) {}
++void PersonaHandler::OnJavascriptAllowed() {}
++
++void PersonaHandler::OnJavascriptDisallowed() {}
++
++void PersonaHandler::HandleGetPersonaState(const base::ListValue& args) {}
++void PersonaHandler::HandleSavePersona(const base::ListValue& args) {}
++void PersonaHandler::HandleSetActivePersona(const base::ListValue& args) {}
++void PersonaHandler::HandleClonePresetIntoProfile(const base::ListValue& args) {}
++void PersonaHandler::HandleDeletePersona(const base::ListValue& args) {}
 +
 +}  // namespace settings

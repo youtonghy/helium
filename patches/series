@@ -161,4 +161,3 @@ helium/core/persona-noise-token-determinism-test.patch
 helium/core/persona-background-worker-snapshot-propagation.patch
 helium/core/persona-contacts-background-fetch-runtime-gating.patch
 helium/core/persona-privacy-sandbox-runtime-gates.patch
-helium/core/persona-webaudio-sample-rate-runtime-consistency.patch
