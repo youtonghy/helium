@@ -25,7 +25,43 @@
 +#endif  /* COMPONENTS_HELIUM_SERVICES_EXTENSION_IDS_H_ */
 --- a/chrome/browser/extensions/component_loader.h
 +++ b/chrome/browser/extensions/component_loader.h
-@@ -218,6 +218,7 @@ class ComponentLoader : public KeyedServ
+@@ -164,7 +164,8 @@
+   // Information about a registered component extension.
+   struct ComponentExtensionInfo {
+     ComponentExtensionInfo(base::DictValue manifest_param,
+-                           const base::FilePath& root_directory);
++                           const base::FilePath& root_directory,
++                           const ExtensionId& explicit_id = ExtensionId());
+ 
+     ComponentExtensionInfo(const ComponentExtensionInfo&) = delete;
+     ComponentExtensionInfo& operator=(const ComponentExtensionInfo&) = delete;
+@@ -182,6 +183,10 @@
+ 
+     // The component extension's ID.
+     ExtensionId extension_id;
++
++    // Explicit ID to pass into Extension::Create for bundled components whose
++    // upstream manifest does not carry a public key.
++    ExtensionId explicit_extension_id;
+   };
+ 
+   explicit ComponentLoader(Profile* profile);
+@@ -193,10 +198,12 @@
+ 
+   ExtensionId Add(std::string_view manifest_contents,
+                   const base::FilePath& root_directory,
+-                  bool skip_allowlist);
++                  bool skip_allowlist,
++                  const ExtensionId& explicit_id = ExtensionId());
+   ExtensionId Add(base::DictValue parsed_manifest,
+                   const base::FilePath& root_directory,
+-                  bool skip_allowlist);
++                  bool skip_allowlist,
++                  const ExtensionId& explicit_id = ExtensionId());
+ 
+   // Loads a registered component extension.
+   void Load(const ComponentExtensionInfo& info);
+@@ -218,6 +225,7 @@
                                   const std::string& name_string,
                                   const std::string& description_string);
    void AddWebStoreApp();
@@ -35,19 +71,99 @@
    void AddChromeApp();
 --- a/chrome/browser/extensions/component_loader.cc
 +++ b/chrome/browser/extensions/component_loader.cc
-@@ -439,6 +439,21 @@ void ComponentLoader::AddWebStoreApp() {
+@@ -39,6 +39,7 @@
+ #include "chrome/grit/component_extension_resources.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "components/crx_file/id_util.h"
++#include "components/helium_services/extension_ids.h"
+ #include "components/version_info/version_info.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/common/content_switches.h"
+@@ -158,20 +159,26 @@
+ 
+ ComponentLoader::ComponentExtensionInfo::ComponentExtensionInfo(
+     base::DictValue manifest_param,
+-    const base::FilePath& directory)
+-    : manifest(std::move(manifest_param)), root_directory(directory) {
++    const base::FilePath& directory,
++    const ExtensionId& explicit_id)
++    : manifest(std::move(manifest_param)),
++      root_directory(directory),
++      explicit_extension_id(explicit_id) {
+   if (!root_directory.IsAbsolute()) {
+     CHECK(base::PathService::Get(chrome::DIR_RESOURCES, &root_directory));
+     root_directory = root_directory.Append(directory);
+   }
+-  extension_id = GenerateId(manifest, root_directory);
++  extension_id = explicit_extension_id.empty()
++                     ? GenerateId(manifest, root_directory)
++                     : explicit_extension_id;
+ }
+ 
+ ComponentLoader::ComponentExtensionInfo::ComponentExtensionInfo(
+     ComponentExtensionInfo&& other)
+     : manifest(std::move(other.manifest)),
+       root_directory(std::move(other.root_directory)),
+-      extension_id(std::move(other.extension_id)) {}
++      extension_id(std::move(other.extension_id)),
++      explicit_extension_id(std::move(other.explicit_extension_id)) {}
+ 
+ ComponentLoader::ComponentExtensionInfo&
+ ComponentLoader::ComponentExtensionInfo::operator=(
+@@ -179,6 +186,7 @@
+   manifest = std::move(other.manifest);
+   root_directory = std::move(other.root_directory);
+   extension_id = std::move(other.extension_id);
++  explicit_extension_id = std::move(other.explicit_extension_id);
+   return *this;
+ }
+ 
+@@ -260,20 +268,24 @@
+ 
+ ExtensionId ComponentLoader::Add(std::string_view manifest_contents,
+                                  const base::FilePath& root_directory,
+-                                 bool skip_allowlist) {
++                                 bool skip_allowlist,
++                                 const ExtensionId& explicit_id) {
+   // The Value is kept for the lifetime of the ComponentLoader. This is
+   // required in case LoadAll() is called again.
+   std::optional<base::DictValue> manifest = ParseManifest(manifest_contents);
+   if (manifest) {
+-    return Add(std::move(*manifest), root_directory, skip_allowlist);
++    return Add(std::move(*manifest), root_directory, skip_allowlist,
++               explicit_id);
+   }
+   return std::string();
+ }
+ 
+ ExtensionId ComponentLoader::Add(base::DictValue parsed_manifest,
+                                  const base::FilePath& root_directory,
+-                                 bool skip_allowlist) {
+-  ComponentExtensionInfo info(std::move(parsed_manifest), root_directory);
++                                 bool skip_allowlist,
++                                 const ExtensionId& explicit_id) {
++  ComponentExtensionInfo info(std::move(parsed_manifest), root_directory,
++                              explicit_id);
+   if (!ignore_allowlist_for_testing_ && !skip_allowlist &&
+       !IsComponentExtensionAllowlisted(info.extension_id)) {
+     return std::string();
+@@ -439,6 +451,25 @@
        l10n_util::GetStringUTF8(IDS_WEBSTORE_APP_DESCRIPTION));
  }
  
 +void ComponentLoader::AddUBlock() {
-+  Add(IDR_UBLOCK_MANIFEST_JSON, base::FilePath(FILE_PATH_LITERAL("ublock")));
++  std::string manifest_contents =
++      ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
++          IDR_UBLOCK_MANIFEST_JSON);
++  Add(manifest_contents, base::FilePath(FILE_PATH_LITERAL("ublock")), true,
++      helium::kUBlockOriginComponentId);
 +
 +  using namespace extension_l10n_util;
 +  ComponentExtensionInfo& info = component_extensions_.back();
 +  std::string error;
-+  bool localized = LocalizeExtension(info.root_directory, &info.manifest,
-+                      GzippedMessagesPermission::kAllowForTrustedSource,
-+                      &error, true);
++  bool localized = LocalizeExtension(
++      info.root_directory, &info.manifest,
++      GzippedMessagesPermission::kAllowForTrustedSource, &error, true);
 +
 +  if (!localized) {
 +    LOG(ERROR) << "Failed to localize uBlock: " << error;
@@ -57,7 +173,25 @@
  #if BUILDFLAG(IS_CHROMEOS)
  void ComponentLoader::AddChromeApp() {
    AddWithNameAndDescription(
-@@ -516,6 +531,7 @@ void ComponentLoader::AddDefaultComponen
+@@ -471,7 +502,7 @@
+     std::u16string* error) {
+   // TODO(abarth): We should REQUIRE_MODERN_MANIFEST_VERSION once we've updated
+   //               our component extensions to the new manifest version.
+-  int flags = Extension::REQUIRE_KEY;
++  int flags = info.explicit_extension_id.empty() ? Extension::REQUIRE_KEY : 0;
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+   // ChromeOS component extension (GoogleTTS) needs to use symlinks to share
+@@ -481,7 +512,7 @@
+ 
+   return Extension::Create(info.root_directory,
+                            mojom::ManifestLocation::kComponent, info.manifest,
+-                           flags, error);
++                           flags, info.explicit_extension_id, error);
+ }
+ 
+ // static
+@@ -516,6 +547,7 @@
  
    if (!skip_session_components) {
      AddWebStoreApp();
@@ -67,19 +201,15 @@
  #endif  // BUILDFLAG(IS_CHROMEOS)
 --- a/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
 +++ b/chrome/browser/extensions/component_extensions_allowlist/allowlist.cc
-@@ -15,10 +15,11 @@
- #include "chrome/common/buildflags.h"
+@@ -16,6 +16,7 @@
  #include "chrome/common/extensions/extension_constants.h"
  #include "chrome/grit/browser_resources.h"
-+#include "components/helium_services/extension_ids.h"
  #include "chrome/grit/component_extension_resources.h"
++#include "components/helium_services/extension_ids.h"
  #include "extensions/buildflags/buildflags.h"
  #include "extensions/common/constants.h"
  #include "printing/buildflags/buildflags.h"
- 
- #if BUILDFLAG(IS_CHROMEOS)
- #include "ash/keyboard/ui/grit/keyboard_resources.h"
-@@ -36,6 +37,7 @@ bool IsComponentExtensionAllowlisted(con
+@@ -36,6 +37,7 @@
        extension_misc::kGlicExtensionId,
        extension_misc::kInAppPaymentsSupportAppId,
        extension_misc::kPdfExtensionId,
@@ -87,17 +217,17 @@
  #if BUILDFLAG(IS_CHROMEOS)
        extension_misc::kAssessmentAssistantExtensionId,
        extension_misc::kAccessibilityCommonExtensionId,
-@@ -95,6 +97,7 @@ bool IsComponentExtensionAllowlisted(int
+@@ -94,6 +96,7 @@
+     case IDR_NETWORK_SPEECH_SYNTHESIS_MANIFEST:
      case IDR_NETWORK_SPEECH_SYNTHESIS_MANIFEST_MV3:
      case IDR_READING_MODE_GDOCS_HELPER_MANIFEST:
-     case IDR_WEBSTORE_MANIFEST:
 +    case IDR_UBLOCK_MANIFEST_JSON:
+     case IDR_WEBSTORE_MANIFEST:
  
  #if BUILDFLAG(IS_CHROMEOS)
-     // Separate ChromeOS list, as it is quite large.
 --- a/ui/base/resource/resource_bundle.cc
 +++ b/ui/base/resource/resource_bundle.cc
-@@ -761,7 +761,7 @@ base::RefCountedMemory* ResourceBundle::
+@@ -761,7 +761,7 @@
  
    std::string_view data = GetRawDataResourceForScale(resource_id, scale_factor);
    if (data.empty())
@@ -108,8 +238,7 @@
        HasBrotliHeader(data)) {
 --- a/chrome/browser/resources/component_extension_resources.grd
 +++ b/chrome/browser/resources/component_extension_resources.grd
-@@ -21,6 +21,8 @@
- 
+@@ -22,6 +22,8 @@
        <include name="IDR_READING_MODE_GDOC_HELPER_CONTENT_JS" file="reading_mode_gdocs_helper/content.js" type="BINDATA" />
        <include name="IDR_READING_MODE_GDOC_HELPER_GDOCS_SCRIPT_JS" file="reading_mode_gdocs_helper/gdocs_script.js" type="BINDATA" />
  

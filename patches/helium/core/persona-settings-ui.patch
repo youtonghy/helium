@@ -1,3 +1,5 @@
+Index: chromium_src/chrome/browser/resources/settings/privacy_page/privacy_page.html
+===================================================================
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
 @@ -51,6 +51,11 @@
@@ -12,10 +14,12 @@
      <cr-toast id="deleteBrowsingDataToast" duration="5000">
        <div>[[dbdDeletionConfirmationToastLabel_]]</div>
      </cr-toast>
+Index: chromium_src/chrome/browser/resources/settings/privacy_page/privacy_page.ts
+===================================================================
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
-@@ -165,6 +165,11 @@
-     Router.getInstance().navigateTo(routes.SITE_SETTINGS);
+@@ -170,6 +170,11 @@ export class SettingsPrivacyPageElement
+     Router.getInstance().navigateTo(routes.HELIUM_SERVICES);
    }
  
 +  private onPersonaPageClick_() {
@@ -26,6 +30,8 @@
    private onSecurityPageClick_() {
      this.interactedWithPage_();
      this.metricsBrowserProxy_.recordAction(
+Index: chromium_src/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
+===================================================================
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
 @@ -103,6 +103,14 @@
@@ -43,9 +49,11 @@
        routes_.COOKIES, currentRoute, inSearchMode)]]"
        update-when-false>
      <settings-cookies-page slot="view" id="cookies"
+Index: chromium_src/chrome/browser/resources/settings/router.ts
+===================================================================
 --- a/chrome/browser/resources/settings/router.ts
 +++ b/chrome/browser/resources/settings/router.ts
-@@ -44,6 +44,7 @@
+@@ -44,6 +44,7 @@ export interface SettingsRoutes {
    PAYMENTS: Route;
    PEOPLE: Route;
    PERFORMANCE: Route;
@@ -53,9 +61,11 @@
    PRELOADING: Route;
    PRIVACY: Route;
    PRIVACY_GUIDE: Route;
+Index: chromium_src/chrome/browser/resources/settings/route.ts
+===================================================================
 --- a/chrome/browser/resources/settings/route.ts
 +++ b/chrome/browser/resources/settings/route.ts
-@@ -29,6 +29,7 @@
+@@ -29,6 +29,7 @@ function addPrivacyChildRoutes(r: Partia
    if (loadTimeData.getBoolean('showPrivacyGuide')) {
      r.PRIVACY_GUIDE = r.PRIVACY.createChild('guide');
    }
@@ -63,9 +73,11 @@
    r.SITE_SETTINGS = r.PRIVACY.createChild('/content');
    r.SECURITY = r.PRIVACY.createChild('/security');
  
+Index: chromium_src/chrome/browser/resources/settings/BUILD.gn
+===================================================================
 --- a/chrome/browser/resources/settings/BUILD.gn
 +++ b/chrome/browser/resources/settings/BUILD.gn
-@@ -142,6 +142,7 @@
+@@ -142,6 +142,7 @@ build_webui("build") {
      "privacy_page/privacy_guide/privacy_guide_safe_browsing_fragment.ts",
      "privacy_page/privacy_guide/privacy_guide_welcome_fragment.ts",
      "privacy_page/privacy_guide/step_indicator.ts",
@@ -73,7 +85,7 @@
      "privacy_page/privacy_page.ts",
      "privacy_page/privacy_page_index.ts",
      "privacy_page/security/fingerprint_progress_arc.ts",
-@@ -397,6 +398,7 @@
+@@ -397,6 +398,7 @@ build_webui("build") {
        "people_page/import_data_browser_proxy.ts",
        "people_page/manage_profile_browser_proxy.ts",
        "privacy_page/changelog_proxy.ts",
@@ -81,9 +93,11 @@
        "system_page/system_page_browser_proxy.ts",
      ]
      if (is_chrome_branded) {
+Index: chromium_src/chrome/browser/resources/settings/lazy_load.ts
+===================================================================
 --- a/chrome/browser/resources/settings/lazy_load.ts
 +++ b/chrome/browser/resources/settings/lazy_load.ts
-@@ -22,6 +22,7 @@
+@@ -22,6 +22,7 @@ import './clear_browsing_data_dialog/cle
  import './clear_browsing_data_dialog/clear_browsing_data_time_picker.js';
  import './glic_page/glic_login_permissions_page.js';
  import './privacy_page/cookies_page.js';
@@ -91,7 +105,7 @@
  import './privacy_page/privacy_guide/privacy_guide_dialog.js';
  import './privacy_page/privacy_guide/privacy_guide_page.js';
  import './privacy_page/security/security_keys_subpage.js';
-@@ -245,6 +246,7 @@
+@@ -245,6 +246,7 @@ export {SettingsSyncEncryptionOptionsEle
  export {SettingsSyncPageElement} from './people_page/sync_page.js';
  export {NetworkPredictionOptions} from './performance_page/constants.js';
  export {SettingsCookiesPageElement} from './privacy_page/cookies_page.js';
@@ -99,9 +113,11 @@
  export {SettingsDoNotTrackToggleElement} from './privacy_page/do_not_track_toggle.js';
  export {SettingsPersonalizationOptionsElement} from './privacy_page/personalization_options.js';
  export {PrivacyGuideStep} from './privacy_page/privacy_guide/constants.js';
+Index: chromium_src/chrome/browser/ui/BUILD.gn
+===================================================================
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1485,6 +1485,8 @@
+@@ -1485,6 +1485,8 @@ static_library("ui") {
        "webui/settings/on_startup_handler.h",
        "webui/settings/password_manager_handler.cc",
        "webui/settings/password_manager_handler.h",
@@ -110,6 +126,8 @@
        "webui/settings/people_handler.cc",
        "webui/settings/people_handler.h",
        "webui/settings/performance_handler.cc",
+Index: chromium_src/chrome/browser/ui/webui/settings/settings_ui.cc
+===================================================================
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
 @@ -72,6 +72,7 @@
@@ -120,7 +138,7 @@
  #include "chrome/browser/ui/webui/settings/people_handler.h"
  #include "chrome/browser/ui/webui/settings/performance_handler.h"
  #include "chrome/browser/ui/webui/settings/privacy_sandbox_handler.h"
-@@ -272,6 +273,7 @@
+@@ -272,6 +273,7 @@ SettingsUI::SettingsUI(content::WebUI* w
    AddSettingsPageUIHandler(std::make_unique<ProfileInfoHandler>(profile));
    AddSettingsPageUIHandler(std::make_unique<ProtocolHandlersHandler>(profile));
    AddSettingsPageUIHandler(std::make_unique<PrivacySandboxHandler>());
@@ -128,7 +146,8 @@
    AddSettingsPageUIHandler(std::make_unique<SearchEnginesHandler>(profile));
    AddSettingsPageUIHandler(
        std::make_unique<HeliumServicesSchemaHandler>(profile));
-   AddSettingsPageUIHandler(std::make_unique<SiteSettingsHandler>(profile));
+Index: chromium_src/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
 @@ -0,0 +1,31 @@
@@ -139,13 +158,13 @@
 +
 +export interface PersonaPageResponse {
 +  ok: boolean;
-+  state: Object;
-+  fieldErrors: Object;
++  state: any;
++  fieldErrors: any;
 +}
 +
 +export interface PersonaBrowserProxy {
-+  getPersonaState(): Promise<Object>;
-+  savePersona(persona: Object): Promise<PersonaPageResponse>;
++  getPersonaState(): Promise<any>;
++  savePersona(persona: any): Promise<PersonaPageResponse>;
 +  setActivePersona(personaId: string): Promise<PersonaPageResponse>;
 +  clonePresetIntoProfile(presetId: string): Promise<PersonaPageResponse>;
 +  deletePersona(personaId: string): Promise<PersonaPageResponse>;
@@ -154,8 +173,8 @@
 +let instance: PersonaBrowserProxy|null = null;
 +
 +export class PersonaBrowserProxyImpl implements PersonaBrowserProxy {
-+  getPersonaState() { return sendWithPromise<Object>('getPersonaState'); }
-+  savePersona(persona: Object) { return sendWithPromise<PersonaPageResponse>('savePersona', persona); }
++  getPersonaState() { return sendWithPromise<any>('getPersonaState'); }
++  savePersona(persona: any) { return sendWithPromise<PersonaPageResponse>('savePersona', persona); }
 +  setActivePersona(personaId: string) { return sendWithPromise<PersonaPageResponse>('setActivePersona', personaId); }
 +  clonePresetIntoProfile(presetId: string) { return sendWithPromise<PersonaPageResponse>('clonePresetIntoProfile', presetId); }
 +  deletePersona(personaId: string) { return sendWithPromise<PersonaPageResponse>('deletePersona', personaId); }
@@ -163,12 +182,21 @@
 +    return instance || (instance = new PersonaBrowserProxyImpl());
 +  }
 +}
+Index: chromium_src/chrome/browser/resources/settings/privacy_page/persona_page.html
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,80 @@
++<!-- Copyright 2026 The Helium Authors -->
++<!-- You can use, redistribute, and/or modify this source code under -->
++<!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
 +<style include="cr-shared-style settings-shared">
 +  .field-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
++  .field { display: flex; flex-direction: column; gap: 6px; }
++  .field label { color: var(--cr-secondary-text-color); font-size: 0.75rem; }
++  .field select { min-height: 32px; }
 +  .section { border-top: var(--cr-separator-line); margin-top: 20px; padding-top: 16px; }
++  .actions { display: flex; justify-content: flex-end; margin-top: 20px; }
 +</style>
 +<settings-subpage page-title="$i18n{personaTitle}" route-path$="[[routePath]]">
 +  <div class="field-grid">
@@ -176,10 +204,41 @@
 +    <cr-input label="Platform" value="{{editablePersona_.platform}}"></cr-input>
 +    <cr-input label="Navigator vendor" value="{{editablePersona_.navigatorVendor}}"></cr-input>
 +    <cr-input label="ProductSub" value="{{editablePersona_.navigatorProductSub}}"></cr-input>
-+    <cr-input label="UA-CH platform" value="{{editablePersona_.uaCh.platform}}"></cr-input>
++    <div class="field">
++      <label>UA-CH platform</label>
++      <select value$="[[editablePersona_.uaCh.platform]]"
++          on-change="onUaChPlatformChange_">
++        <option value="macOS">macOS</option>
++        <option value="Windows">Windows</option>
++        <option value="Linux">Linux</option>
++        <option value="Chrome OS">Chrome OS</option>
++        <option value="Android">Android</option>
++      </select>
++    </div>
 +    <cr-input label="UA-CH full version" value="{{editablePersona_.uaCh.fullVersion}}"></cr-input>
-+    <cr-input label="Timezone" value="{{editablePersona_.region.timezone}}"></cr-input>
-+    <cr-input label="Locale" value="{{editablePersona_.region.locale}}"></cr-input>
++    <div class="field">
++      <label>Timezone</label>
++      <select value$="[[editablePersona_.region.timezone]]"
++          on-change="onTimezoneChange_">
++        <option value="UTC">UTC</option>
++        <option value="America/New_York">America/New_York</option>
++        <option value="Europe/London">Europe/London</option>
++        <option value="Europe/Berlin">Europe/Berlin</option>
++        <option value="Asia/Tokyo">Asia/Tokyo</option>
++        <option value="Australia/Melbourne">Australia/Melbourne</option>
++      </select>
++    </div>
++    <div class="field">
++      <label>Locale</label>
++      <select value$="[[editablePersona_.region.locale]]"
++          on-change="onLocaleChange_">
++        <option value="en-US">en-US</option>
++        <option value="en-GB">en-GB</option>
++        <option value="de-DE">de-DE</option>
++        <option value="ja-JP">ja-JP</option>
++        <option value="zh-CN">zh-CN</option>
++      </select>
++    </div>
 +    <cr-input label="Accept-Language" value="{{editablePersona_.region.acceptLanguage}}"></cr-input>
 +    <cr-input label="GPU vendor" value="{{editablePersona_.gpu.vendor}}"></cr-input>
 +    <cr-input label="GPU renderer" value="{{editablePersona_.gpu.renderer}}"></cr-input>
@@ -202,10 +261,17 @@
 +    <cr-input label="Network type" value="{{editablePersona_.network.type}}"></cr-input>
 +    <cr-input label="Downlink max" value="{{editablePersona_.network.downlinkMax}}"></cr-input>
 +  </div>
++  <div class="actions">
++    <cr-button class="action-button" on-click="onSavePersonaClick_">
++      Save
++    </cr-button>
++  </div>
 +</settings-subpage>
+Index: chromium_src/chrome/browser/resources/settings/privacy_page/persona_page.ts
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,166 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -218,7 +284,7 @@
 +import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 +import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 +
-+import {PersonaBrowserProxyImpl} from './persona_browser_proxy.js';
++import {PersonaBrowserProxyImpl, type PersonaPageResponse} from './persona_browser_proxy.js';
 +import {getTemplate} from './persona_page.html.js';
 +
 +const Base = I18nMixin(PrefsMixin(PolymerElement));
@@ -248,7 +314,69 @@
 +
 +  connectedCallback() {
 +    super.connectedCallback();
-+    PersonaBrowserProxyImpl.getInstance().getPersonaState();
++    this.loadPersonaState_();
++  }
++
++  private async loadPersonaState_() {
++    const state = await PersonaBrowserProxyImpl.getInstance().getPersonaState();
++    this.applyPersonaState_(state);
++  }
++
++  private applyPersonaState_(state: any) {
++    const personas = Array.isArray(state.personas) ? state.personas : [];
++    const activePersona = personas.find((persona: any) => {
++      return persona && persona.id === state.activePersonaId;
++    }) || personas[0];
++    if (!activePersona) {
++      return;
++    }
++
++    this.editablePersona_ = {
++      ...this.editablePersona_,
++      ...activePersona,
++      advanced: {
++        ...this.editablePersona_.advanced,
++        ...(activePersona.advanced || {}),
++      },
++      region: {
++        ...this.editablePersona_.region,
++        ...(activePersona.region || {}),
++      },
++      uaCh: {
++        ...this.editablePersona_.uaCh,
++        ...(activePersona.uaCh || {}),
++      },
++    };
++  }
++
++  private applyPersonaResponse_(response: PersonaPageResponse) {
++    if (response.ok) {
++      this.applyPersonaState_(response.state);
++    }
++  }
++
++  private async onSavePersonaClick_() {
++    this.applyPersonaResponse_(
++        await PersonaBrowserProxyImpl.getInstance().savePersona(
++            this.editablePersona_));
++  }
++
++  private onUaChPlatformChange_(event: Event) {
++    this.set(
++        'editablePersona_.uaCh.platform',
++        (event.target as HTMLSelectElement).value);
++  }
++
++  private onTimezoneChange_(event: Event) {
++    this.set(
++        'editablePersona_.region.timezone',
++        (event.target as HTMLSelectElement).value);
++  }
++
++  private onLocaleChange_(event: Event) {
++    const locale = (event.target as HTMLSelectElement).value;
++    this.set('editablePersona_.region.locale', locale);
++    this.set('editablePersona_.region.acceptLanguage', `${locale},en;q=0.9`);
 +  }
 +
 +  private onRandomizePersonaClick_() {
@@ -310,15 +438,18 @@
 +
 +declare global { interface HTMLElementTagNameMap { 'settings-persona-page': SettingsPersonaPageElement; } }
 +customElements.define(SettingsPersonaPageElement.is, SettingsPersonaPageElement);
+Index: chromium_src/chrome/browser/ui/webui/settings/persona_handler.h
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.h
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,34 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_PERSONA_HANDLER_H_
 +#define CHROME_BROWSER_UI_WEBUI_SETTINGS_PERSONA_HANDLER_H_
 +
++#include "base/memory/raw_ptr.h"
 +#include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 +
 +class Profile;
@@ -339,43 +470,127 @@
 +  void HandleSetActivePersona(const base::ListValue& args);
 +  void HandleClonePresetIntoProfile(const base::ListValue& args);
 +  void HandleDeletePersona(const base::ListValue& args);
++
++  raw_ptr<Profile> profile_;
 +};
 +
 +}  // namespace settings
 +
-+#endif
++#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_PERSONA_HANDLER_H_
+Index: chromium_src/chrome/browser/ui/webui/settings/persona_handler.cc
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.cc
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,112 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#include "chrome/browser/ui/webui/settings/persona_handler.h"
 +
++#include "base/check.h"
++#include "base/functional/bind.h"
 +#include "base/values.h"
++#include "chrome/browser/helium_persona/persona_service.h"
++#include "chrome/browser/helium_persona/persona_service_factory.h"
 +#include "content/public/browser/web_ui.h"
 +
 +namespace settings {
 +
-+PersonaHandler::PersonaHandler(Profile* profile) {}
++namespace {
++
++helium_persona::PersonaService* GetPersonaService(Profile* profile) {
++  return helium_persona::PersonaServiceFactory::GetForProfile(profile);
++}
++
++}  // namespace
++
++PersonaHandler::PersonaHandler(Profile* profile) : profile_(profile) {}
 +PersonaHandler::~PersonaHandler() = default;
 +
 +void PersonaHandler::RegisterMessages() {
-+  web_ui()->RegisterMessageCallback("getPersonaState", base::BindRepeating(&PersonaHandler::HandleGetPersonaState, base::Unretained(this)));
-+  web_ui()->RegisterMessageCallback("savePersona", base::BindRepeating(&PersonaHandler::HandleSavePersona, base::Unretained(this)));
-+  web_ui()->RegisterMessageCallback("setActivePersona", base::BindRepeating(&PersonaHandler::HandleSetActivePersona, base::Unretained(this)));
-+  web_ui()->RegisterMessageCallback("clonePresetIntoProfile", base::BindRepeating(&PersonaHandler::HandleClonePresetIntoProfile, base::Unretained(this)));
-+  web_ui()->RegisterMessageCallback("deletePersona", base::BindRepeating(&PersonaHandler::HandleDeletePersona, base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "getPersonaState",
++      base::BindRepeating(&PersonaHandler::HandleGetPersonaState,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "savePersona",
++      base::BindRepeating(&PersonaHandler::HandleSavePersona,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setActivePersona",
++      base::BindRepeating(&PersonaHandler::HandleSetActivePersona,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "clonePresetIntoProfile",
++      base::BindRepeating(&PersonaHandler::HandleClonePresetIntoProfile,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "deletePersona",
++      base::BindRepeating(&PersonaHandler::HandleDeletePersona,
++                          base::Unretained(this)));
 +}
 +
 +void PersonaHandler::OnJavascriptAllowed() {}
 +
 +void PersonaHandler::OnJavascriptDisallowed() {}
 +
-+void PersonaHandler::HandleGetPersonaState(const base::ListValue& args) {}
-+void PersonaHandler::HandleSavePersona(const base::ListValue& args) {}
-+void PersonaHandler::HandleSetActivePersona(const base::ListValue& args) {}
-+void PersonaHandler::HandleClonePresetIntoProfile(const base::ListValue& args) {}
-+void PersonaHandler::HandleDeletePersona(const base::ListValue& args) {}
++void PersonaHandler::HandleGetPersonaState(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(1U, args.size());
++  const base::Value& callback_id = args[0];
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(callback_id, service->GetPersonaState());
++}
++
++void PersonaHandler::HandleSavePersona(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(2U, args.size());
++  const base::Value& callback_id = args[0];
++  CHECK(args[1].is_dict());
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(callback_id,
++                            service->SavePersona(args[1].GetDict()));
++}
++
++void PersonaHandler::HandleSetActivePersona(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(2U, args.size());
++  const base::Value& callback_id = args[0];
++  CHECK(args[1].is_string());
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(
++      callback_id, service->SetActivePersona(args[1].GetString()));
++}
++
++void PersonaHandler::HandleClonePresetIntoProfile(
++    const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(2U, args.size());
++  const base::Value& callback_id = args[0];
++  CHECK(args[1].is_string());
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(
++      callback_id, service->ClonePresetIntoProfile(args[1].GetString()));
++}
++
++void PersonaHandler::HandleDeletePersona(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(2U, args.size());
++  const base::Value& callback_id = args[0];
++  CHECK(args[1].is_string());
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(callback_id,
++                            service->DeletePersona(args[1].GetString()));
++}
 +
 +}  // namespace settings

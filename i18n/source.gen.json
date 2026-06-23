@@ -150,6 +150,18 @@
     "message": "Invalid origin"
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_TITLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Name of the page used to manage browser persona settings",
+    "message": "Persona"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Description of the browser persona settings page",
+    "message": "Configure browser persona and fingerprint surface overrides"
+  },
+  {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
     "source": "chrome/app/chromium_strings.grd",
     "context": "The tooltip to show for the browser menu when Nitrous services schema changes",
@@ -166,6 +178,852 @@
     "source": "chrome/app/generated_resources.grd",
     "context": "Short label next to app-menu button when Nitrous services behavior changes.",
     "message": "Services updated"
+  },
+  {
+    "name": "IDS_PRODUCT_NAME",
+    "source": "chrome/app/chromium_strings.grd",
+    "context": "The Nitrous application name",
+    "message": "Nitrous"
+  },
+  {
+    "name": "IDS_SHORT_PRODUCT_NAME",
+    "source": "chrome/app/chromium_strings.grd",
+    "context": "The Nitrous application short name.",
+    "message": "Nitrous"
+  },
+  {
+    "name": "IDS_BROWSER_WINDOW_TITLE_FORMAT",
+    "source": "chrome/app/chromium_strings.grd",
+    "context": "The format for titles displayed in tabs and popup windows",
+    "message": "<ph name=\"PAGE_TITLE\">$1<ex>Google</ex></ph> - Nitrous"
+  },
+  {
+    "name": "IDS_BROWSER_WINDOW_TITLE_FORMAT",
+    "source": "chrome/app/chromium_strings.grd",
+    "context": "The format for titles displayed in tabbed browser windows",
+    "message": "Nitrous - <ph name=\"PAGE_TITLE\">$1<ex>Google</ex></ph>"
+  },
+  {
+    "name": "IDS_CAPTIVE_PORTAL_BROWSER_WINDOW_TITLE_FORMAT",
+    "source": "chrome/app/chromium_strings.grd",
+    "context": "The format for titles displayed in captive portal popup windows",
+    "message": "<ph name=\"PAGE_TITLE\">$1<ex>Google</ex></ph> - Network Sign-in - Nitrous"
+  },
+  {
+    "name": "IDS_CAPTIVE_PORTAL_BROWSER_WINDOW_TITLE_FORMAT",
+    "source": "chrome/app/chromium_strings.grd",
+    "context": "The format for titles displayed in captive portal popup windows",
+    "message": "Nitrous - Network Sign-in - <ph name=\"PAGE_TITLE\">$1<ex>Google</ex></ph>"
+  },
+  {
+    "name": "IDS_ACCESSIBLE_BROWSER_WINDOW_TITLE_FORMAT",
+    "source": "chrome/app/chromium_strings.grd",
+    "context": "The format for the accessible name of a tabbed browser window",
+    "message": "<ph name=\"PAGE_TITLE\">$1<ex>Google</ex></ph> - Nitrous"
+  },
+  {
+    "name": "IDS_ACCESSIBLE_BETA_BROWSER_WINDOW_TITLE_FORMAT",
+    "source": "chrome/app/chromium_strings.grd",
+    "context": "The format for the accessible name of a tabbed browser window for the beta channel version of the browser",
+    "message": "<ph name=\"PAGE_TITLE\">$1<ex>Google</ex></ph> - Nitrous Beta"
+  },
+  {
+    "name": "IDS_ACCESSIBLE_DEV_BROWSER_WINDOW_TITLE_FORMAT",
+    "source": "chrome/app/chromium_strings.grd",
+    "context": "The format for the accessible name of a tabbed browser window for the developer (dev) channel version of the browser",
+    "message": "<ph name=\"PAGE_TITLE\">$1<ex>Google</ex></ph> - Nitrous Dev"
+  },
+  {
+    "name": "IDS_ACCESSIBLE_CANARY_BROWSER_WINDOW_TITLE_FORMAT",
+    "source": "chrome/app/chromium_strings.grd",
+    "context": "The format for the accessible name of a tabbed browser window for the canary (nightly build) channel version of the browser",
+    "message": "<ph name=\"PAGE_TITLE\">$1<ex>Google</ex></ph> - Nitrous Canary"
+  },
+  {
+    "name": "IDS_PDF_INFOBAR_TEXT",
+    "source": "chrome/app/chromium_strings.grd",
+    "context": "Text to show in an infobar when Nitrous is not the default PDF viewer.",
+    "message": "Set Nitrous as your default PDF viewer"
+  },
+  {
+    "name": "IDS_RELAUNCH_CONFIRMATION_DIALOG_TITLE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The title of the modal dialog that we show when users click on relaunch and they have open Incognito windows. The dialog serves to warn the users about losing their Incognito windows if they proceed with the relaunch.",
+    "message": "Relaunch Nitrous?"
+  },
+  {
+    "name": "IDS_SETTINGS_ABOUT_PROGRAM",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Menu title for the About Nitrous page.",
+    "message": "About Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_GET_HELP_USING_CHROME",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Text of the button which takes the user to the Nitrous help page.",
+    "message": "Get help with Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_UPGRADE_UPDATING",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Status label: Updating Nitrous",
+    "message": "Updating Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_UPGRADE_UPDATING_PERCENT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Status label: Updating Nitrous (90%)",
+    "message": "Updating Nitrous (<ph name=\"PROGRESS_PERCENT\">$1<ex>90%</ex></ph>)"
+  },
+  {
+    "name": "IDS_SETTINGS_UPGRADE_SUCCESSFUL_RELAUNCH",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Status label: Successfully updated Nitrous",
+    "message": "Nearly up to date! Relaunch Nitrous to finish updating."
+  },
+  {
+    "name": "IDS_SETTINGS_UPGRADE_UP_TO_DATE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Status label: Already up to date (Nitrous)",
+    "message": "Nitrous is up to date"
+  },
+  {
+    "name": "IDS_SETTINGS_CHECK_PASSWORDS_ERROR_OFFLINE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Error message when the password check can't be completed because the user is offline.",
+    "message": "Nitrous can't check your passwords. Try checking your internet connection."
+  },
+  {
+    "name": "IDS_SETTINGS_CHECK_PASSWORDS_ERROR_SIGNED_OUT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Error message when the password check can't be completed because the user is not signed in.",
+    "message": "Nitrous can check your passwords when you sign in with your Google Account"
+  },
+  {
+    "name": "IDS_SETTINGS_CHECK_PASSWORDS_ERROR_NO_PASSWORDS",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Error message when the password check can't be completed since no passwords could be checked.",
+    "message": "No saved passwords. Nitrous can check your passwords when you save them."
+  },
+  {
+    "name": "IDS_SETTINGS_CHECK_PASSWORDS_ERROR_QUOTA_LIMIT_GOOGLE_ACCOUNT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Error message when the password check can't be completed since the user hit the quota limit, but the user is able to check their passwords in their Google account.",
+    "message": "Nitrous can't check your passwords. Try again after 24 hours or <ph name=\"BEGIN_LINK\">&lt;a href=\"$1\" target=\"_blank\"&gt;</ph>check passwords in your Google Account<ph name=\"END_LINK\">&lt;/a&gt;</ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_CHECK_PASSWORDS_ERROR_QUOTA_LIMIT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Error message when the password check can't be completed since the user hit the quota limit.",
+    "message": "Nitrous can't check your passwords. Try again after 24 hours."
+  },
+  {
+    "name": "IDS_SETTINGS_CHECK_PASSWORDS_ERROR_GENERIC",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Error message when the password check can't be completed for an unspecified reason.",
+    "message": "Nitrous can't check your passwords. Try again later."
+  },
+  {
+    "name": "IDS_SETTINGS_NO_COMPROMISED_CREDENTIALS_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Label which is shown when there were no compromised passwords detected.",
+    "message": "Nitrous will notify you when you sign in with a compromised password"
+  },
+  {
+    "name": "IDS_SETTINGS_SIGNED_OUT_USER_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Label which is shown at the top of the compromised password section if user is signed out.",
+    "message": "To check if your passwords are safe from data breaches and other security issues, <ph name=\"BEGIN_LINK\">&lt;a target='_blank' href='$1'&gt;</ph>sign in to Nitrous<ph name=\"END_LINK\">&lt;/a&gt;</ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_SIGNED_OUT_USER_HAS_COMPROMISED_CREDENTIALS_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Label which is shown at the bottom of the compromised password section if user is signed out and has compromised credentials.",
+    "message": "To check if your other passwords are safe from data breaches and other security issues, <ph name=\"BEGIN_LINK\">&lt;a target='_blank' href='$1'&gt;</ph>sign in to Nitrous<ph name=\"END_LINK\">&lt;/a&gt;</ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_WEAK_PASSWORDS_DESCRIPTION_GENERATION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Information about why weak passwords are a security issue and what syncing user should do to fix the problem. Has a link.",
+    "message": "Weak passwords are easy to guess. Let Nitrous <ph name=\"BEGIN_LINK\">&lt;a target='_blank' href='$1'&gt;</ph>create and remember strong passwords for you<ph name=\"END_LINK\">&lt;/a&gt;</ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_COMPROMISED_EDIT_DISCLAIMER_DESCRIPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "A description for the dialog which tells the user to edit password in Nitrous if it was changed already.",
+    "message": "If so, please edit your saved password in Nitrous so it matches your new password."
+  },
+  {
+    "name": "IDS_SETTINGS_AUTOFILL_AI_WHEN_ON_USE_TO_FILL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Bullet 2 of 2 that appears beneath the “When on” title. “Later”: this is a two-step feature. 1) data is saved, 2) it becomes valuable to the user later when they want to fill in a form with similar data. “Nitrous can ask”: the user has a choice, every time, whether their data is saved and also whether they want to autofill their saved info into forms.",
+    "message": "Later, Nitrous can ask if you want to use saved info to autofill forms for you"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_DEFAULT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The text displayed when Nitrous is the default browser",
+    "message": "Nitrous is your default browser"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_DEFAULT_THANK_YOU",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The text displayed when Nitrous is the default browser",
+    "message": "Thanks for choosing Nitrous as your default browser!"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_MAKE_DEFAULT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Default browser checkbox label",
+    "message": "Make Nitrous the default browser"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_MAKE_DEFAULT_USER_VALUE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The text displayed when Nitrous is not the default browser. This string describes the effect (user benefit) of setting a browser as the default.",
+    "message": "You can use Nitrous anytime you click links in messages, documents, and other apps"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_MAKE_DEFAULT_AND_PIN",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The text of the button to make Nitrous the default browser and pin it to the taskbar.",
+    "message": "Make Nitrous the default browser and pin to the taskbar"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_MAKE_DEFAULT_AND_PIN_USER_VALUE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The text of the button to make Nitrous the default browser and pin it to the taskbar.",
+    "message": "You can use Nitrous anytime you click links in messages, documents, and other apps. It will also be pinned to your taskbar."
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_ERROR",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The text displayed when Nitrous cannot determine or set the default browser",
+    "message": "Nitrous cannot determine or set the default browser"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The text displayed when Nitrous is installed in side-by-side mode, which does not support setting as the default browser.",
+    "message": "This is a secondary installation of Nitrous, and cannot be made your default browser."
+  },
+  {
+    "name": "IDS_SETTINGS_PRELOAD_PAGES_STANDARD_PRELOADING_WHEN_ON_BULLET_TWO",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Bullet point in the standard preloading and when on column. Informs the user about what the standard preloading setting does.",
+    "message": "Nitrous preloads pages you're likely to visit, so that they load more quickly when you visit them"
+  },
+  {
+    "name": "IDS_SETTINGS_PRELOAD_PAGES_EXTENDED_PRELOADING_WHEN_ON_BULLET_TWO",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Bullet point in the extended preloading and when on column. Informs the user about what the extended preloading setting does.",
+    "message": "Nitrous preloads even more pages that you're likely to visit, so that they load more quickly when you visit them"
+  },
+  {
+    "name": "IDS_SETTINGS_PRELOAD_PAGES_EXTENDED_PRELOADING_THINGS_TO_CONSIDER_BULLET_TWO",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Bullet point in the extended preloading and things to consider column. Informs the user about what the extended preloading setting does.",
+    "message": "When a site asks to privately preload links on their page, Nitrous uses Google servers. This hides your identity from the preloaded site, but Google learns what sites get preloaded."
+  },
+  {
+    "name": "IDS_SETTINGS_PRELOAD_PAGES_THINGS_TO_CONSIDER_BULLET_ONE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Bullet point in the things to consider column. Informs the user about what the preloading setting does.",
+    "message": "If you allow cookies, Nitrous may use them when preloading"
+  },
+  {
+    "name": "IDS_SETTINGS_SPELLING_PREF_DESC",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Description of using a web serviced to help resolve spelling errors. It is important to convey that what the user types will be sent to Google.",
+    "message": "To fix spelling errors, Nitrous sends the text you type in text fields to Google"
+  },
+  {
+    "name": "IDS_SETTINGS_RESTART_TO_APPLY_CHANGES",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Description in the snackbar to restart Nitrous and apply changes.",
+    "message": "To apply your changes, relaunch Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_SIGNIN_ALLOWED",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The title of the preference to allow to sign-in to Nitrous",
+    "message": "Allow Nitrous sign-in"
+  },
+  {
+    "name": "IDS_SETTINGS_SIGNIN_ALLOWED_DESC",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The description of the preference to allow to sign-in to Nitrous",
+    "message": "By turning this off, you can sign in to Google sites like Gmail without signing in to Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_SIGNIN_ALLOWED_DESC_2",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The description of the preference to allow to sign-in to Nitrous",
+    "message": "Shows prompts to sign in to Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_SITE_SETTINGS_PDFS_BLOCKED",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Label for the disabled option of the pdfs content setting.",
+    "message": "Open PDFs in Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_SITE_SITE_DETAILS_CAMERA_BLOCKED_BY_OS",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The description for the camera permission with a link to system settings.",
+    "message": "To use your camera, give Nitrous access in <ph name=\"BEGIN_LINK\">&lt;a href=\"#\" id=\"openSystemSettingsLink\" &gt;</ph>system settings<ph name=\"END_LINK\">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SITE_SITE_DETAILS_MICROPHONE_BLOCKED_BY_OS",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The description for the microphone permission with a link to system settings.",
+    "message": "To use your microphone, give Nitrous access in <ph name=\"BEGIN_LINK\">&lt;a href=\"#\" id=\"openSystemSettingsLink\" &gt;</ph>system settings<ph name=\"END_LINK\">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SITE_SITE_DETAILS_LOCATION_BLOCKED_BY_OS",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The description for the location permission with a link to system settings.",
+    "message": "To use your location, give Nitrous access in <ph name=\"BEGIN_LINK\">&lt;a href=\"#\" id=\"openSystemSettingsLink\" &gt;</ph>system settings<ph name=\"END_LINK\">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SITE_SETTINGS_CAMERA_BLOCKED_BY_OS",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Warning for camera content setting when the camera is disabled on OS level.",
+    "message": "To use your camera on these sites, give Nitrous access in <ph name=\"BEGIN_LINK\">&lt;a href=\"#\" id=\"openSystemSettingsLink\" &gt;</ph>system settings<ph name=\"END_LINK\">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SITE_SETTINGS_LOCATION_BLOCKED_BY_OS",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Warning for location content setting when the camera is disabled on OS level.",
+    "message": "To use your location on these sites, give Nitrous access in <ph name=\"BEGIN_LINK\">&lt;a href=\"#\" id=\"openSystemSettingsLink\" &gt;</ph>system settings<ph name=\"END_LINK\">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SITE_SETTINGS_MIC_BLOCKED_BY_OS",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Warning for microphone content setting when the camera is disabled on OS level.",
+    "message": "To use your microphone on these sites, give Nitrous access in <ph name=\"BEGIN_LINK\">&lt;a href=\"#\" id=\"openSystemSettingsLink\" &gt;</ph>system settings<ph name=\"END_LINK\">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SITE_DATA_PAGE_CLEAR_ON_EXIT_WITH_EXCEPTION_RADIO_SUBLABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "A description of the benefit/cost of choosing 'Sites can save content on your device. In short, a site will remember your preferences, shopping cart content, etc. during this browser session. But once you close all open windows, and then visit the site again, it's as if you're coming to the site for the first time.",
+    "message": "Sites will probably work as expected. You'll be signed out of most sites when you close all Nitrous windows, except your Google Account if you're signed in to Nitrous."
+  },
+  {
+    "name": "IDS_SETTINGS_SITE_DATA_PAGE_DELETE_ON_EXIT_EXCEPTIONS_SUB_HEADING",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "2 of 3. A label within 'Customized behaviors' that allows for exceptions to the 'On-device site data' setting. This label and the list of sites that can appear beneath it is only relevant if the user has chosen to allow 'on-device site data' as the default value above.",
+    "message": "Always delete site data from your device when you close Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_PRIVACY_GUIDE_PROMO_BODY",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Body text of a card in the settings page that explains what the 'Privacy Guide' feature is.",
+    "message": "Review key privacy and security controls in Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_PRIVACY_GUIDE_SAFE_BROWSING_CARD_STANDARD_PROTECTION_FEATURE_DESCRIPTION2",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "A part of the feature description of the standard protection section of the safe browsing card in the 'Privacy Guide'.",
+    "message": "Checks URLs with a list of unsafe sites stored in Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_PRIVACY_GUIDE_SAFE_BROWSING_CARD_STANDARD_PROTECTION_PRIVACY_DESCRIPTION1",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "A part of the privacy description of the standard protection section of the safe browsing card in the 'Privacy Guide'.",
+    "message": "If a site tries to steal your password, or when you download a harmful file, Nitrous may also send URLs, including bits of page content, to Safe Browsing"
+  },
+  {
+    "name": "IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_PRIVACY_SANDBOX_SUB_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Text of the Privacy Sandbox sublabel in the completion card of the 'Privacy Guide'.",
+    "message": "Nitrous gives you more control over the ads you see and limits what sites can learn about you when they show you personalized ads"
+  },
+  {
+    "name": "IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_WAA_SUB_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Text of the Web and App Activity sublabel in the completion card of the 'Privacy Guide'.",
+    "message": "Choose whether to include Nitrous history for more personalized experiences in Google services"
+  },
+  {
+    "name": "IDS_SETTINGS_PRIVACY_GUIDE_MSBB_FEATURE_DESCRIPTION3",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "A part of the feature description of 'make searches and browsing better' in the 'Privacy Guide'.",
+    "message": "If you also save your bookmarks in your Google Account, you can track product prices in Nitrous and get notified when the price drops"
+  },
+  {
+    "name": "IDS_SETTINGS_PRIVACY_GUIDE_MSBB_PRIVACY_DESCRIPTION2",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "A part of the privacy description of 'make searches and browsing better' in the 'Privacy Guide'.",
+    "message": "If you also share Nitrous usage reports, those reports include the URLs you visit"
+  },
+  {
+    "name": "IDS_SETTINGS_PRIVACY_SANDBOX_LEARN_MORE_DIALOG_TOPICS_TITLE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "TOPICS API A sub title that describes the first of 2 ways a site can get info from Nitrous in order to target ads to the user. Topics of interest include things like “Live comedy” and “Rock music”. Nitrous estimates these interests based on the sites users visit. * “Your”: we need to convey a sense of ownership, even if the user didn’t explicitly choose the interests we’re talking about. Without the “your”, it could sound like Nitrous is simply building a generic library of interests. * “estimated”: It’s an “estimation”, and we don’t want to suggest that we know with certainty the user’s interests. Avoid words like “guess”, “establish”, “define”, etc. (in place of “estimate”). * “by Nitrous”: This is new behavior for a browser (Nitrous) to take an active role in processing user data for the purposes of showing ads. It’s important to convey “chrome”, the actor in this case.",
+    "message": "Your interests as estimated by Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_PRIVACY_SANDBOX_AD_MEASUREMENT_DIALOG_DESCRIPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "A description of the Ad measurement API. * “Ad measurement” is the name of an API in this context. We don’t use “API” with the user, but they need to know that there is something called “A measurement” and what it does. * “sites you visit”: call the API to get information. The actor is the site, not Nitrous. * “restricts cross-site tracking”: Today, with 3rd-party cookies, ad measurement technologies can inadvertently (and intentionally) share considerable information from one site to another). This feature restricts that sharing in order to improve the user’s privacy.",
+    "message": "Ad measurement allows sites you visit to request information from Nitrous that helps the site measure the performance of their ads. Ad measurement restricts cross-site tracking by transferring as little information as possible between sites."
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_CHECK_UNUSED_SITE_PERMISSIONS_SETTING_SUBLABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "By default Nitrous auto-revokes (disables) permissions (e.g. Camera, Location, etc.) for websites that were not visited for a while. This sublabel is for the toggle that allows users to switch off/on this functionality.",
+    "message": "To protect your data, let Nitrous remove permissions from sites you haven't visited recently. Doesn't stop notifications."
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_CHECK_UNUSED_SITE_PERMISSIONS_AND_NOTIFICATIONS_SETTING_SUBLABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "By default Nitrous auto-revokes (disables) permissions (e.g. Camera, Location, etc.) for websites that were not visited for a while. This sublabel is for the toggle that allows users to switch off/on this functionality.",
+    "message": "To protect your data, let Nitrous remove permissions from sites you haven't visited recently."
+  },
+  {
+    "name": "IDS_SETTINGS_SAFEBROWSING_ENHANCED_BULLET_TWO",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Bullet point under the safe browsing enhanced protection mode",
+    "message": "Keeps you safe on Nitrous and may be used to improve your security in other Google apps when you are signed in"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFEBROWSING_STANDARD_BULLET_TWO",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Bullet point under the safe browsing standard protection mode",
+    "message": "Checks URLs with a list of unsafe sites stored in Nitrous. If a site tries to steal your password, or when you download a harmful file, Nitrous may also send URLs, including bits of page content, to Safe Browsing."
+  },
+  {
+    "name": "IDS_SETTINGS_SAFEBROWSING_ENHANCED_WHEN_ON_BULLET_ONE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Bullet point under the Safe Browsing enhanced protection mode section titled 'When on'",
+    "message": "Warns you about dangerous sites, even ones Google didn't know about before, by analyzing more data from sites than standard protection. You can choose to skip Nitrous warnings."
+  },
+  {
+    "name": "IDS_SETTINGS_SAFEBROWSING_ENHANCED_LEARN_MORE_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The text for a link to a help center article that gives more information about Safe Browsing.",
+    "message": "Learn more about <ph name=\"BEGIN_LINK\">&lt;a href=\"#\" id=\"enhancedProtectionLearnMoreLink\" on-click=\"onEnhancedProtectionLearnMoreClick_\"&gt;</ph>how Nitrous keeps your data private<ph name=\"END_LINK\">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SECURE_DNS_DESCRIPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Secondary, continued explanation of secure DNS in Privacy options",
+    "message": "Make it harder for people with access to your internet traffic to see which sites you visit. Nitrous uses a secure connection to look up a site's IP address in the DNS (Domain Name System)."
+  },
+  {
+    "name": "IDS_SETTINGS_SYNC_DISCONNECT_DELETE_PROFILE_WARNING_WITH_COUNTS_SINGULAR",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Warning message displayed in the Sign out of Nitrous dialog that indicates profile browsing data will be removed from the device.",
+    "message": "This will delete 1 item from this device. To retrieve your data later, sign in to Nitrous as <ph name=\"USER_EMAIL\">$1<ex>foo@example.com</ex></ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_SYNC_DISCONNECT_DELETE_PROFILE_WARNING_WITH_COUNTS_PLURAL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Warning message displayed in the Sign out of Nitrous dialog that indicates profile browsing data will be removed from the device.",
+    "message": "This will delete <ph name=\"ITEMS_COUNT\">$1<ex>66</ex></ph> items from this device. To retrieve your data later, sign in to Nitrous as <ph name=\"USER_EMAIL\">$2<ex>foo@example.com</ex></ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_SYNC_DISCONNECT_DELETE_PROFILE_WARNING_WITHOUT_COUNTS",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Warning message displayed in the Sign out of Nitrous dialog that indicates profile browsing data will be removed from the device.",
+    "message": "This will delete your browsing data from this device. To retrieve your data later, sign in to Nitrous as <ph name=\"USER_EMAIL\">$1<ex>foo@example.com</ex></ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOMIZE_YOUR_CHROME_PROFILE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Label of the link that takes you to the page to customize your chrome profile.",
+    "message": "Customize your Nitrous profile"
+  },
+  {
+    "name": "IDS_SETTING_NAME_YOUR_PROFILE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Title of the edit local profile name section on the manage profile page.",
+    "message": "Name your Nitrous profile"
+  },
+  {
+    "name": "IDS_SETTINGS_PEOPLE_SIGN_IN_PROMPT_SECONDARY_WITH_ACCOUNT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The secondary text displayed to prompt users to enable sync for an account that is alredy present in Nitrous.",
+    "message": "Sync and personalize Nitrous across your devices"
+  },
+  {
+    "name": "IDS_SETTINGS_PEOPLE_EXPLICIT_SIGN_IN_PROMPT_SECONDARY_WITH_NO_ACCOUNT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The secondary text displayed to prompt users to enable sync for an account that is already present in Nitrous.",
+    "message": "To get your passwords and more on all your devices, sign in to Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_PEOPLE_EXPLICIT_SIGN_IN_PROMPT_SECONDARY_WITH_NO_ACCOUNT_WITH_BOOKMARKS",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The secondary text displayed to prompt users to enable sync for an account that is already present in Nitrous.",
+    "message": "To get your passwords, bookmarks, and more on all your devices, sign in to Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_PEOPLE_ACCOUNT_AWARE_SIGNIN_ACCOUNT_ROW_TITLE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The title of the avatar row shown to users who are signed in only to the web",
+    "message": "Your Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCOUNT_MANAGER_DESCRIPTION_V2",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Description of the Account Manager Settings page. Shown just below the title of the page.",
+    "message": "You can manage your signed-in Google Accounts. Your Google Accounts are used for Nitrous browser, Play Store, Gmail, and more. If you want to add an account for someone else, like a family member, add a new person to your <ph name=\"DEVICE_TYPE\">$1<ex>Chromebook</ex></ph> instead. <ph name=\"LINK_BEGIN\">&lt;a&gt;</ph>Learn more<ph name=\"LINK_END\">&lt;/a&gt;</ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SIGNIN_CHROME_SIGNIN_OPTIONS_TITLE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Title of the settings that controls whether a user gets signed in to Nitrous when signing in to Google Services.",
+    "message": "Sign in to Nitrous when you sign in to other Google services"
+  },
+  {
+    "name": "IDS_SETTINGS_SIGNIN_CHROME_SIGNIN_OPTIONS_DESC",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Description of the settings that controls whether a user gets signed in to Nitrous when signing in to Google Services.",
+    "message": "When signing into Google services like Gmail or Youtube with <ph name=\"USER_EMAIL\">$1<ex>foo@example.com</ex></ph>, you can automatically sign in to Nitrous with the same account"
+  },
+  {
+    "name": "IDS_SETTINGS_PEOPLE_SIGNIN_SECTION_SIGNED_OUT_TITLE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The text displayed to prompt users to sign in to Nitrous. Shown on top of the account card in the people settings page when the user is signed out.",
+    "message": "Make Nitrous your own"
+  },
+  {
+    "name": "IDS_SETTINGS_SYNC_DATA_ENCRYPTED_TEXT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Text alerting the user that synced data is encrypted.",
+    "message": "For added security, Nitrous will encrypt your data."
+  },
+  {
+    "name": "IDS_SETTINGS_SYNC_DISCONNECT_TITLE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The title of the dialog to stop syncing and sign out.",
+    "message": "Sign out of Nitrous?"
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_DESC",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The description of the checkbox to enable/disable sending omnibox input to the user's default search engine to get additional suggestions.",
+    "message": "When you type in the address bar or search box, Nitrous sends what you type to your default search engine to get better suggestions. This is off in Incognito."
+  },
+  {
+    "name": "IDS_SETTINGS_SEARCH_AGGREGATOR_PREF_DESC",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The description of the 'Show suggestions and results from your organization' checkbox, which enables/disables sending omnibox input to the user's organization's search aggregator to get additional suggestions. Note that this setting is controlled by enterprise policy and, while a checkbox is shown, it is always enabled and cannot be disabled.",
+    "message": "When you type in the address bar or search box, Nitrous sends what you type to your organization's search, AI, and agent tools to get suggestions."
+  },
+  {
+    "name": "IDS_SETTINGS_SYNC_SIGN_IN_PROMPT_WITH_NO_ACCOUNT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The text displayed to prompt users to sign in to Nitrous.",
+    "message": "Sign in to sync and personalize Nitrous across your devices"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONALIZE_GOOGLE_SERVICES_DESC",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "This is the subtitle of a setting that directs users to other settings where they can control how Nitrous history can be used to personalize other Google services. This subtitle appears in Nitrous's Advanced Sync settings, after the 'Control how browsing history is used with your other data across Google services' string. The 'Web &#38; App Activity' text should match the branded term in Glossary Manager: https://localization.google.com/glossary/termset?gid=27517723&#38;tsid=77d3b75.",
+    "message": "To get personalization, include Nitrous in Web &#38; App Activity"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONALIZE_GOOGLE_SERVICES_DESC_WITH_LINKED_SERVICES",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "This is the subtitle of a setting that directs users to other settings where they can control how Nitrous history can be used to personalize other Google services. This subtitle appears in Nitrous's Advanced Sync settings, after the 'Control how browsing history is used with your other data across Google services' string. The 'Web &#38; App Activity' text should match the branded term in Glossary Manager: https://localization.google.com/glossary/termset?gid=27517723&#38;tsid=77d3b75. The 'linked Google services' text should match the branded term in Glossary Manager: https://localization.google.com/glossary/termset?gid=27517723&#38;tsid=517bace2.",
+    "message": "To get personalization and other features, include Nitrous in Web &#38; App Activity and linked Google services"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONALIZE_GOOGLE_SERVICES_LINKED_SERVICES_DESC",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "This is the subtitle of a setting that links to 'Linked Google services' in the Google Account's Data &#38; privacy settings. This subtitle appears in Nitrous's Advanced Sync settings and is after the 'Linked Google services' string.",
+    "message": "Link Nitrous and other Google services for personalization and other purposes"
+  },
+  {
+    "name": "IDS_SETTINGS_ERROR_PASSPHRASE_USER_ERROR_DESCRIPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Subtitle of settings page that indicates user must re-enter their sync password.",
+    "message": "To use and save Nitrous data in your Google Account, enter your passphrase"
+  },
+  {
+    "name": "IDS_SETTINGS_ERROR_TRUSTED_VAULT_USER_ERROR_DESCRIPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Error description of the sync/signin error header of the settings page.",
+    "message": "To use and save Nitrous data in your Google Account, verify it's you"
+  },
+  {
+    "name": "IDS_SETTINGS_ERROR_UPGRADE_CLIENT_USER_ERROR_DESCRIPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Error message to resolve sync protocol error for out-of-date client.",
+    "message": "To use and save Nitrous data in your Google Account, update Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_PENDING_STATE_DESCRIPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Subtitle of settings page that indicates user is in pending state and should sign in.",
+    "message": "Verify it's you to use and save Nitrous data in your account, <ph name=\"ACCOUNT_EMAIL\">$1<ex>elisa.beckett@gmail.com</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_ERROR_PASSPHRASE_USER_ERROR_DESCRIPTION_WITH_EMAIL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Subtitle of settings page that indicates user must re-enter their sync password.",
+    "message": "Enter your passphrase to use and save Nitrous data in your account, <ph name=\"USER_EMAIL\">$1<ex>foo@example.com</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SIGN_OUT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The text label of the Sign out of Nitrous button in the settings page.",
+    "message": "Sign out of Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCOUNT_DATA_DASHBOARD",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "This string is found in the Account settings page in Nitrous settings to let a user manage the Nitrous data that they've saved in their Google Account. It is important that it is consistent with the destination's title 'Nitrous data in your account' (except using 'Nitrous' instead of 'Nitrous') (TC ID 2983573066282140756).",
+    "message": "Nitrous data in your account"
+  },
+  {
+    "name": "IDS_SETTINGS_ENCRYPT_ACCOUNT_DATA_WITH_PASSPHRASE_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Label for the radio button which, when selected, causes synced settings to be encrypted with a user-provided password.",
+    "message": "Use your <ph name=\"BEGIN_LINK\">&lt;a href=\"$1\" target=&quot;_blank&quot;&gt;<ex>&lt;a href=\"$1\" target=&quot;_blank&quot;&gt;</ex></ph>own passphrase<ph name=\"END_LINK\">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph> to encrypt all the Nitrous data in your Google Account. Payment methods and addresses from Google Pay won’t be encrypted. Browsing history from Nitrous won’t sync."
+  },
+  {
+    "name": "IDS_SETTINGS_ENCRYPT_ACCOUNT_DATA_WITH_PASSPHRASE_EXPLANATION_TEXT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Message shown when explicit passphrase is selected.",
+    "message": "Only someone with your passphrase can read your encrypted data. The passphrase is not sent to or stored by Google. If you forget your passphrase or want to change this setting, you’ll need to <ph name=\"BEGIN_LINK\">&lt;a href=\"$1\" target=&quot;_blank&quot;&gt;<ex>&lt;a href=\"$1\" target=&quot;_blank&quot;&gt;</ex></ph>delete the Nitrous data in your account<ph name=\"END_LINK\">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_PASSPHRASE_RESET_HINT_ACCOUNT_DATA_ENCRYPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Informs user how to change their encryption setting.",
+    "message": "If you forgot your passphrase or want to change this setting, <ph name=\"BEGIN_LINK\">&lt;a href=\"$1\" target=&quot;_blank&quot;&gt;<ex>&lt;a href=\"$1\" target=&quot;_blank&quot;&gt;</ex></ph>delete the Nitrous data in your account<ph name=\"END_LINK\">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_PAGE_CONTENT_THINGS_TO_CONSIDER_BULLET_TWO",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Bullet point in the 'Things to consider' column of the description of the setting that enables features that provide contextual help for currently opened pages.",
+    "message": "To help improve these features, Nitrous sends your interactions with them to Google. This data may be read, processed, and annotated by human reviewers."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Description for the memory saver mode setting",
+    "message": "Nitrous frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Nitrous fast. Your inactive tabs automatically become active again when you go back to them."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Description for the energy saver mode setting",
+    "message": "Nitrous conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Summary for the preload pages setting",
+    "message": "Nitrous preloads pages which makes browsing and searching faster."
+  },
+  {
+    "name": "IDS_SETTINGS_LANGUAGES_IS_DISPLAYED_IN_THIS_LANGUAGE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The label for a language that is currently used as the UI display language.",
+    "message": "This language is used to display menus, settings, alerts, and other text in Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_LANGUAGES_DISPLAY_IN_THIS_LANGUAGE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The label used for a button that changes the UI language.",
+    "message": "Display Nitrous in this language"
+  },
+  {
+    "name": "IDS_SETTINGS_SYSTEM_BACKGROUND_APPS_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Label for the checkbox to allow apps to run in the background, when Nitrous is closed.",
+    "message": "Continue running background apps when Nitrous is closed"
+  },
+  {
+    "name": "IDS_SETTINGS_RESET_PROFILE_FEEDBACK",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Feedback label in the Reset Profile Settings dialog",
+    "message": "Help make Nitrous better by reporting the <ph name=\"BEGIN_LINK\">&lt;a is=\"action-link\" target=\"_blank\"&gt;</ph>current settings<ph name=\"END_LINK\">&lt;/a&gt;</ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_ENTRY_POINT_NOTHING_TO_DO",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "This text describes what Safety Hub does (regularly checking whether Nitrous settings are safe) and indicates whether the user should take action. This text is shown when Safety Hub has not identified any issues at this time. There is nothing to do for the user. As future checks of Safety Hub may identify issues, this state may change. This text is shown on a card in privacy settings next to a button that leads to Safety Hub.",
+    "message": "Nitrous regularly checks to make sure your browser has the safest settings. We'll let you know if anything needs your review."
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_ENTRY_POINT_HEADER",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Title of a row in Nitrous's privacy settings (nitrous://settings/privacy) explaining that Nitrous recommends for the user to take action to improve their safety. Next to this text there is a button labeled 'Go to SafetyHub' that will take users to a dedicated page where users can take action.",
+    "message": "Nitrous found some safety recommendations for your review"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_EMPTY_STATE_MODULE_SUBHEADER",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The header of the 'Empty State Module' in the Safety Hub page. The 'Empty State Module' is visible if there is no safety recommendation.",
+    "message": "Nitrous will let you know if anything needs your review"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_VERSION_MODULE_UPPERCASE_NAME",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The entry point shown on the screenshot leads to Safety Check settings page (nitrous://settings/safetyCheck) when at least on of the SC modules have recommendations. The subheader of the entry point lists the modules with recommendations. This string is the upper case version (i.e. version that comes first in the sentence) for the name of Nitrous update module.",
+    "message": "Nitrous update"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_VERSION_MODULE_LOWERCASE_NAME",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The entry point shown on the screenshot leads to Safety Check settings page (nitrous://settings/safetyCheck) when at least on of the SC modules have recommendations. The subheader of the entry point lists the modules with recommendations. This string is the lower case version (i.e. version that comes in the middle of the sentence) for the name of Nitrous update module.",
+    "message": "Nitrous update"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_PASSWORD_CHECK_SUBHEADER_NO_PASSWORDS",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "This text explains that passwords saved in Nitrous are automatically checked for issues (e.g. password is leaked or weak) by SafetyHub. However the user does not have any passwords stored in Nitrous, therefore the feature does not operate. This text is shown as a subtitle of the passwords card of SafetyHub. It sits below the title 'No saved passwords'.",
+    "message": "Nitrous can check your passwords when you save them"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_USER_EDU_MODULE_HEADER",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The header of the 'User Education Module' in the Safety Hub page. The 'User Education Module' is visible if there is no safety recommendation and gives information about some Nitrous features.",
+    "message": "Learn how Nitrous keeps you safe"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_USER_EDU_DATA_HEADER",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The header of the first item in the 'User Education Module' in the Safety Hub page. This item explains how Nitrous's tools help user to keep their data safe.",
+    "message": "Nitrous's safety tools"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_USER_EDU_DATA_SUBHEADER",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The subheader of the first item in the 'User Education Module' in the Safety Hub page. This item explains how Nitrous's tools help user to keep their data safe.",
+    "message": "With <ph name=\"BEGIN_LINK\">&lt;a href=\"$1\" target=\"_blank\"&gt;</ph>tools from Nitrous<ph name=\"END_LINK\">&lt;/a&gt;</ph>, you can browse safely and stay in control"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_USER_EDU_INCOGNITO_HEADER",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The header of the second item in the 'User Education Module' in the Safety Hub page. This item explains Incognito mode.",
+    "message": "Nitrous Incognito"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_USER_EDU_SAFE_BROWSING_SUBHEADER",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "The header of the second item in the 'User Education Module' in the Safety Hub page. This item explains Safe Browsing.",
+    "message": "<ph name=\"BEGIN_LINK\">&lt;a href=\"$1\" target=\"_blank\"&gt;</ph>Nitrous warns you<ph name=\"END_LINK\">&lt;/a&gt;</ph> about unsafe sites and downloads"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_VERSION_CARD_HEADER_RESTART",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Safety Hub settings page (nitrous://settings/safetyHub) gives users an overview over their safety status. The version card, which this text is a part of, informs the user whether their Nitrous is up to date. This title of the card is shown when Nitrous is not up to date but there is an update available and the user needs to restart their browser to finish the update. Shown above the subtitle 'Relaunch to finish update. Your tabs will reopen'.",
+    "message": "Nitrous is out of date"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_VERSION_CARD_HEADER_UPDATED",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Safety Hub settings page (nitrous://settings/safetyHub) gives users an overview over their safety status. The version card, which this text is a part of, informs the user whether their Nitrous is up to date. This title of the card is shown when Nitrous is up to date and the user does not need to take any action. Shown above the subtitle that is the Nitrous version.",
+    "message": "Nitrous is up to date"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_VERSION_NAVIGATION_ARIA_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Safety Check settings page (nitrous://settings/safetyCheck) gives users an overview over their safety status. The version card, which this text is a part of, informs the user whether their Nitrous is up to date. This string is for the accesibility label for the card to call out where to navigation will happen (nitrous://settings/help) if the card is clicked.",
+    "message": "Go to About Nitrous page"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_VERSION_RELAUNCH_ARIA_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Safety Check settings page (nitrous://settings/safetyCheck) gives users an overview over their safety status. The version card, which this text is a part of, informs the user whether their Nitrous is up to date. This string is for the accesibility label for the card to call out the click on card will result restarting the browser.",
+    "message": "Relaunch Nitrous"
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_UNUSED_SITE_PERMISSIONS_REMOVED_ONE_PERMISSION_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "'Revoked Permissions' shows the revoked permissions of unused websites. This text describes which permission was removed from an unused site and is shown if there is exactly one permission.",
+    "message": "You haven't visited recently. Nitrous removed <ph name=\"PERMISSION\">$1<ex>location</ex></ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_UNUSED_SITE_PERMISSIONS_REMOVED_TWO_PERMISSIONS_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "'Revoked Permissions' shows the revoked permissions of unused websites. This text describes which permissions were removed from an unused site and is shown if there are exactly two permissions.",
+    "message": "You haven't visited recently. Nitrous removed <ph name=\"PERMISSION_1\">$1<ex>location</ex></ph>, <ph name=\"PERMISSION_2\">$2<ex>notifications</ex></ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_UNUSED_SITE_PERMISSIONS_REMOVED_THREE_PERMISSIONS_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "'Revoked Permissions' shows the revoked permissions of unused websites. This text describes which permissions were removed from an unused site and is shown if there are exactly three permissions.",
+    "message": "You haven't visited recently. Nitrous removed <ph name=\"PERMISSION_1\">$1<ex>location</ex></ph>, <ph name=\"PERMISSION_2\">$2<ex>notifications</ex></ph>, <ph name=\"PERMISSION_3\">$3<ex>camera</ex></ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_UNUSED_SITE_PERMISSIONS_REMOVED_FOUR_OR_MORE_PERMISSIONS_LABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "'Revoked Permissions' shows the revoked permissions of unused websites. This text describes which permissions were removed from an unused site and is shown if there are four or more permissions. The number indicates the count of permisions that are not shown explicitly. The number is always two or larger.",
+    "message": "You haven't visited recently. Nitrous removed <ph name=\"PERMISSION_1\">$1<ex>location</ex></ph>, <ph name=\"PERMISSION_2\">$2<ex>notifications</ex></ph>, and <ph name=\"COUNT\">$3<ex>2</ex></ph> more."
+  },
+  {
+    "name": "IDS_SETTINGS_SAFETY_HUB_ABUSIVE_NOTIFICATION_PERMISSIONS_SETTING_SUBLABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "'Revoked Permissions' module shows the revoked permissions of websites. This text describes that abusive notification permissions were removed.",
+    "message": "Dangerous site. Nitrous removed notifications."
+  },
+  {
+    "name": "IDS_SETTINGS_SECURITY_PASSWORDS_LEAK_DETECTION_DESC",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Text that briefly describes the 'Password Leak Detection' feature.",
+    "message": "Get warned if Nitrous finds one of your passwords in a public data breach"
+  },
+  {
+    "name": "IDS_SETTINGS_SECURITY_SAFE_BROWSING_STANDARD_HOW_IT_WORKS_CONTENT",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Content of the Safe Browsing standard protection column describing how it works",
+    "message": "When you visit a site, Nitrous sends an obfuscated portion of the URL to <ph name=\"BEGIN_LINK\">&lt;a target=\"_blank\" href=\"https://safebrowsing.google.com/\"&gt;</ph>Google Safe Browsing<ph name=\"END_LINK\">&lt;/a&gt;</ph> through a privacy server that hides your IP address. If a site does something suspicious, full URLs and bits of page content are also sent."
+  },
+  {
+    "name": "IDS_SETTINGS_SECURITY_JAVASCRIPT_GUARDRAILS_UNRECOGNIZED_SITES_DESCRIPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Description of JavaScript Guardrails unrecognized sites option.",
+    "message": "Enhanced protection turns off JavaScript optimization for sites Nitrous doesn’t recognize"
+  },
+  {
+    "name": "IDS_SETTINGS_SECURITY_BUNDLE_ENHANCED_BULLET_ONE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "First bullet point under the security settings enhanced bundle section",
+    "message": "Turns on additional features to provide Nitrous’s strongest protections"
+  },
+  {
+    "name": "IDS_SETTINGS_SECURE_CONNECTIONS_SECTION_DESCRIPTION",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Description for the Secure Connections section in Security settings, explaining the baseline behavior of the browser even if the 'Always use secure connections' toggle is disabled.",
+    "message": "Nitrous upgrades insecure connections to HTTPS automatically when possible"
+  },
+  {
+    "name": "IDS_SETTINGS_HTTPS_FIRST_MODE_SUBTITLE",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Subtitle for HTTPS-First Mode section in Security settings",
+    "message": "Nitrous will try to upgrade navigations to HTTPS"
+  },
+  {
+    "name": "IDS_SETTINGS_HTTPS_FIRST_MODE_ENABLED_FULL_SUBLABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Sublabel for radio button to fully enable HTTPS-First Mode",
+    "message": "Nitrous will warn you before loading any site using an insecure connection"
+  },
+  {
+    "name": "IDS_SETTINGS_HTTPS_FIRST_MODE_ENABLED_INCOGNITO_SUBLABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Sublabel for radio button to enable HTTPS-First Mode in Incognito",
+    "message": "When browsing in Incognito mode, Nitrous will warn you before loading a site using an insecure connection"
+  },
+  {
+    "name": "IDS_SETTINGS_HTTPS_FIRST_MODE_DISABLED_SUBLABEL",
+    "source": "chrome/app/settings_chromium_strings.grdp",
+    "context": "Sublabel for radio button to disable HTTPS-First Mode",
+    "message": "When HTTPS isn't available, Nitrous will use an insecure connection without warning you"
+  },
+  {
+    "name": "IDS_SETTINGS_ALT_PAGE_TITLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "The settings page title for the about page.",
+    "message": "Settings - <ph name=\"SECTION_TITLE\">$1<ex>About Nitrous</ex></ph>"
   },
   {
     "name": "IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION",

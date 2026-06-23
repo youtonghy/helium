@@ -59,6 +59,7 @@ helium/core/fix-building-without-safebrowsing.patch
 helium/core/services-prefs.patch
 helium/core/services-schema-nag.patch
 helium/core/change-chromium-branding.patch
+helium/core/nitrous-runtime-branding.patch
 helium/core/scan-chrome-native-messaging-hosts.patch
 helium/core/search/restore-google.patch
 helium/core/search/engine-defaults.patch
@@ -146,6 +147,7 @@ helium/ui/profile-customization-cleanup.patch
 helium/ui/reduce-text-button-height.patch
 helium/ui/pwa-toolbar.patch
 helium/ui/helium-color-mixers.patch
+helium/ui/vertical-tabs-menu-cleanup.patch
 helium/ui/status-bubble.patch
 helium/ui/enable-fluent-scrollbar.patch
 helium/ui/helium-color-scheme.patch

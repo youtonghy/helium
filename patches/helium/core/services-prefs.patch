@@ -1,6 +1,6 @@
 --- a/chrome/app/settings_strings.grdp
 +++ b/chrome/app/settings_strings.grdp
-@@ -1705,6 +1705,44 @@
+@@ -1705,6 +1705,50 @@
        </message>
      </if>
  
@@ -41,13 +41,19 @@
 +    <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN" desc="Validation error shown when the custom Nitrous services origin is invalid.">
 +      Invalid origin
 +    </message>
++    <message name="IDS_SETTINGS_PERSONA_TITLE" desc="Name of the page used to manage browser persona settings">
++      Persona
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_DESCRIPTION" desc="Description of the browser persona settings page">
++      Configure browser persona and fingerprint surface overrides
++    </message>
 +
      <!-- Safety check -->
      <message name="IDS_SETTINGS_SAFETY_CHECK_ICON_INFO_ARIA_LABEL" desc="Accessibility text for a safety check child icon, that indicates info for the child check.">
        Info
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -2234,6 +2234,25 @@ void AddPrivacyStrings(content::WebUIDat
+@@ -2234,6 +2234,27 @@ void AddPrivacyStrings(content::WebUIDat
        {"siteSettingsSublabel", IDS_SETTINGS_PERMISSIONS_DESCRIPTION},
        {"securityPageTitle", IDS_SETTINGS_SECURITY},
        {"securityPageDescription", IDS_SETTINGS_SECURITY_DESCRIPTION},
@@ -70,6 +76,8 @@
 +        IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL},
 +      {"heliumOriginOverrideInvalidOrigin",
 +        IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN},
++      {"personaTitle", IDS_SETTINGS_PERSONA_TITLE},
++      {"personaDescription", IDS_SETTINGS_PERSONA_DESCRIPTION},
        {"advancedProtectionProgramTitle",
         IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM},
        {"advancedProtectionProgramDesc",
@@ -87,6 +95,20 @@
      <cr-toast id="deleteBrowsingDataToast" duration="5000">
        <div>[[dbdDeletionConfirmationToastLabel_]]</div>
      </cr-toast>
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
+@@ -165,6 +165,11 @@
+     Router.getInstance().navigateTo(routes.SITE_SETTINGS);
+   }
+ 
++  private onHeliumServicesPageClick_() {
++    this.interactedWithPage_();
++    Router.getInstance().navigateTo(routes.HELIUM_SERVICES);
++  }
++
+   private onSecurityPageClick_() {
+     this.interactedWithPage_();
+     this.metricsBrowserProxy_.recordAction(
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
 @@ -39,6 +39,14 @@
@@ -395,7 +417,7 @@
  #include "components/language/core/browser/pref_names.h"
  #include "components/live_caption/pref_names.h"
  #include "components/media_router/common/pref_names.h"
-@@ -396,6 +397,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil
+@@ -396,6 +397,12 @@
        settings_api::PrefType::kString;
  #endif
  

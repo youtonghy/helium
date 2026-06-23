@@ -1,3 +1,5 @@
+Index: chromium_src/content/public/browser/content_browser_client.h
+===================================================================
 --- a/content/public/browser/content_browser_client.h
 +++ b/content/public/browser/content_browser_client.h
 @@ -85,6 +85,7 @@
@@ -8,7 +10,7 @@
  #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
  #include "third_party/blink/public/mojom/ai/ai_manager.mojom-forward.h"
  #include "third_party/blink/public/mojom/browsing_topics/browsing_topics.mojom-forward.h"
-@@ -883,6 +884,8 @@
+@@ -883,6 +884,8 @@ class CONTENT_EXPORT ContentBrowserClien
    // |ConfigureNetworkContextParams()| below).
    // (Not called GetAcceptLanguages so it doesn't clash with win32).
    virtual std::string GetAcceptLangs(BrowserContext* context);
@@ -17,22 +19,24 @@
  
    // Returns the default favicon.
    virtual gfx::ImageSkia GetDefaultFavicon();
+Index: chromium_src/content/public/browser/content_browser_client.cc
+===================================================================
 --- a/content/public/browser/content_browser_client.cc
 +++ b/content/public/browser/content_browser_client.cc
-@@ -459,8 +459,13 @@
- std::string ContentBrowserClient::GetAcceptLangs(BrowserContext* context) {
-   DCHECK(context);
+@@ -461,6 +461,11 @@ std::string ContentBrowserClient::GetAcc
    return std::string();
  }
-+
+ 
 +blink::HeliumPersonaSnapshot ContentBrowserClient::GetHeliumPersonaSnapshot(
 +    BrowserContext* browser_context) {
 +  return blink::HeliumPersonaSnapshot();
 +}
- 
++
  gfx::ImageSkia ContentBrowserClient::GetDefaultFavicon() {
    return gfx::ImageSkia();
  }
+Index: chromium_src/chrome/browser/chrome_content_browser_client.h
+===================================================================
 --- a/chrome/browser/chrome_content_browser_client.h
 +++ b/chrome/browser/chrome_content_browser_client.h
 @@ -50,6 +50,7 @@
@@ -43,7 +47,7 @@
  #include "third_party/blink/public/mojom/on_device_translation/translation_manager.mojom-forward.h"
  #include "third_party/blink/public/mojom/worker/shared_worker_info.mojom.h"
  #include "ui/base/clipboard/clipboard_metadata.h"
-@@ -316,6 +317,8 @@
+@@ -316,6 +317,8 @@ class ChromeContentBrowserClient : publi
        override;
    std::string GetApplicationLocale() override;
    std::string GetAcceptLangs(content::BrowserContext* context) override;
@@ -52,6 +56,8 @@
    gfx::ImageSkia GetDefaultFavicon() override;
    bool IsDataSaverEnabled(content::BrowserContext* context) override;
    bool IsPinchToZoomAllowed(content::BrowserContext* context) override;
+Index: chromium_src/chrome/browser/chrome_content_browser_client.cc
+===================================================================
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -88,6 +88,8 @@
@@ -63,7 +69,7 @@
  #include "chrome/browser/external_protocol/external_protocol_handler.h"
  #include "chrome/browser/favicon/favicon_utils.h"
  #include "chrome/browser/font_family_cache.h"
-@@ -3201,6 +3203,19 @@
+@@ -3201,6 +3203,19 @@ std::string ChromeContentBrowserClient::
    return profile->GetPrefs()->GetString(language::prefs::kAcceptLanguages);
  }
  
@@ -83,9 +89,12 @@
  gfx::ImageSkia ChromeContentBrowserClient::GetDefaultFavicon() {
    return favicon::GetDefaultFavicon().AsImageSkia();
  }
+Index: chromium_src/chrome/browser/BUILD.gn
+===================================================================
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -250,6 +250,12 @@ static_library("browser") {
+@@ -249,6 +249,12 @@ static_library("browser") {
+     "font_family_cache.cc",
      "font_family_cache.h",
      "global_features.cc",
 +    "global_features.h",
@@ -97,10 +106,11 @@
      "icon_loader.cc",
      "icon_loader.h",
      "icon_manager.cc",
-     "icon_manager.h",
+Index: chromium_src/third_party/blink/public/common/BUILD.gn
+===================================================================
 --- a/third_party/blink/public/common/BUILD.gn
 +++ b/third_party/blink/public/common/BUILD.gn
-@@ -162,6 +162,8 @@
+@@ -162,6 +162,8 @@ source_set("headers") {
      "frame/user_activation_state.h",
      "frame/user_activation_update_source.h",
      "frame/view_transition_state.h",
@@ -109,27 +119,24 @@
      "history/session_history_constants.h",
      "indexeddb/indexed_db_default_mojom_traits.h",
      "indexeddb/indexeddb_key.h",
+Index: chromium_src/third_party/blink/public/mojom/BUILD.gn
+===================================================================
 --- a/third_party/blink/public/mojom/BUILD.gn
 +++ b/third_party/blink/public/mojom/BUILD.gn
-@@ -1356,6 +1356,9 @@
-     # Depends on frame_policy.mojom.
+@@ -1357,6 +1357,9 @@ mojom("mojom_core") {
      "fenced_frame/fenced_frame.mojom",
      "navigation/navigation_params.mojom",
-+
+ 
 +    # Helium persona snapshot.
 +    "helium_persona/persona_snapshot.mojom",
- 
++
      # Note that service_worker_object.mojom and service_worker.mojom depend on
      # transferable_message.mojom, and controller_service_worker.mojom and
-@@ -1523,17 +1526,30 @@
-       traits_deps = [ "//gpu/ipc/common" ]
-     },
-   ]
- 
-   cpp_typemaps = [
-+    {
-+      types = [
-+        {
+     # service_worker_registration.mojom depend on service_worker_object.mojom,
+@@ -1528,6 +1531,19 @@ mojom("mojom_core") {
+     {
+       types = [
+         {
 +          mojom = "blink.mojom.HeliumPersonaUaChBrand"
 +          cpp = "::blink::HeliumPersonaUaChBrand"
 +        },
@@ -140,18 +147,14 @@
 +      ]
 +      traits_headers = [ "//third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h" ]
 +    },
-     {
-       types = [
-         {
++    {
++      types = [
++        {
            mojom = "blink.mojom.CloneableMessage"
            cpp = "::blink::CloneableMessage"
            move_only = true
-         },
-       ]
-       traits_headers =
-           [ "//third_party/blink/public/common/messaging/cloneable_message.h" ]
-       traits_private_headers = [ "//third_party/blink/public/common/messaging/cloneable_message_mojom_traits.h" ]
-     },
+Index: chromium_src/components/helium_persona/persona_snapshot.h
+===================================================================
 --- /dev/null
 +++ b/components/helium_persona/persona_snapshot.h
 @@ -0,0 +1,17 @@
@@ -172,6 +175,8 @@
 +}  // namespace helium_persona
 +
 +#endif
+Index: chromium_src/components/helium_persona/persona_snapshot.cc
+===================================================================
 --- /dev/null
 +++ b/components/helium_persona/persona_snapshot.cc
 @@ -0,0 +1,16 @@
@@ -191,6 +196,8 @@
 +}
 +
 +}  // namespace helium_persona
+Index: chromium_src/third_party/blink/public/common/helium_persona/persona_snapshot.h
+===================================================================
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
 @@ -0,0 +1,41 @@
@@ -235,6 +242,8 @@
 +}  // namespace blink
 +
 +#endif
+Index: chromium_src/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+===================================================================
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
 @@ -0,0 +1,143 @@
@@ -381,6 +390,8 @@
 +}  // namespace mojo
 +
 +#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_MOJOM_TRAITS_H_
+Index: chromium_src/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+===================================================================
 --- /dev/null
 +++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
 @@ -0,0 +1,29 @@
@@ -413,9 +424,11 @@
 +  array<string> ua_ch_form_factors;
 +  array<HeliumPersonaUaChBrand> ua_ch_brands;
 +};
+Index: chromium_src/chrome/browser/helium_persona/persona_service.h
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.h
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,44 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -423,12 +436,16 @@
 +#define CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
 +
 +#include <string>
++
 +#include "base/memory/raw_ptr.h"
 +#include "base/values.h"
 +#include "components/keyed_service/core/keyed_service.h"
 +#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
 +
 +class PrefService;
++namespace user_prefs {
++class PrefRegistrySyncable;
++}
 +
 +namespace helium_persona {
 +
@@ -436,6 +453,8 @@
 + public:
 +  explicit PersonaService(PrefService* prefs);
 +  ~PersonaService() override;
++
++  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 +
 +  base::DictValue GetPersonaState() const;
 +  base::DictValue SavePersona(const base::DictValue& payload);
@@ -445,100 +464,565 @@
 +  blink::HeliumPersonaSnapshot GetActiveSnapshot() const;
 +
 + private:
++  base::DictValue ReadState() const;
++  void WriteState(base::DictValue state);
++
 +  raw_ptr<PrefService> prefs_;
 +};
 +
 +}  // namespace helium_persona
 +
-+#endif
++#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
+Index: chromium_src/chrome/browser/helium_persona/persona_service.cc
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,452 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#include "chrome/browser/helium_persona/persona_service.h"
 +
++#include <optional>
++#include <string_view>
++
 +#include "components/prefs/pref_service.h"
++#include "components/user_prefs/pref_registry_syncable.h"
 +
 +namespace helium_persona {
++
++namespace {
++
++constexpr char kPersonaStatePref[] = "helium.persona.state";
++constexpr char kDefaultPersonaId[] = "default";
++
++base::DictValue MakeRegionDefaults() {
++  return base::DictValue()
++      .Set("timezone", "UTC")
++      .Set("locale", "en-US")
++      .Set("acceptLanguage", "en-US,en;q=0.9");
++}
++
++base::DictValue MakeUaChDefaults() {
++  base::ListValue brands;
++  brands.Append(base::DictValue().Set("brand", "Chromium").Set("version", "137"));
++  brands.Append(base::DictValue().Set("brand", "Not/A)Brand").Set("version", "24"));
++
++  base::ListValue form_factors;
++  form_factors.Append("Desktop");
++
++  return base::DictValue()
++      .Set("platform", "macOS")
++      .Set("platformVersion", "")
++      .Set("architecture", "arm")
++      .Set("model", "")
++      .Set("bitness", "64")
++      .Set("fullVersion", "")
++      .Set("mobile", false)
++      .Set("wow64", false)
++      .Set("brands", std::move(brands))
++      .Set("formFactors", std::move(form_factors));
++}
++
++base::DictValue MakeAdvancedDefaults() {
++  return base::DictValue()
++      .Set("clientHintsEnabled", true)
++      .Set("allowBackgroundSync", false)
++      .Set("allowContacts", false)
++      .Set("allowPrivacySandboxApis", true);
++}
++
++base::DictValue MakeDefaultPersona() {
++  return base::DictValue()
++      .Set("id", kDefaultPersonaId)
++      .Set("name", "Default")
++      .Set("enabled", false)
++      .Set("userAgent", "")
++      .Set("region", MakeRegionDefaults())
++      .Set("uaCh", MakeUaChDefaults())
++      .Set("advanced", MakeAdvancedDefaults());
++}
++
++base::DictValue MakeDesktopPreset() {
++  return base::DictValue()
++      .Set("id", "desktop-macos")
++      .Set("name", "macOS Desktop")
++      .Set("enabled", true)
++      .Set("userAgent", "")
++      .Set("region", MakeRegionDefaults())
++      .Set("uaCh", MakeUaChDefaults())
++      .Set("advanced", MakeAdvancedDefaults());
++}
++
++base::DictValue MakeDefaultState() {
++  base::ListValue personas;
++  personas.Append(MakeDefaultPersona());
++
++  base::ListValue presets;
++  presets.Append(MakeDesktopPreset());
++
++  return base::DictValue()
++      .Set("activePersonaId", kDefaultPersonaId)
++      .Set("personas", std::move(personas))
++      .Set("presets", std::move(presets));
++}
++
++const base::DictValue* FindPersonaInList(const base::ListValue* personas,
++                                         const std::string& persona_id) {
++  if (!personas) {
++    return nullptr;
++  }
++
++  for (const auto& value : *personas) {
++    if (!value.is_dict()) {
++      continue;
++    }
++
++    const base::DictValue& persona = value.GetDict();
++    const std::string* id = persona.FindString("id");
++    if (id && *id == persona_id) {
++      return &persona;
++    }
++  }
++  return nullptr;
++}
++
++std::string GetActivePersonaId(const base::DictValue& state) {
++  const std::string* active_id = state.FindString("activePersonaId");
++  return active_id && !active_id->empty() ? *active_id : kDefaultPersonaId;
++}
++
++base::DictValue NormalizePersona(const base::DictValue& payload,
++                                 const std::string& fallback_id) {
++  base::DictValue persona = payload.Clone();
++
++  const std::string* id = persona.FindString("id");
++  if (!id || id->empty()) {
++    persona.Set("id", fallback_id.empty() ? kDefaultPersonaId : fallback_id);
++  }
++
++  const std::string* name = persona.FindString("name");
++  if (!name || name->empty()) {
++    persona.Set("name", "Custom Persona");
++  }
++
++  if (!persona.FindBool("enabled").has_value()) {
++    persona.Set("enabled", true);
++  }
++
++  if (!persona.FindString("userAgent")) {
++    persona.Set("userAgent", "");
++  }
++
++  base::DictValue* region = persona.EnsureDict("region");
++  if (!region->FindString("timezone")) {
++    region->Set("timezone", "UTC");
++  }
++  if (!region->FindString("locale")) {
++    region->Set("locale", "en-US");
++  }
++  if (!region->FindString("acceptLanguage")) {
++    region->Set("acceptLanguage", "en-US,en;q=0.9");
++  }
++
++  base::DictValue* ua_ch = persona.EnsureDict("uaCh");
++  if (!ua_ch->FindString("platform")) {
++    ua_ch->Set("platform", "macOS");
++  }
++  if (!ua_ch->FindString("platformVersion")) {
++    ua_ch->Set("platformVersion", "");
++  }
++  if (!ua_ch->FindString("architecture")) {
++    ua_ch->Set("architecture", "arm");
++  }
++  if (!ua_ch->FindString("model")) {
++    ua_ch->Set("model", "");
++  }
++  if (!ua_ch->FindString("bitness")) {
++    ua_ch->Set("bitness", "64");
++  }
++  if (!ua_ch->FindString("fullVersion")) {
++    ua_ch->Set("fullVersion", "");
++  }
++  if (!ua_ch->FindBool("mobile").has_value()) {
++    ua_ch->Set("mobile", false);
++  }
++  if (!ua_ch->FindBool("wow64").has_value()) {
++    ua_ch->Set("wow64", false);
++  }
++
++  base::DictValue* advanced = persona.EnsureDict("advanced");
++  if (!advanced->FindBool("clientHintsEnabled").has_value()) {
++    advanced->Set("clientHintsEnabled", true);
++  }
++  if (!advanced->FindBool("allowBackgroundSync").has_value()) {
++    advanced->Set("allowBackgroundSync", false);
++  }
++  if (!advanced->FindBool("allowContacts").has_value()) {
++    advanced->Set("allowContacts", false);
++  }
++  if (!advanced->FindBool("allowPrivacySandboxApis").has_value()) {
++    advanced->Set("allowPrivacySandboxApis", true);
++  }
++
++  return persona;
++}
++
++base::DictValue MakeResponse(bool ok,
++                             base::DictValue state,
++                             base::DictValue field_errors = base::DictValue()) {
++  return base::DictValue()
++      .Set("ok", ok)
++      .Set("state", std::move(state))
++      .Set("fieldErrors", std::move(field_errors));
++}
++
++base::ListValue UpsertPersona(const base::ListValue* existing,
++                              const base::DictValue& persona) {
++  base::ListValue personas;
++  const std::string* persona_id = persona.FindString("id");
++  bool replaced = false;
++
++  if (existing) {
++    for (const auto& value : *existing) {
++      if (!value.is_dict()) {
++        continue;
++      }
++
++      const base::DictValue& current = value.GetDict();
++      const std::string* current_id = current.FindString("id");
++      if (persona_id && current_id && *current_id == *persona_id) {
++        personas.Append(persona.Clone());
++        replaced = true;
++      } else {
++        personas.Append(current.Clone());
++      }
++    }
++  }
++
++  if (!replaced) {
++    personas.Append(persona.Clone());
++  }
++
++  return personas;
++}
++
++const std::string* FindNestedString(const base::DictValue& persona,
++                                    std::string_view dict_key,
++                                    std::string_view key) {
++  const base::DictValue* dict = persona.FindDict(dict_key);
++  return dict ? dict->FindString(key) : nullptr;
++}
++
++std::optional<bool> FindNestedBool(const base::DictValue& persona,
++                                   std::string_view dict_key,
++                                   std::string_view key) {
++  const base::DictValue* dict = persona.FindDict(dict_key);
++  return dict ? dict->FindBool(key) : std::nullopt;
++}
++
++}  // namespace
 +
 +PersonaService::PersonaService(PrefService* prefs) : prefs_(prefs) {}
 +PersonaService::~PersonaService() = default;
 +
++void PersonaService::RegisterProfilePrefs(
++    user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterDictionaryPref(kPersonaStatePref);
++}
++
 +base::DictValue PersonaService::GetPersonaState() const {
-+  return base::DictValue();
++  return ReadState();
 +}
 +
 +base::DictValue PersonaService::SavePersona(const base::DictValue& payload) {
-+  return payload.Clone();
++  base::DictValue state = ReadState();
++  base::DictValue persona = NormalizePersona(payload, GetActivePersonaId(state));
++  const std::string* persona_id = persona.FindString("id");
++  state.Set("personas", UpsertPersona(state.FindList("personas"), persona));
++  state.Set("activePersonaId", persona_id ? *persona_id : kDefaultPersonaId);
++  WriteState(state.Clone());
++  return MakeResponse(true, std::move(state));
 +}
 +
 +base::DictValue PersonaService::ClonePresetIntoProfile(const std::string& preset_id) {
-+  base::DictValue result;
-+  result.Set("presetId", preset_id);
-+  return result;
++  base::DictValue state = ReadState();
++  const base::DictValue* preset =
++      FindPersonaInList(state.FindList("presets"), preset_id);
++  if (!preset) {
++    base::DictValue errors;
++    errors.Set("presetId", "Unknown preset");
++    return MakeResponse(false, std::move(state), std::move(errors));
++  }
++
++  base::DictValue persona = NormalizePersona(*preset, preset_id);
++  persona.Set("id", preset_id + "-custom");
++  state.Set("personas", UpsertPersona(state.FindList("personas"), persona));
++  state.Set("activePersonaId", preset_id + "-custom");
++  WriteState(state.Clone());
++  return MakeResponse(true, std::move(state));
 +}
 +
 +base::DictValue PersonaService::SetActivePersona(const std::string& persona_id) {
-+  base::DictValue result;
-+  result.Set("activePersonaId", persona_id);
-+  return result;
++  base::DictValue state = ReadState();
++  if (!FindPersonaInList(state.FindList("personas"), persona_id)) {
++    base::DictValue errors;
++    errors.Set("personaId", "Unknown persona");
++    return MakeResponse(false, std::move(state), std::move(errors));
++  }
++
++  state.Set("activePersonaId", persona_id);
++  WriteState(state.Clone());
++  return MakeResponse(true, std::move(state));
 +}
 +
 +base::DictValue PersonaService::DeletePersona(const std::string& persona_id) {
-+  base::DictValue result;
-+  result.Set("deletedPersonaId", persona_id);
-+  return result;
++  base::DictValue state = ReadState();
++  if (persona_id == kDefaultPersonaId) {
++    base::DictValue errors;
++    errors.Set("personaId", "Default persona cannot be deleted");
++    return MakeResponse(false, std::move(state), std::move(errors));
++  }
++
++  base::ListValue personas;
++  const base::ListValue* existing = state.FindList("personas");
++  if (existing) {
++    for (const auto& value : *existing) {
++      if (!value.is_dict()) {
++        continue;
++      }
++
++      const base::DictValue& persona = value.GetDict();
++      const std::string* id = persona.FindString("id");
++      if (!id || *id != persona_id) {
++        personas.Append(persona.Clone());
++      }
++    }
++  }
++
++  if (personas.empty()) {
++    personas.Append(MakeDefaultPersona());
++  }
++
++  std::string active_id = GetActivePersonaId(state);
++  if (active_id == persona_id) {
++    const base::DictValue& first_persona = personas.front().GetDict();
++    const std::string* first_id = first_persona.FindString("id");
++    active_id = first_id ? *first_id : kDefaultPersonaId;
++  }
++
++  state.Set("personas", std::move(personas));
++  state.Set("activePersonaId", active_id);
++  WriteState(state.Clone());
++  return MakeResponse(true, std::move(state));
 +}
 +
 +blink::HeliumPersonaSnapshot PersonaService::GetActiveSnapshot() const {
-+  return blink::HeliumPersonaSnapshot();
++  base::DictValue state = ReadState();
++  const base::DictValue* persona =
++      FindPersonaInList(state.FindList("personas"), GetActivePersonaId(state));
++  if (!persona) {
++    return blink::HeliumPersonaSnapshot();
++  }
++
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = persona->FindBool("enabled").value_or(false);
++  if (!snapshot.enabled) {
++    return snapshot;
++  }
++
++  snapshot.client_hints_enabled =
++      FindNestedBool(*persona, "advanced", "clientHintsEnabled").value_or(true);
++  snapshot.allow_background_sync =
++      FindNestedBool(*persona, "advanced", "allowBackgroundSync").value_or(false);
++  snapshot.allow_contacts =
++      FindNestedBool(*persona, "advanced", "allowContacts").value_or(false);
++  snapshot.allow_privacy_sandbox_apis =
++      FindNestedBool(*persona, "advanced", "allowPrivacySandboxApis")
++          .value_or(true);
++  snapshot.ua_ch_mobile =
++      FindNestedBool(*persona, "uaCh", "mobile").value_or(false);
++  snapshot.ua_ch_wow64 =
++      FindNestedBool(*persona, "uaCh", "wow64").value_or(false);
++
++  if (const std::string* user_agent = persona->FindString("userAgent")) {
++    snapshot.user_agent = *user_agent;
++  }
++  if (const std::string* accept_language =
++          FindNestedString(*persona, "region", "acceptLanguage")) {
++    snapshot.accept_language = *accept_language;
++  }
++  if (const std::string* value = FindNestedString(*persona, "uaCh", "platform")) {
++    snapshot.ua_ch_platform = *value;
++  }
++  if (const std::string* value =
++          FindNestedString(*persona, "uaCh", "platformVersion")) {
++    snapshot.ua_ch_platform_version = *value;
++  }
++  if (const std::string* value =
++          FindNestedString(*persona, "uaCh", "architecture")) {
++    snapshot.ua_ch_architecture = *value;
++  }
++  if (const std::string* value = FindNestedString(*persona, "uaCh", "model")) {
++    snapshot.ua_ch_model = *value;
++  }
++  if (const std::string* value = FindNestedString(*persona, "uaCh", "bitness")) {
++    snapshot.ua_ch_bitness = *value;
++  }
++  if (const std::string* value =
++          FindNestedString(*persona, "uaCh", "fullVersion")) {
++    snapshot.ua_ch_full_version = *value;
++  }
++
++  const base::DictValue* ua_ch = persona->FindDict("uaCh");
++  const base::ListValue* form_factors =
++      ua_ch ? ua_ch->FindList("formFactors") : nullptr;
++  if (form_factors) {
++    for (const auto& value : *form_factors) {
++      if (value.is_string()) {
++        snapshot.ua_ch_form_factors.push_back(value.GetString());
++      }
++    }
++  }
++
++  const base::ListValue* brands = ua_ch ? ua_ch->FindList("brands") : nullptr;
++  if (brands) {
++    for (const auto& value : *brands) {
++      if (!value.is_dict()) {
++        continue;
++      }
++      const base::DictValue& brand_dict = value.GetDict();
++      const std::string* brand = brand_dict.FindString("brand");
++      const std::string* version = brand_dict.FindString("version");
++      if (brand && version) {
++        snapshot.ua_ch_brands.push_back({*brand, *version});
++      }
++    }
++  }
++
++  return snapshot;
++}
++
++base::DictValue PersonaService::ReadState() const {
++  if (!prefs_) {
++    return MakeDefaultState();
++  }
++
++  base::DictValue state = prefs_->GetDict(kPersonaStatePref).Clone();
++  if (!state.FindList("personas")) {
++    state = MakeDefaultState();
++  }
++  if (!state.FindList("presets")) {
++    base::ListValue presets;
++    presets.Append(MakeDesktopPreset());
++    state.Set("presets", std::move(presets));
++  }
++  if (!state.FindString("activePersonaId")) {
++    state.Set("activePersonaId", kDefaultPersonaId);
++  }
++  return state;
++}
++
++void PersonaService::WriteState(base::DictValue state) {
++  if (prefs_) {
++    prefs_->SetDict(kPersonaStatePref, std::move(state));
++  }
 +}
 +
 +}  // namespace helium_persona
+Index: chromium_src/chrome/browser/helium_persona/persona_service_factory.h
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service_factory.h
-@@ -0,0 +1,19 @@
+@@ -0,0 +1,40 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#ifndef CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_FACTORY_H_
 +#define CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_FACTORY_H_
 +
++#include <memory>
++
++#include "base/no_destructor.h"
++#include "chrome/browser/profiles/profile_keyed_service_factory.h"
++
 +class Profile;
++namespace content {
++class BrowserContext;
++}
 +
 +namespace helium_persona {
 +class PersonaService;
 +
-+class PersonaServiceFactory {
++class PersonaServiceFactory : public ProfileKeyedServiceFactory {
 + public:
 +  static PersonaService* GetForProfile(Profile* profile);
++  static PersonaServiceFactory* GetInstance();
++
++  PersonaServiceFactory(const PersonaServiceFactory&) = delete;
++  PersonaServiceFactory& operator=(const PersonaServiceFactory&) = delete;
++
++ private:
++  friend base::NoDestructor<PersonaServiceFactory>;
++
++  PersonaServiceFactory();
++  ~PersonaServiceFactory() override;
++
++  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
++      content::BrowserContext* context) const override;
 +};
 +
 +}  // namespace helium_persona
 +
-+#endif
++#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_FACTORY_H_
+Index: chromium_src/chrome/browser/helium_persona/persona_service_factory.cc
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service_factory.cc
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,41 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#include "chrome/browser/helium_persona/persona_service_factory.h"
 +
++#include "base/no_destructor.h"
 +#include "chrome/browser/helium_persona/persona_service.h"
-+
-+class Profile;
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_selections.h"
++#include "content/public/browser/browser_context.h"
 +
 +namespace helium_persona {
 +
 +PersonaService* PersonaServiceFactory::GetForProfile(Profile* profile) {
-+  static PersonaService* service = nullptr;
-+  return service;
++  return static_cast<PersonaService*>(
++      GetInstance()->GetServiceForBrowserContext(profile, true));
++}
++
++PersonaServiceFactory* PersonaServiceFactory::GetInstance() {
++  static base::NoDestructor<PersonaServiceFactory> instance;
++  return instance.get();
++}
++
++PersonaServiceFactory::PersonaServiceFactory()
++    : ProfileKeyedServiceFactory(
++          "HeliumPersonaService",
++          ProfileSelections::Builder()
++              .WithRegular(ProfileSelection::kOriginalOnly)
++              .WithGuest(ProfileSelection::kOriginalOnly)
++              .Build()) {}
++
++PersonaServiceFactory::~PersonaServiceFactory() = default;
++
++std::unique_ptr<KeyedService>
++PersonaServiceFactory::BuildServiceInstanceForBrowserContext(
++    content::BrowserContext* context) const {
++  Profile* profile = Profile::FromBrowserContext(context);
++  return std::make_unique<PersonaService>(profile->GetPrefs());
 +}
 +
 +}  // namespace helium_persona
+Index: chromium_src/chrome/browser/helium_persona/persona_runtime_override.cc
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_runtime_override.cc
 @@ -0,0 +1,16 @@
@@ -558,3 +1042,23 @@
 +// persona_snapshot = browser_client->GetHeliumPersonaSnapshot
 +// SetHeliumPersonaSnapshot(creation_params->persona_snapshot)
 +// ApplyPersonaUserAgentMetadata
+Index: chromium_src/chrome/browser/prefs/browser_prefs.cc
+===================================================================
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -35,6 +35,7 @@
+ #include "chrome/browser/glic/glic_pref_names.h"
+ #include "chrome/browser/glic/suggestions/contextual_cueing_prefs.h"
+ #include "chrome/browser/gpu/gpu_mode_manager.h"
++#include "chrome/browser/helium_persona/persona_service.h"
+ #include "chrome/browser/lifetime/browser_shutdown.h"
+ #include "chrome/browser/login_detection/login_detection_prefs.h"
+ #include "chrome/browser/media/media_engagement_service.h"
+@@ -1755,6 +1756,7 @@ void RegisterProfilePrefs(user_prefs::Pr
+   finds::FindsService::RegisterProfilePrefs(registry);
+   glic::prefs::RegisterProfilePrefs(registry);
+   glic::contextual_cueing::prefs::RegisterProfilePrefs(registry);
++  helium_persona::PersonaService::RegisterProfilePrefs(registry);
+   permissions::PermissionHatsTriggerHelper::RegisterProfilePrefs(registry);
+   history_clusters::prefs::RegisterProfilePrefs(registry);
+   HostContentSettingsMap::RegisterProfilePrefs(registry);

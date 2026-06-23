@@ -29,6 +29,46 @@
    if (base::FeatureList::IsEnabled(
            features::kTabsFromOtherDevicesSidePanelPinnedByDefault)) {
      const std::optional<std::string>& tabs_from_other_devices_action =
+--- a/chrome/browser/ui/tabs/features.cc
++++ b/chrome/browser/ui/tabs/features.cc
+@@ -84,7 +84,7 @@ BASE_FEATURE_PARAM(int,
+ 
+ BASE_FEATURE(kTabSelectionByPointer, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+-BASE_FEATURE(kHorizontalTabStripComboButton, base::FEATURE_ENABLED_BY_DEFAULT);
++BASE_FEATURE(kHorizontalTabStripComboButton, base::FEATURE_DISABLED_BY_DEFAULT);
+ BASE_FEATURE_PARAM(bool,
+                    kHorizontalTabStripComboButtonShowStartOnly,
+                    &kHorizontalTabStripComboButton,
+--- a/chrome/browser/ui/tabs/tab_strip_prefs.cc
++++ b/chrome/browser/ui/tabs/tab_strip_prefs.cc
+@@ -114,16 +114,16 @@ TabSearchPosition GetTabSearchPosition(
+     }
+   }
+ 
+-  if (base::FeatureList::IsEnabled(tabs::kHorizontalTabStripComboButton)) {
+-    return TabSearchPosition::kLeadingHorizontalTabstrip;
+-  }
+-
++  const bool has_tab_search_toolbar_button =
++      features::HasTabSearchToolbarButton();
++  if (has_tab_search_toolbar_button) {
++    return TabSearchPosition::kToolbarButton;
++  }
++
++  if (base::FeatureList::IsEnabled(tabs::kHorizontalTabStripComboButton)) {
++    return TabSearchPosition::kLeadingHorizontalTabstrip;
++  }
++
+-  const bool has_tab_search_toolbar_button =
+-      features::HasTabSearchToolbarButton();
+-  if (has_tab_search_toolbar_button) {
+-    return TabSearchPosition::kToolbarButton;
+-  }
+-
+   // If this pref has already been read, we need to return the same value.
+   if (!g_tab_search_trailing_tabstrip_at_startup.has_value()) {
+     g_tab_search_trailing_tabstrip_at_startup =
 --- a/chrome/browser/ui/tab_search_feature.cc
 +++ b/chrome/browser/ui/tab_search_feature.cc
 @@ -12,6 +12,6 @@ namespace features {
@@ -39,6 +79,89 @@
 +  return true;
  }
  }  // namespace features
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -4250,30 +4250,46 @@ void BrowserView::UpdateTabSearchBubbleHost() {
+   auto* vertical_tab_strip_state_controller =
+       tabs::VerticalTabStripStateController::From(browser_);
+   if (vertical_tab_strip_state_controller &&
+       vertical_tab_strip_state_controller->ShouldDisplayVerticalTabs()) {
+-    auto* combo_button =
+-        vertical_tab_strip_region_view_->GetTopContainer()->GetComboButton();
+-    tab_search_bubble_host_ = std::make_unique<TabSearchBubbleHost>(
+-        combo_button->end_button(), browser_.get());
+-    combo_button->SetTabSearchBubbleHost(tab_search_bubble_host_.get());
+-  } else if (base::FeatureList::IsEnabled(
+-                 tabs::kHorizontalTabStripComboButton)) {
+-    auto* combo_button = horizontal_tab_strip_region_view_->GetComboButton();
+-    tab_search_bubble_host_ = std::make_unique<TabSearchBubbleHost>(
+-        combo_button->end_button(), browser_.get());
+-    combo_button->SetTabSearchBubbleHost(tab_search_bubble_host_.get());
+-  } else if (tabs::GetTabSearchPosition(browser_) ==
+-             tabs::TabSearchPosition::kToolbarButton) {
++    auto* top_container = vertical_tab_strip_region_view_
++                              ? vertical_tab_strip_region_view_->GetTopContainer()
++                              : nullptr;
++    auto* combo_button =
++        top_container ? top_container->GetComboButton() : nullptr;
++    if (combo_button && combo_button->end_button()) {
++      tab_search_bubble_host_ = std::make_unique<TabSearchBubbleHost>(
++          combo_button->end_button(), browser_.get());
++      combo_button->SetTabSearchBubbleHost(tab_search_bubble_host_.get());
++      return;
++    }
++  }
++
++  if (base::FeatureList::IsEnabled(tabs::kHorizontalTabStripComboButton)) {
++    auto* combo_button = horizontal_tab_strip_region_view_
++                             ? horizontal_tab_strip_region_view_->GetComboButton()
++                             : nullptr;
++    if (combo_button && combo_button->end_button()) {
++      tab_search_bubble_host_ = std::make_unique<TabSearchBubbleHost>(
++          combo_button->end_button(), browser_.get());
++      combo_button->SetTabSearchBubbleHost(tab_search_bubble_host_.get());
++      return;
++    }
++  }
++
++  if (auto* toolbar_button = toolbar_->tab_search_button()) {
+     tab_search_bubble_host_ = std::make_unique<TabSearchBubbleHost>(
+-        toolbar_->tab_search_button(), browser_.get());
+-    auto* toolbar_button_controller =
+-        TabSearchToolbarButtonController::From(browser_.get());
+-    CHECK(toolbar_button_controller);
+-    toolbar_button_controller->UpdateBubbleHost(tab_search_bubble_host_.get());
+-  } else {
++        toolbar_button, browser_.get());
++    if (auto* toolbar_button_controller =
++            TabSearchToolbarButtonController::From(browser_.get())) {
++      toolbar_button_controller->UpdateBubbleHost(tab_search_bubble_host_.get());
++    }
++    return;
++  }
++
++  if (auto* tab_search_button =
++          BrowserElementsViews::From(browser_.get())
++              ->GetViewAs<TabSearchButton>(kTabSearchButtonElementId)) {
+     tab_search_bubble_host_ = std::make_unique<TabSearchBubbleHost>(
+-        BrowserElementsViews::From(browser_.get())
+-            ->GetViewAs<TabSearchButton>(kTabSearchButtonElementId),
+-        browser_.get());
++        tab_search_button, browser_.get());
+   }
+ }
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -503,8 +503,7 @@ void ToolbarView::Init() {
+     pinned_toolbar_actions_ = toolbar_webview_->GetPinnedToolbarActions();
+   }
+ 
+-  if (!base::FeatureList::IsEnabled(tabs::kHorizontalTabStripComboButton) &&
+-      features::HasTabSearchToolbarButton()) {
++  if (features::HasTabSearchToolbarButton()) {
+     CHECK(!features::IsWebUIPinnedToolbarActionsEnabled())
+         << "WebUIPinnedToolbarActions does not support "
+            "CreatePermanentButtonFor, consider enabling "
 --- a/chrome/browser/ui/views/frame/horizontal_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/horizontal_tab_strip_region_view.cc
 @@ -225,9 +225,7 @@ class TabSearchPositionMetricsLogger {
