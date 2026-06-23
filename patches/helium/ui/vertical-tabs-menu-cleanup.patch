@@ -1,0 +1,197 @@
+Index: chromium_src/chrome/browser/ui/tabs/tab_menu_model.cc
+===================================================================
+--- a/chrome/browser/ui/tabs/tab_menu_model.cc
++++ b/chrome/browser/ui/tabs/tab_menu_model.cc
+@@ -24,8 +24,6 @@
+ #include "chrome/browser/glic/resources/grit/glic_browser_resources.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
+-#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+-#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_context_menu_delegate.h"
+ #include "chrome/browser/ui/tabs/existing_tab_group_sub_menu_model.h"
+@@ -41,9 +39,7 @@
+ #include "chrome/browser/ui/tabs/tab_utils.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/ui_features.h"
+-#include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
+ #include "chrome/browser/ui/web_applications/web_app_tabbed_utils.h"
+-#include "chrome/browser/user_education/user_education_service.h"
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "chrome/grit/branded_strings.h"
+@@ -344,32 +340,6 @@ void TabMenuModel::Build(int index) {
+     }
+   }
+ 
+-  if (tabs::kVerticalTabsToggleInTabContextMenu.Get() && controller) {
+-    // TODO(crbug.com/475222200): When in immersive, swapping between tab
+-    // strip types create duplicate tab strips. Until that is resolved,
+-    // disable the ability to swap between tab strips while in immersive.
+-    BrowserWindowInterface* bwi =
+-        tab_strip_->delegate()->GetBrowserWindowInterface();
+-    if (bwi && !bwi->GetFeatures().immersive_mode_controller()->IsEnabled()) {
+-      AddSeparator(ui::NORMAL_SEPARATOR);
+-      if (controller->ShouldDisplayVerticalTabs()) {
+-        AddItemWithStringId(TabStripModel::CommandToggleVertical,
+-                            IDS_SWITCH_TO_HORIZONTAL_TAB);
+-      } else {
+-        AddItemWithStringId(TabStripModel::CommandToggleVertical,
+-                            IDS_SWITCH_TO_VERTICAL_TAB);
+-        const bool use_preview_badge =
+-            base::FeatureList::IsEnabled(tabs::kVerticalTabsPreviewBadge);
+-        const user_education::DisplayNewBadge show_badge =
+-            UserEducationService::MaybeShowNewBadge(
+-                tab_strip_->profile(), use_preview_badge
+-                                           ? tabs::kVerticalTabsPreviewBadge
+-                                           : tabs::kVerticalTabsNewBadge);
+-        SetIsNewFeatureAt(GetItemCount() - 1, show_badge);
+-      }
+-    }
+-  }
+-
+ // Append extension items for the 'tab' context if the feature is enabled.
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+   if (base::FeatureList::IsEnabled(
+Index: chromium_src/chrome/browser/ui/views/frame/system_menu_model_builder.cc
+===================================================================
+--- a/chrome/browser/ui/views/frame/system_menu_model_builder.cc
++++ b/chrome/browser/ui/views/frame/system_menu_model_builder.cc
+@@ -14,17 +14,13 @@
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/tabs/features.h"
+-#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/toolbar/app_menu_model.h"
+ #include "chrome/browser/ui/ui_features.h"
+-#include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+-#include "chrome/browser/user_education/user_education_service.h"
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "components/strings/grit/components_strings.h"
+-#include "components/user_education/common/new_badge/new_badge_controller.h"
+ #include "ui/base/accelerators/accelerator.h"
+ #include "ui/base/models/menu_model.h"
+ #include "ui/menus/simple_menu_model.h"
+@@ -129,56 +125,6 @@ void SystemMenuModelBuilder::BuildSystem
+   }
+ #endif  // BUILDFLAG(IS_WIN)
+ 
+-  if (auto* controller =
+-          tabs::VerticalTabStripStateController::From(browser())) {
+-    // TODO(crbug.com/475222200): When in immersive, swapping between tab
+-    // strip types create duplicate tab strips. Until that is resolved, disable
+-    // the ability to swap between tab strips while in immersive.
+-    if (!ImmersiveModeController::From(browser())->IsEnabled()) {
+-      model->AddSeparator(ui::NORMAL_SEPARATOR);
+-      if (controller->ShouldDisplayVerticalTabs()) {
+-        model->AddItemWithStringId(IDC_TOGGLE_VERTICAL_TABS,
+-                                   IDS_SWITCH_TO_HORIZONTAL_TAB);
+-
+-        if (tabs::IsVerticalTabsExpandOnHoverFeatureEnabled() &&
+-            controller->ShouldDisplayVerticalTabs()) {
+-          model->AddItemWithStringId(
+-              IDC_TOGGLE_VERTICAL_TABS_EXPAND_ON_HOVER,
+-              controller->IsExpandOnHoverEnabled()
+-                  ? IDS_VERTICAL_TABS_DISABLE_EXPAND_ON_HOVER
+-                  : IDS_VERTICAL_TABS_ENABLE_EXPAND_ON_HOVER);
+-          model->SetElementIdentifierAt(
+-              model
+-                  ->GetIndexOfCommandId(
+-                      IDC_TOGGLE_VERTICAL_TABS_EXPAND_ON_HOVER)
+-                  .value(),
+-              kToggleVerticalTabsExpandOnHoverElementId);
+-        }
+-      } else {
+-        model->AddItemWithStringId(IDC_TOGGLE_VERTICAL_TABS,
+-                                   IDS_SWITCH_TO_VERTICAL_TAB);
+-        const bool use_preview_badge =
+-            base::FeatureList::IsEnabled(tabs::kVerticalTabsPreviewBadge);
+-        const ui::NewBadgeType badge_type = use_preview_badge
+-                                                ? ui::NewBadgeType::kPreview
+-                                                : ui::NewBadgeType::kNew;
+-        const user_education::DisplayNewBadge show_badge =
+-            UserEducationService::MaybeShowNewBadge(
+-                browser()->GetProfile(), use_preview_badge
+-                                             ? tabs::kVerticalTabsPreviewBadge
+-                                             : tabs::kVerticalTabsNewBadge);
+-        model->SetIsNewFeatureAt(
+-            model->GetIndexOfCommandId(IDC_TOGGLE_VERTICAL_TABS).value(),
+-            show_badge, badge_type);
+-      }
+-      model->SetElementIdentifierAt(
+-          model->GetIndexOfCommandId(IDC_TOGGLE_VERTICAL_TABS).value(),
+-          kToggleVerticalTabsElementId);
+-      model->AddItemWithStringId(IDC_VERTICAL_TABS_SEND_FEEDBACK,
+-                                 IDS_VERTICAL_TABS_SEND_FEEDBACK);
+-    }
+-  }
+-
+   if (chrome::CanOpenTaskManager()) {
+     model->AddSeparator(ui::NORMAL_SEPARATOR);
+     model->AddItemWithStringId(IDC_TASK_MANAGER_CONTEXT_MENU, IDS_TASK_MANAGER);
+Index: chromium_src/chrome/browser/ui/views/frame/system_menu_model_delegate.cc
+===================================================================
+--- a/chrome/browser/ui/views/frame/system_menu_model_delegate.cc
++++ b/chrome/browser/ui/views/frame/system_menu_model_delegate.cc
+@@ -16,8 +16,6 @@
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/tabs/features.h"
+-#include "chrome/browser/ui/tabs/vertical_tab_strip_metrics.h"
+-#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/common/pref_names.h"
+@@ -100,8 +98,7 @@ bool SystemMenuModelDelegate::GetAcceler
+ 
+ bool SystemMenuModelDelegate::IsItemForCommandIdDynamic(int command_id) const {
+   return std::set{IDC_RESTORE_TAB, IDC_TAB_SEARCH_TOGGLE_PIN,
+-                  IDC_GLIC_TOGGLE_PIN, IDC_TOGGLE_VERTICAL_TABS,
+-                  IDC_TOGGLE_VERTICAL_TABS_EXPAND_ON_HOVER}
++                  IDC_GLIC_TOGGLE_PIN}
+       .contains(command_id);
+ }
+ 
+@@ -129,22 +126,6 @@ std::u16string SystemMenuModelDelegate::
+         }
+       }
+       break;
+-    case IDC_TOGGLE_VERTICAL_TABS: {
+-      auto* controller = tabs::VerticalTabStripStateController::From(browser_);
+-      CHECK(controller);
+-      string_id = controller->ShouldDisplayVerticalTabs()
+-                      ? IDS_SWITCH_TO_HORIZONTAL_TAB
+-                      : IDS_SWITCH_TO_VERTICAL_TAB;
+-      break;
+-    }
+-    case IDC_TOGGLE_VERTICAL_TABS_EXPAND_ON_HOVER: {
+-      auto* controller = tabs::VerticalTabStripStateController::From(browser_);
+-      CHECK(controller);
+-      string_id = controller->IsExpandOnHoverEnabled()
+-                      ? IDS_VERTICAL_TABS_DISABLE_EXPAND_ON_HOVER
+-                      : IDS_VERTICAL_TABS_ENABLE_EXPAND_ON_HOVER;
+-      break;
+-    }
+     case IDC_TAB_SEARCH_TOGGLE_PIN:
+       string_id = browser_->profile()->GetPrefs()->GetBoolean(
+                       prefs::kTabSearchPinnedToTabstrip)
+@@ -184,15 +165,6 @@ void SystemMenuModelDelegate::ExecuteCom
+       base::RecordAction(
+           base::UserMetricsAction("SystemContextMenu_NameWindow"));
+       break;
+-    case IDC_TOGGLE_VERTICAL_TABS: {
+-      auto* controller = tabs::VerticalTabStripStateController::From(browser_);
+-      if (controller) {
+-        const bool is_vertical = !controller->ShouldDisplayVerticalTabs();
+-        tabs::RecordVerticalTabStripModeChanged(
+-            is_vertical, tabs::VerticalTabStripEntryPoint::kSystemContextMenu);
+-      }
+-      break;
+-    }
+     case IDC_TAB_SEARCH_TOGGLE_PIN: {
+       if (base::FeatureList::IsEnabled(tabs::kHorizontalTabStripComboButton)) {
+         PrefService* prefs = browser_->profile()->GetPrefs();
