@@ -15,7 +15,13 @@ from third_party import unidiff
 import utils.name_substitution_utils as namesub # pylint: disable=wrong-import-order
 
 PLATFORMS = ("windows", "macos", "linux")
-REPO_URL = "https://github.com/imputnet/helium-{platform}.git"
+# Per-platform source repos. Forked platforms point at our own repos;
+# the rest stay on upstream until forked.
+REPO_URLS = {
+    "windows": "https://github.com/imputnet/helium-windows.git",
+    "macos": "https://github.com/youtonghy/helium-macos.git",
+    "linux": "https://github.com/imputnet/helium-linux.git",
+}
 
 
 def get_xml_attr(text, attr):
@@ -32,7 +38,7 @@ def prep_platform_repos(platforms_dir):
         dest = platforms_dir / platform
         if not dest.is_dir():
             subprocess.run(
-                ["git", "clone", REPO_URL.format(platform=platform),
+                ["git", "clone", REPO_URLS[platform],
                  str(dest)],
                 check=True,
             )
