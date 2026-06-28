@@ -1,5 +1,3 @@
-Index: b/chrome/browser/resources/settings/privacy_page/privacy_page.html
-===================================================================
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
 @@ -51,6 +51,11 @@
@@ -14,8 +12,6 @@ Index: b/chrome/browser/resources/settings/privacy_page/privacy_page.html
      <cr-toast id="deleteBrowsingDataToast" duration="5000">
        <div>[[dbdDeletionConfirmationToastLabel_]]</div>
      </cr-toast>
-Index: b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
-===================================================================
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
 @@ -170,6 +170,11 @@ export class SettingsPrivacyPageElement
@@ -30,8 +26,6 @@ Index: b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
    private onSecurityPageClick_() {
      this.interactedWithPage_();
      this.metricsBrowserProxy_.recordAction(
-Index: b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
-===================================================================
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
 @@ -103,6 +103,14 @@
@@ -49,8 +43,6 @@ Index: b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
        routes_.COOKIES, currentRoute, inSearchMode)]]"
        update-when-false>
      <settings-cookies-page slot="view" id="cookies"
-Index: b/chrome/browser/resources/settings/router.ts
-===================================================================
 --- a/chrome/browser/resources/settings/router.ts
 +++ b/chrome/browser/resources/settings/router.ts
 @@ -44,6 +44,7 @@ export interface SettingsRoutes {
@@ -61,8 +53,6 @@ Index: b/chrome/browser/resources/settings/router.ts
    PRELOADING: Route;
    PRIVACY: Route;
    PRIVACY_GUIDE: Route;
-Index: b/chrome/browser/resources/settings/route.ts
-===================================================================
 --- a/chrome/browser/resources/settings/route.ts
 +++ b/chrome/browser/resources/settings/route.ts
 @@ -29,6 +29,7 @@ function addPrivacyChildRoutes(r: Partia
@@ -73,8 +63,6 @@ Index: b/chrome/browser/resources/settings/route.ts
    r.SITE_SETTINGS = r.PRIVACY.createChild('/content');
    r.SECURITY = r.PRIVACY.createChild('/security');
  
-Index: b/chrome/browser/resources/settings/BUILD.gn
-===================================================================
 --- a/chrome/browser/resources/settings/BUILD.gn
 +++ b/chrome/browser/resources/settings/BUILD.gn
 @@ -142,6 +142,7 @@ build_webui("build") {
@@ -93,8 +81,6 @@ Index: b/chrome/browser/resources/settings/BUILD.gn
        "system_page/system_page_browser_proxy.ts",
      ]
      if (is_chrome_branded) {
-Index: b/chrome/browser/resources/settings/lazy_load.ts
-===================================================================
 --- a/chrome/browser/resources/settings/lazy_load.ts
 +++ b/chrome/browser/resources/settings/lazy_load.ts
 @@ -22,6 +22,7 @@ import './clear_browsing_data_dialog/cle
@@ -113,8 +99,6 @@ Index: b/chrome/browser/resources/settings/lazy_load.ts
  export {SettingsDoNotTrackToggleElement} from './privacy_page/do_not_track_toggle.js';
  export {SettingsPersonalizationOptionsElement} from './privacy_page/personalization_options.js';
  export {PrivacyGuideStep} from './privacy_page/privacy_guide/constants.js';
-Index: b/chrome/browser/ui/BUILD.gn
-===================================================================
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
 @@ -1485,6 +1485,8 @@ static_library("ui") {
@@ -126,8 +110,6 @@ Index: b/chrome/browser/ui/BUILD.gn
        "webui/settings/people_handler.cc",
        "webui/settings/people_handler.h",
        "webui/settings/performance_handler.cc",
-Index: b/chrome/browser/ui/webui/settings/settings_ui.cc
-===================================================================
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
 @@ -72,6 +72,7 @@
@@ -146,8 +128,6 @@ Index: b/chrome/browser/ui/webui/settings/settings_ui.cc
    AddSettingsPageUIHandler(std::make_unique<SearchEnginesHandler>(profile));
    AddSettingsPageUIHandler(
        std::make_unique<HeliumServicesSchemaHandler>(profile));
-Index: b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
 @@ -0,0 +1,31 @@
@@ -182,11 +162,9 @@ Index: b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
 +    return instance || (instance = new PersonaBrowserProxyImpl());
 +  }
 +}
-Index: b/chrome/browser/resources/settings/privacy_page/persona_page.html
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,100 @@
 +<!-- Copyright 2026 The Helium Authors -->
 +<!-- You can use, redistribute, and/or modify this source code under -->
 +<!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
@@ -195,10 +173,30 @@ Index: b/chrome/browser/resources/settings/privacy_page/persona_page.html
 +  .field { display: flex; flex-direction: column; gap: 6px; }
 +  .field label { color: var(--cr-secondary-text-color); font-size: 0.75rem; }
 +  .field select { min-height: 32px; }
++  .preset-actions { display: flex; gap: 12px; align-items: end; }
++  .preset-actions cr-button { flex: none; }
++  .preset-select { min-width: 260px; }
 +  .section { border-top: var(--cr-separator-line); margin-top: 20px; padding-top: 16px; }
 +  .actions { display: flex; justify-content: flex-end; margin-top: 20px; }
 +</style>
 +<settings-subpage page-title="$i18n{personaTitle}" route-path$="[[routePath]]">
++  <div class="section">
++    <h3>Quick Presets</h3>
++    <div class="preset-actions">
++      <div class="field preset-select">
++        <label>Preset</label>
++        <select value$="[[selectedPresetId_]]" on-change="onPresetChange_">
++          <option value="">Choose a preset...</option>
++          <template is="dom-repeat" items="[[presets_]]">
++            <option value$="[[item.id]]">[[item.name]]</option>
++          </template>
++        </select>
++      </div>
++      <cr-button class="action-button" on-click="onApplyPresetClick_">
++        Apply Preset
++      </cr-button>
++    </div>
++  </div>
 +  <div class="field-grid">
 +    <cr-input label="User agent" value="{{editablePersona_.userAgent}}"></cr-input>
 +    <cr-input label="Platform" value="{{editablePersona_.platform}}"></cr-input>
@@ -267,11 +265,9 @@ Index: b/chrome/browser/resources/settings/privacy_page/persona_page.html
 +    </cr-button>
 +  </div>
 +</settings-subpage>
-Index: b/chrome/browser/resources/settings/privacy_page/persona_page.ts
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
-@@ -0,0 +1,354 @@
+@@ -0,0 +1,376 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -284,7 +280,8 @@ Index: b/chrome/browser/resources/settings/privacy_page/persona_page.ts
 +import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 +import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 +
-+import {PersonaBrowserProxyImpl, type PersonaPageResponse} from './persona_browser_proxy.js';
++import type {PersonaPageResponse} from './persona_browser_proxy.js';
++import {PersonaBrowserProxyImpl} from './persona_browser_proxy.js';
 +import {getTemplate} from './persona_page.html.js';
 +
 +interface PersonaGpuProfile {
@@ -408,6 +405,8 @@ Index: b/chrome/browser/resources/settings/privacy_page/persona_page.ts
 +  static get template() { return getTemplate(); }
 +  static get properties() {
 +    return {
++      presets_: {type: Array, value: () => []},
++      selectedPresetId_: {type: String, value: ''},
 +      editablePersona_: {type: Object, value: () => ({
 +        userAgent: '', platform: '', navigatorVendor: '', navigatorProductSub: '',
 +        uaCh: {platform: '', fullVersion: ''},
@@ -437,6 +436,7 @@ Index: b/chrome/browser/resources/settings/privacy_page/persona_page.ts
 +  }
 +
 +  private applyPersonaState_(state: any) {
++    this.presets_ = Array.isArray(state.presets) ? state.presets : [];
 +    const personas = Array.isArray(state.personas) ? state.personas : [];
 +    const activePersona = personas.find((persona: any) => {
 +      return persona && persona.id === state.activePersonaId;
@@ -461,6 +461,10 @@ Index: b/chrome/browser/resources/settings/privacy_page/persona_page.ts
 +        ...(activePersona.uaCh || {}),
 +      },
 +    };
++    const matchingPreset = this.presets_.find((preset: any) => {
++      return preset && preset.name === activePersona.name;
++    });
++    this.selectedPresetId_ = matchingPreset?.id || '';
 +  }
 +
 +  private applyPersonaResponse_(response: PersonaPageResponse) {
@@ -473,6 +477,20 @@ Index: b/chrome/browser/resources/settings/privacy_page/persona_page.ts
 +    this.applyPersonaResponse_(
 +        await PersonaBrowserProxyImpl.getInstance().savePersona(
 +            this.editablePersona_));
++  }
++
++  private onPresetChange_(event: Event) {
++    this.selectedPresetId_ = (event.target as HTMLSelectElement).value;
++  }
++
++  private async onApplyPresetClick_() {
++    if (!this.selectedPresetId_) {
++      return;
++    }
++
++    this.applyPersonaResponse_(
++        await PersonaBrowserProxyImpl.getInstance().clonePresetIntoProfile(
++            this.selectedPresetId_));
 +  }
 +
 +  private onUaChPlatformChange_(event: Event) {
@@ -626,8 +644,6 @@ Index: b/chrome/browser/resources/settings/privacy_page/persona_page.ts
 +
 +declare global { interface HTMLElementTagNameMap { 'settings-persona-page': SettingsPersonaPageElement; } }
 +customElements.define(SettingsPersonaPageElement.is, SettingsPersonaPageElement);
-Index: b/chrome/browser/ui/webui/settings/persona_handler.h
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.h
 @@ -0,0 +1,34 @@
@@ -665,8 +681,6 @@ Index: b/chrome/browser/ui/webui/settings/persona_handler.h
 +}  // namespace settings
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_PERSONA_HANDLER_H_
-Index: b/chrome/browser/ui/webui/settings/persona_handler.cc
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.cc
 @@ -0,0 +1,112 @@
