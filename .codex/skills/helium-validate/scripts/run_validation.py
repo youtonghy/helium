@@ -238,6 +238,7 @@ def prepare_source_tree(python, source_tree):
 
 
 def run_source_checks(python, source_tree):
+    run([python, './devutils/check_chromium_src_clean.py', '--source-tree', source_tree])
     run([python, './devutils/validate_patches.py', '-l', source_tree, '-v'])
     with tempfile.TemporaryDirectory(prefix='helium-lists-') as tmpdir:
         tmpdir = Path(tmpdir)
