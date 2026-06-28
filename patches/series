@@ -1,6 +1,3 @@
-upstream-fixes/missing-dependencies.patch
-upstream-fixes/wasm-interpreter-fix.patch
-upstream-fixes/vertical-tab-black-flash.patch
 inox-patchset/fix-building-without-safebrowsing.patch
 inox-patchset/disable-autofill-download-manager.patch
 inox-patchset/disable-update-pings.patch
@@ -59,6 +56,7 @@ helium/core/fix-building-without-safebrowsing.patch
 helium/core/services-prefs.patch
 helium/core/services-schema-nag.patch
 helium/core/change-chromium-branding.patch
+helium/core/app-isolation.patch
 helium/core/nitrous-runtime-branding.patch
 helium/core/scan-chrome-native-messaging-hosts.patch
 helium/core/search/restore-google.patch

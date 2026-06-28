@@ -1,0 +1,11 @@
+--- a/chrome/app/app-Info.plist
++++ b/chrome/app/app-Info.plist
+@@ -153,6 +153,8 @@
+ 	<string>AppIcon</string>
+ 	<key>CFBundleIdentifier</key>
+ 	<string>${CHROMIUM_BUNDLE_ID}</string>
++	<key>CrProductDirName</key>
++	<string>Nitrous</string>
+ 	<key>CFBundleInfoDictionaryVersion</key>
+ 	<string>6.0</string>
+ 	<key>CFBundleName</key>
