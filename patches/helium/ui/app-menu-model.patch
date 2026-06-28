@@ -1,15 +1,6 @@
 --- a/chrome/browser/ui/toolbar/app_menu_model.cc
 +++ b/chrome/browser/ui/toolbar/app_menu_model.cc
-@@ -74,8 +74,6 @@
- #include "chrome/browser/ui/tabs/features.h"
- #include "chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h"
- #include "chrome/browser/ui/tabs/tab_strip_model.h"
--#include "chrome/browser/ui/tabs/vertical_tab_strip_metrics.h"
--#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
- #include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
- #include "chrome/browser/ui/toolbar/bookmark_sub_menu_model.h"
- #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_prefs.h"
-@@ -778,9 +776,6 @@ SaveAndShareSubMenuModel::SaveAndShareSu
+@@ -778,9 +778,6 @@ SaveAndShareSubMenuModel::SaveAndShareSu
      if (!sharing_hub::SharingIsDisabledByPolicy(browser->profile())) {
        AddItemWithStringIdAndVectorIcon(
            this, IDC_COPY_URL, IDS_APP_MENU_COPY_LINK, kLinkChromeRefreshIcon);
@@ -19,7 +10,7 @@
        AddItemWithStringIdAndVectorIcon(this, IDC_QRCODE_GENERATOR,
                                         IDS_APP_MENU_CREATE_QR_CODE,
                                         kQrCodeChromeRefreshIcon);
-@@ -793,11 +788,6 @@ SaveAndShareSubMenuModel::SaveAndShareSu
+@@ -793,11 +790,6 @@ SaveAndShareSubMenuModel::SaveAndShareSu
    }
  }
  
@@ -31,39 +22,20 @@
  }  // namespace
  
  ////////////////////////////////////////////////////////////////////////////////
-@@ -909,52 +899,6 @@ void ToolsMenuModel::Build(Browser* brow
-   AddItemWithStringIdAndVectorIcon(this, IDC_NAME_WINDOW, IDS_NAME_WINDOW,
+@@ -910,9 +902,6 @@ void ToolsMenuModel::Build(Browser* brow
                                     kNameWindowIcon);
  
--  if (auto* controller = tabs::VerticalTabStripStateController::From(browser)) {
+   if (auto* controller = tabs::VerticalTabStripStateController::From(browser)) {
 -    // TODO(crbug.com/475222200): When in immersive, swapping between tab
 -    // strip types create duplicate tab strips. Until that is resolved,
 -    // disable the ability to swap between tab strips while in immersive.
--    if (!ImmersiveModeController::From(browser)->IsEnabled()) {
--      if (controller->ShouldDisplayVerticalTabs()) {
--        AddItemWithStringIdAndVectorIcon(this, IDC_TOGGLE_VERTICAL_TABS,
--                                         IDS_SWITCH_TO_HORIZONTAL_TAB,
--                                         kToolbarIcon);
--      } else {
--        AddItemWithStringIdAndVectorIcon(
--            this, IDC_TOGGLE_VERTICAL_TABS, IDS_SWITCH_TO_VERTICAL_TAB,
--            base::i18n::IsRTL() ? kDockToRightIcon : kDockToLeftIcon);
--        const bool use_preview_badge =
--            base::FeatureList::IsEnabled(tabs::kVerticalTabsPreviewBadge);
--        const ui::NewBadgeType badge_type = use_preview_badge
--                                                ? ui::NewBadgeType::kPreview
--                                                : ui::NewBadgeType::kNew;
--        const user_education::DisplayNewBadge show_badge =
--            UserEducationService::MaybeShowNewBadge(
--                browser->GetProfile(), use_preview_badge
--                                           ? tabs::kVerticalTabsPreviewBadge
--                                           : tabs::kVerticalTabsNewBadge);
--        SetIsNewFeatureAt(GetIndexOfCommandId(IDC_TOGGLE_VERTICAL_TABS).value(),
--                          show_badge, badge_type);
--      }
--    }
--  }
--
+     if (!ImmersiveModeController::From(browser)->IsEnabled()) {
+       if (controller->ShouldDisplayVerticalTabs()) {
+         AddItemWithStringIdAndVectorIcon(this, IDC_TOGGLE_VERTICAL_TABS,
+@@ -938,23 +927,6 @@ void ToolsMenuModel::Build(Browser* brow
+     }
+   }
+ 
 -  if (CustomizeChromePageHandler::IsSupported(
 -          NtpCustomBackgroundServiceFactory::GetForProfile(browser->profile()),
 -          browser->profile())) {
@@ -84,7 +56,7 @@
    AddSeparator(ui::NORMAL_SEPARATOR);
  
    AddItemWithStringIdAndVectorIcon(this, IDC_PERFORMANCE, IDS_SHOW_PERFORMANCE,
-@@ -995,6 +939,10 @@ void ToolsMenuModel::Build(Browser* brow
+@@ -995,6 +967,10 @@ void ToolsMenuModel::Build(Browser* brow
        }
      }
    }
@@ -95,22 +67,7 @@
  }
  
  ////////////////////////////////////////////////////////////////////////////////
-@@ -1731,14 +1679,6 @@ void AppMenuModel::LogMenuMetrics(int co
-       }
-       LogMenuAction(MENU_ACTION_SAFETY_HUB_MANAGE_EXTENSIONS);
-       break;
--    case IDC_TOGGLE_VERTICAL_TABS:
--      if (auto* controller =
--              tabs::VerticalTabStripStateController::From(browser_)) {
--        const bool is_vertical = !controller->ShouldDisplayVerticalTabs();
--        tabs::RecordVerticalTabStripModeChanged(
--            is_vertical, tabs::VerticalTabStripEntryPoint::kAppMenu);
--      }
--      break;
-     default: {
-       if (IsOtherProfileCommand(command_id)) {
-         if (!uma_action_recorded_) {
-@@ -1820,22 +1760,8 @@ void AppMenuModel::Build() {
+@@ -1820,22 +1796,8 @@ void AppMenuModel::Build() {
    // Build (and, by extension, Init) should only be called once.
    DCHECK_EQ(0u, GetItemCount());
  
@@ -135,7 +92,7 @@
      AddSeparator(ui::NORMAL_SEPARATOR);
    }
  
-@@ -1872,32 +1798,6 @@ void AppMenuModel::Build() {
+@@ -1872,32 +1834,6 @@ void AppMenuModel::Build() {
  
    AddSeparator(ui::NORMAL_SEPARATOR);
  
@@ -168,7 +125,7 @@
    if (!browser_->profile()->IsOffTheRecord()) {
      auto recent_tabs_sub_menu =
          std::make_unique<RecentTabsSubMenuModel>(provider_, browser_);
-@@ -1919,7 +1819,7 @@ void AppMenuModel::Build() {
+@@ -1919,7 +1855,7 @@ void AppMenuModel::Build() {
          std::make_unique<BookmarkSubMenuModel>(this, browser_);
  
      AddSubMenuWithStringIdAndVectorIcon(
@@ -177,7 +134,7 @@
          bookmark_sub_menu_model_.get(), kBookmarksListsMenuIcon);
      SetElementIdentifierAt(GetIndexOfCommandId(IDC_BOOKMARKS_MENU).value(),
                             kBookmarksMenuItem);
-@@ -1936,23 +1836,10 @@ void AppMenuModel::Build() {
+@@ -1936,23 +1872,10 @@ void AppMenuModel::Build() {
          kTabGroupsMenuItem);
    }
  
@@ -205,7 +162,7 @@
  
    AddItemWithStringIdAndVectorIcon(this, IDC_CLEAR_BROWSING_DATA,
                                     IDS_CLEAR_BROWSING_DATA,
-@@ -1997,9 +1884,6 @@ void AppMenuModel::Build() {
+@@ -1997,9 +1920,6 @@ void AppMenuModel::Build() {
              lens::features::kLensOverlay));
    }
  
@@ -215,7 +172,7 @@
    CreateFindAndEditSubMenu();
  
    sub_menus_.push_back(
-@@ -2050,13 +1934,15 @@ void AppMenuModel::Build() {
+@@ -2050,13 +1970,15 @@ void AppMenuModel::Build() {
  #endif
  #endif
  
@@ -235,7 +192,7 @@
    // On Chrome OS, similar UI is displayed in the system tray menu, instead of
    // this menu.
  #if !BUILDFLAG(IS_CHROMEOS)
-@@ -2146,34 +2032,21 @@ bool AppMenuModel::AddDefaultBrowserMenu
+@@ -2146,34 +2068,21 @@ bool AppMenuModel::AddDefaultBrowserMenu
    return false;
  }
  
