@@ -68,6 +68,7 @@ Use `--prepare-source` only when a network/download-heavy validation is intended
 This runs:
 
 - optional source retrieval/unpack when `--prepare-source` is passed
+- `python3 ./devutils/check_chromium_src_clean.py --source-tree <source-tree>`
 - `./devutils/validate_patches.py -l <source-tree> -v`
 - `./devutils/update_lists.py --tree <source-tree> --pruning <tmp> --domain-substitution <tmp> --no-error-unused`
 - diffs generated `pruning.list` and `domain_substitution.list` output against committed files
