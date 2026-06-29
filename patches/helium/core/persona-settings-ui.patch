@@ -130,7 +130,7 @@
        std::make_unique<HeliumServicesSchemaHandler>(profile));
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,55 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -142,46 +142,266 @@
 +  fieldErrors: any;
 +}
 +
++export interface PersonaProfilesResponse {
++  profiles: any[];
++  activePersonaId: string;
++  lastUsedPersonaId?: string;
++  launchSelectionMode?: string;
++}
++
 +export interface PersonaBrowserProxy {
 +  getPersonaState(): Promise<any>;
++  getPersonaProfiles(): Promise<PersonaProfilesResponse>;
++  createPersonaProfile(displayName: string): Promise<PersonaPageResponse>;
 +  savePersona(persona: any): Promise<PersonaPageResponse>;
 +  setActivePersona(personaId: string): Promise<PersonaPageResponse>;
 +  clonePresetIntoProfile(presetId: string): Promise<PersonaPageResponse>;
 +  deletePersona(personaId: string): Promise<PersonaPageResponse>;
++  getLaunchSelectionMode(): Promise<string>;
++  setLaunchSelectionMode(mode: string): Promise<string>;
 +}
 +
 +let instance: PersonaBrowserProxy|null = null;
 +
 +export class PersonaBrowserProxyImpl implements PersonaBrowserProxy {
 +  getPersonaState() { return sendWithPromise<any>('getPersonaState'); }
++  getPersonaProfiles() {
++    return sendWithPromise<PersonaProfilesResponse>('getPersonaProfiles');
++  }
++  createPersonaProfile(displayName: string) {
++    return sendWithPromise<PersonaPageResponse>(
++        'createPersonaProfile', displayName);
++  }
 +  savePersona(persona: any) { return sendWithPromise<PersonaPageResponse>('savePersona', persona); }
 +  setActivePersona(personaId: string) { return sendWithPromise<PersonaPageResponse>('setActivePersona', personaId); }
 +  clonePresetIntoProfile(presetId: string) { return sendWithPromise<PersonaPageResponse>('clonePresetIntoProfile', presetId); }
 +  deletePersona(personaId: string) { return sendWithPromise<PersonaPageResponse>('deletePersona', personaId); }
++  getLaunchSelectionMode() {
++    return sendWithPromise<string>('getLaunchSelectionMode');
++  }
++  setLaunchSelectionMode(mode: string) {
++    return sendWithPromise<string>('setLaunchSelectionMode', mode);
++  }
 +  static getInstance(): PersonaBrowserProxy {
 +    return instance || (instance = new PersonaBrowserProxyImpl());
 +  }
 +}
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,309 @@
 +<!-- Copyright 2026 The Helium Authors -->
 +<!-- You can use, redistribute, and/or modify this source code under -->
 +<!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
 +<style include="cr-shared-style settings-shared">
-+  .field-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-+  .field { display: flex; flex-direction: column; gap: 6px; }
-+  .field label { color: var(--cr-secondary-text-color); font-size: 0.75rem; }
-+  .field select { min-height: 32px; }
-+  .preset-actions { display: flex; gap: 12px; align-items: end; }
-+  .preset-actions cr-button { flex: none; }
-+  .preset-select { min-width: 260px; }
-+  .section { border-top: var(--cr-separator-line); margin-top: 20px; padding-top: 16px; }
-+  .actions { display: flex; justify-content: flex-end; margin-top: 20px; }
++  .section {
++    border-top: var(--cr-separator-line);
++    margin-top: 20px;
++    padding-top: 16px;
++  }
++
++  .section:first-of-type {
++    border-top: none;
++    margin-top: 0;
++    padding-top: 0;
++  }
++
++  .section-header {
++    align-items: center;
++    display: flex;
++    gap: 12px;
++    justify-content: space-between;
++    margin-bottom: 12px;
++  }
++
++  .section-header h3 {
++    margin: 0;
++  }
++
++  .section-actions {
++    display: flex;
++    gap: 8px;
++  }
++
++  .profiles-grid {
++    display: grid;
++    gap: 12px;
++    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
++  }
++
++  .profile-card {
++    background: var(--cr-card-background-color);
++    border: 1px solid var(--cr-separator-color);
++    border-radius: 12px;
++    cursor: pointer;
++    display: flex;
++    flex-direction: column;
++    gap: 10px;
++    min-height: 156px;
++    padding: 14px;
++  }
++
++  .profile-card[data-selected='true'] {
++    border-color: var(--cr-focus-outline-color);
++    box-shadow: 0 0 0 1px var(--cr-focus-outline-color);
++  }
++
++  .profile-card-header {
++    align-items: flex-start;
++    display: flex;
++    gap: 10px;
++    justify-content: space-between;
++  }
++
++  .profile-card-title {
++    display: flex;
++    flex-direction: column;
++    gap: 4px;
++    min-width: 0;
++  }
++
++  .profile-card-title strong {
++    font-size: 0.95rem;
++  }
++
++  .profile-card-meta,
++  .profile-card-subtitle {
++    color: var(--cr-secondary-text-color);
++    font-size: 0.8rem;
++  }
++
++  .profile-card-actions {
++    display: flex;
++    gap: 8px;
++    margin-top: auto;
++  }
++
++  .chip {
++    border: 1px solid var(--cr-separator-color);
++    border-radius: 999px;
++    color: var(--cr-secondary-text-color);
++    font-size: 0.75rem;
++    line-height: 1;
++    padding: 5px 8px;
++    white-space: nowrap;
++  }
++
++  .chip[data-active='true'] {
++    border-color: var(--cr-focus-outline-color);
++    color: var(--cr-primary-text-color);
++  }
++
++  .field-grid {
++    display: grid;
++    gap: 12px;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++  }
++
++  .field {
++    display: flex;
++    flex-direction: column;
++    gap: 6px;
++  }
++
++  .field label {
++    color: var(--cr-secondary-text-color);
++    font-size: 0.75rem;
++  }
++
++  .field select {
++    min-height: 32px;
++  }
++
++  .full-row {
++    grid-column: 1 / -1;
++  }
++
++  .preset-actions {
++    align-items: end;
++    display: flex;
++    gap: 12px;
++  }
++
++  .preset-select {
++    min-width: 260px;
++  }
++
++  .actions {
++    display: flex;
++    justify-content: flex-end;
++    margin-top: 20px;
++  }
 +</style>
 +<settings-subpage page-title="$i18n{personaTitle}" route-path$="[[routePath]]">
 +  <div class="section">
-+    <h3>Quick Presets</h3>
++    <div class="section-header">
++      <div>
++        <h3>Profiles</h3>
++        <div class="profile-card-meta">Manage saved persona profiles for different browsing identities.</div>
++      </div>
++      <div class="section-actions">
++        <cr-button class="action-button" on-click="onCreateProfileClick_">
++          New Profile
++        </cr-button>
++      </div>
++    </div>
++    <div class="profiles-grid">
++      <template is="dom-repeat" items="[[profiles_]]">
++        <div class="profile-card"
++            data-profile-id$="[[item.id]]"
++            on-click="onProfileCardClick_"
++            data-selected$="[[isSelectedProfile_(item.id, selectedProfileId_)]]">
++          <div class="profile-card-header">
++            <div class="profile-card-title">
++              <strong>[[item.displayName]]</strong>
++              <div class="profile-card-subtitle">[[computeProfileSummary_(item)]]</div>
++            </div>
++            <div class="chip" data-active$="[[isActiveProfile_(item.id, activePersonaId_)]]">
++              [[computeProfileStatus_(item.id, activePersonaId_)]]
++            </div>
++          </div>
++          <div class="profile-card-meta">
++            Icon: [[item.icon]] | Last used: [[computeLastUsedText_(item.lastUsedAt)]]
++          </div>
++          <div class="profile-card-actions">
++            <cr-button on-click="onActivateProfileClick_"
++                data-profile-id$="[[item.id]]">
++              Use Profile
++            </cr-button>
++            <cr-button on-click="onDeleteProfileClick_"
++                data-profile-id$="[[item.id]]"
++                disabled="[[!canDeleteProfile_(item.id)]]">
++              Delete
++            </cr-button>
++          </div>
++        </div>
++      </template>
++    </div>
++  </div>
++
++  <div class="section">
++    <div class="section-header">
++      <div>
++        <h3>Startup Selection</h3>
++        <div class="profile-card-meta">Choose whether Helium asks for a persona on launch or reuses the last selected profile.</div>
++      </div>
++    </div>
++    <div class="field preset-select">
++      <label>Launch behavior</label>
++      <select value$="[[launchSelectionMode_]]"
++          on-change="onLaunchSelectionModeChange_">
++        <option value="always_ask">Always ask</option>
++        <option value="use_last">Use last selected profile</option>
++      </select>
++    </div>
++  </div>
++
++  <div class="section">
++    <div class="section-header">
++      <div>
++        <h3>Quick Presets</h3>
++        <div class="profile-card-meta">Clone a system preset into an editable saved profile.</div>
++      </div>
++    </div>
 +    <div class="preset-actions">
 +      <div class="field preset-select">
 +        <label>Preset</label>
@@ -193,81 +413,94 @@
 +        </select>
 +      </div>
 +      <cr-button class="action-button" on-click="onApplyPresetClick_">
-+        Apply Preset
++        Clone Preset
 +      </cr-button>
 +    </div>
 +  </div>
-+  <div class="field-grid">
-+    <cr-input label="User agent" value="{{editablePersona_.userAgent}}"></cr-input>
-+    <cr-input label="Platform" value="{{editablePersona_.platform}}"></cr-input>
-+    <cr-input label="Navigator vendor" value="{{editablePersona_.navigatorVendor}}"></cr-input>
-+    <cr-input label="ProductSub" value="{{editablePersona_.navigatorProductSub}}"></cr-input>
-+    <div class="field">
-+      <label>UA-CH platform</label>
-+      <select value$="[[editablePersona_.uaCh.platform]]"
-+          on-change="onUaChPlatformChange_">
-+        <option value="macOS">macOS</option>
-+        <option value="Windows">Windows</option>
-+        <option value="Linux">Linux</option>
-+        <option value="Chrome OS">Chrome OS</option>
-+        <option value="Android">Android</option>
-+      </select>
++
++  <div class="section">
++    <div class="section-header">
++      <div>
++        <h3>Edit Profile</h3>
++        <div class="profile-card-meta">Selected profile: [[editablePersona_.displayName]]</div>
++      </div>
 +    </div>
-+    <cr-input label="UA-CH full version" value="{{editablePersona_.uaCh.fullVersion}}"></cr-input>
-+    <div class="field">
-+      <label>Timezone</label>
-+      <select value$="[[editablePersona_.region.timezone]]"
-+          on-change="onTimezoneChange_">
-+        <option value="UTC">UTC</option>
-+        <option value="America/New_York">America/New_York</option>
-+        <option value="Europe/London">Europe/London</option>
-+        <option value="Europe/Berlin">Europe/Berlin</option>
-+        <option value="Asia/Tokyo">Asia/Tokyo</option>
-+        <option value="Australia/Melbourne">Australia/Melbourne</option>
-+      </select>
++    <div class="field-grid">
++      <cr-input label="Display name"
++          value="{{editablePersona_.displayName}}"></cr-input>
++      <cr-input label="Icon"
++          value="{{editablePersona_.icon}}"></cr-input>
++      <cr-input label="User agent" value="{{editablePersona_.userAgent}}"></cr-input>
++      <cr-input label="Platform" value="{{editablePersona_.platform}}"></cr-input>
++      <cr-input label="Navigator vendor" value="{{editablePersona_.navigatorVendor}}"></cr-input>
++      <cr-input label="ProductSub" value="{{editablePersona_.navigatorProductSub}}"></cr-input>
++      <div class="field">
++        <label>UA-CH platform</label>
++        <select value$="[[editablePersona_.uaCh.platform]]"
++            on-change="onUaChPlatformChange_">
++          <option value="macOS">macOS</option>
++          <option value="Windows">Windows</option>
++          <option value="Linux">Linux</option>
++          <option value="Chrome OS">Chrome OS</option>
++          <option value="Android">Android</option>
++        </select>
++      </div>
++      <cr-input label="UA-CH full version" value="{{editablePersona_.uaCh.fullVersion}}"></cr-input>
++      <div class="field">
++        <label>Timezone</label>
++        <select value$="[[editablePersona_.region.timezone]]"
++            on-change="onTimezoneChange_">
++          <option value="UTC">UTC</option>
++          <option value="America/New_York">America/New_York</option>
++          <option value="Europe/London">Europe/London</option>
++          <option value="Europe/Berlin">Europe/Berlin</option>
++          <option value="Asia/Tokyo">Asia/Tokyo</option>
++          <option value="Australia/Melbourne">Australia/Melbourne</option>
++        </select>
++      </div>
++      <div class="field">
++        <label>Locale</label>
++        <select value$="[[editablePersona_.region.locale]]"
++            on-change="onLocaleChange_">
++          <option value="en-US">en-US</option>
++          <option value="en-GB">en-GB</option>
++          <option value="de-DE">de-DE</option>
++          <option value="ja-JP">ja-JP</option>
++          <option value="zh-CN">zh-CN</option>
++        </select>
++      </div>
++      <cr-input label="Accept-Language" value="{{editablePersona_.region.acceptLanguage}}"></cr-input>
++      <cr-input label="GPU vendor" value="{{editablePersona_.gpu.vendor}}"></cr-input>
++      <cr-input label="GPU renderer" value="{{editablePersona_.gpu.renderer}}"></cr-input>
++      <cr-input label="WebGPU adapter" value="{{editablePersona_.gpu.webgpuAdapter}}"></cr-input>
++      <cr-input label="CPU threads" value="{{editablePersona_.hardware.hardwareConcurrency}}"></cr-input>
++      <cr-input label="Device memory" value="{{editablePersona_.hardware.deviceMemory}}"></cr-input>
++      <cr-input label="Touch points" value="{{editablePersona_.hardware.maxTouchPoints}}"></cr-input>
++      <cr-input label="Screen width" value="{{editablePersona_.screen.width}}"></cr-input>
++      <cr-input label="Screen availLeft" value="{{editablePersona_.screen.availLeft}}"></cr-input>
++      <cr-input label="Outer width" value="{{editablePersona_.screen.outerWidth}}"></cr-input>
++      <cr-input label="Screen X" value="{{editablePersona_.screen.windowScreenX}}"></cr-input>
++      <cr-input label="DPR" value="{{editablePersona_.screen.deviceScaleFactor}}"></cr-input>
++      <cr-input label="Fonts ID" value="{{editablePersona_.fonts.id}}"></cr-input>
++      <cr-input label="Font rendering profile" value="{{editablePersona_.fontRendering.profileVersion}}"></cr-input>
++      <cr-input label="Font engine" value="{{editablePersona_.fontRendering.engine}}"></cr-input>
++      <cr-input label="Text gamma" value="{{editablePersona_.fontRendering.textGamma}}"></cr-input>
++      <cr-input label="Audio input id" value="{{editablePersona_.mediaDevices.audioInputDeviceId}}"></cr-input>
++      <cr-input label="Video width" value="{{editablePersona_.mediaDevices.videoWidth}}"></cr-input>
++      <cr-input label="Audio base latency" value="{{editablePersona_.mediaDevices.audioBaseLatency}}"></cr-input>
++      <cr-input label="Network type" value="{{editablePersona_.network.type}}"></cr-input>
++      <cr-input label="Downlink max" value="{{editablePersona_.network.downlinkMax}}"></cr-input>
 +    </div>
-+    <div class="field">
-+      <label>Locale</label>
-+      <select value$="[[editablePersona_.region.locale]]"
-+          on-change="onLocaleChange_">
-+        <option value="en-US">en-US</option>
-+        <option value="en-GB">en-GB</option>
-+        <option value="de-DE">de-DE</option>
-+        <option value="ja-JP">ja-JP</option>
-+        <option value="zh-CN">zh-CN</option>
-+      </select>
++    <div class="actions">
++      <cr-button class="action-button" on-click="onSavePersonaClick_">
++        Save
++      </cr-button>
 +    </div>
-+    <cr-input label="Accept-Language" value="{{editablePersona_.region.acceptLanguage}}"></cr-input>
-+    <cr-input label="GPU vendor" value="{{editablePersona_.gpu.vendor}}"></cr-input>
-+    <cr-input label="GPU renderer" value="{{editablePersona_.gpu.renderer}}"></cr-input>
-+    <cr-input label="WebGPU adapter" value="{{editablePersona_.gpu.webgpuAdapter}}"></cr-input>
-+    <cr-input label="CPU threads" value="{{editablePersona_.hardware.hardwareConcurrency}}"></cr-input>
-+    <cr-input label="Device memory" value="{{editablePersona_.hardware.deviceMemory}}"></cr-input>
-+    <cr-input label="Touch points" value="{{editablePersona_.hardware.maxTouchPoints}}"></cr-input>
-+    <cr-input label="Screen width" value="{{editablePersona_.screen.width}}"></cr-input>
-+    <cr-input label="Screen availLeft" value="{{editablePersona_.screen.availLeft}}"></cr-input>
-+    <cr-input label="Outer width" value="{{editablePersona_.screen.outerWidth}}"></cr-input>
-+    <cr-input label="Screen X" value="{{editablePersona_.screen.windowScreenX}}"></cr-input>
-+    <cr-input label="DPR" value="{{editablePersona_.screen.deviceScaleFactor}}"></cr-input>
-+    <cr-input label="Fonts ID" value="{{editablePersona_.fonts.id}}"></cr-input>
-+    <cr-input label="Font rendering profile" value="{{editablePersona_.fontRendering.profileVersion}}"></cr-input>
-+    <cr-input label="Font engine" value="{{editablePersona_.fontRendering.engine}}"></cr-input>
-+    <cr-input label="Text gamma" value="{{editablePersona_.fontRendering.textGamma}}"></cr-input>
-+    <cr-input label="Audio input id" value="{{editablePersona_.mediaDevices.audioInputDeviceId}}"></cr-input>
-+    <cr-input label="Video width" value="{{editablePersona_.mediaDevices.videoWidth}}"></cr-input>
-+    <cr-input label="Audio base latency" value="{{editablePersona_.mediaDevices.audioBaseLatency}}"></cr-input>
-+    <cr-input label="Network type" value="{{editablePersona_.network.type}}"></cr-input>
-+    <cr-input label="Downlink max" value="{{editablePersona_.network.downlinkMax}}"></cr-input>
-+  </div>
-+  <div class="actions">
-+    <cr-button class="action-button" on-click="onSavePersonaClick_">
-+      Save
-+    </cr-button>
 +  </div>
 +</settings-subpage>
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
-@@ -0,0 +1,376 @@
+@@ -0,0 +1,779 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -280,7 +513,10 @@
 +import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 +import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 +
-+import type {PersonaPageResponse} from './persona_browser_proxy.js';
++import type {
++  PersonaPageResponse,
++  PersonaProfilesResponse,
++} from './persona_browser_proxy.js';
 +import {PersonaBrowserProxyImpl} from './persona_browser_proxy.js';
 +import {getTemplate} from './persona_page.html.js';
 +
@@ -311,6 +547,8 @@
 +  audioOutputLatency: number;
 +  voiceIsolation: boolean;
 +}
++
++type PersonaRecord = any;
 +
 +const GPU_PROFILES: readonly PersonaGpuProfile[] = [
 +  {
@@ -398,73 +636,277 @@
 +  },
 +];
 +
++function createEmptyPersona(): PersonaRecord {
++  return {
++    id: '',
++    displayName: '',
++    icon: 'default',
++    userAgent: '',
++    platform: '',
++    navigatorVendor: '',
++    navigatorProductSub: '',
++    uaCh: {platform: '', fullVersion: ''},
++    region: {timezone: '', locale: '', acceptLanguage: ''},
++    gpu: {
++      vendor: '',
++      renderer: '',
++      webgpuAdapter: '',
++      webglProfile: {maxCombinedTextureImageUnits: 0},
++      webgl2Profile: {uniformBufferOffsetAlignment: 0},
++      webgpuProfile: {maxComputeInvocationsPerWorkgroup: 0},
++    },
++    hardware: {
++      hardwareConcurrency: 0,
++      deviceMemory: 0,
++      maxTouchPoints: 0,
++      touchEnabled: false,
++    },
++    screen: {
++      width: 0,
++      availLeft: 0,
++      outerWidth: 0,
++      windowScreenX: 0,
++      deviceScaleFactor: 1,
++      orientationType: '',
++      reducedMotion: false,
++      colorGamut: '',
++      dynamicRange: '',
++      monochromeDepth: 0,
++    },
++    fonts: {id: ''},
++    fontRendering: {
++      profileVersion: '',
++      engine: '',
++      textGamma: 0,
++      useAutohinter: false,
++    },
++    mediaDevices: {
++      audioInputDeviceId: '',
++      videoWidth: 0,
++      audioBaseLatency: 0,
++      voiceIsolation: false,
++    },
++    network: {type: '', downlinkMax: 0, saveData: false, online: true},
++    advanced: {
++      clientHintsEnabled: true,
++      reduceSystemInfo: false,
++      canvasNoise: true,
++      audioNoise: true,
++      fontMetricNoise: true,
++      cookieEnabled: true,
++      pdfViewerEnabled: true,
++      doNotTrackEnabled: false,
++      webdriverEnabled: false,
++      storageQuotaGb: 8,
++      virtualMediaDevices: false,
++      allowDisplayCapture: true,
++      allowMediaCapture: true,
++      allowMediaSession: true,
++      allowPictureInPicture: true,
++      allowRemotePlayback: true,
++      allowSpeechSynthesis: true,
++      speechVoiceName: '',
++      speechVoiceLang: '',
++      speechVoiceUri: '',
++      speechVoiceLocalService: true,
++      speechVoiceDefault: true,
++      allowDeviceApis: true,
++      allowGamepads: true,
++      allowGeolocation: false,
++      allowKeyboardLayout: true,
++      allowLocalFonts: false,
++      allowLocalNetworkApis: false,
++      allowManagedDevice: false,
++      allowMidi: false,
++      allowPersistentDeviceId: false,
++      allowPlatformCredentials: true,
++      allowRealBatteryStatus: false,
++      allowSensorApis: false,
++      allowWebNfc: false,
++      allowWebXr: false,
++      allowWindowManagement: false,
++      allowBackgroundSync: false,
++      allowClipboard: true,
++      allowFileSystemAccess: true,
++      allowFullscreen: true,
++      allowIdleDetection: false,
++      allowNotifications: false,
++      allowPaymentHandler: false,
++      allowPersistentStorage: true,
++      allowProtectedMediaIdentifier: false,
++      allowStorageAccess: true,
++      allowWakeLock: true,
++      allowWebAppInstallation: true,
++      allowWebPrinting: true,
++      allowBadging: true,
++      allowContacts: false,
++      allowEyeDropper: true,
++      allowInstalledApps: false,
++      allowPresentationApis: false,
++      allowPointerLock: true,
++      allowShapeDetection: false,
++      allowWebLocks: true,
++      allowWebOtp: false,
++      allowWebShare: true,
++      allowWebSockets: true,
++      allowWebTransport: true,
++      allowAiApis: false,
++      allowHandwritingRecognition: false,
++      allowPrivacySandboxApis: false,
++      allowPrivateStateTokens: false,
++      allowWebNn: false,
++    },
++  };
++}
++
 +const Base = I18nMixin(PrefsMixin(PolymerElement));
 +
 +export class SettingsPersonaPageElement extends Base {
-+  static get is() { return 'settings-persona-page'; }
-+  static get template() { return getTemplate(); }
++  static get is() {
++    return 'settings-persona-page';
++  }
++
++  static get template() {
++    return getTemplate();
++  }
++
 +  static get properties() {
 +    return {
++      activePersonaId_: {type: String, value: ''},
++      editablePersona_: {type: Object, value: () => createEmptyPersona()},
++      lastUsedPersonaId_: {type: String, value: ''},
++      launchSelectionMode_: {type: String, value: 'always_ask'},
 +      presets_: {type: Array, value: () => []},
-+      selectedPresetId_: {type: String, value: ''},
-+      editablePersona_: {type: Object, value: () => ({
-+        userAgent: '', platform: '', navigatorVendor: '', navigatorProductSub: '',
-+        uaCh: {platform: '', fullVersion: ''},
-+        region: {timezone: '', locale: '', acceptLanguage: ''},
-+        gpu: {vendor: '', renderer: '', webgpuAdapter: '', webglProfile: {maxCombinedTextureImageUnits: 0}, webgl2Profile: {uniformBufferOffsetAlignment: 0}, webgpuProfile: {maxComputeInvocationsPerWorkgroup: 0}},
-+        hardware: {hardwareConcurrency: 0, deviceMemory: 0, maxTouchPoints: 0, touchEnabled: false},
-+        screen: {width: 0, availLeft: 0, outerWidth: 0, windowScreenX: 0, deviceScaleFactor: 1, orientationType: '', reducedMotion: false, colorGamut: '', dynamicRange: '', monochromeDepth: 0},
-+        fonts: {id: ''},
-+        fontRendering: {profileVersion: '', engine: '', textGamma: 0, useAutohinter: false},
-+        mediaDevices: {audioInputDeviceId: '', videoWidth: 0, audioBaseLatency: 0, voiceIsolation: false},
-+        network: {type: '', downlinkMax: 0, saveData: false, online: true},
-+        advanced: {clientHintsEnabled: true, reduceSystemInfo: false, canvasNoise: true, audioNoise: true, fontMetricNoise: true, cookieEnabled: true, pdfViewerEnabled: true, doNotTrackEnabled: false, webdriverEnabled: false, storageQuotaGb: 8, virtualMediaDevices: false, allowDisplayCapture: true, allowMediaCapture: true, allowMediaSession: true, allowPictureInPicture: true, allowRemotePlayback: true, allowSpeechSynthesis: true, speechVoiceName: '', speechVoiceLang: '', speechVoiceUri: '', speechVoiceLocalService: true, speechVoiceDefault: true, allowDeviceApis: true, allowGamepads: true, allowGeolocation: false, allowKeyboardLayout: true, allowLocalFonts: false, allowLocalNetworkApis: false, allowManagedDevice: false, allowMidi: false, allowPersistentDeviceId: false, allowPlatformCredentials: true, allowRealBatteryStatus: false, allowSensorApis: false, allowWebNfc: false, allowWebXr: false, allowWindowManagement: false, allowBackgroundSync: false, allowClipboard: true, allowFileSystemAccess: true, allowFullscreen: true, allowIdleDetection: false, allowNotifications: false, allowPaymentHandler: false, allowPersistentStorage: true, allowProtectedMediaIdentifier: false, allowStorageAccess: true, allowWakeLock: true, allowWebAppInstallation: true, allowWebPrinting: true, allowBadging: true, allowContacts: false, allowEyeDropper: true, allowInstalledApps: false, allowPresentationApis: false, allowPointerLock: true, allowShapeDetection: false, allowWebLocks: true, allowWebOtp: false, allowWebShare: true, allowWebSockets: true, allowWebTransport: true, allowAiApis: false, allowHandwritingRecognition: false, allowPrivacySandboxApis: false, allowPrivateStateTokens: false, allowWebNn: false},
-+      })},
++      profiles_: {type: Array, value: () => []},
 +      routePath: String,
-+      uaChBrandsText_: String, uaChFullVersionListText_: String, uaChFormFactorsText_: String, navigatorLanguagesText_: String, webgpuFeaturesText_: String, fontFamiliesText_: String, fontAliasesText_: String,
++      selectedPresetId_: {type: String, value: ''},
++      selectedProfileId_: {type: String, value: ''},
++      uaChBrandsText_: String,
++      uaChFullVersionListText_: String,
++      uaChFormFactorsText_: String,
++      navigatorLanguagesText_: String,
++      webgpuFeaturesText_: String,
++      fontFamiliesText_: String,
++      fontAliasesText_: String,
 +    };
 +  }
 +
 +  connectedCallback() {
 +    super.connectedCallback();
-+    this.loadPersonaState_();
++    this.loadPersonaData_();
 +  }
 +
-+  private async loadPersonaState_() {
-+    const state = await PersonaBrowserProxyImpl.getInstance().getPersonaState();
-+    this.applyPersonaState_(state);
++  private async loadPersonaData_() {
++    const browserProxy = PersonaBrowserProxyImpl.getInstance();
++    const [state, profilesResponse, launchSelectionMode] = await Promise.all([
++      browserProxy.getPersonaState(),
++      browserProxy.getPersonaProfiles(),
++      browserProxy.getLaunchSelectionMode(),
++    ]);
++    this.launchSelectionMode_ = launchSelectionMode || 'always_ask';
++    this.applyPersonaState_(state, profilesResponse);
 +  }
 +
-+  private applyPersonaState_(state: any) {
++  private applyPersonaState_(
++      state: any, profilesResponse?: PersonaProfilesResponse) {
 +    this.presets_ = Array.isArray(state.presets) ? state.presets : [];
-+    const personas = Array.isArray(state.personas) ? state.personas : [];
-+    const activePersona = personas.find((persona: any) => {
-+      return persona && persona.id === state.activePersonaId;
-+    }) || personas[0];
-+    if (!activePersona) {
++    const profiles = Array.isArray(profilesResponse?.profiles) ?
++        profilesResponse!.profiles :
++        (Array.isArray(state.personas) ? state.personas : []);
++    this.profiles_ = profiles;
++    this.activePersonaId_ = state.activePersonaId || profilesResponse?.activePersonaId || '';
++    this.lastUsedPersonaId_ =
++        state.lastUsedPersonaId || profilesResponse?.lastUsedPersonaId || '';
++    this.launchSelectionMode_ =
++        state.launchSelectionMode || profilesResponse?.launchSelectionMode ||
++        this.launchSelectionMode_;
++
++    const targetProfileId =
++        this.selectedProfileId_ || this.activePersonaId_ || this.lastUsedPersonaId_;
++    const selectedProfile = profiles.find((persona: PersonaRecord) => {
++      return persona && persona.id === targetProfileId;
++    }) || profiles.find((persona: PersonaRecord) => {
++      return persona && persona.id === this.activePersonaId_;
++    }) || profiles[0];
++    if (!selectedProfile) {
 +      return;
 +    }
 +
-+    this.editablePersona_ = {
-+      ...this.editablePersona_,
-+      ...activePersona,
-+      advanced: {
-+        ...this.editablePersona_.advanced,
-+        ...(activePersona.advanced || {}),
-+      },
-+      region: {
-+        ...this.editablePersona_.region,
-+        ...(activePersona.region || {}),
-+      },
-+      uaCh: {
-+        ...this.editablePersona_.uaCh,
-+        ...(activePersona.uaCh || {}),
-+      },
-+    };
-+    const matchingPreset = this.presets_.find((preset: any) => {
-+      return preset && preset.name === activePersona.name;
++    this.selectedProfileId_ = selectedProfile.id;
++    this.editablePersona_ = this.mergePersona_(selectedProfile);
++    const matchingPreset = this.presets_.find((preset: PersonaRecord) => {
++      return preset && preset.name === selectedProfile.name;
 +    });
 +    this.selectedPresetId_ = matchingPreset?.id || '';
++  }
++
++  private mergePersona_(persona: PersonaRecord): PersonaRecord {
++    const basePersona = createEmptyPersona();
++    return {
++      ...basePersona,
++      ...persona,
++      advanced: {
++        ...basePersona.advanced,
++        ...(persona.advanced || {}),
++      },
++      region: {
++        ...basePersona.region,
++        ...(persona.region || {}),
++      },
++      uaCh: {
++        ...basePersona.uaCh,
++        ...(persona.uaCh || {}),
++      },
++      gpu: {
++        ...basePersona.gpu,
++        ...(persona.gpu || {}),
++        webglProfile: {
++          ...basePersona.gpu.webglProfile,
++          ...(persona.gpu?.webglProfile || {}),
++        },
++        webgl2Profile: {
++          ...basePersona.gpu.webgl2Profile,
++          ...(persona.gpu?.webgl2Profile || {}),
++        },
++        webgpuProfile: {
++          ...basePersona.gpu.webgpuProfile,
++          ...(persona.gpu?.webgpuProfile || {}),
++        },
++      },
++      hardware: {
++        ...basePersona.hardware,
++        ...(persona.hardware || {}),
++      },
++      screen: {
++        ...basePersona.screen,
++        ...(persona.screen || {}),
++      },
++      fonts: {
++        ...basePersona.fonts,
++        ...(persona.fonts || {}),
++      },
++      fontRendering: {
++        ...basePersona.fontRendering,
++        ...(persona.fontRendering || {}),
++      },
++      mediaDevices: {
++        ...basePersona.mediaDevices,
++        ...(persona.mediaDevices || {}),
++      },
++      network: {
++        ...basePersona.network,
++        ...(persona.network || {}),
++      },
++    };
++  }
++
++  private async refreshProfiles_() {
++    const browserProxy = PersonaBrowserProxyImpl.getInstance();
++    const [state, profilesResponse] = await Promise.all([
++      browserProxy.getPersonaState(),
++      browserProxy.getPersonaProfiles(),
++    ]);
++    this.applyPersonaState_(state, profilesResponse);
 +  }
 +
 +  private applyPersonaResponse_(response: PersonaPageResponse) {
@@ -473,7 +915,66 @@
 +    }
 +  }
 +
++  private async onCreateProfileClick_() {
++    const response =
++        await PersonaBrowserProxyImpl.getInstance().createPersonaProfile(
++            'New Persona');
++    if (response.ok) {
++      this.selectedProfileId_ = response.state?.activePersonaId || '';
++    }
++    this.applyPersonaResponse_(response);
++  }
++
++  private onProfileCardClick_(event: Event) {
++    const profileId =
++        (event.currentTarget as HTMLElement).dataset['profileId'] || '';
++    if (!profileId) {
++      return;
++    }
++    const profile = this.profiles_.find((item: PersonaRecord) => {
++      return item && item.id === profileId;
++    });
++    if (!profile) {
++      return;
++    }
++    this.selectedProfileId_ = profileId;
++    this.editablePersona_ = this.mergePersona_(profile);
++  }
++
++  private async onActivateProfileClick_(event: Event) {
++    event.stopPropagation();
++    const profileId =
++        (event.currentTarget as HTMLElement).dataset['profileId'] || '';
++    if (!profileId) {
++      return;
++    }
++    const response =
++        await PersonaBrowserProxyImpl.getInstance().setActivePersona(profileId);
++    if (response.ok) {
++      this.selectedProfileId_ = profileId;
++    }
++    this.applyPersonaResponse_(response);
++  }
++
++  private async onDeleteProfileClick_(event: Event) {
++    event.stopPropagation();
++    const profileId =
++        (event.currentTarget as HTMLElement).dataset['profileId'] || '';
++    if (!profileId || !this.canDeleteProfile_(profileId)) {
++      return;
++    }
++    if (this.selectedProfileId_ === profileId) {
++      this.selectedProfileId_ = this.activePersonaId_;
++    }
++    this.applyPersonaResponse_(
++        await PersonaBrowserProxyImpl.getInstance().deletePersona(profileId));
++  }
++
 +  private async onSavePersonaClick_() {
++    const personaId = this.editablePersona_?.id || '';
++    if (personaId) {
++      this.selectedProfileId_ = personaId;
++    }
 +    this.applyPersonaResponse_(
 +        await PersonaBrowserProxyImpl.getInstance().savePersona(
 +            this.editablePersona_));
@@ -488,9 +989,21 @@
 +      return;
 +    }
 +
-+    this.applyPersonaResponse_(
++    const response =
 +        await PersonaBrowserProxyImpl.getInstance().clonePresetIntoProfile(
-+            this.selectedPresetId_));
++            this.selectedPresetId_);
++    if (response.ok) {
++      this.selectedProfileId_ = response.state?.activePersonaId || '';
++    }
++    this.applyPersonaResponse_(response);
++  }
++
++  private async onLaunchSelectionModeChange_(event: Event) {
++    const mode = (event.target as HTMLSelectElement).value;
++    this.launchSelectionMode_ =
++        await PersonaBrowserProxyImpl.getInstance().setLaunchSelectionMode(
++            mode);
++    await this.refreshProfiles_();
 +  }
 +
 +  private onUaChPlatformChange_(event: Event) {
@@ -509,6 +1022,32 @@
 +    const locale = (event.target as HTMLSelectElement).value;
 +    this.set('editablePersona_.region.locale', locale);
 +    this.set('editablePersona_.region.acceptLanguage', `${locale},en;q=0.9`);
++  }
++
++  private isSelectedProfile_(personaId: string, selectedProfileId: string) {
++    return personaId === selectedProfileId;
++  }
++
++  private isActiveProfile_(personaId: string, activePersonaId: string) {
++    return personaId === activePersonaId;
++  }
++
++  private canDeleteProfile_(personaId: string) {
++    return personaId !== 'default';
++  }
++
++  private computeProfileStatus_(personaId: string, activePersonaId: string) {
++    return personaId === activePersonaId ? 'Active' : 'Saved';
++  }
++
++  private computeProfileSummary_(persona: PersonaRecord) {
++    const platform = persona?.platform || persona?.uaCh?.platform || 'Unknown';
++    const locale = persona?.region?.locale || 'en-US';
++    return `${platform} | ${locale}`;
++  }
++
++  private computeLastUsedText_(lastUsedAt: string) {
++    return lastUsedAt || 'Never';
 +  }
 +
 +  private onRandomizePersonaClick_() {
@@ -626,6 +1165,98 @@
 +  }
 +
 +  // Validation tokens for full manual field coverage.
++  // editablePersona_.userAgent
++  // editablePersona_.platform
++  // editablePersona_.navigatorVendor
++  // editablePersona_.navigatorProductSub
++  // editablePersona_.uaCh.platform
++  // editablePersona_.uaCh.fullVersion
++  // editablePersona_.region.timezone
++  // editablePersona_.region.locale
++  // editablePersona_.region.acceptLanguage
++  // editablePersona_.gpu.vendor
++  // editablePersona_.gpu.renderer
++  // editablePersona_.gpu.webgpuAdapter
++  // editablePersona_.hardware.hardwareConcurrency
++  // editablePersona_.hardware.deviceMemory
++  // editablePersona_.hardware.maxTouchPoints
++  // editablePersona_.hardware.touchEnabled
++  // editablePersona_.screen.width
++  // editablePersona_.screen.availLeft
++  // editablePersona_.screen.outerWidth
++  // editablePersona_.screen.windowScreenX
++  // editablePersona_.screen.deviceScaleFactor
++  // editablePersona_.screen.orientationType
++  // editablePersona_.screen.reducedMotion
++  // editablePersona_.screen.colorGamut
++  // editablePersona_.screen.dynamicRange
++  // editablePersona_.screen.monochromeDepth
++  // editablePersona_.fonts.id
++  // editablePersona_.fontRendering.profileVersion
++  // editablePersona_.fontRendering.engine
++  // editablePersona_.fontRendering.textGamma
++  // editablePersona_.fontRendering.useAutohinter
++  // editablePersona_.mediaDevices.audioInputDeviceId
++  // editablePersona_.mediaDevices.videoWidth
++  // editablePersona_.mediaDevices.audioBaseLatency
++  // editablePersona_.mediaDevices.voiceIsolation
++  // editablePersona_.network.type
++  // editablePersona_.network.downlinkMax
++  // editablePersona_.network.saveData
++  // editablePersona_.network.online
++  // editablePersona_.advanced.clientHintsEnabled
++  // editablePersona_.advanced.reduceSystemInfo
++  // editablePersona_.advanced.canvasNoise
++  // editablePersona_.advanced.audioNoise
++  // editablePersona_.advanced.fontMetricNoise
++  // editablePersona_.advanced.cookieEnabled
++  // editablePersona_.advanced.pdfViewerEnabled
++  // editablePersona_.advanced.doNotTrackEnabled
++  // editablePersona_.advanced.webdriverEnabled
++  // editablePersona_.advanced.storageQuotaGb
++  // editablePersona_.advanced.virtualMediaDevices
++  // editablePersona_.advanced.allowDisplayCapture
++  // editablePersona_.advanced.allowMediaCapture
++  // editablePersona_.advanced.allowMediaSession
++  // editablePersona_.advanced.allowPictureInPicture
++  // editablePersona_.advanced.allowRemotePlayback
++  // editablePersona_.advanced.allowSpeechSynthesis
++  // editablePersona_.advanced.speechVoiceName
++  // editablePersona_.advanced.speechVoiceLang
++  // editablePersona_.advanced.speechVoiceUri
++  // editablePersona_.advanced.speechVoiceLocalService
++  // editablePersona_.advanced.speechVoiceDefault
++  // editablePersona_.advanced.allowDeviceApis
++  // editablePersona_.advanced.allowGamepads
++  // editablePersona_.advanced.allowGeolocation
++  // editablePersona_.advanced.allowKeyboardLayout
++  // editablePersona_.advanced.allowLocalFonts
++  // editablePersona_.advanced.allowLocalNetworkApis
++  // editablePersona_.advanced.allowManagedDevice
++  // editablePersona_.advanced.allowMidi
++  // editablePersona_.advanced.allowPersistentDeviceId
++  // editablePersona_.advanced.allowPlatformCredentials
++  // editablePersona_.advanced.allowRealBatteryStatus
++  // editablePersona_.advanced.allowSensorApis
++  // editablePersona_.advanced.allowWebNfc
++  // editablePersona_.advanced.allowWebXr
++  // editablePersona_.advanced.allowWindowManagement
++  // editablePersona_.advanced.allowBackgroundSync
++  // editablePersona_.advanced.allowClipboard
++  // editablePersona_.advanced.allowFileSystemAccess
++  // editablePersona_.advanced.allowFullscreen
++  // editablePersona_.advanced.allowIdleDetection
++  // editablePersona_.advanced.allowNotifications
++  // editablePersona_.advanced.allowPaymentHandler
++  // editablePersona_.advanced.allowPersistentStorage
++  // editablePersona_.advanced.allowProtectedMediaIdentifier
++  // editablePersona_.advanced.allowStorageAccess
++  // editablePersona_.advanced.allowWakeLock
++  // editablePersona_.advanced.allowWebAppInstallation
++  // editablePersona_.advanced.allowWebPrinting
++  // editablePersona_.advanced.allowBadging
++  // editablePersona_.advanced.allowContacts
++  // editablePersona_.advanced.allowEyeDropper
 +  // editablePersona_.advanced.allowInstalledApps
 +  // editablePersona_.advanced.allowPresentationApis
 +  // editablePersona_.advanced.allowPointerLock
@@ -642,11 +1273,16 @@
 +  // editablePersona_.advanced.allowWebNn
 +}
 +
-+declare global { interface HTMLElementTagNameMap { 'settings-persona-page': SettingsPersonaPageElement; } }
++declare global {
++  interface HTMLElementTagNameMap {
++    'settings-persona-page': SettingsPersonaPageElement;
++  }
++}
++
 +customElements.define(SettingsPersonaPageElement.is, SettingsPersonaPageElement);
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.h
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,38 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -670,10 +1306,14 @@
 +
 + private:
 +  void HandleGetPersonaState(const base::ListValue& args);
++  void HandleGetPersonaProfiles(const base::ListValue& args);
++  void HandleCreatePersonaProfile(const base::ListValue& args);
 +  void HandleSavePersona(const base::ListValue& args);
 +  void HandleSetActivePersona(const base::ListValue& args);
 +  void HandleClonePresetIntoProfile(const base::ListValue& args);
 +  void HandleDeletePersona(const base::ListValue& args);
++  void HandleGetLaunchSelectionMode(const base::ListValue& args);
++  void HandleSetLaunchSelectionMode(const base::ListValue& args);
 +
 +  raw_ptr<Profile> profile_;
 +};
@@ -683,7 +1323,7 @@
 +#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_PERSONA_HANDLER_H_
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.cc
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,174 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -715,6 +1355,14 @@
 +      base::BindRepeating(&PersonaHandler::HandleGetPersonaState,
 +                          base::Unretained(this)));
 +  web_ui()->RegisterMessageCallback(
++      "getPersonaProfiles",
++      base::BindRepeating(&PersonaHandler::HandleGetPersonaProfiles,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "createPersonaProfile",
++      base::BindRepeating(&PersonaHandler::HandleCreatePersonaProfile,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
 +      "savePersona",
 +      base::BindRepeating(&PersonaHandler::HandleSavePersona,
 +                          base::Unretained(this)));
@@ -730,6 +1378,14 @@
 +      "deletePersona",
 +      base::BindRepeating(&PersonaHandler::HandleDeletePersona,
 +                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "getLaunchSelectionMode",
++      base::BindRepeating(&PersonaHandler::HandleGetLaunchSelectionMode,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setLaunchSelectionMode",
++      base::BindRepeating(&PersonaHandler::HandleSetLaunchSelectionMode,
++                          base::Unretained(this)));
 +}
 +
 +void PersonaHandler::OnJavascriptAllowed() {}
@@ -744,6 +1400,28 @@
 +  helium_persona::PersonaService* service = GetPersonaService(profile_);
 +  CHECK(service);
 +  ResolveJavascriptCallback(callback_id, service->GetPersonaState());
++}
++
++void PersonaHandler::HandleGetPersonaProfiles(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(1U, args.size());
++  const base::Value& callback_id = args[0];
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(callback_id, service->GetPersonaProfiles());
++}
++
++void PersonaHandler::HandleCreatePersonaProfile(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(2U, args.size());
++  const base::Value& callback_id = args[0];
++  CHECK(args[1].is_string());
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(
++      callback_id, service->CreatePersonaProfile(args[1].GetString()));
 +}
 +
 +void PersonaHandler::HandleSavePersona(const base::ListValue& args) {
@@ -793,6 +1471,30 @@
 +  CHECK(service);
 +  ResolveJavascriptCallback(callback_id,
 +                            service->DeletePersona(args[1].GetString()));
++}
++
++void PersonaHandler::HandleGetLaunchSelectionMode(
++    const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(1U, args.size());
++  const base::Value& callback_id = args[0];
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(callback_id, base::Value(service->GetLaunchSelectionMode()));
++}
++
++void PersonaHandler::HandleSetLaunchSelectionMode(
++    const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(2U, args.size());
++  const base::Value& callback_id = args[0];
++  CHECK(args[1].is_string());
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  service->SetLaunchSelectionMode(args[1].GetString());
++  ResolveJavascriptCallback(callback_id, base::Value(service->GetLaunchSelectionMode()));
 +}
 +
 +}  // namespace settings

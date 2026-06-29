@@ -14,6 +14,8 @@ from pathlib import Path
 
 from pylint import lint
 
+_EXCLUDED_DIR_PREFIXES = (('i18n-data', ), )
+
 
 class ChangeDir:
     """
@@ -39,6 +41,10 @@ def _is_git_ignored(path):
     return result.returncode == 0
 
 
+def _is_excluded_path(path):
+    return any(path.parts[:len(prefix)] == prefix for prefix in _EXCLUDED_DIR_PREFIXES)
+
+
 def run_pylint(module_path, pylint_options, ignore_prefixes=tuple()):
     """Runs Pylint. Returns a boolean indicating success"""
     pylint_stats = Path(f'/run/user/{os.getuid()}/pylint_stats')
@@ -53,6 +59,8 @@ def run_pylint(module_path, pylint_options, ignore_prefixes=tuple()):
     if module_path.is_dir():
         for path in module_path.rglob('*.py'):
             if _is_git_ignored(path):
+                continue
+            if _is_excluded_path(path):
                 continue
             ignore_matched = False
             for prefix in ignore_prefixes:

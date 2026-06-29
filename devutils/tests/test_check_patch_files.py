@@ -17,8 +17,9 @@ sys.path.pop(0)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from check_patch_files import (
-    _PERSONA_RANDOMIZATION_FIELD_GROUPS, _PERSONA_CONTRACT_GROUPS, _PERSONA_RUNTIME_HOOK_GROUPS,
-    _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS, check_persona_contract_coverage,
+    _PERSONA_PROFILE_MANAGEMENT_GROUPS, _PERSONA_RANDOMIZATION_FIELD_GROUPS,
+    _PERSONA_CONTRACT_GROUPS, _PERSONA_RUNTIME_HOOK_GROUPS, _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS,
+    check_persona_contract_coverage, check_persona_profile_management_coverage,
     check_persona_randomization_coverage, check_persona_runtime_hook_coverage,
     check_persona_settings_manual_field_coverage, check_series_duplicates)
 
@@ -93,6 +94,22 @@ def test_check_persona_contract_coverage():
         assert check_persona_contract_coverage(patches_dir)
 
 
+def test_check_persona_profile_management_coverage():
+    """Test persona profile management coverage guard."""
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        patches_dir = Path(tmpdirname)
+        full_guard_tokens = _tokens_from_groups(_PERSONA_PROFILE_MANAGEMENT_GROUPS)
+        _write_persona_guard_patch(patches_dir, full_guard_tokens,
+                                   'persona-profile-management-guard.patch')
+        assert not check_persona_profile_management_coverage(patches_dir)
+
+        _write_persona_guard_patch(patches_dir,
+                                   full_guard_tokens.replace('PersonaIndicatorButton\n', ''),
+                                   'persona-profile-management-guard.patch')
+        assert check_persona_profile_management_coverage(patches_dir)
+
+
 def test_check_persona_randomization_coverage():
     """Test persona randomization coverage guard."""
 
@@ -128,6 +145,7 @@ def test_check_persona_settings_manual_field_coverage():
 if __name__ == '__main__':
     test_check_series_duplicates()
     test_check_persona_contract_coverage()
+    test_check_persona_profile_management_coverage()
     test_check_persona_runtime_hook_coverage()
     test_check_persona_randomization_coverage()
     test_check_persona_settings_manual_field_coverage()

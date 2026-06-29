@@ -42,16 +42,31 @@ def prep_platform_repos(platforms_dir):
                  str(dest)],
                 check=True,
             )
-        subprocess.check_call(["git", "-C", str(dest), "checkout", "main"])
-        subprocess.check_call(["git", "-C", str(dest), "pull"])
+        try:
+            subprocess.check_call(["git", "-C", str(dest), "checkout", "main"])
+        except subprocess.CalledProcessError:
+            pass
+        try:
+            subprocess.check_call(["git", "-C", str(dest), "pull"])
+        except subprocess.CalledProcessError:
+            print(f'WARNING: Failed to update {platform} platform repo at {dest}; '
+                  'using existing local checkout.')
 
 
 def get_patch_paths(repo_root, platforms_dir):
     """
     Generate patch file paths from all series files (main repo + platforms).
     """
-    series_files = [repo_root / "patches" / "series"] + \
-        [platforms_dir / platform / "patches" / "series" for platform in PLATFORMS]
+    series_files = [repo_root / "patches" / "series"]
+
+    for platform in PLATFORMS:
+        patches_dir = platforms_dir / platform / "patches"
+        series_file = patches_dir / "series"
+        if not series_file.exists():
+            merged_series = patches_dir / "series.merged"
+            if merged_series.exists():
+                series_file = merged_series
+        series_files.append(series_file)
 
     for series_file in series_files:
         patches_dir = series_file.parent

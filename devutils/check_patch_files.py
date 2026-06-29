@@ -118,6 +118,51 @@ _PERSONA_CONTRACT_GROUPS = {
     ),
 }
 
+_PERSONA_PROFILE_MANAGEMENT_GROUPS = {
+    'profile metadata and lifecycle': (
+        'GetPersonaProfiles',
+        'CreatePersonaProfile',
+        'GetLastUsedPersonaId',
+        'SetLastUsedPersonaId',
+        'GetLaunchSelectionMode',
+        'SetLaunchSelectionMode',
+        'displayName',
+        'icon',
+        'createdAt',
+        'modifiedAt',
+        'lastUsedAt',
+        'helium.persona.last_used_id',
+        'helium.persona.launch_selection_mode',
+    ),
+    'settings profile manager ui': (
+        'getPersonaProfiles',
+        'createPersonaProfile',
+        'getLaunchSelectionMode',
+        'setLaunchSelectionMode',
+        'profiles_',
+        'launchSelectionMode_',
+        'onProfileCardClick_',
+        'onCreateProfileClick_',
+    ),
+    'startup persona picker flow': (
+        'MaybeLaunchPersonaPickerOnStartup',
+        'ResumePendingLaunchWithPersona',
+        'ApplyLastUsedPersonaOnStartup',
+        'ShowPersonaPickerForStartup',
+        'kChromeUIPersonaPickerHost',
+        'chrome://persona-picker',
+        'continueStartupWithPersona',
+        'persona_picker:resources',
+    ),
+    'session indicator toolbar ui': (
+        'PersonaIndicatorButton',
+        'PersonaIndicatorMenuModel',
+        'VIEW_ID_PERSONA_INDICATOR',
+        'SetActivePersonaAndReload',
+        'Manage personas',
+    ),
+}
+
 _PERSONA_RANDOMIZATION_FIELD_GROUPS = {
     'randomize entrypoint and sequencing': (
         'onRandomizePersonaClick_',
@@ -515,6 +560,12 @@ def check_persona_contract_coverage(patches_dir, series_path=Path('series')):
                                        series_path)
 
 
+def check_persona_profile_management_coverage(patches_dir, series_path=Path('series')):
+    """Check that persona profile metadata and launch-selection prefs are covered."""
+    return _check_persona_token_groups(patches_dir, 'profile management',
+                                       _PERSONA_PROFILE_MANAGEMENT_GROUPS, series_path)
+
+
 def check_persona_randomization_coverage(patches_dir, series_path=Path('series')):
     """
     Checks that the settings randomize flow still touches the full persona
@@ -559,6 +610,7 @@ def main():
     warnings |= check_series_duplicates(args.patches)
     warnings |= check_unused_patches(args.patches)
     warnings |= check_persona_contract_coverage(args.patches)
+    warnings |= check_persona_profile_management_coverage(args.patches)
     warnings |= check_persona_runtime_hook_coverage(args.patches)
     warnings |= check_persona_randomization_coverage(args.patches)
     warnings |= check_persona_settings_manual_field_coverage(args.patches)

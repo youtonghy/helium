@@ -402,7 +402,7 @@
 +};
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.h
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,50 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -431,10 +431,16 @@
 +  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 +
 +  base::DictValue GetPersonaState() const;
++  base::DictValue GetPersonaProfiles() const;
++  base::DictValue CreatePersonaProfile(const std::string& display_name);
 +  base::DictValue SavePersona(const base::DictValue& payload);
 +  base::DictValue ClonePresetIntoProfile(const std::string& preset_id);
 +  base::DictValue SetActivePersona(const std::string& persona_id);
 +  base::DictValue DeletePersona(const std::string& persona_id);
++  std::string GetLastUsedPersonaId() const;
++  void SetLastUsedPersonaId(const std::string& persona_id);
++  std::string GetLaunchSelectionMode() const;
++  void SetLaunchSelectionMode(const std::string& mode);
 +  blink::HeliumPersonaSnapshot GetActiveSnapshot() const;
 +
 + private:
@@ -449,7 +455,7 @@
 +#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -0,0 +1,618 @@
+@@ -0,0 +1,878 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -458,6 +464,9 @@
 +#include <optional>
 +#include <string_view>
 +
++#include "base/i18n/time_formatting.h"
++#include "base/time/time.h"
++#include "base/uuid.h"
 +#include "components/prefs/pref_service.h"
 +#include "components/pref_registry/pref_registry_syncable.h"
 +
@@ -466,7 +475,39 @@
 +namespace {
 +
 +constexpr char kPersonaStatePref[] = "helium.persona.state";
++constexpr char kPersonaLastUsedIdPref[] = "helium.persona.last_used_id";
++constexpr char kPersonaLaunchSelectionModePref[] =
++    "helium.persona.launch_selection_mode";
 +constexpr char kDefaultPersonaId[] = "default";
++constexpr char kLaunchSelectionModeAlwaysAsk[] = "always_ask";
++constexpr char kLaunchSelectionModeUseLast[] = "use_last";
++
++std::string MakeIsoTimestamp(base::Time time = base::Time::Now()) {
++  return base::TimeFormatAsIso8601(time);
++}
++
++std::string MakePersonaId() {
++  return "persona-" + base::Uuid::GenerateRandomV4().AsLowercaseString();
++}
++
++std::string GetPersonaIconForPlatform(std::string_view platform) {
++  if (platform == "macOS") {
++    return "macos";
++  }
++  if (platform == "Windows") {
++    return "windows";
++  }
++  if (platform == "Linux") {
++    return "linux";
++  }
++  if (platform == "Chrome OS") {
++    return "chromeos";
++  }
++  if (platform == "Android") {
++    return "android";
++  }
++  return "default";
++}
 +
 +base::DictValue MakeRegionDefaults() {
 +  return base::DictValue()
@@ -533,6 +574,7 @@
 +                           double audio_base_latency,
 +                           std::string_view network_type,
 +                           double network_downlink_max) {
++  const std::string created_at = MakeIsoTimestamp();
 +  base::DictValue region = MakeRegionDefaults();
 +  region.Set("timezone", timezone);
 +  region.Set("locale", locale);
@@ -607,6 +649,11 @@
 +  return base::DictValue()
 +      .Set("id", id)
 +      .Set("name", name)
++      .Set("displayName", name)
++      .Set("icon", GetPersonaIconForPlatform(platform))
++      .Set("createdAt", created_at)
++      .Set("modifiedAt", created_at)
++      .Set("lastUsedAt", "")
 +      .Set("enabled", true)
 +      .Set("userAgent", user_agent)
 +      .Set("platform", platform)
@@ -687,9 +734,15 @@
 +}
 +
 +base::DictValue MakeDefaultPersona() {
++  const std::string created_at = MakeIsoTimestamp();
 +  return base::DictValue()
 +      .Set("id", kDefaultPersonaId)
 +      .Set("name", "Default")
++      .Set("displayName", "Default")
++      .Set("icon", "default")
++      .Set("createdAt", created_at)
++      .Set("modifiedAt", created_at)
++      .Set("lastUsedAt", "")
 +      .Set("enabled", false)
 +      .Set("userAgent", "")
 +      .Set("region", MakeRegionDefaults())
@@ -706,6 +759,13 @@
 +      .Set("personas", std::move(personas))
 +      .Set("presets", MakePresetList());
 +}
++
++bool IsValidLaunchSelectionMode(std::string_view mode) {
++  return mode == kLaunchSelectionModeAlwaysAsk ||
++         mode == kLaunchSelectionModeUseLast;
++}
++
++std::string ResolvePersonaPlatform(const base::DictValue& persona);
 +
 +const base::DictValue* FindPersonaInList(const base::ListValue* personas,
 +                                         const std::string& persona_id) {
@@ -732,9 +792,22 @@
 +  return active_id && !active_id->empty() ? *active_id : kDefaultPersonaId;
 +}
 +
++std::string GetPersonaDisplayName(const base::DictValue& persona) {
++  if (const std::string* display_name = persona.FindString("displayName");
++      display_name && !display_name->empty()) {
++    return *display_name;
++  }
++  if (const std::string* name = persona.FindString("name");
++      name && !name->empty()) {
++    return *name;
++  }
++  return "Custom Persona";
++}
++
 +base::DictValue NormalizePersona(const base::DictValue& payload,
 +                                 const std::string& fallback_id) {
 +  base::DictValue persona = payload.Clone();
++  const std::string timestamp = MakeIsoTimestamp();
 +
 +  const std::string* id = persona.FindString("id");
 +  if (!id || id->empty()) {
@@ -744,6 +817,26 @@
 +  const std::string* name = persona.FindString("name");
 +  if (!name || name->empty()) {
 +    persona.Set("name", "Custom Persona");
++  }
++  if (const std::string* display_name = persona.FindString("displayName");
++      !display_name || display_name->empty()) {
++    persona.Set("displayName", GetPersonaDisplayName(persona));
++  }
++
++  const std::string platform = ResolvePersonaPlatform(persona);
++  persona.Set("platform", platform);
++  if (const std::string* icon = persona.FindString("icon");
++      !icon || icon->empty()) {
++    persona.Set("icon", GetPersonaIconForPlatform(platform));
++  }
++
++  const std::string* created_at = persona.FindString("createdAt");
++  if (!created_at || created_at->empty()) {
++    persona.Set("createdAt", timestamp);
++  }
++  persona.Set("modifiedAt", timestamp);
++  if (!persona.FindString("lastUsedAt")) {
++    persona.Set("lastUsedAt", "");
 +  }
 +
 +  if (!persona.FindBool("enabled").has_value()) {
@@ -811,6 +904,12 @@
 +base::DictValue MakeResponse(bool ok,
 +                             base::DictValue state,
 +                             base::DictValue field_errors = base::DictValue()) {
++  if (!state.FindString("lastUsedPersonaId")) {
++    state.Set("lastUsedPersonaId", kDefaultPersonaId);
++  }
++  if (!state.FindString("launchSelectionMode")) {
++    state.Set("launchSelectionMode", kLaunchSelectionModeAlwaysAsk);
++  }
 +  return base::DictValue()
 +      .Set("ok", ok)
 +      .Set("state", std::move(state))
@@ -847,6 +946,52 @@
 +  return personas;
 +}
 +
++base::ListValue NormalizePersonaList(const base::ListValue* existing,
++                                     bool ensure_default) {
++  base::ListValue personas;
++  bool has_default = false;
++
++  if (existing) {
++    for (const auto& value : *existing) {
++      if (!value.is_dict()) {
++        continue;
++      }
++      base::DictValue normalized =
++          NormalizePersona(value.GetDict(), MakePersonaId());
++      const std::string* id = normalized.FindString("id");
++      has_default |= id && *id == kDefaultPersonaId;
++      personas.Append(std::move(normalized));
++    }
++  }
++
++  if (ensure_default && !has_default) {
++    personas.Append(MakeDefaultPersona());
++  }
++  return personas;
++}
++
++base::DictValue MakeNewProfile(std::string_view display_name) {
++  const std::string timestamp = MakeIsoTimestamp();
++  const std::string resolved_display_name =
++      display_name.empty() ? "New Persona" : std::string(display_name);
++  return base::DictValue()
++      .Set("id", MakePersonaId())
++      .Set("name", resolved_display_name)
++      .Set("displayName", resolved_display_name)
++      .Set("icon", "default")
++      .Set("createdAt", timestamp)
++      .Set("modifiedAt", timestamp)
++      .Set("lastUsedAt", "")
++      .Set("enabled", true)
++      .Set("userAgent", "")
++      .Set("platform", "macOS")
++      .Set("navigatorVendor", "Google Inc.")
++      .Set("navigatorProductSub", "20030107")
++      .Set("region", MakeRegionDefaults())
++      .Set("uaCh", MakeUaChDefaults())
++      .Set("advanced", MakeAdvancedDefaults());
++}
++
 +const std::string* FindNestedString(const base::DictValue& persona,
 +                                    std::string_view dict_key,
 +                                    std::string_view key) {
@@ -861,6 +1006,36 @@
 +  return dict ? dict->FindBool(key) : std::nullopt;
 +}
 +
++std::string ResolvePersonaPlatform(const base::DictValue& persona) {
++  if (const std::string* platform = persona.FindString("platform");
++      platform && !platform->empty()) {
++    return *platform;
++  }
++  if (const std::string* platform =
++          FindNestedString(persona, "uaCh", "platform");
++      platform && !platform->empty()) {
++    return *platform;
++  }
++  return "macOS";
++}
++
++base::DictValue BuildProfilesResponse(const base::DictValue& state) {
++  base::DictValue response;
++  if (const base::ListValue* personas = state.FindList("personas")) {
++    response.Set("profiles", personas->Clone());
++  } else {
++    response.Set("profiles", base::ListValue());
++  }
++  response.Set("activePersonaId", GetActivePersonaId(state));
++  if (const std::string* last_used_id = state.FindString("lastUsedPersonaId")) {
++    response.Set("lastUsedPersonaId", *last_used_id);
++  }
++  if (const std::string* launch_mode = state.FindString("launchSelectionMode")) {
++    response.Set("launchSelectionMode", *launch_mode);
++  }
++  return response;
++}
++
 +}  // namespace
 +
 +PersonaService::PersonaService(PrefService* prefs) : prefs_(prefs) {}
@@ -869,18 +1044,49 @@
 +void PersonaService::RegisterProfilePrefs(
 +    user_prefs::PrefRegistrySyncable* registry) {
 +  registry->RegisterDictionaryPref(kPersonaStatePref);
++  registry->RegisterStringPref(kPersonaLastUsedIdPref, kDefaultPersonaId);
++  registry->RegisterStringPref(kPersonaLaunchSelectionModePref,
++                               kLaunchSelectionModeAlwaysAsk);
 +}
 +
 +base::DictValue PersonaService::GetPersonaState() const {
 +  return ReadState();
 +}
 +
++base::DictValue PersonaService::GetPersonaProfiles() const {
++  return BuildProfilesResponse(ReadState());
++}
++
++base::DictValue PersonaService::CreatePersonaProfile(
++    const std::string& display_name) {
++  base::DictValue state = ReadState();
++  base::DictValue persona = NormalizePersona(
++      MakeNewProfile(display_name), MakePersonaId());
++  persona.Set("lastUsedAt", MakeIsoTimestamp());
++  const std::string* persona_id = persona.FindString("id");
++  state.Set("personas", UpsertPersona(state.FindList("personas"), persona));
++  if (persona_id) {
++    state.Set("activePersonaId", *persona_id);
++    state.Set("lastUsedPersonaId", *persona_id);
++    SetLastUsedPersonaId(*persona_id);
++  }
++  WriteState(state.Clone());
++  return MakeResponse(true, std::move(state));
++}
++
 +base::DictValue PersonaService::SavePersona(const base::DictValue& payload) {
 +  base::DictValue state = ReadState();
 +  base::DictValue persona = NormalizePersona(payload, GetActivePersonaId(state));
 +  const std::string* persona_id = persona.FindString("id");
++  if (persona_id && !persona_id->empty()) {
++    persona.Set("lastUsedAt", MakeIsoTimestamp());
++  }
 +  state.Set("personas", UpsertPersona(state.FindList("personas"), persona));
-+  state.Set("activePersonaId", persona_id ? *persona_id : kDefaultPersonaId);
++  const std::string active_persona_id =
++      persona_id ? *persona_id : kDefaultPersonaId;
++  state.Set("activePersonaId", active_persona_id);
++  state.Set("lastUsedPersonaId", active_persona_id);
++  SetLastUsedPersonaId(active_persona_id);
 +  WriteState(state.Clone());
 +  return MakeResponse(true, std::move(state));
 +}
@@ -895,23 +1101,41 @@
 +    return MakeResponse(false, std::move(state), std::move(errors));
 +  }
 +
-+  base::DictValue persona = NormalizePersona(*preset, preset_id);
-+  persona.Set("id", preset_id + "-custom");
++  base::DictValue persona = NormalizePersona(*preset, MakePersonaId());
++  persona.Set("id", MakePersonaId());
++  const std::string* preset_name = preset->FindString("name");
++  if (preset_name && !preset_name->empty()) {
++    persona.Set("name", *preset_name + " Copy");
++    persona.Set("displayName", *preset_name + " Copy");
++  }
++  const std::string* persona_id = persona.FindString("id");
++  persona.Set("lastUsedAt", MakeIsoTimestamp());
 +  state.Set("personas", UpsertPersona(state.FindList("personas"), persona));
-+  state.Set("activePersonaId", preset_id + "-custom");
++  if (persona_id) {
++    state.Set("activePersonaId", *persona_id);
++    state.Set("lastUsedPersonaId", *persona_id);
++    SetLastUsedPersonaId(*persona_id);
++  }
 +  WriteState(state.Clone());
 +  return MakeResponse(true, std::move(state));
 +}
 +
 +base::DictValue PersonaService::SetActivePersona(const std::string& persona_id) {
 +  base::DictValue state = ReadState();
-+  if (!FindPersonaInList(state.FindList("personas"), persona_id)) {
++  const base::DictValue* current_persona =
++      FindPersonaInList(state.FindList("personas"), persona_id);
++  if (!current_persona) {
 +    base::DictValue errors;
 +    errors.Set("personaId", "Unknown persona");
 +    return MakeResponse(false, std::move(state), std::move(errors));
 +  }
 +
++  base::DictValue persona = current_persona->Clone();
++  persona.Set("lastUsedAt", MakeIsoTimestamp());
++  state.Set("personas", UpsertPersona(state.FindList("personas"), persona));
 +  state.Set("activePersonaId", persona_id);
++  state.Set("lastUsedPersonaId", persona_id);
++  SetLastUsedPersonaId(persona_id);
 +  WriteState(state.Clone());
 +  return MakeResponse(true, std::move(state));
 +}
@@ -953,8 +1177,40 @@
 +
 +  state.Set("personas", std::move(personas));
 +  state.Set("activePersonaId", active_id);
++  if (GetLastUsedPersonaId() == persona_id) {
++    SetLastUsedPersonaId(active_id);
++  }
 +  WriteState(state.Clone());
 +  return MakeResponse(true, std::move(state));
++}
++
++std::string PersonaService::GetLastUsedPersonaId() const {
++  if (!prefs_) {
++    return kDefaultPersonaId;
++  }
++  const std::string last_used = prefs_->GetString(kPersonaLastUsedIdPref);
++  return last_used.empty() ? kDefaultPersonaId : last_used;
++}
++
++void PersonaService::SetLastUsedPersonaId(const std::string& persona_id) {
++  if (prefs_) {
++    prefs_->SetString(kPersonaLastUsedIdPref, persona_id);
++  }
++}
++
++std::string PersonaService::GetLaunchSelectionMode() const {
++  if (!prefs_) {
++    return kLaunchSelectionModeAlwaysAsk;
++  }
++  const std::string mode = prefs_->GetString(kPersonaLaunchSelectionModePref);
++  return IsValidLaunchSelectionMode(mode) ? mode
++                                          : kLaunchSelectionModeAlwaysAsk;
++}
++
++void PersonaService::SetLaunchSelectionMode(const std::string& mode) {
++  if (prefs_ && IsValidLaunchSelectionMode(mode)) {
++    prefs_->SetString(kPersonaLaunchSelectionModePref, mode);
++  }
 +}
 +
 +blink::HeliumPersonaSnapshot PersonaService::GetActiveSnapshot() const {
@@ -1045,19 +1301,29 @@
 +
 +base::DictValue PersonaService::ReadState() const {
 +  if (!prefs_) {
-+    return MakeDefaultState();
++    base::DictValue state = MakeDefaultState();
++    state.Set("lastUsedPersonaId", kDefaultPersonaId);
++    state.Set("launchSelectionMode", kLaunchSelectionModeAlwaysAsk);
++    return state;
 +  }
 +
 +  base::DictValue state = prefs_->GetDict(kPersonaStatePref).Clone();
 +  if (!state.FindList("personas")) {
 +    state = MakeDefaultState();
++  } else {
++    state.Set("personas",
++              NormalizePersonaList(state.FindList("personas"), true));
 +  }
 +  if (!state.FindList("presets")) {
 +    state.Set("presets", MakePresetList());
++  } else {
++    state.Set("presets", NormalizePersonaList(state.FindList("presets"), false));
 +  }
 +  if (!state.FindString("activePersonaId")) {
 +    state.Set("activePersonaId", kDefaultPersonaId);
 +  }
++  state.Set("lastUsedPersonaId", GetLastUsedPersonaId());
++  state.Set("launchSelectionMode", GetLaunchSelectionMode());
 +  return state;
 +}
 +

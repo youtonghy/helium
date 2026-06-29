@@ -90,6 +90,8 @@ helium/core/ublock-install-as-component.patch
 helium/core/clean-omnibox-suggestions.patch
 helium/core/persona-state-management.patch
 helium/core/persona-settings-ui.patch
+helium/core/persona-launch-picker.patch
+helium/core/persona-session-indicator.patch
 helium/core/persona-consistent-randomize-ui.patch
 helium/core/persona-accept-language-reducer-guard.patch
 helium/core/enable-parallel-downloading.patch

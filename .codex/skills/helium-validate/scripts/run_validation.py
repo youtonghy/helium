@@ -59,10 +59,20 @@ I18N_TOOL_PATHS = {
 }
 
 SKILL_PATH = '.codex/skills/helium-validate'
+PYTHON_SCAN_EXCLUDES = {
+    'devutils/i18n-data',
+}
 
 
 def quote_command(command):
     return shlex.join(str(part) for part in command)
+
+
+def make_command(command, *, cwd=ROOT):
+    return {
+        'command': command,
+        'cwd': cwd,
+    }
 
 
 def run(command, *, cwd=ROOT):
@@ -116,8 +126,33 @@ def path_in(paths):
     return lambda path: path in paths
 
 
+def patch_might_affect_i18n(path):
+    if not path.startswith('patches/') or not path.endswith('.patch'):
+        return False
+    patch_path = ROOT / path
+    if not patch_path.is_file():
+        return False
+    content = patch_path.read_text(encoding='utf-8')
+    return '.grd' in content or '.grdp' in content
+
+
+def path_is_under(path, prefix):
+    path_parts = Path(path).parts
+    prefix_parts = Path(prefix).parts
+    return len(path_parts) >= len(prefix_parts) and path_parts[:len(prefix_parts)] == prefix_parts
+
+
 def non_ignored_python_files(prefix):
-    return sorted(str(path) for path in (ROOT / prefix).rglob('*.py') if not git_check_ignore(path))
+    files = []
+    for path in (ROOT / prefix).rglob('*.py'):
+        relative_path = path.relative_to(ROOT)
+        relative_path_str = str(relative_path)
+        if any(path_is_under(relative_path, excluded) for excluded in PYTHON_SCAN_EXCLUDES):
+            continue
+        if git_check_ignore(relative_path_str):
+            continue
+        files.append(relative_path_str)
+    return sorted(files)
 
 
 def yapf_check_command(python, prefix):
@@ -135,25 +170,46 @@ def yapf_check_command(python, prefix):
     ]
 
 
+def pytest_check_command(python, config_path, test_path):
+    config_path = Path(config_path)
+    test_path = Path(test_path)
+    cwd = ROOT / config_path.parent
+    resolved_test_path = ROOT / test_path
+    return make_command(
+        [
+            python,
+            '-m',
+            'pytest',
+            '-c',
+            config_path.name,
+            str(resolved_test_path.relative_to(cwd)),
+        ],
+        cwd=cwd,
+    )
+
+
 def utils_checks(python):
     return [
         yapf_check_command(python, 'utils'),
-        ['./devutils/run_utils_pylint.py', '--hide-fixme'],
-        ['./devutils/run_utils_tests.sh'],
+        [python, './devutils/run_utils_pylint.py', '--hide-fixme'],
+        pytest_check_command(python, './utils/pytest.ini', './utils/tests'),
     ]
 
 
 def devutils_checks(python):
     return [
         yapf_check_command(python, 'devutils'),
-        ['./devutils/run_devutils_pylint.py', '--hide-fixme'],
-        ['./devutils/run_devutils_tests.sh'],
+        [python, './devutils/run_devutils_pylint.py', '--hide-fixme'],
+        pytest_check_command(python, './devutils/pytest.ini', './devutils/tests'),
     ]
 
 
 def run_commands(commands):
     for command in commands:
-        run(command)
+        if isinstance(command, dict):
+            run(command['command'], cwd=command['cwd'])
+        else:
+            run(command)
 
 
 def run_i18n_checks(python):
@@ -283,10 +339,9 @@ def selected_auto_checks(files, python, lint_python):
     ])
     i18n_touched = touches_any(files, [
         path_under('i18n'),
-        path_under('patches'),
         path_in(I18N_TOOL_PATHS),
         path_in({'.github/workflows/lint.yml'}),
-    ])
+    ]) or any(patch_might_affect_i18n(path) for path in files)
     skill_touched = touches_any(files, [
         path_under(SKILL_PATH),
     ])

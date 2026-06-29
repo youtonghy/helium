@@ -1,0 +1,536 @@
+--- a/chrome/browser/ui/view_ids.h
++++ b/chrome/browser/ui/view_ids.h
+@@ -69,6 +69,7 @@ enum ViewID {
+   VIEW_ID_SHARING_HUB_BUTTON,
+   VIEW_ID_MANAGEMENT_BUTTON,
+   VIEW_ID_RECORD_REPLAY_BUTTON,
++  VIEW_ID_PERSONA_INDICATOR,
+ 
+   // Location bar content settings icons.
+   VIEW_ID_CONTENT_SETTING_JAVASCRIPT,
+--- /dev/null
++++ b/chrome/browser/ui/views/persona/persona_indicator_button.cc
+@@ -0,0 +1,167 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/views/persona/persona_indicator_button.h"
++
++#include <string_view>
++
++#include "base/strings/utf_string_conversions.h"
++#include "base/values.h"
++#include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/helium_persona/persona_service.h"
++#include "chrome/browser/helium_persona/persona_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/view_ids.h"
++#include "chrome/browser/ui/views/persona/persona_indicator_menu_model.h"
++#include "ui/base/menu_source_utils.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/menu_button_controller.h"
++#include "ui/views/controls/menu/menu_runner.h"
++
++namespace {
++
++constexpr size_t kMaxPersonaButtonLabelLength = 10;
++constexpr char kDefaultPersonaId[] = "default";
++
++struct PersonaIndicatorState {
++  const gfx::VectorIcon* icon = &kGlobeIcon;
++  std::u16string short_label = u"Default";
++  std::u16string full_label = u"Default persona";
++};
++
++std::u16string MakeShortPersonaLabel(std::string_view label) {
++  if (label.empty()) {
++    return u"Default";
++  }
++
++  const size_t separator = label.find_first_of(" -_/");
++  std::string short_label(
++      label.substr(0, separator == std::string_view::npos ? label.size()
++                                                          : separator));
++  if (short_label.empty()) {
++    short_label = std::string(label);
++  }
++  if (short_label.size() > kMaxPersonaButtonLabelLength) {
++    short_label.resize(kMaxPersonaButtonLabelLength);
++  }
++  return base::UTF8ToUTF16(short_label);
++}
++
++const gfx::VectorIcon& GetPersonaIcon(std::string_view icon_name) {
++  if (icon_name == "android") {
++    return kSmartphoneIcon;
++  }
++  if (icon_name == "windows") {
++    return kDesktopWindowsChromeRefreshIcon;
++  }
++  if (icon_name == "linux" || icon_name == "macos" ||
++      icon_name == "chromeos") {
++    return kLaptopIcon;
++  }
++  if (icon_name == "default") {
++    return kGlobeIcon;
++  }
++  return kAccountCircleChromeRefreshIcon;
++}
++
++std::string GetPersonaDisplayName(const base::Value::Dict& persona) {
++  if (const std::string* display_name = persona.FindString("displayName");
++      display_name && !display_name->empty()) {
++    return *display_name;
++  }
++  if (const std::string* name = persona.FindString("name");
++      name && !name->empty()) {
++    return *name;
++  }
++  return "Default";
++}
++
++PersonaIndicatorState GetPersonaIndicatorState(Browser* browser) {
++  auto* service =
++      helium_persona::PersonaServiceFactory::GetForProfile(browser->profile());
++  if (!service) {
++    return {};
++  }
++
++  base::Value::Dict response = service->GetPersonaProfiles();
++  const std::string* active_persona_id = response.FindString("activePersonaId");
++  const base::Value::List* profiles = response.FindList("profiles");
++  if (!active_persona_id || !profiles) {
++    return {};
++  }
++
++  for (const base::Value& value : *profiles) {
++    if (!value.is_dict()) {
++      continue;
++    }
++    const base::Value::Dict& persona = value.GetDict();
++    const std::string* persona_id = persona.FindString("id");
++    if (!persona_id || *persona_id != *active_persona_id) {
++      continue;
++    }
++
++    const std::optional<bool> enabled = persona.FindBool("enabled");
++    if (*persona_id == kDefaultPersonaId || (enabled.has_value() && !*enabled)) {
++      return {};
++    }
++
++    const std::string full_label = GetPersonaDisplayName(persona);
++    const std::string* icon_name = persona.FindString("icon");
++    return {
++        .icon = &(icon_name ? GetPersonaIcon(*icon_name) : kGlobeIcon),
++        .short_label = MakeShortPersonaLabel(full_label),
++        .full_label = base::UTF8ToUTF16(full_label),
++    };
++  }
++
++  return {};
++}
++
++}  // namespace
++
++PersonaIndicatorButton::PersonaIndicatorButton(Browser* browser)
++    : ToolbarButton(views::Button::PressedCallback()), browser_(browser) {
++  SetID(VIEW_ID_PERSONA_INDICATOR);
++  SetVectorIcon(kAccountCircleChromeRefreshIcon);
++  GetViewAccessibility().SetHasPopup(ax::mojom::HasPopup::kMenu);
++  SetButtonController(std::make_unique<views::MenuButtonController>(
++      this,
++      base::BindRepeating(&PersonaIndicatorButton::ButtonPressed,
++                          base::Unretained(this)),
++      std::make_unique<views::Button::DefaultButtonControllerDelegate>(this)));
++  Refresh();
++}
++
++PersonaIndicatorButton::~PersonaIndicatorButton() = default;
++
++void PersonaIndicatorButton::Refresh() {
++  const PersonaIndicatorState state = GetPersonaIndicatorState(browser_);
++  SetVectorIcon(*state.icon);
++  SetText(state.short_label);
++  SetTooltipText(state.full_label);
++  GetViewAccessibility().SetName(state.full_label);
++}
++
++void PersonaIndicatorButton::ButtonPressed(const ui::Event& event) {
++  if (menu_runner_ && menu_runner_->IsRunning()) {
++    menu_runner_->Cancel();
++    return;
++  }
++
++  menu_model_ = std::make_unique<PersonaIndicatorMenuModel>(browser_);
++  menu_runner_ =
++      std::make_unique<views::MenuRunner>(menu_model_.get(),
++                                          views::MenuRunner::HAS_MNEMONICS);
++  menu_runner_->RunMenuAt(
++      GetWidget(),
++      static_cast<views::MenuButtonController*>(button_controller()),
++      GetAnchorBoundsInScreen(), views::MenuAnchorPosition::kTopLeft,
++      ui::GetMenuSourceTypeForEvent(event));
++  Refresh();
++}
++
++BEGIN_METADATA(PersonaIndicatorButton)
++END_METADATA
+--- /dev/null
++++ b/chrome/browser/ui/views/persona/persona_indicator_button.h
+@@ -0,0 +1,39 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_PERSONA_PERSONA_INDICATOR_BUTTON_H_
++#define CHROME_BROWSER_UI_VIEWS_PERSONA_PERSONA_INDICATOR_BUTTON_H_
++
++#include <memory>
++
++#include "base/memory/raw_ptr.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_button.h"
++
++class Browser;
++class PersonaIndicatorMenuModel;
++
++namespace views {
++class MenuRunner;
++}
++
++class PersonaIndicatorButton : public ToolbarButton {
++  METADATA_HEADER(PersonaIndicatorButton, ToolbarButton)
++
++ public:
++  explicit PersonaIndicatorButton(Browser* browser);
++  PersonaIndicatorButton(const PersonaIndicatorButton&) = delete;
++  PersonaIndicatorButton& operator=(const PersonaIndicatorButton&) = delete;
++  ~PersonaIndicatorButton() override;
++
++  void Refresh();
++
++ private:
++  void ButtonPressed(const ui::Event& event);
++
++  raw_ptr<Browser> browser_;
++  std::unique_ptr<PersonaIndicatorMenuModel> menu_model_;
++  std::unique_ptr<views::MenuRunner> menu_runner_;
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_PERSONA_PERSONA_INDICATOR_BUTTON_H_
+--- /dev/null
++++ b/chrome/browser/ui/views/persona/persona_indicator_menu_model.cc
+@@ -0,0 +1,181 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/views/persona/persona_indicator_menu_model.h"
++
++#include "base/strings/utf_string_conversions.h"
++#include "base/values.h"
++#include "chrome/browser/helium_persona/persona_service.h"
++#include "chrome/browser/helium_persona/persona_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
++#include "chrome/browser/ui/chrome_pages.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/common/reload_type.h"
++
++namespace {
++
++constexpr int kPersonaCommandBase = 56000;
++constexpr int kCommandOpenPersonaSettings = kPersonaCommandBase;
++constexpr int kCommandPersonaGroupBase = kPersonaCommandBase + 100;
++
++std::string GetDisplayName(const base::Value::Dict& persona) {
++  if (const std::string* display_name = persona.FindString("displayName");
++      display_name && !display_name->empty()) {
++    return *display_name;
++  }
++  if (const std::string* name = persona.FindString("name");
++      name && !name->empty()) {
++    return *name;
++  }
++  if (const std::string* id = persona.FindString("id")) {
++    return *id;
++  }
++  return "Persona";
++}
++
++}  // namespace
++
++PersonaIndicatorMenuModel::PersonaIndicatorMenuModel(Browser* browser)
++    : ui::SimpleMenuModel(this), browser_(browser) {
++  Build();
++}
++
++PersonaIndicatorMenuModel::~PersonaIndicatorMenuModel() = default;
++
++void PersonaIndicatorMenuModel::Build() {
++  AddPersonaItems();
++  if (!persona_commands_.empty()) {
++    AddSeparator(ui::NORMAL_SEPARATOR);
++  }
++  AddItem(kCommandOpenPersonaSettings, u"Manage personas");
++}
++
++void PersonaIndicatorMenuModel::AddPersonaItems() {
++  auto* service = GetPersonaService();
++  if (!service) {
++    return;
++  }
++
++  base::Value::Dict response = service->GetPersonaProfiles();
++  const base::Value::List* profiles = response.FindList("profiles");
++  if (!profiles) {
++    return;
++  }
++
++  int next_command_id = kCommandPersonaGroupBase;
++  for (const base::Value& value : *profiles) {
++    if (!value.is_dict()) {
++      continue;
++    }
++    const base::Value::Dict& persona = value.GetDict();
++    const std::string* persona_id = persona.FindString("id");
++    if (!persona_id || persona_id->empty()) {
++      continue;
++    }
++
++    AddCheckItem(next_command_id,
++                 base::UTF8ToUTF16(GetDisplayName(persona)));
++    persona_commands_.push_back(
++        {.command_id = next_command_id, .persona_id = *persona_id});
++    ++next_command_id;
++  }
++}
++
++void PersonaIndicatorMenuModel::SetActivePersonaAndReload(
++    const std::string& persona_id) {
++  auto* service = GetPersonaService();
++  if (!service) {
++    return;
++  }
++
++  service->SetActivePersona(persona_id);
++
++  if (auto* collection = ProfileBrowserCollection::GetForProfile(
++          browser_->profile())) {
++    collection->ForEach([](BrowserWindowInterface* browser_interface) {
++      auto* browser = browser_interface->GetBrowserForMigrationOnly();
++      if (!browser) {
++        return true;
++      }
++
++      TabStripModel* tab_strip_model = browser->tab_strip_model();
++      for (int index = 0; index < tab_strip_model->count(); ++index) {
++        content::WebContents* contents =
++            tab_strip_model->GetWebContentsAt(index);
++        if (!contents) {
++          continue;
++        }
++        contents->GetController().Reload(content::ReloadType::NORMAL, true);
++      }
++      return true;
++    });
++  }
++}
++
++std::optional<std::string> PersonaIndicatorMenuModel::GetActivePersonaId()
++    const {
++  auto* service = GetPersonaService();
++  if (!service) {
++    return std::nullopt;
++  }
++
++  base::Value::Dict response = service->GetPersonaProfiles();
++  const std::string* active_persona_id = response.FindString("activePersonaId");
++  if (!active_persona_id || active_persona_id->empty()) {
++    return std::nullopt;
++  }
++  return *active_persona_id;
++}
++
++helium_persona::PersonaService* PersonaIndicatorMenuModel::GetPersonaService()
++    const {
++  return helium_persona::PersonaServiceFactory::GetForProfile(
++      browser_->profile());
++}
++
++bool PersonaIndicatorMenuModel::IsCommandIdChecked(int command_id) const {
++  auto active_persona_id = GetActivePersonaId();
++  if (!active_persona_id) {
++    return false;
++  }
++
++  for (const PersonaCommand& command : persona_commands_) {
++    if (command.command_id == command_id) {
++      return command.persona_id == *active_persona_id;
++    }
++  }
++  return false;
++}
++
++bool PersonaIndicatorMenuModel::IsCommandIdEnabled(int command_id) const {
++  if (command_id == kCommandOpenPersonaSettings) {
++    return true;
++  }
++
++  for (const PersonaCommand& command : persona_commands_) {
++    if (command.command_id == command_id) {
++      return true;
++    }
++  }
++  return false;
++}
++
++void PersonaIndicatorMenuModel::ExecuteCommand(int command_id,
++                                               int /*event_flags*/) {
++  if (command_id == kCommandOpenPersonaSettings) {
++    chrome::ShowSettingsSubPage(browser_, "persona");
++    return;
++  }
++
++  for (const PersonaCommand& command : persona_commands_) {
++    if (command.command_id == command_id) {
++      SetActivePersonaAndReload(command.persona_id);
++      return;
++    }
++  }
++}
+--- /dev/null
++++ b/chrome/browser/ui/views/persona/persona_indicator_menu_model.h
+@@ -0,0 +1,52 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_PERSONA_PERSONA_INDICATOR_MENU_MODEL_H_
++#define CHROME_BROWSER_UI_VIEWS_PERSONA_PERSONA_INDICATOR_MENU_MODEL_H_
++
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "ui/menus/simple_menu_model.h"
++
++class Browser;
++
++namespace helium_persona {
++class PersonaService;
++}
++
++class PersonaIndicatorMenuModel : public ui::SimpleMenuModel,
++                                  public ui::SimpleMenuModel::Delegate {
++ public:
++  explicit PersonaIndicatorMenuModel(Browser* browser);
++  PersonaIndicatorMenuModel(const PersonaIndicatorMenuModel&) = delete;
++  PersonaIndicatorMenuModel& operator=(const PersonaIndicatorMenuModel&) =
++      delete;
++  ~PersonaIndicatorMenuModel() override;
++
++ private:
++  struct PersonaCommand {
++    int command_id = 0;
++    std::string persona_id;
++  };
++
++  void Build();
++  void AddPersonaItems();
++  void SetActivePersonaAndReload(const std::string& persona_id);
++
++  std::optional<std::string> GetActivePersonaId() const;
++  helium_persona::PersonaService* GetPersonaService() const;
++
++  // ui::SimpleMenuModel::Delegate:
++  bool IsCommandIdChecked(int command_id) const override;
++  bool IsCommandIdEnabled(int command_id) const override;
++  void ExecuteCommand(int command_id, int event_flags) override;
++
++  raw_ptr<Browser> browser_;
++  std::vector<PersonaCommand> persona_commands_;
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_PERSONA_PERSONA_INDICATOR_MENU_MODEL_H_
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -85,6 +85,7 @@
+ #include "chrome/browser/ui/views/page_action/page_action_icon_container.h"
+ #include "chrome/browser/ui/views/page_action/page_action_icon_controller.h"
+ #include "chrome/browser/ui/views/page_action/page_action_view.h"
++#include "chrome/browser/ui/views/persona/persona_indicator_button.h"
+ #include "chrome/browser/ui/views/performance_controls/battery_saver_button.h"
+ #include "chrome/browser/ui/views/performance_controls/performance_intervention_button.h"
+ #include "chrome/browser/ui/views/side_panel/side_panel.h"
+@@ -577,6 +578,12 @@ void ToolbarView::Init() {
+     UpdateGlicButtonVisibility();
+   }
+ 
++  if (browser_->profile()->IsRegularProfile() ||
++      browser_->profile()->IsGuestSession()) {
++    persona_indicator_button_ =
++        AddChildView(std::make_unique<PersonaIndicatorButton>(browser_));
++  }
++
+   if (!features::IsWebUIAvatarButtonEnabled()) {
+     avatar_ =
+         AddChildView(std::make_unique<AvatarToolbarButton>(browser_view_));
+@@ -1204,6 +1211,10 @@ void ToolbarView::Update(WebContents* ta
+     reload_control->SetDevToolsStatus(
+         chrome::IsDebuggerAttachedToCurrentTab(browser_));
+   }
++
++  if (persona_indicator_button_) {
++    persona_indicator_button_->Refresh();
++  }
+ }
+ 
+ bool ToolbarView::UpdateSecurityState() {
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.h
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
+@@ -66,6 +66,7 @@ class ToolbarController;
+ class ToolbarDivider;
+ class OverflowButton;
+ class PerformanceInterventionButton;
++class PersonaIndicatorButton;
+ 
+ namespace views {
+ class FlexLayout;
+@@ -187,6 +188,9 @@ class ToolbarView : public views::Access
+   PinnedActionToolbarButton* tab_search_button() const {
+     return tab_search_button_;
+   }
++  PersonaIndicatorButton* persona_indicator_button() const {
++    return persona_indicator_button_;
++  }
+ 
+   // TODO(crbug.com/513238408): Remove this once toolbar layout/overflow is
+   // fixed.
+@@ -459,6 +463,7 @@ class ToolbarView : public views::Access
+   // due to small toolbar view width. Visibility controlled by
+   // `toolbar_controller_`.
+   raw_ptr<OverflowButton> overflow_button_ = nullptr;
++  raw_ptr<PersonaIndicatorButton> persona_indicator_button_ = nullptr;
+ 
+   // Subscription for when tab strip mode changes
+   base::CallbackListSubscription vertical_tab_subscription_;
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -4479,6 +4479,10 @@ static_library("ui") {
+       "views/performance_controls/tab_list_row_view.h",
+       "views/performance_controls/tab_list_view.cc",
+       "views/performance_controls/tab_list_view.h",
++      "views/persona/persona_indicator_button.cc",
++      "views/persona/persona_indicator_button.h",
++      "views/persona/persona_indicator_menu_model.cc",
++      "views/persona/persona_indicator_menu_model.h",
+       "views/permissions/chip/multi_image_container.cc",
+       "views/permissions/chip/multi_image_container.h",
+       "views/permissions/chip/permission_dashboard_controller.cc",
