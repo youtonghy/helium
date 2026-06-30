@@ -180,7 +180,7 @@
 +}  // namespace helium_persona
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,88 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -205,7 +205,23 @@
 +  bool allow_privacy_sandbox_apis = true;
 +  bool ua_ch_mobile = false;
 +  bool ua_ch_wow64 = false;
++  bool passthrough = false;
++  bool canvas_noise = false;
++  bool audio_noise = false;
++  bool font_metric_noise = false;
++  bool font_antialiasing = false;
++  bool font_subpixel_rendering = false;
++  bool font_lcd_text = false;
 +  std::string user_agent;
++  std::string id;
++  std::string name;
++  std::string device;
++  std::string os;
++  std::string platform;
++  std::string navigator_vendor;
++  std::string navigator_product_sub;
++  std::string timezone;
++  std::string locale;
 +  std::string accept_language;
 +  std::string ua_ch_platform;
 +  std::string ua_ch_platform_version;
@@ -213,7 +229,38 @@
 +  std::string ua_ch_model;
 +  std::string ua_ch_bitness;
 +  std::string ua_ch_full_version;
++  std::string gpu_vendor;
++  std::string gpu_renderer;
++  std::string webgpu_adapter;
++  std::string gpu_driver;
++  std::string font_pack_id;
++  std::string font_pack_name;
++  std::string font_rendering_engine;
++  std::string font_rendering_id;
++  std::string noise_seed;
++  std::string network_type;
++  int hardware_concurrency = 0;
++  int device_memory = 0;
++  int max_touch_points = 0;
++  int screen_width = 0;
++  int screen_height = 0;
++  int avail_left = 0;
++  int avail_top = 0;
++  int avail_width = 0;
++  int avail_height = 0;
++  int outer_width = 0;
++  int outer_height = 0;
++  int color_depth = 0;
++  int pixel_depth = 0;
++  int refresh_rate = 0;
++  double device_scale_factor = 0.0;
++  double audio_base_latency = 0.0;
++  double audio_output_latency = 0.0;
++  double network_downlink_max = 0.0;
 +  std::vector<std::string> ua_ch_form_factors;
++  std::vector<std::string> navigator_languages;
++  std::vector<std::string> font_families;
++  std::vector<std::string> font_aliases;
 +  std::vector<HeliumPersonaUaChBrand> ua_ch_brands;
 +
 +  bool IsEnabled() const { return enabled; }
@@ -224,7 +271,7 @@
 +#endif
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,399 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -293,9 +340,78 @@
 +    return data.ua_ch_wow64;
 +  }
 +
++  static bool passthrough(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.passthrough;
++  }
++
++  static bool canvas_noise(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.canvas_noise;
++  }
++
++  static bool audio_noise(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.audio_noise;
++  }
++
++  static bool font_metric_noise(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.font_metric_noise;
++  }
++
++  static bool font_antialiasing(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.font_antialiasing;
++  }
++
++  static bool font_subpixel_rendering(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.font_subpixel_rendering;
++  }
++
++  static bool font_lcd_text(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.font_lcd_text;
++  }
++
 +  static const std::string& user_agent(
 +      const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.user_agent;
++  }
++
++  static const std::string& id(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.id;
++  }
++
++  static const std::string& name(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.name;
++  }
++
++  static const std::string& device(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.device;
++  }
++
++  static const std::string& os(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.os;
++  }
++
++  static const std::string& platform(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.platform;
++  }
++
++  static const std::string& navigator_vendor(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.navigator_vendor;
++  }
++
++  static const std::string& navigator_product_sub(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.navigator_product_sub;
++  }
++
++  static const std::string& timezone(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.timezone;
++  }
++
++  static const std::string& locale(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.locale;
 +  }
 +
 +  static const std::string& accept_language(
@@ -333,9 +449,151 @@
 +    return data.ua_ch_full_version;
 +  }
 +
++  static const std::string& gpu_vendor(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.gpu_vendor;
++  }
++
++  static const std::string& gpu_renderer(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.gpu_renderer;
++  }
++
++  static const std::string& webgpu_adapter(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.webgpu_adapter;
++  }
++
++  static const std::string& gpu_driver(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.gpu_driver;
++  }
++
++  static const std::string& font_pack_id(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.font_pack_id;
++  }
++
++  static const std::string& font_pack_name(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.font_pack_name;
++  }
++
++  static const std::string& font_rendering_engine(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.font_rendering_engine;
++  }
++
++  static const std::string& font_rendering_id(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.font_rendering_id;
++  }
++
++  static const std::string& noise_seed(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.noise_seed;
++  }
++
++  static const std::string& network_type(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.network_type;
++  }
++
++  static int hardware_concurrency(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.hardware_concurrency;
++  }
++
++  static int device_memory(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.device_memory;
++  }
++
++  static int max_touch_points(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.max_touch_points;
++  }
++
++  static int screen_width(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.screen_width;
++  }
++
++  static int screen_height(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.screen_height;
++  }
++
++  static int avail_left(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.avail_left;
++  }
++
++  static int avail_top(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.avail_top;
++  }
++
++  static int avail_width(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.avail_width;
++  }
++
++  static int avail_height(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.avail_height;
++  }
++
++  static int outer_width(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.outer_width;
++  }
++
++  static int outer_height(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.outer_height;
++  }
++
++  static int color_depth(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.color_depth;
++  }
++
++  static int pixel_depth(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.pixel_depth;
++  }
++
++  static int refresh_rate(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.refresh_rate;
++  }
++
++  static double device_scale_factor(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.device_scale_factor;
++  }
++
++  static double audio_base_latency(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.audio_base_latency;
++  }
++
++  static double audio_output_latency(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.audio_output_latency;
++  }
++
++  static double network_downlink_max(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.network_downlink_max;
++  }
++
 +  static const std::vector<std::string>& ua_ch_form_factors(
 +      const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.ua_ch_form_factors;
++  }
++
++  static const std::vector<std::string>& navigator_languages(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.navigator_languages;
++  }
++
++  static const std::vector<std::string>& font_families(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.font_families;
++  }
++
++  static const std::vector<std::string>& font_aliases(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.font_aliases;
 +  }
 +
 +  static const std::vector<::blink::HeliumPersonaUaChBrand>& ua_ch_brands(
@@ -352,7 +610,39 @@
 +    out->allow_privacy_sandbox_apis = data.allow_privacy_sandbox_apis();
 +    out->ua_ch_mobile = data.ua_ch_mobile();
 +    out->ua_ch_wow64 = data.ua_ch_wow64();
++    out->passthrough = data.passthrough();
++    out->canvas_noise = data.canvas_noise();
++    out->audio_noise = data.audio_noise();
++    out->font_metric_noise = data.font_metric_noise();
++    out->font_antialiasing = data.font_antialiasing();
++    out->font_subpixel_rendering = data.font_subpixel_rendering();
++    out->font_lcd_text = data.font_lcd_text();
++    out->hardware_concurrency = data.hardware_concurrency();
++    out->device_memory = data.device_memory();
++    out->max_touch_points = data.max_touch_points();
++    out->screen_width = data.screen_width();
++    out->screen_height = data.screen_height();
++    out->avail_left = data.avail_left();
++    out->avail_top = data.avail_top();
++    out->avail_width = data.avail_width();
++    out->avail_height = data.avail_height();
++    out->outer_width = data.outer_width();
++    out->outer_height = data.outer_height();
++    out->color_depth = data.color_depth();
++    out->pixel_depth = data.pixel_depth();
++    out->refresh_rate = data.refresh_rate();
++    out->device_scale_factor = data.device_scale_factor();
++    out->audio_base_latency = data.audio_base_latency();
++    out->audio_output_latency = data.audio_output_latency();
++    out->network_downlink_max = data.network_downlink_max();
 +    return data.ReadUserAgent(&out->user_agent) &&
++           data.ReadId(&out->id) && data.ReadName(&out->name) &&
++           data.ReadDevice(&out->device) && data.ReadOs(&out->os) &&
++           data.ReadPlatform(&out->platform) &&
++           data.ReadNavigatorVendor(&out->navigator_vendor) &&
++           data.ReadNavigatorProductSub(&out->navigator_product_sub) &&
++           data.ReadTimezone(&out->timezone) &&
++           data.ReadLocale(&out->locale) &&
 +           data.ReadAcceptLanguage(&out->accept_language) &&
 +           data.ReadUaChPlatform(&out->ua_ch_platform) &&
 +           data.ReadUaChPlatformVersion(&out->ua_ch_platform_version) &&
@@ -360,7 +650,20 @@
 +           data.ReadUaChModel(&out->ua_ch_model) &&
 +           data.ReadUaChBitness(&out->ua_ch_bitness) &&
 +           data.ReadUaChFullVersion(&out->ua_ch_full_version) &&
++           data.ReadGpuVendor(&out->gpu_vendor) &&
++           data.ReadGpuRenderer(&out->gpu_renderer) &&
++           data.ReadWebgpuAdapter(&out->webgpu_adapter) &&
++           data.ReadGpuDriver(&out->gpu_driver) &&
++           data.ReadFontPackId(&out->font_pack_id) &&
++           data.ReadFontPackName(&out->font_pack_name) &&
++           data.ReadFontRenderingEngine(&out->font_rendering_engine) &&
++           data.ReadFontRenderingId(&out->font_rendering_id) &&
++           data.ReadNoiseSeed(&out->noise_seed) &&
++           data.ReadNetworkType(&out->network_type) &&
 +           data.ReadUaChFormFactors(&out->ua_ch_form_factors) &&
++           data.ReadNavigatorLanguages(&out->navigator_languages) &&
++           data.ReadFontFamilies(&out->font_families) &&
++           data.ReadFontAliases(&out->font_aliases) &&
 +           data.ReadUaChBrands(&out->ua_ch_brands);
 +  }
 +};
@@ -370,7 +673,7 @@
 +#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_MOJOM_TRAITS_H_
 --- /dev/null
 +++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,76 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -389,7 +692,23 @@
 +  bool allow_privacy_sandbox_apis;
 +  bool ua_ch_mobile;
 +  bool ua_ch_wow64;
++  bool passthrough;
++  bool canvas_noise;
++  bool audio_noise;
++  bool font_metric_noise;
++  bool font_antialiasing;
++  bool font_subpixel_rendering;
++  bool font_lcd_text;
 +  string user_agent;
++  string id;
++  string name;
++  string device;
++  string os;
++  string platform;
++  string navigator_vendor;
++  string navigator_product_sub;
++  string timezone;
++  string locale;
 +  string accept_language;
 +  string ua_ch_platform;
 +  string ua_ch_platform_version;
@@ -397,7 +716,38 @@
 +  string ua_ch_model;
 +  string ua_ch_bitness;
 +  string ua_ch_full_version;
++  string gpu_vendor;
++  string gpu_renderer;
++  string webgpu_adapter;
++  string gpu_driver;
++  string font_pack_id;
++  string font_pack_name;
++  string font_rendering_engine;
++  string font_rendering_id;
++  string noise_seed;
++  string network_type;
++  int32 hardware_concurrency;
++  int32 device_memory;
++  int32 max_touch_points;
++  int32 screen_width;
++  int32 screen_height;
++  int32 avail_left;
++  int32 avail_top;
++  int32 avail_width;
++  int32 avail_height;
++  int32 outer_width;
++  int32 outer_height;
++  int32 color_depth;
++  int32 pixel_depth;
++  int32 refresh_rate;
++  double device_scale_factor;
++  double audio_base_latency;
++  double audio_output_latency;
++  double network_downlink_max;
 +  array<string> ua_ch_form_factors;
++  array<string> navigator_languages;
++  array<string> font_families;
++  array<string> font_aliases;
 +  array<HeliumPersonaUaChBrand> ua_ch_brands;
 +};
 --- /dev/null
@@ -455,14 +805,16 @@
 +#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -0,0 +1,878 @@
+@@ -0,0 +1,1046 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#include "chrome/browser/helium_persona/persona_service.h"
 +
 +#include <optional>
++#include <string>
 +#include <string_view>
++#include <vector>
 +
 +#include "base/i18n/time_formatting.h"
 +#include "base/time/time.h"
@@ -897,6 +1249,15 @@
 +  if (!advanced->FindBool("allowPrivacySandboxApis").has_value()) {
 +    advanced->Set("allowPrivacySandboxApis", true);
 +  }
++  if (!advanced->FindBool("canvasNoise").has_value()) {
++    advanced->Set("canvasNoise", true);
++  }
++  if (!advanced->FindBool("audioNoise").has_value()) {
++    advanced->Set("audioNoise", true);
++  }
++  if (!advanced->FindBool("fontMetricNoise").has_value()) {
++    advanced->Set("fontMetricNoise", false);
++  }
 +
 +  return persona;
 +}
@@ -1004,6 +1365,34 @@
 +                                   std::string_view key) {
 +  const base::DictValue* dict = persona.FindDict(dict_key);
 +  return dict ? dict->FindBool(key) : std::nullopt;
++}
++
++std::optional<int> FindNestedInt(const base::DictValue& persona,
++                                 std::string_view dict_key,
++                                 std::string_view key) {
++  const base::DictValue* dict = persona.FindDict(dict_key);
++  return dict ? dict->FindInt(key) : std::nullopt;
++}
++
++std::optional<double> FindNestedDouble(const base::DictValue& persona,
++                                       std::string_view dict_key,
++                                       std::string_view key) {
++  const base::DictValue* dict = persona.FindDict(dict_key);
++  return dict ? dict->FindDouble(key) : std::nullopt;
++}
++
++std::vector<std::string> DeriveNavigatorLanguages(std::string_view locale) {
++  std::vector<std::string> languages;
++  if (locale.empty()) {
++    return languages;
++  }
++
++  languages.emplace_back(locale);
++  const size_t separator = locale.find('-');
++  if (separator != std::string_view::npos && separator > 0) {
++    languages.emplace_back(locale.substr(0, separator));
++  }
++  return languages;
 +}
 +
 +std::string ResolvePersonaPlatform(const base::DictValue& persona) {
@@ -1227,6 +1616,19 @@
 +    return snapshot;
 +  }
 +
++  if (const std::string* value = persona->FindString("id")) {
++    snapshot.id = *value;
++    snapshot.noise_seed = *value;
++  }
++  if (const std::string* value = persona->FindString("name")) {
++    snapshot.name = *value;
++  }
++  if (const std::string* value = persona->FindString("platform")) {
++    snapshot.os = *value;
++    snapshot.platform = *value;
++  }
++  snapshot.device = "Desktop";
++  snapshot.passthrough = false;
 +  snapshot.client_hints_enabled =
 +      FindNestedBool(*persona, "advanced", "clientHintsEnabled").value_or(true);
 +  snapshot.allow_background_sync =
@@ -1236,6 +1638,12 @@
 +  snapshot.allow_privacy_sandbox_apis =
 +      FindNestedBool(*persona, "advanced", "allowPrivacySandboxApis")
 +          .value_or(true);
++  snapshot.canvas_noise =
++      FindNestedBool(*persona, "advanced", "canvasNoise").value_or(true);
++  snapshot.audio_noise =
++      FindNestedBool(*persona, "advanced", "audioNoise").value_or(true);
++  snapshot.font_metric_noise =
++      FindNestedBool(*persona, "advanced", "fontMetricNoise").value_or(false);
 +  snapshot.ua_ch_mobile =
 +      FindNestedBool(*persona, "uaCh", "mobile").value_or(false);
 +  snapshot.ua_ch_wow64 =
@@ -1243,6 +1651,19 @@
 +
 +  if (const std::string* user_agent = persona->FindString("userAgent")) {
 +    snapshot.user_agent = *user_agent;
++  }
++  if (const std::string* value = persona->FindString("navigatorVendor")) {
++    snapshot.navigator_vendor = *value;
++  }
++  if (const std::string* value = persona->FindString("navigatorProductSub")) {
++    snapshot.navigator_product_sub = *value;
++  }
++  if (const std::string* value = FindNestedString(*persona, "region", "timezone")) {
++    snapshot.timezone = *value;
++  }
++  if (const std::string* value = FindNestedString(*persona, "region", "locale")) {
++    snapshot.locale = *value;
++    snapshot.navigator_languages = DeriveNavigatorLanguages(*value);
 +  }
 +  if (const std::string* accept_language =
 +          FindNestedString(*persona, "region", "acceptLanguage")) {
@@ -1269,6 +1690,103 @@
 +          FindNestedString(*persona, "uaCh", "fullVersion")) {
 +    snapshot.ua_ch_full_version = *value;
 +  }
++  if (const std::string* value = FindNestedString(*persona, "gpu", "vendor")) {
++    snapshot.gpu_vendor = *value;
++  }
++  if (const std::string* value = FindNestedString(*persona, "gpu", "renderer")) {
++    snapshot.gpu_renderer = *value;
++  }
++  if (const std::string* value =
++          FindNestedString(*persona, "gpu", "webgpuAdapter")) {
++    snapshot.webgpu_adapter = *value;
++  }
++  if (const std::string* value =
++          FindNestedString(*persona, "gpu", "driver")) {
++    snapshot.gpu_driver = *value;
++  }
++  if (const std::string* value = FindNestedString(*persona, "fonts", "id")) {
++    snapshot.font_pack_id = *value;
++  }
++  if (const std::string* value =
++          FindNestedString(*persona, "fonts", "name")) {
++    snapshot.font_pack_name = *value;
++  }
++  const base::DictValue* fonts_dict = persona->FindDict("fonts");
++  const base::ListValue* font_families_list =
++      fonts_dict ? fonts_dict->FindList("families") : nullptr;
++  if (font_families_list) {
++    for (const auto& value : *font_families_list) {
++      if (value.is_string()) {
++        snapshot.font_families.push_back(value.GetString());
++      }
++    }
++  }
++  const base::ListValue* font_aliases_list =
++      fonts_dict ? fonts_dict->FindList("aliases") : nullptr;
++  if (font_aliases_list) {
++    for (const auto& value : *font_aliases_list) {
++      if (value.is_string()) {
++        snapshot.font_aliases.push_back(value.GetString());
++      }
++    }
++  }
++  if (const std::string* value =
++          FindNestedString(*persona, "fontRendering", "engine")) {
++    snapshot.font_rendering_engine = *value;
++  }
++  if (const std::string* value =
++          FindNestedString(*persona, "fontRendering", "id")) {
++    snapshot.font_rendering_id = *value;
++  }
++  snapshot.font_antialiasing =
++      FindNestedBool(*persona, "fontRendering", "antialiasing")
++          .value_or(false);
++  snapshot.font_subpixel_rendering =
++      FindNestedBool(*persona, "fontRendering", "subpixelRendering")
++          .value_or(false);
++  snapshot.font_lcd_text =
++      FindNestedBool(*persona, "fontRendering", "lcdText").value_or(false);
++  snapshot.hardware_concurrency =
++      FindNestedInt(*persona, "hardware", "hardwareConcurrency").value_or(0);
++  snapshot.device_memory =
++      FindNestedInt(*persona, "hardware", "deviceMemory").value_or(0);
++  snapshot.max_touch_points =
++      FindNestedInt(*persona, "hardware", "maxTouchPoints").value_or(0);
++  snapshot.screen_width =
++      FindNestedInt(*persona, "screen", "width").value_or(0);
++  snapshot.screen_height =
++      FindNestedInt(*persona, "screen", "height").value_or(0);
++  snapshot.avail_left =
++      FindNestedInt(*persona, "screen", "availLeft").value_or(0);
++  snapshot.avail_top =
++      FindNestedInt(*persona, "screen", "availTop").value_or(0);
++  snapshot.outer_width =
++      FindNestedInt(*persona, "screen", "outerWidth").value_or(0);
++  snapshot.outer_height =
++      FindNestedInt(*persona, "screen", "outerHeight").value_or(0);
++  snapshot.avail_width =
++      FindNestedInt(*persona, "screen", "availWidth")
++          .value_or(snapshot.screen_width);
++  snapshot.avail_height =
++      FindNestedInt(*persona, "screen", "availHeight")
++          .value_or(snapshot.screen_height);
++  snapshot.color_depth = 24;
++  snapshot.pixel_depth = 24;
++  snapshot.device_scale_factor =
++      FindNestedDouble(*persona, "screen", "deviceScaleFactor").value_or(0.0);
++  snapshot.refresh_rate =
++      FindNestedInt(*persona, "screen", "refreshRate").value_or(0);
++  snapshot.audio_base_latency =
++      FindNestedDouble(*persona, "mediaDevices", "audioBaseLatency")
++          .value_or(0.0);
++  snapshot.audio_output_latency =
++      FindNestedDouble(*persona, "mediaDevices", "audioOutputLatency")
++          .value_or(0.0);
++  if (const std::string* value = FindNestedString(*persona, "network", "type")) {
++    snapshot.network_type = *value;
++  }
++  snapshot.network_downlink_max =
++      FindNestedDouble(*persona, "network", "downlinkMax").value_or(0.0);
 +
 +  const base::DictValue* ua_ch = persona->FindDict("uaCh");
 +  const base::ListValue* form_factors =
