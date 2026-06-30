@@ -123,25 +123,33 @@
    virtual blink::scheduler::WebAgentGroupScheduler&
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -5297,6 +5297,21 @@ void RenderFrameImpl::PrepareFrameForCom
+@@ -102,6 +102,7 @@
+ #include "content/renderer/mojo/blink_interface_registry_impl.h"
+ #include "content/renderer/navigation_client.h"
+ #include "content/renderer/navigation_state.h"
++#include "content/renderer/persona_timezone_coordinator.h"
+ #include "content/renderer/policy_container_util.h"
+ #include "content/renderer/render_process.h"
+ #include "content/renderer/render_thread_impl.h"
+@@ -3778,6 +3779,7 @@ blink::WebFrame* RenderFrameImpl::FindFr
+ }
+ 
+ void RenderFrameImpl::WillDetach(blink::DetachReason detach_reason) {
++  PersonaTimezoneCoordinator::GetInstance().Clear(this);
+   if (detach_reason == blink::DetachReason::kNavigation) {
+     if (navigation_client_impl_) {
+       navigation_client_impl_->ResetWithoutCancelling();
+@@ -5297,6 +5299,13 @@ void RenderFrameImpl::PrepareFrameForCom
      const GURL& url,
      const blink::mojom::CommitNavigationParams& commit_params) {
    is_requesting_navigation_ = false;
 +  persona_snapshot_ = commit_params.persona_snapshot;
-+  if (!persona_snapshot_.IsEnabled() || persona_snapshot_.timezone.empty()) {
-+    persona_timezone_override_.reset();
-+  } else if (persona_timezone_override_) {
-+    persona_timezone_override_->change(
-+        blink::String::FromUTF8(persona_snapshot_.timezone));
-+  } else {
-+    auto result = blink::TimeZoneController::SetTimeZoneOverride(
-+        blink::String::FromUTF8(persona_snapshot_.timezone));
-+    if (result.status ==
-+            blink::TimeZoneController::TimeZoneOverrideStatus::kSuccess &&
-+        result.handle) {
-+      persona_timezone_override_ = std::move(result.handle);
-+    }
-+  }
++  // Delegate the process-global timezone override to the renderer-wide
++  // coordinator, which reconciles all frames' desired timezones into a single
++  // TimeZoneController handle.
++  PersonaTimezoneCoordinator::GetInstance().Update(
++      this, persona_snapshot_.IsEnabled() ? persona_snapshot_.timezone
++                                          : std::string());
    GetContentClient()->SetActiveURL(
        url, frame_->Top()->GetSecurityOrigin().ToString().Utf8());
  
@@ -155,15 +163,7 @@
  #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
  #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
  #include "third_party/blink/public/common/permissions_policy/document_policy.h"
-@@ -119,6 +120,7 @@
- #include "third_party/blink/public/web/web_local_frame.h"
- #include "third_party/blink/public/web/web_local_frame_client.h"
- #include "third_party/blink/public/web/web_meaningful_layout.h"
-+#include "third_party/blink/renderer/core/timezone/timezone_controller.h"
- #include "ui/accessibility/ax_event.h"
- #include "ui/accessibility/ax_mode.h"
- #include "ui/accessibility/ax_node_id_forward.h"
-@@ -644,6 +646,9 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -644,6 +645,9 @@ class CONTENT_EXPORT RenderFrameImpl
    base::ScopedClosureRunner CreateScopedClientNavigationThrottler() override;
  
    bool IsForInitialWebUI() const override;
@@ -173,13 +173,11 @@
  
    // Dispatches the current state of selection on the webpage to the browser if
    // it has changed or if the forced flag is passed. The forced flag is used
-@@ -1499,6 +1504,10 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -1499,6 +1503,8 @@ class CONTENT_EXPORT RenderFrameImpl
    // scroll offset) within the main frame document.
    std::optional<gfx::Rect> main_frame_viewport_rect_;
  
 +  blink::HeliumPersonaSnapshot persona_snapshot_;
-+  std::unique_ptr<blink::TimeZoneController::TimeZoneOverride>
-+      persona_timezone_override_;
 +
    std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
        websocket_handshake_throttle_provider_;
@@ -325,7 +323,7 @@
  bool IsRunningMicrotasks(ScriptState* script_state) {
    if (auto* microtask_queue = ToMicrotaskQueue(script_state))
      return microtask_queue->IsRunningMicrotasks();
-@@ -1572,6 +1586,10 @@
+@@ -1572,6 +1586,10 @@ bool LocalDOMWindow::offscreenBuffering(
  }
  
  int LocalDOMWindow::outerHeight() const {
@@ -336,7 +334,7 @@
    if (!GetFrame())
      return 0;
  
-@@ -1597,6 +1615,10 @@
+@@ -1597,6 +1615,10 @@ int LocalDOMWindow::outerHeight() const
  }
  
  int LocalDOMWindow::outerWidth() const {
@@ -347,7 +345,7 @@
    if (!GetFrame())
      return 0;
  
-@@ -1800,6 +1822,10 @@
+@@ -1800,6 +1822,10 @@ CSSStyleDeclaration* LocalDOMWindow::get
  }
  
  double LocalDOMWindow::devicePixelRatio() const {
@@ -853,3 +851,174 @@
          return WebGLAny(script_state,
                          String(ContextGL()->GetString(GL_VENDOR)));
        }
+--- /dev/null
++++ b/content/renderer/persona_timezone_coordinator.cc
+@@ -0,0 +1,87 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "content/renderer/persona_timezone_coordinator.h"
++
++#include <algorithm>
++#include <utility>
++
++#include "content/renderer/render_frame_impl.h"
++
++namespace content {
++
++// static
++PersonaTimezoneCoordinator& PersonaTimezoneCoordinator::GetInstance() {
++  static base::NoDestructor<PersonaTimezoneCoordinator> instance;
++  return *instance;
++}
++
++PersonaTimezoneCoordinator::PersonaTimezoneCoordinator() = default;
++
++void PersonaTimezoneCoordinator::Update(RenderFrameImpl* frame,
++                                        const std::string& timezone) {
++  DCHECK(frame);
++  auto it = std::find_if(
++      desired_.begin(), desired_.end(),
++      [frame](const auto& entry) { return entry.first.get() == frame; });
++  if (timezone.empty()) {
++    if (it != desired_.end()) {
++      desired_.erase(it);
++    }
++  } else if (it != desired_.end()) {
++    it->second = timezone;
++  } else {
++    desired_.emplace_back(frame, timezone);
++  }
++  Recompute();
++}
++
++void PersonaTimezoneCoordinator::Clear(RenderFrameImpl* frame) {
++  std::erase_if(desired_,
++                [frame](const auto& entry) { return entry.first.get() == frame; });
++  Recompute();
++}
++
++std::string PersonaTimezoneCoordinator::PickEffective() {
++  std::string last;
++  for (const auto& [frame, timezone] : desired_) {
++    // The main frame's timezone wins outright.
++    if (frame->IsMainFrame()) {
++      return timezone;
++    }
++    last = timezone;
++  }
++  return last;
++}
++
++void PersonaTimezoneCoordinator::Recompute() {
++  std::string effective = PickEffective();
++
++  if (effective.empty()) {
++    // No frame needs an override: release the single handle, which restores
++    // the host timezone process-wide.
++    override_.reset();
++    return;
++  }
++
++  blink::String tz_blink = blink::String::FromUTF8(effective);
++  if (override_) {
++    // change() is a no-op when the timezone is already equal, so recurring
++    // Updates with the same timezone are cheap.
++    override_->change(tz_blink);
++    return;
++  }
++
++  // No handle yet: acquire the one global override. If a non-persona owner
++  // (e.g. DevTools emulation) already holds it, leave |override_| null and do
++  // not steal it; persona timezone is best-effort relative to such a session.
++  auto result = blink::TimeZoneController::SetTimeZoneOverride(tz_blink);
++  if (result.status ==
++          blink::TimeZoneController::TimeZoneOverrideStatus::kSuccess &&
++      result.handle) {
++    override_ = std::move(result.handle);
++  }
++}
++
++}  // namespace content
+--- /dev/null
++++ b/content/renderer/persona_timezone_coordinator.h
+@@ -0,0 +1,78 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CONTENT_RENDERER_PERSONA_TIMEZONE_COORDINATOR_H_
++#define CONTENT_RENDERER_PERSONA_TIMEZONE_COORDINATOR_H_
++
++#include <string>
++#include <utility>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "base/no_destructor.h"
++#include "third_party/blink/renderer/core/timezone/timezone_controller.h"
++
++namespace content {
++
++class RenderFrameImpl;
++
++// Owns the single process-wide blink::TimeZoneController::TimeZoneOverride
++// handle on behalf of every RenderFrameImpl in this renderer.
++//
++// blink::TimeZoneController enforces exclusive single-owner semantics: only one
++// override may be active per renderer process. If each RenderFrameImpl held its
++// own handle they would clobber one another (a second acquirer receives
++// kAlreadyInEffect and silently renders the first frame's timezone, and the
++// first frame's teardown clears the override for everyone else). This
++// coordinator reconciles every frame's desired timezone into exactly one
++// handle.
++//
++// Conflict policy: when multiple frames request different timezones, the main
++// frame's timezone wins; otherwise the most recently registered non-main frame
++// wins. The handle is released (restoring the host timezone) only when no
++// remaining frame wants an override.
++//
++// Not thread-safe; all methods must be called on the renderer main thread
++// (PrepareFrameForCommitment and WillDetach both run there).
++class PersonaTimezoneCoordinator {
++ public:
++  PersonaTimezoneCoordinator(const PersonaTimezoneCoordinator&) = delete;
++  PersonaTimezoneCoordinator& operator=(const PersonaTimezoneCoordinator&) =
++      delete;
++
++  static PersonaTimezoneCoordinator& GetInstance();
++
++  // Records |frame|'s desired timezone. An empty |timezone| means "this frame
++  // wants no override" (equivalent to Clear). Recomputes and drives the single
++  // global handle.
++  void Update(RenderFrameImpl* frame, const std::string& timezone);
++
++  // Removes |frame| from tracking. Called from RenderFrameImpl::WillDetach,
++  // before the frame is destroyed. Idempotent.
++  void Clear(RenderFrameImpl* frame);
++
++ private:
++  friend class base::NoDestructor<PersonaTimezoneCoordinator>;
++
++  PersonaTimezoneCoordinator();
++  ~PersonaTimezoneCoordinator() = default;
++
++  // Reads |desired_| and acquires / changes / releases the global handle.
++  void Recompute();
++
++  // Returns the effective timezone, or empty if no frame wants an override.
++  std::string PickEffective();
++
++  // Desired timezones keyed by frame. Cleared in WillDetach before the
++  // RenderFrameImpl is destroyed, so entries never dangle.
++  std::vector<std::pair<raw_ptr<RenderFrameImpl>, std::string>> desired_;
++
++  // The single process-wide handle. Present iff at least one frame wants an
++  // override and its timezone was accepted by TimeZoneController.
++  std::unique_ptr<blink::TimeZoneController::TimeZoneOverride> override_;
++};
++
++}  // namespace content
++
++#endif  // CONTENT_RENDERER_PERSONA_TIMEZONE_COORDINATOR_H_
