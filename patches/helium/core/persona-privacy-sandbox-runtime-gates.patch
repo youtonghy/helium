@@ -157,19 +157,9 @@
 // editablePersona_.advanced.allowPrivacySandboxApis
 // editablePersona_.advanced.allowPrivateStateTokens
 // editablePersona_.advanced.allowWebNn
-diff --git a/content/browser/renderer_host/navigation_request.cc b/content/browser/renderer_host/navigation_request.cc
-index 29e5b43..6f3270c 100644
 --- a/content/browser/renderer_host/navigation_request.cc
 +++ b/content/browser/renderer_host/navigation_request.cc
-@@ -150,6 +150,7 @@
- #include "content/public/common/origin_util.h"
- #include "content/public/common/url_constants.h"
- #include "content/public/common/url_utils.h"
-+#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
- #include "mojo/public/cpp/bindings/pending_receiver.h"
- #include "mojo/public/cpp/system/data_pipe.h"
- #include "net/base/features.h"
-@@ -1007,6 +1008,15 @@ network::mojom::WebSandboxFlags GetSandboxFlagsInitiator(
+@@ -1008,6 +1008,15 @@ network::mojom::WebSandboxFlags GetSandb
  bool IsSharedStorageWritableEligibleForNavigationRequest(
      FrameTreeNode* frame_tree_node,
      const GURL& url) {
@@ -185,8 +175,6 @@ index 29e5b43..6f3270c 100644
    // False if the <iframe> does not have the "sharedstoragewritable" opt-in
    // attribute.
    if (!frame_tree_node->shared_storage_writable_opted_in()) {
-diff --git a/content/browser/renderer_host/render_frame_host_impl.cc b/content/browser/renderer_host/render_frame_host_impl.cc
-index 476edd0..0d9f090 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.cc
 +++ b/content/browser/renderer_host/render_frame_host_impl.cc
 @@ -238,6 +238,7 @@
@@ -197,7 +185,7 @@ index 476edd0..0d9f090 100644
  #include "ipc/constants.mojom.h"
  #include "media/base/media_switches.h"
  #include "media/media_buildflags.h"
-@@ -943,6 +944,13 @@ bool IsWindowManagementGranted(RenderFrameHost* host) {
+@@ -943,6 +944,13 @@ bool IsWindowManagementGranted(RenderFra
               host) == blink::mojom::PermissionStatus::GRANTED;
  }
  
@@ -211,7 +199,7 @@ index 476edd0..0d9f090 100644
  bool IsOpenGraphMetadataValid(const blink::mojom::OpenGraphMetadata* metadata) {
    return !metadata->image || metadata->image->SchemeIsHTTPOrHTTPS();
  }
-@@ -10462,6 +10470,10 @@ void RenderFrameHostImpl::SendLegacyTechEvent(
+@@ -10462,6 +10470,10 @@ void RenderFrameHostImpl::SendLegacyTech
  
  void RenderFrameHostImpl::SendPrivateAggregationRequestsForFencedFrameEvent(
      const std::string& event_type) {
@@ -222,7 +210,7 @@ index 476edd0..0d9f090 100644
    if (!base::FeatureList::IsEnabled(blink::features::kPrivateAggregationApi) ||
        !blink::features::kPrivateAggregationApiEnabledInProtectedAudience
             .Get()) {
-@@ -10564,6 +10576,10 @@ void RenderFrameHostImpl::CreateFencedFrame(
+@@ -10564,6 +10576,10 @@ void RenderFrameHostImpl::CreateFencedFr
      blink::mojom::RemoteFrameInterfacesFromRendererPtr remote_frame_interfaces,
      const blink::RemoteFrameToken& frame_token,
      const base::UnguessableToken& devtools_frame_token) {
@@ -233,7 +221,7 @@ index 476edd0..0d9f090 100644
    // We should defer fenced frame creation during prerendering, so creation at
    // this point is an error.
    if (GetLifecycleState() == RenderFrameHost::LifecycleState::kPrerendering) {
-@@ -10633,6 +10649,10 @@ void RenderFrameHostImpl::SendFencedFrameReportingBeacon(
+@@ -10633,6 +10649,10 @@ void RenderFrameHostImpl::SendFencedFram
      const std::string& event_type,
      const std::vector<blink::FencedFrame::ReportingDestination>& destinations,
      bool cross_origin_exposed) {
@@ -244,7 +232,7 @@ index 476edd0..0d9f090 100644
    if (!IsFencedFrameReportingFromRendererAllowed(cross_origin_exposed)) {
      return;
    }
-@@ -10663,6 +10683,10 @@ void RenderFrameHostImpl::SendFencedFrameReportingBeacon(
+@@ -10663,6 +10683,10 @@ void RenderFrameHostImpl::SendFencedFram
  void RenderFrameHostImpl::SendFencedFrameReportingBeaconToCustomURL(
      const GURL& destination_url,
      bool cross_origin_exposed) {
@@ -255,7 +243,7 @@ index 476edd0..0d9f090 100644
    if (!destination_url.is_valid() ||
        !destination_url.SchemeIs(url::kHttpsScheme)) {
      mojo::ReportBadMessage(
-@@ -10683,6 +10707,10 @@ void RenderFrameHostImpl::SendFencedFrameReportingBeaconToCustomURL(
+@@ -10683,6 +10707,10 @@ void RenderFrameHostImpl::SendFencedFram
  void RenderFrameHostImpl::MaybeSendFencedFrameAutomaticReportingBeacon(
      NavigationRequest& navigation_request,
      blink::mojom::AutomaticBeaconType event_type) {
@@ -266,7 +254,7 @@ index 476edd0..0d9f090 100644
    if (!blink::features::IsFencedFramesEnabled()) {
      return;
    }
-@@ -10895,6 +10923,10 @@ void RenderFrameHostImpl::SetFencedFrameAutomaticBeaconReportEventData(
+@@ -10895,6 +10923,10 @@ void RenderFrameHostImpl::SetFencedFrame
      const std::vector<blink::FencedFrame::ReportingDestination>& destinations,
      bool once,
      bool cross_origin_exposed) {
@@ -277,8 +265,6 @@ index 476edd0..0d9f090 100644
    if (!blink::features::IsFencedFramesEnabled()) {
      mojo::ReportBadMessage(
          "SetFencedFrameAutomaticBeaconReportEventData() received while "
-diff --git a/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc b/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc
-index 72baffb..405764c 100644
 --- a/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc
 +++ b/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc
 @@ -42,6 +42,7 @@
@@ -303,7 +289,7 @@ index 72baffb..405764c 100644
  // This class is used to chain multiple mojo::MessageFilter. Messages will be
  // processed by the filters in the same order as the filters are added with the
  // Add() method. WillDispatch() might not be called for all filters or might see
-@@ -221,6 +229,9 @@ void RenderFrameHostImpl::SetUpMojoConnection() {
+@@ -221,6 +229,9 @@ void RenderFrameHostImpl::SetUpMojoConne
          [](RenderFrameHostImpl* impl,
             mojo::PendingAssociatedReceiver<
                 blink::mojom::SharedStorageDocumentService> receiver) {
@@ -313,7 +299,7 @@ index 72baffb..405764c 100644
            if (SharedStorageDocumentServiceImpl::GetForCurrentDocument(impl)) {
              // TODO(crbug.com/401559926): The renderer somehow requested two
              // SharedStorageDocumentServiceImpl associated with the same
-@@ -322,6 +333,9 @@ void RenderFrameHostImpl::SetUpMojoConnection() {
+@@ -322,6 +333,9 @@ void RenderFrameHostImpl::SetUpMojoConne
            [](RenderFrameHostImpl* impl,
               mojo::PendingAssociatedReceiver<blink::mojom::AttributionHost>
                   receiver) {
@@ -323,8 +309,6 @@ index 72baffb..405764c 100644
              AttributionHost::BindReceiver(std::move(receiver), impl);
            },
            base::Unretained(this)));
-diff --git a/content/browser/shared_storage/shared_storage_document_service_impl.cc b/content/browser/shared_storage/shared_storage_document_service_impl.cc
-index 6cc6782..863433d 100644
 --- a/content/browser/shared_storage/shared_storage_document_service_impl.cc
 +++ b/content/browser/shared_storage/shared_storage_document_service_impl.cc
 @@ -27,6 +27,7 @@
@@ -349,7 +333,7 @@ index 6cc6782..863433d 100644
  }  // namespace
  
  const char kSharedStorageDisabledMessage[] = "sharedStorage is disabled";
-@@ -118,6 +126,12 @@ void SharedStorageDocumentServiceImpl::CreateWorklet(
+@@ -118,6 +126,12 @@ void SharedStorageDocumentServiceImpl::C
      mojo::PendingAssociatedReceiver<blink::mojom::SharedStorageWorkletHost>
          worklet_host,
      CreateWorkletCallback callback) {
@@ -362,7 +346,7 @@ index 6cc6782..863433d 100644
    create_worklet_called_ = true;
    bool is_same_origin =
        render_frame_host().GetLastCommittedOrigin().IsSameOriginWith(
-@@ -164,6 +178,11 @@ void SharedStorageDocumentServiceImpl::SharedStorageUpdate(
+@@ -164,6 +178,11 @@ void SharedStorageDocumentServiceImpl::S
      network::mojom::SharedStorageModifierMethodWithOptionsPtr
          method_with_options,
      SharedStorageUpdateCallback callback) {
@@ -374,7 +358,7 @@ index 6cc6782..863433d 100644
    if (render_frame_host().GetLastCommittedOrigin().opaque()) {
      receiver_.ReportBadMessage(
          "Attempted to call SharedStorageUpdate() from an opaque origin "
-@@ -202,6 +221,11 @@ void SharedStorageDocumentServiceImpl::SharedStorageBatchUpdate(
+@@ -202,6 +221,11 @@ void SharedStorageDocumentServiceImpl::S
          methods_with_options,
      const std::optional<std::string>& with_lock,
      SharedStorageBatchUpdateCallback callback) {
@@ -386,7 +370,7 @@ index 6cc6782..863433d 100644
    if (render_frame_host().GetLastCommittedOrigin().opaque()) {
      receiver_.ReportBadMessage(
          "Attempted to call SharedStorageBatchUpdate() from an opaque origin "
-@@ -307,6 +331,16 @@ SharedStorageDocumentServiceImpl::GetSharedStorageRuntimeManager() {
+@@ -307,6 +331,16 @@ SharedStorageDocumentServiceImpl::GetSha
  bool SharedStorageDocumentServiceImpl::IsSharedStorageAllowed(
      std::string* out_debug_message,
      bool* out_block_is_site_setting_specific) {
@@ -403,8 +387,6 @@ index 6cc6782..863433d 100644
    // Will trigger a call to
    // `content_settings::PageSpecificContentSettings::BrowsingDataAccessed()` for
    // reporting purposes.
-diff --git a/content/browser/shared_storage/shared_storage_worklet_host.cc b/content/browser/shared_storage/shared_storage_worklet_host.cc
-index f5bfb61..f48ac4a 100644
 --- a/content/browser/shared_storage/shared_storage_worklet_host.cc
 +++ b/content/browser/shared_storage/shared_storage_worklet_host.cc
 @@ -55,6 +55,7 @@
@@ -428,7 +410,7 @@ index f5bfb61..f48ac4a 100644
  net::NetworkTrafficAnnotationTag CreateDataOptInNetworkAnnotationTag() {
    return net::DefineNetworkTrafficAnnotation("shared_storage_worklet_host", R"(
      semantics {
-@@ -601,6 +608,14 @@ void SharedStorageWorkletHost::SelectURL(
+@@ -601,6 +608,14 @@ void SharedStorageWorkletHost::SelectURL
      const std::u16string& saved_query_name,
      base::TimeTicks start_time,
      SelectURLCallback callback) {
@@ -456,7 +438,7 @@ index f5bfb61..f48ac4a 100644
    CHECK(private_aggregation_config);
    // `page_` can be null. See test
    // MainFrameDocumentAssociatedDataChangesOnSameSiteNavigation in
-@@ -1030,6 +1051,11 @@ void SharedStorageWorkletHost::SharedStorageUpdate(
+@@ -1030,6 +1051,11 @@ void SharedStorageWorkletHost::SharedSto
      network::mojom::SharedStorageModifierMethodWithOptionsPtr
          method_with_options,
      SharedStorageUpdateCallback callback) {
@@ -468,7 +450,7 @@ index f5bfb61..f48ac4a 100644
    std::string debug_message;
    if (!IsSharedStorageAllowed(&debug_message)) {
      std::move(callback).Run(GetSharedStorageErrorMessage(
-@@ -1048,6 +1074,11 @@ void SharedStorageWorkletHost::SharedStorageBatchUpdate(
+@@ -1048,6 +1074,11 @@ void SharedStorageWorkletHost::SharedSto
          methods_with_options,
      const std::optional<std::string>& with_lock,
      SharedStorageBatchUpdateCallback callback) {
@@ -480,7 +462,7 @@ index f5bfb61..f48ac4a 100644
    std::string debug_message;
    if (!IsSharedStorageAllowed(&debug_message)) {
      std::move(callback).Run(GetSharedStorageErrorMessage(
-@@ -1064,6 +1095,13 @@ void SharedStorageWorkletHost::SharedStorageBatchUpdate(
+@@ -1064,6 +1095,13 @@ void SharedStorageWorkletHost::SharedSto
  void SharedStorageWorkletHost::SharedStorageGet(
      const std::u16string& key,
      SharedStorageGetCallback callback) {
@@ -494,7 +476,7 @@ index f5bfb61..f48ac4a 100644
    std::string debug_message;
    if (!IsSharedStorageAllowed(&debug_message)) {
      std::move(callback).Run(blink::mojom::SharedStorageGetStatus::kError,
-@@ -1114,6 +1152,15 @@ void SharedStorageWorkletHost::SharedStorageGet(
+@@ -1114,6 +1152,15 @@ void SharedStorageWorkletHost::SharedSto
  void SharedStorageWorkletHost::SharedStorageKeys(
      mojo::PendingRemote<blink::mojom::SharedStorageEntriesListener>
          pending_listener) {
@@ -510,7 +492,7 @@ index f5bfb61..f48ac4a 100644
    std::string debug_message;
    if (!IsSharedStorageAllowed(&debug_message)) {
      mojo::Remote<blink::mojom::SharedStorageEntriesListener> listener(
-@@ -1142,6 +1189,15 @@ void SharedStorageWorkletHost::SharedStorageEntries(
+@@ -1142,6 +1189,15 @@ void SharedStorageWorkletHost::SharedSto
      mojo::PendingRemote<blink::mojom::SharedStorageEntriesListener>
          pending_listener,
      bool values_only) {
@@ -526,7 +508,7 @@ index f5bfb61..f48ac4a 100644
    std::string debug_message;
    if (!IsSharedStorageAllowed(&debug_message)) {
      mojo::Remote<blink::mojom::SharedStorageEntriesListener> listener(
-@@ -1169,6 +1225,12 @@ void SharedStorageWorkletHost::SharedStorageEntries(
+@@ -1169,6 +1225,12 @@ void SharedStorageWorkletHost::SharedSto
  
  void SharedStorageWorkletHost::SharedStorageLength(
      SharedStorageLengthCallback callback) {
@@ -539,7 +521,7 @@ index f5bfb61..f48ac4a 100644
    std::string debug_message;
    if (!IsSharedStorageAllowed(&debug_message)) {
      std::move(callback).Run(
-@@ -1212,6 +1274,12 @@ void SharedStorageWorkletHost::SharedStorageLength(
+@@ -1212,6 +1274,12 @@ void SharedStorageWorkletHost::SharedSto
  
  void SharedStorageWorkletHost::SharedStorageRemainingBudget(
      SharedStorageRemainingBudgetCallback callback) {
@@ -552,7 +534,7 @@ index f5bfb61..f48ac4a 100644
    std::string debug_message;
    if (!IsSharedStorageAllowed(&debug_message)) {
      std::move(callback).Run(
-@@ -1254,6 +1322,13 @@ void SharedStorageWorkletHost::SharedStorageRemainingBudget(
+@@ -1254,6 +1322,13 @@ void SharedStorageWorkletHost::SharedSto
  
  void SharedStorageWorkletHost::GetInterestGroups(
      GetInterestGroupsCallback callback) {
@@ -566,7 +548,7 @@ index f5bfb61..f48ac4a 100644
    InterestGroupManagerImpl* interest_group_manager =
        static_cast<InterestGroupManagerImpl*>(
            storage_partition_->GetInterestGroupManager());
-@@ -1768,6 +1843,10 @@ SharedStorageWorkletHost::MaybeConstructPrivateAggregationOperationDetails(
+@@ -1768,6 +1843,10 @@ SharedStorageWorkletHost::MaybeConstruct
      return nullptr;
    }
  
@@ -577,10 +559,11 @@ index f5bfb61..f48ac4a 100644
    PrivateAggregationManager* private_aggregation_manager =
        PrivateAggregationManager::GetManager(*browser_context_);
    CHECK(private_aggregation_manager);
-@@ -1815,6 +1894,16 @@ bool SharedStorageWorkletHost::IsSharedStorageAllowed(
+@@ -1814,6 +1893,16 @@ bool SharedStorageWorkletHost::IsSharedS
+     }
      return false;
    }
- 
++
 +  if (!HeliumPersonaAllowsPrivacySandboxApis(browser_context_)) {
 +    if (out_debug_message) {
 +      *out_debug_message = kSharedStorageDisabledMessage;
@@ -590,12 +573,9 @@ index f5bfb61..f48ac4a 100644
 +    }
 +    return false;
 +  }
-+
+ 
    RenderFrameHost* rfh =
        document_service_ ? &(document_service_->render_frame_host()) : nullptr;
-   return GetContentClient()->browser()->IsSharedStorageAllowed(
-diff --git a/content/browser/storage_partition_impl.cc b/content/browser/storage_partition_impl.cc
-index ea8aefc..6c99ff4 100644
 --- a/content/browser/storage_partition_impl.cc
 +++ b/content/browser/storage_partition_impl.cc
 @@ -162,6 +162,7 @@
@@ -606,7 +586,7 @@ index ea8aefc..6c99ff4 100644
  #include "third_party/blink/public/common/navigation/preloading_headers.h"
  #include "third_party/blink/public/common/permissions/permission_utils.h"
  #include "third_party/blink/public/common/storage_key/storage_key.h"
-@@ -2541,6 +2542,15 @@ void StoragePartitionImpl::OnSharedStorageHeaderReceived(
+@@ -2541,6 +2542,15 @@ void StoragePartitionImpl::OnSharedStora
          methods_with_options,
      const std::optional<std::string>& with_lock,
      OnSharedStorageHeaderReceivedCallback callback) {
