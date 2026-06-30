@@ -66,6 +66,10 @@ def get_patch_paths(repo_root, platforms_dir):
             merged_series = patches_dir / "series.merged"
             if merged_series.exists():
                 series_file = merged_series
+            else:
+                print(f'WARNING: no patches/series or patches/series.merged '
+                      f'for {platform}; skipping platform string extraction.')
+                continue
         series_files.append(series_file)
 
     for series_file in series_files:
