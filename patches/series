@@ -89,6 +89,7 @@ helium/core/add-component-managed-schema-support.patch
 helium/core/ublock-install-as-component.patch
 helium/core/clean-omnibox-suggestions.patch
 helium/core/persona-state-management.patch
+helium/core/persona-navigator-runtime-overrides.patch
 helium/core/persona-settings-ui.patch
 helium/core/persona-launch-picker.patch
 helium/core/persona-session-indicator.patch
