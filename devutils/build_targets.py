@@ -38,6 +38,7 @@ _DEFAULT_MACOS_ROOT = os.environ.get("HELIUM_MACOS_ROOT",
 
 
 def resolve_paths(macos_root):
+    """Return key paths inside a helium-macos warm build tree."""
     src_dir = os.path.join(macos_root, "build", "src")
     out_dir = os.path.join(src_dir, "out", "Default")
     depot = os.path.join(src_dir, "third_party", "depot_tools")
@@ -55,13 +56,13 @@ def resolve_paths(macos_root):
 def targets_from_failed(out_dir):
     """Extract target output paths from siso_failed_commands*.sh annotations."""
     targets = []
-    pat = re.compile(r"^#\s+(?:CXX|CC|OBJCXX|SOLINK|SOLINK_MODULE|LINK|ACTION)\s+(\S+)")
-    for sh in sorted(glob.glob(os.path.join(out_dir, "siso_failed_commands*.sh"))):
-        with open(sh) as fh:
-            for line in fh:
-                m = pat.match(line)
-                if m:
-                    tok = m.group(1)
+    pattern = re.compile(r"^#\s+(?:CXX|CC|OBJCXX|SOLINK|SOLINK_MODULE|LINK|ACTION)\s+(\S+)")
+    for script_path in sorted(glob.glob(os.path.join(out_dir, "siso_failed_commands*.sh"))):
+        with open(script_path, encoding="utf-8") as failed_commands:
+            for line in failed_commands:
+                match = pattern.match(line)
+                if match:
+                    tok = match.group(1)
                     # ACTION lines look like //path:target(toolchain); take label.
                     if tok.startswith("//"):
                         tok = tok.split("(")[0]
@@ -69,31 +70,31 @@ def targets_from_failed(out_dir):
     # De-dup, preserve order.
     seen = set()
     uniq = []
-    for t in targets:
-        if t not in seen:
-            seen.add(t)
-            uniq.append(t)
+    for target in targets:
+        if target not in seen:
+            seen.add(target)
+            uniq.append(target)
     return uniq
 
 
 def main():
     """Parse args, resolve targets, and invoke autoninja incrementally."""
-    ap = argparse.ArgumentParser(description="Incremental single-target build via autoninja")
-    ap.add_argument("targets", nargs="*", help="ninja targets / output paths")
-    ap.add_argument("--macos-root", default=_DEFAULT_MACOS_ROOT)
-    ap.add_argument("--from-failed",
-                    action="store_true",
-                    help="Derive targets from siso_failed_commands*.sh")
-    ap.add_argument("-k",
-                    "--keep-going",
-                    type=int,
-                    default=0,
-                    help="autoninja -k value (0 = keep going forever)")
-    ap.add_argument("-n",
-                    "--dry-run",
-                    action="store_true",
-                    help="Print the autoninja command without running it")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser(description="Incremental single-target build via autoninja")
+    parser.add_argument("targets", nargs="*", help="ninja targets / output paths")
+    parser.add_argument("--macos-root", default=_DEFAULT_MACOS_ROOT)
+    parser.add_argument("--from-failed",
+                        action="store_true",
+                        help="Derive targets from siso_failed_commands*.sh")
+    parser.add_argument("-k",
+                        "--keep-going",
+                        type=int,
+                        default=0,
+                        help="autoninja -k value (0 = keep going forever)")
+    parser.add_argument("-n",
+                        "--dry-run",
+                        action="store_true",
+                        help="Print the autoninja command without running it")
+    args = parser.parse_args()
 
     src_dir, out_dir, siso, autoninja = resolve_paths(args.macos_root)
 
@@ -118,7 +119,7 @@ def main():
     env = dict(os.environ)
     if os.path.exists(siso):
         env["SISO_PATH"] = siso
-    proc = subprocess.run(argv, cwd=src_dir, env=env)
+    proc = subprocess.run(argv, cwd=src_dir, env=env, check=False)
     sys.exit(proc.returncode)
 
 
