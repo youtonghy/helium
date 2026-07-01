@@ -222,6 +222,7 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot.h
 +  bool client_hints_enabled = true;
 +  bool allow_background_sync = false;
 +  bool allow_contacts = false;
++  bool allow_local_fonts = true;
 +  bool allow_privacy_sandbox_apis = true;
 +  bool ua_ch_mobile = false;
 +  bool ua_ch_wow64 = false;
@@ -347,6 +348,10 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_t
 +
 +  static bool allow_contacts(const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.allow_contacts;
++  }
++
++  static bool allow_local_fonts(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_local_fonts;
 +  }
 +
 +  static bool allow_privacy_sandbox_apis(
@@ -629,6 +634,7 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_t
 +    out->client_hints_enabled = data.client_hints_enabled();
 +    out->allow_background_sync = data.allow_background_sync();
 +    out->allow_contacts = data.allow_contacts();
++    out->allow_local_fonts = data.allow_local_fonts();
 +    out->allow_privacy_sandbox_apis = data.allow_privacy_sandbox_apis();
 +    out->ua_ch_mobile = data.ua_ch_mobile();
 +    out->ua_ch_wow64 = data.ua_ch_wow64();
@@ -713,6 +719,7 @@ Index: b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
 +  bool client_hints_enabled;
 +  bool allow_background_sync;
 +  bool allow_contacts;
++  bool allow_local_fonts;
 +  bool allow_privacy_sandbox_apis;
 +  bool ua_ch_mobile;
 +  bool ua_ch_wow64;
@@ -922,6 +929,7 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +      .Set("clientHintsEnabled", true)
 +      .Set("allowBackgroundSync", false)
 +      .Set("allowContacts", false)
++      .Set("allowLocalFonts", false)
 +      .Set("allowPrivacySandboxApis", true);
 +}
 +
@@ -1260,6 +1268,9 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +  }
 +  if (!advanced->FindBool("allowContacts").has_value()) {
 +    advanced->Set("allowContacts", false);
++  }
++  if (!advanced->FindBool("allowLocalFonts").has_value()) {
++    advanced->Set("allowLocalFonts", false);
 +  }
 +  if (!advanced->FindBool("allowPrivacySandboxApis").has_value()) {
 +    advanced->Set("allowPrivacySandboxApis", true);
@@ -1650,6 +1661,8 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +      FindNestedBool(*persona, "advanced", "allowBackgroundSync").value_or(false);
 +  snapshot.allow_contacts =
 +      FindNestedBool(*persona, "advanced", "allowContacts").value_or(false);
++  snapshot.allow_local_fonts =
++      FindNestedBool(*persona, "advanced", "allowLocalFonts").value_or(false);
 +  snapshot.allow_privacy_sandbox_apis =
 +      FindNestedBool(*persona, "advanced", "allowPrivacySandboxApis")
 +          .value_or(true);

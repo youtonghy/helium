@@ -172,3 +172,4 @@ helium/core/persona-canvas-noise.patch
 helium/core/persona-webgl-readpixels-noise.patch
 helium/core/persona-audio-noise.patch
 helium/core/persona-font-metric-noise.patch
+helium/core/persona-local-fonts-access.patch
