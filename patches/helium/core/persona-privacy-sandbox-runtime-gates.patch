@@ -68,7 +68,6 @@
 // editablePersona_.screen.width
 // editablePersona_.screen.availLeft
 // editablePersona_.screen.outerWidth
-// editablePersona_.screen.windowScreenX
 // editablePersona_.screen.deviceScaleFactor
 // editablePersona_.screen.orientationType
 // editablePersona_.screen.reducedMotion
@@ -78,12 +77,8 @@
 // editablePersona_.fonts.id
 // fontFamiliesText_
 // fontAliasesText_
-// editablePersona_.fontRendering.profileVersion
 // editablePersona_.fontRendering.engine
-// editablePersona_.fontRendering.textGamma
 // editablePersona_.fontRendering.useAutohinter
-// editablePersona_.mediaDevices.audioInputDeviceId
-// editablePersona_.mediaDevices.videoWidth
 // editablePersona_.mediaDevices.audioBaseLatency
 // editablePersona_.mediaDevices.voiceIsolation
 // editablePersona_.network.type
@@ -159,7 +154,7 @@
 // editablePersona_.advanced.allowWebNn
 --- a/content/browser/renderer_host/navigation_request.cc
 +++ b/content/browser/renderer_host/navigation_request.cc
-@@ -1008,6 +1008,15 @@ network::mojom::WebSandboxFlags GetSandb
+@@ -1058,6 +1058,15 @@ network::mojom::WebSandboxFlags GetSandb
  bool IsSharedStorageWritableEligibleForNavigationRequest(
      FrameTreeNode* frame_tree_node,
      const GURL& url) {

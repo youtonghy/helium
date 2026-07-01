@@ -1,0 +1,219 @@
+--- a/content/browser/BUILD.gn
++++ b/content/browser/BUILD.gn
+@@ -1160,6 +1160,8 @@ source_set("browser") {
+     "generic_sensor/web_contents_sensor_provider_proxy.h",
+     "geolocation/geolocation_service_impl.cc",
+     "geolocation/geolocation_service_impl.h",
++    "helium_noise/noise_token_data.cc",
++    "helium_noise/noise_token_data.h",
+     "gpu/browser_gpu_channel_host_factory.cc",
+     "gpu/browser_gpu_channel_host_factory.h",
+     "gpu/browser_gpu_client_delegate.cc",
+--- /dev/null
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -0,0 +1,126 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "content/browser/helium_noise/noise_token_data.h"
++
++#include <array>
++#include <memory>
++#include <span>
++#include <string>
++#include <string_view>
++
++#include "base/check.h"
++#include "base/numerics/byte_conversions.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/supports_user_data.h"
++#include "content/public/browser/browser_context.h"
++#include "crypto/hash.h"
++#include "crypto/random.h"
++#include "url/origin.h"
++
++namespace content {
++
++namespace {
++
++constexpr char kSessionSaltKey[] = "helium_noise_session_salt";
++
++class SessionSaltData : public base::SupportsUserData::Data {
++ public:
++  SessionSaltData() { Regenerate(); }
++
++  std::string_view salt() const { return salt_; }
++
++  void Regenerate() {
++    const std::array<uint8_t, 32> bytes = crypto::RandBytesAsArray<32>();
++    salt_ = base::HexEncodeLower(bytes);
++  }
++
++ private:
++  std::string salt_;
++};
++
++SessionSaltData* GetSessionSaltData(BrowserContext* browser_context) {
++  CHECK(browser_context);
++  auto* data = static_cast<SessionSaltData*>(
++      browser_context->GetUserData(kSessionSaltKey));
++  if (!data) {
++    auto new_data = std::make_unique<SessionSaltData>();
++    data = new_data.get();
++    browser_context->SetUserData(kSessionSaltKey, std::move(new_data));
++  }
++  return data;
++}
++
++std::string_view FeatureTag(blink::HeliumNoiseFeature feature) {
++  switch (feature) {
++    case blink::HeliumNoiseFeature::kCanvas:
++      return "canvas";
++    case blink::HeliumNoiseFeature::kAudio:
++      return "audio";
++    case blink::HeliumNoiseFeature::kHardware:
++      return "hardware";
++    case blink::HeliumNoiseFeature::kFontMetric:
++      return "font_metric";
++  }
++}
++
++uint64_t DeriveToken(std::string_view seed,
++                     const url::Origin& origin,
++                     const blink::HeliumPersonaSnapshot& persona,
++                     blink::HeliumNoiseFeature feature) {
++  std::string input;
++  input.reserve(seed.size() + origin.Serialize().size() + persona.id.size() +
++                persona.locale.size() + persona.timezone.size() + 64);
++  input.append(seed);
++  input.push_back('\n');
++  input.append(origin.Serialize());
++  input.push_back('\n');
++  input.append(persona.id);
++  input.push_back('\n');
++  input.append(persona.locale);
++  input.push_back('\n');
++  input.append(persona.timezone);
++  input.push_back('\n');
++  input.append(FeatureTag(feature));
++
++  const std::array<uint8_t, crypto::hash::kSha256Size> digest =
++      crypto::hash::Sha256(input);
++  return base::U64FromBigEndian(
++      std::span<const uint8_t, 8u>(digest.data(), 8u));
++}
++
++void AddToken(blink::HeliumNoiseTokenMap& tokens,
++              std::string_view seed,
++              const url::Origin& origin,
++              const blink::HeliumPersonaSnapshot& persona,
++              blink::HeliumNoiseFeature feature) {
++  tokens.emplace(feature,
++                 blink::HeliumNoiseToken(DeriveToken(seed, origin, persona,
++                                                     feature)));
++}
++
++}  // namespace
++
++blink::HeliumNoiseTokenMap HeliumNoiseTokenData::GetTokens(
++    BrowserContext* browser_context,
++    const url::Origin& origin,
++    const blink::HeliumPersonaSnapshot& persona) {
++  const std::string_view seed =
++      persona.noise_seed.empty() ? GetSessionSaltData(browser_context)->salt()
++                                 : std::string_view(persona.noise_seed);
++
++  blink::HeliumNoiseTokenMap tokens;
++  AddToken(tokens, seed, origin, persona, blink::HeliumNoiseFeature::kCanvas);
++  AddToken(tokens, seed, origin, persona, blink::HeliumNoiseFeature::kAudio);
++  AddToken(tokens, seed, origin, persona, blink::HeliumNoiseFeature::kHardware);
++  AddToken(tokens, seed, origin, persona,
++           blink::HeliumNoiseFeature::kFontMetric);
++  return tokens;
++}
++
++void HeliumNoiseTokenData::RegenerateTokens(BrowserContext* browser_context) {
++  GetSessionSaltData(browser_context)->Regenerate();
++}
++
++}  // namespace content
+--- /dev/null
++++ b/content/browser/helium_noise/noise_token_data.h
+@@ -0,0 +1,28 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CONTENT_BROWSER_HELIUM_NOISE_NOISE_TOKEN_DATA_H_
++#define CONTENT_BROWSER_HELIUM_NOISE_NOISE_TOKEN_DATA_H_
++
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "url/origin.h"
++
++namespace content {
++
++class BrowserContext;
++
++class HeliumNoiseTokenData {
++ public:
++  static blink::HeliumNoiseTokenMap GetTokens(
++      BrowserContext* browser_context,
++      const url::Origin& origin,
++      const blink::HeliumPersonaSnapshot& persona);
++
++  static void RegenerateTokens(BrowserContext* browser_context);
++};
++
++}  // namespace content
++
++#endif  // CONTENT_BROWSER_HELIUM_NOISE_NOISE_TOKEN_DATA_H_
+--- a/third_party/blink/public/common/BUILD.gn
++++ b/third_party/blink/public/common/BUILD.gn
+@@ -162,6 +162,7 @@ source_set("headers") {
+     "frame/user_activation_state.h",
+     "frame/user_activation_update_source.h",
+     "frame/view_transition_state.h",
++    "helium_noise/noise_token.h",
+     "helium_persona/persona_snapshot.h",
+     "helium_persona/persona_snapshot_mojom_traits.h",
+     "history/session_history_constants.h",
+--- /dev/null
++++ b/third_party/blink/public/common/helium_noise/noise_token.h
+@@ -0,0 +1,35 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_NOISE_NOISE_TOKEN_H_
++#define THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_NOISE_NOISE_TOKEN_H_
++
++#include <cstdint>
++#include <map>
++
++namespace blink {
++
++enum class HeliumNoiseFeature {
++  kCanvas,
++  kAudio,
++  kHardware,
++  kFontMetric,
++};
++
++class HeliumNoiseToken {
++ public:
++  constexpr HeliumNoiseToken() = default;
++  explicit constexpr HeliumNoiseToken(uint64_t value) : value_(value) {}
++
++  constexpr uint64_t Value() const { return value_; }
++
++ private:
++  uint64_t value_ = 0;
++};
++
++using HeliumNoiseTokenMap = std::map<HeliumNoiseFeature, HeliumNoiseToken>;
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_NOISE_NOISE_TOKEN_H_

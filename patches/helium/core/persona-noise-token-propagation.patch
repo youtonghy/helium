@@ -1,0 +1,297 @@
+Index: src/content/browser/renderer_host/navigation_request.cc
+===================================================================
+--- a/content/browser/renderer_host/navigation_request.cc
++++ b/content/browser/renderer_host/navigation_request.cc
+@@ -59,6 +59,7 @@
+ #include "content/browser/devtools/network_service_devtools_observer.h"
+ #include "content/browser/download/download_manager_impl.h"
+ #include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
++#include "content/browser/helium_noise/noise_token_data.h"
+ #include "content/browser/interest_group/ad_auction_headers_util.h"
+ #include "content/browser/loader/browser_initiated_resource_request.h"
+ #include "content/browser/loader/cached_navigation_url_loader.h"
+@@ -150,6 +151,8 @@
+ #include "content/public/common/origin_util.h"
+ #include "content/public/common/url_constants.h"
+ #include "content/public/common/url_utils.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/system/data_pipe.h"
+@@ -265,6 +268,34 @@ constexpr base::TimeDelta kCompositorLoc
+ const char kSecSharedStorageWritableRequestHeaderKey[] =
+     "Sec-Shared-Storage-Writable";
+
++std::optional<blink::NoiseToken> GetHeliumNoiseToken(
++    BrowserContext* browser_context,
++    const url::Origin& origin,
++    const blink::HeliumPersonaSnapshot& persona_snapshot,
++    blink::HeliumNoiseFeature feature) {
++  if (!browser_context || !persona_snapshot.IsEnabled())
++    return std::nullopt;
++  if (feature == blink::HeliumNoiseFeature::kCanvas &&
++      !persona_snapshot.canvas_noise) {
++    return std::nullopt;
++  }
++  if (feature == blink::HeliumNoiseFeature::kAudio &&
++      !persona_snapshot.audio_noise) {
++    return std::nullopt;
++  }
++  if (feature == blink::HeliumNoiseFeature::kFontMetric &&
++      !persona_snapshot.font_metric_noise) {
++    return std::nullopt;
++  }
++
++  blink::HeliumNoiseTokenMap tokens = HeliumNoiseTokenData::GetTokens(
++      browser_context, origin, persona_snapshot);
++  auto token = tokens.find(feature);
++  if (token == tokens.end())
++    return std::nullopt;
++  return blink::NoiseToken(token->second.Value());
++}
++
+ // Flag to control whether redirect URLs are being sanitized before sending
+ // them to the renderer process as part of the navigation.
+ // See https://crbug.com/40095391.
+@@ -1523,6 +1554,9 @@ std::unique_ptr<NavigationRequest> Navig
+           /*local_surface_id=*/std::nullopt,
+           frame_tree_node->current_frame_host()->GetCachedPermissionStatuses(),
+           blink::HeliumPersonaSnapshot(),
++          /*helium_canvas_noise_token=*/std::nullopt,
++          /*helium_audio_noise_token=*/std::nullopt,
++          /*helium_font_metric_noise_token=*/std::nullopt,
+           /*should_skip_screenshot=*/false,
+           /*force_new_document_sequence_number=*/false,
+           /*navigation_metrics_token=*/base::UnguessableToken::Create(),
+@@ -1530,9 +1564,10 @@ std::unique_ptr<NavigationRequest> Navig
+           /*is_initial_webui=*/false,
+           /*isolated_app_policy=*/std::nullopt,
+           /*internal_scroll_to_text_fragment=*/std::nullopt);
++  BrowserContext* browser_context =
++      frame_tree_node->navigator().controller().GetBrowserContext();
+   commit_params->persona_snapshot =
+-      GetContentClient()->browser()->GetHeliumPersonaSnapshot(
+-          frame_tree_node->navigator().controller().GetBrowserContext());
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
+ #if !BUILDFLAG(IS_ANDROID)
+   CHECK(!GetContentClient()->browser()->IsInitialWebUIURL(common_params->url));
+ #endif
+@@ -1686,6 +1721,9 @@ NavigationRequest::CreateForSynchronousR
+           /*local_surface_id=*/std::nullopt,
+           render_frame_host->GetCachedPermissionStatuses(),
+           blink::HeliumPersonaSnapshot(),
++          /*helium_canvas_noise_token=*/std::nullopt,
++          /*helium_audio_noise_token=*/std::nullopt,
++          /*helium_font_metric_noise_token=*/std::nullopt,
+           /*should_skip_screenshot=*/false,
+           /*force_new_document_sequence_number=*/false,
+           /*navigation_metrics_token=*/base::UnguessableToken::Create(),
+@@ -1693,9 +1731,9 @@ NavigationRequest::CreateForSynchronousR
+           /*is_initial_webui=*/false,
+           /*isolated_app_policy=*/std::nullopt,
+           /*internal_scroll_to_text_fragment=*/std::nullopt);
++  BrowserContext* browser_context = render_frame_host->GetBrowserContext();
+   commit_params->persona_snapshot =
+-      GetContentClient()->browser()->GetHeliumPersonaSnapshot(
+-          render_frame_host->GetBrowserContext());
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
+   blink::mojom::BeginNavigationParamsPtr begin_params =
+       blink::mojom::BeginNavigationParams::New();
+   std::unique_ptr<NavigationRequest> navigation_request(new NavigationRequest(
+@@ -9127,6 +9165,17 @@ void NavigationRequest::ReadyToCommitNav
+
+   commit_params_->is_load_data_with_base_url = IsLoadDataWithBaseURL();
+   commit_params_->origin_to_commit = origin_to_commit.value();
++  BrowserContext* browser_context =
++      frame_tree_node_->navigator().controller().GetBrowserContext();
++  commit_params_->helium_canvas_noise_token = GetHeliumNoiseToken(
++      browser_context, commit_params_->origin_to_commit,
++      commit_params_->persona_snapshot, blink::HeliumNoiseFeature::kCanvas);
++  commit_params_->helium_audio_noise_token = GetHeliumNoiseToken(
++      browser_context, commit_params_->origin_to_commit,
++      commit_params_->persona_snapshot, blink::HeliumNoiseFeature::kAudio);
++  commit_params_->helium_font_metric_noise_token = GetHeliumNoiseToken(
++      browser_context, commit_params_->origin_to_commit,
++      commit_params_->persona_snapshot, blink::HeliumNoiseFeature::kFontMetric);
+
+   if (!IsSameDocument()) {
+ #if DCHECK_IS_ON()
+Index: src/content/renderer/render_frame_impl.cc
+===================================================================
+--- a/content/renderer/render_frame_impl.cc
++++ b/content/renderer/render_frame_impl.cc
+@@ -1082,6 +1082,12 @@ void FillMiscNavigationParams(
+   // Blink renderer class WebLocalFrameImpl.
+   navigation_params->modified_runtime_features =
+       commit_params.modified_runtime_features;
++  navigation_params->helium_canvas_noise_token =
++      commit_params.helium_canvas_noise_token;
++  navigation_params->helium_audio_noise_token =
++      commit_params.helium_audio_noise_token;
++  navigation_params->helium_font_metric_noise_token =
++      commit_params.helium_font_metric_noise_token;
+
+   // Populate the arrays of non-current entries for the window.navigation API.
+   auto& entry_arrays = commit_params.navigation_api_history_entry_arrays;
+Index: src/third_party/blink/public/mojom/navigation/navigation_params.mojom
+===================================================================
+--- a/third_party/blink/public/mojom/navigation/navigation_params.mojom
++++ b/third_party/blink/public/mojom/navigation/navigation_params.mojom
+@@ -22,6 +22,7 @@ import "services/viz/public/mojom/compos
+ import "third_party/blink/public/mojom/back_forward_cache_not_restored_reasons.mojom";
+ import "third_party/blink/public/mojom/conversions/conversions.mojom";
+ import "third_party/blink/public/mojom/fenced_frame/fenced_frame_config.mojom";
++import "third_party/blink/public/mojom/fingerprinting_protection/noise_token.mojom";
+ import "third_party/blink/public/mojom/fetch/fetch_api_request.mojom";
+ import "third_party/blink/public/mojom/frame/agent_cluster_key.mojom";
+ import "third_party/blink/public/mojom/frame/frame_policy.mojom";
+@@ -691,6 +692,15 @@ struct CommitNavigationParams {
+   // Helium persona runtime snapshot to apply to the committed document.
+   blink.mojom.HeliumPersonaSnapshot persona_snapshot;
+
++  // Helium persona canvas noise token for the committed document.
++  blink.mojom.NoiseToken? helium_canvas_noise_token;
++
++  // Helium persona audio noise token for the committed document.
++  blink.mojom.NoiseToken? helium_audio_noise_token;
++
++  // Helium persona font metric noise token for the committed document.
++  blink.mojom.NoiseToken? helium_font_metric_noise_token;
++
+   // Whether to skip taking a screenshot of the contents when doing a
+   // navigation. The screenshot is used for back/forward transition animations.
+   bool should_skip_screenshot;
+Index: src/third_party/blink/public/web/web_navigation_params.h
+===================================================================
+--- a/third_party/blink/public/web/web_navigation_params.h
++++ b/third_party/blink/public/web/web_navigation_params.h
+@@ -24,6 +24,7 @@
+ #include "services/network/public/mojom/url_response_head.mojom-shared.h"
+ #include "services/network/public/mojom/web_client_hints_types.mojom-shared.h"
+ #include "third_party/blink/public/common/fenced_frame/redacted_fenced_frame_config.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/common/frame/frame_policy.h"
+ #include "third_party/blink/public/common/frame/view_transition_state.h"
+ #include "third_party/blink/public/common/navigation/impression.h"
+@@ -611,6 +612,15 @@ struct BLINK_EXPORT WebNavigationParams
+   // hashtable is initialized.
+   std::optional<uint64_t> visited_link_salt;
+
++  // Helium persona canvas noise token for this document.
++  std::optional<NoiseToken> helium_canvas_noise_token;
++
++  // Helium persona audio noise token for this document.
++  std::optional<NoiseToken> helium_audio_noise_token;
++
++  // Helium persona font metric noise token for this document.
++  std::optional<NoiseToken> helium_font_metric_noise_token;
++
+   // Map of permission statuses at commit time.
+   // Note: the permission statues will be only used as initial states of
+   // `CachedPermissionStatus` in renderer side.
+Index: src/third_party/blink/renderer/core/loader/document_loader.cc
+===================================================================
+--- a/third_party/blink/renderer/core/loader/document_loader.cc
++++ b/third_party/blink/renderer/core/loader/document_loader.cc
+@@ -365,6 +365,9 @@ struct SameSizeAsDocumentLoader
+   std::optional<blink::mojom::FetchCacheMode> force_fetch_cache_mode;
+   FramePolicy frame_policy;
+   std::optional<uint64_t> visited_link_salt;
++  std::optional<NoiseToken> helium_canvas_noise_token;
++  std::optional<NoiseToken> helium_audio_noise_token;
++  std::optional<NoiseToken> helium_font_metric_noise_token;
+   Member<LocalFrame> frame;
+   Member<HistoryItem> history_item;
+   Member<DocumentParser> parser;
+@@ -554,6 +557,10 @@ DocumentLoader::DocumentLoader(
+       force_fetch_cache_mode_(params_->force_fetch_cache_mode),
+       frame_policy_(params_->frame_policy.value_or(FramePolicy())),
+       visited_link_salt_(params_->visited_link_salt),
++      helium_canvas_noise_token_(params_->helium_canvas_noise_token),
++      helium_audio_noise_token_(params_->helium_audio_noise_token),
++      helium_font_metric_noise_token_(
++          params_->helium_font_metric_noise_token),
+       frame_(frame),
+       // For back/forward navigations, the browser passed a history item to use
+       // at commit time in |params_|. Set it as the current history item of this
+@@ -787,6 +794,9 @@ DocumentLoader::CreateWebNavigationParam
+   params->load_with_storage_access = storage_access_api_status_;
+   params->modified_runtime_features = modified_runtime_features_;
+   params->visited_link_salt = visited_link_salt_;
++  params->helium_canvas_noise_token = helium_canvas_noise_token_;
++  params->helium_audio_noise_token = helium_audio_noise_token_;
++  params->helium_font_metric_noise_token = helium_font_metric_noise_token_;
+   params->content_settings = content_settings_->Clone();
+   params->sandbox_origin_token = std::move(sandbox_origin_token_);
+
+@@ -2921,7 +2931,10 @@ void DocumentLoader::CommitNavigation()
+       ->GetRuntimeFeatureStateOverrideContext()
+       ->ApplyOverrideValuesFromParams(modified_runtime_features_);
+
+-  frame_->DomWindow()->SetCanvasNoiseToken(std::nullopt);
++  frame_->DomWindow()->SetCanvasNoiseToken(helium_canvas_noise_token_);
++  frame_->DomWindow()->SetAudioNoiseToken(helium_audio_noise_token_);
++  frame_->DomWindow()->SetFontMetricNoiseToken(
++      helium_font_metric_noise_token_);
+
+   // Previous same-document navigation tasks are not relevant once a
+   // cross-document navigation has happened.
+Index: src/third_party/blink/renderer/core/loader/document_loader.h
+===================================================================
+--- a/third_party/blink/renderer/core/loader/document_loader.h
++++ b/third_party/blink/renderer/core/loader/document_loader.h
+@@ -44,6 +44,7 @@
+ #include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
+ #include "third_party/blink/public/common/fenced_frame/redacted_fenced_frame_config.h"
+ #include "third_party/blink/public/common/frame/view_transition_state.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
+ #include "third_party/blink/public/common/permissions_policy/document_policy.h"
+ #include "third_party/blink/public/common/scheduler/task_attribution_id.h"
+@@ -678,6 +679,9 @@ class CORE_EXPORT DocumentLoader : publi
+   const std::optional<blink::mojom::FetchCacheMode> force_fetch_cache_mode_;
+   const FramePolicy frame_policy_;
+   std::optional<uint64_t> visited_link_salt_;
++  const std::optional<NoiseToken> helium_canvas_noise_token_;
++  const std::optional<NoiseToken> helium_audio_noise_token_;
++  const std::optional<NoiseToken> helium_font_metric_noise_token_;
+
+   Member<LocalFrame> frame_;
+
+Index: src/third_party/blink/renderer/core/execution_context/execution_context.h
+===================================================================
+--- a/third_party/blink/renderer/core/execution_context/execution_context.h
++++ b/third_party/blink/renderer/core/execution_context/execution_context.h
+@@ -480,6 +480,22 @@ class CORE_EXPORT ExecutionContext : pub
+     canvas_noise_token_ = token;
+   }
+
++  const std::optional<NoiseToken>& AudioNoiseToken() const {
++    return audio_noise_token_;
++  }
++
++  void SetAudioNoiseToken(std::optional<NoiseToken> token) {
++    audio_noise_token_ = token;
++  }
++
++  const std::optional<NoiseToken>& FontMetricNoiseToken() const {
++    return font_metric_noise_token_;
++  }
++
++  void SetFontMetricNoiseToken(std::optional<NoiseToken> token) {
++    font_metric_noise_token_ = token;
++  }
++
+   // Returns the policy state for network-efficiency-guardrails in this
+   // document.
+   virtual std::optional<mojom::blink::PolicyDisposition>
+@@ -561,6 +577,8 @@ class CORE_EXPORT ExecutionContext : pub
+   bool require_trusted_types_ = false;
+
+   std::optional<NoiseToken> canvas_noise_token_;
++  std::optional<NoiseToken> audio_noise_token_;
++  std::optional<NoiseToken> font_metric_noise_token_;
+ };
+
+ }  // namespace blink

@@ -1,0 +1,548 @@
+Index: b/content/browser/service_worker/service_worker_version.cc
+===================================================================
+--- a/content/browser/service_worker/service_worker_version.cc
++++ b/content/browser/service_worker/service_worker_version.cc
+@@ -39,6 +39,7 @@
+ #include "content/browser/back_forward_cache/back_forward_cache_can_store_document_result.h"
+ #include "content/browser/bad_message.h"
+ #include "content/browser/child_process_security_policy_impl.h"
++#include "content/browser/helium_noise/noise_token_data.h"
+ #include "content/browser/renderer_host/local_network_access_util.h"
+ #include "content/browser/service_worker/payment_handler_support.h"
+ #include "content/browser/service_worker/service_worker_client.h"
+@@ -67,6 +68,8 @@
+ #include "net/cookies/site_for_cookies.h"
+ #include "net/http/http_response_headers.h"
+ #include "services/network/public/mojom/cross_origin_embedder_policy.mojom.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
+ #include "third_party/blink/public/common/service_worker/service_worker_type_converters.h"
+@@ -325,6 +328,34 @@ void ApplyPersonaUserAgentMetadata(
+   }
+ }
+
++std::optional<blink::NoiseToken> GetHeliumWorkerNoiseToken(
++    BrowserContext* browser_context,
++    const url::Origin& origin,
++    const blink::HeliumPersonaSnapshot& persona_snapshot,
++    blink::HeliumNoiseFeature feature) {
++  if (!browser_context || !persona_snapshot.IsEnabled())
++    return std::nullopt;
++  if (feature == blink::HeliumNoiseFeature::kCanvas &&
++      !persona_snapshot.canvas_noise) {
++    return std::nullopt;
++  }
++  if (feature == blink::HeliumNoiseFeature::kAudio &&
++      !persona_snapshot.audio_noise) {
++    return std::nullopt;
++  }
++  if (feature == blink::HeliumNoiseFeature::kFontMetric &&
++      !persona_snapshot.font_metric_noise) {
++    return std::nullopt;
++  }
++
++  blink::HeliumNoiseTokenMap tokens = HeliumNoiseTokenData::GetTokens(
++      browser_context, origin, persona_snapshot);
++  auto token = tokens.find(feature);
++  if (token == tokens.end())
++    return std::nullopt;
++  return blink::NoiseToken(token->second.Value());
++}
++
+ }  // namespace
+
+ constexpr base::TimeDelta ServiceWorkerVersion::kTimeoutTimerDelay;
+@@ -2674,10 +2705,11 @@ void ServiceWorkerVersion::StartWorkerIn
+       outside_fetch_client_settings_object_.Clone();
+
+   ContentBrowserClient* browser_client = GetContentClient()->browser();
++  BrowserContext* browser_context = context_->wrapper()->browser_context();
+   params->user_agent = browser_client->GetUserAgent();
+   params->ua_metadata = browser_client->GetUserAgentMetadata();
+   params->persona_snapshot = browser_client->GetHeliumPersonaSnapshot(
+-      context_->wrapper()->browser_context());
++      browser_context);
+   if (params->persona_snapshot.IsEnabled()) {
+     if (!params->persona_snapshot.user_agent.empty()) {
+       params->user_agent = params->persona_snapshot.user_agent;
+@@ -2685,6 +2717,16 @@ void ServiceWorkerVersion::StartWorkerIn
+     ApplyPersonaUserAgentMetadata(params->persona_snapshot,
+                                   &params->ua_metadata);
+   }
++  const url::Origin worker_origin = url::Origin::Create(script_url_);
++  params->helium_canvas_noise_token = GetHeliumWorkerNoiseToken(
++      browser_context, worker_origin, params->persona_snapshot,
++      blink::HeliumNoiseFeature::kCanvas);
++  params->helium_audio_noise_token = GetHeliumWorkerNoiseToken(
++      browser_context, worker_origin, params->persona_snapshot,
++      blink::HeliumNoiseFeature::kAudio);
++  params->helium_font_metric_noise_token = GetHeliumWorkerNoiseToken(
++      browser_context, worker_origin, params->persona_snapshot,
++      blink::HeliumNoiseFeature::kFontMetric);
+   params->is_installed = IsInstalled(status_);
+   params->script_url_to_skip_throttling = updated_script_url_;
+   params->main_script_load_params = std::move(main_script_load_params_);
+Index: b/content/browser/worker_host/mock_shared_worker.cc
+===================================================================
+--- a/content/browser/worker_host/mock_shared_worker.cc
++++ b/content/browser/worker_host/mock_shared_worker.cc
+@@ -139,6 +139,9 @@ void MockSharedWorkerFactory::CreateShar
+     const std::string& user_agent,
+     const blink::UserAgentMetadata& ua_metadata,
+     const blink::HeliumPersonaSnapshot& persona_snapshot,
++    const std::optional<blink::NoiseToken>& helium_canvas_noise_token,
++    const std::optional<blink::NoiseToken>& helium_audio_noise_token,
++    const std::optional<blink::NoiseToken>& helium_font_metric_noise_token,
+     bool pause_on_start,
+     const base::UnguessableToken& devtools_worker_token,
+     const blink::RendererPreferences& renderer_preferences,
+Index: b/content/browser/worker_host/mock_shared_worker.h
+===================================================================
+--- a/content/browser/worker_host/mock_shared_worker.h
++++ b/content/browser/worker_host/mock_shared_worker.h
+@@ -6,6 +6,7 @@
+ #define CONTENT_BROWSER_WORKER_HOST_MOCK_SHARED_WORKER_H_
+
+ #include <memory>
++#include <optional>
+ #include <queue>
+ #include <set>
+ #include <string>
+@@ -19,6 +20,7 @@
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
+ #include "services/network/public/mojom/content_security_policy.mojom-forward.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/messaging/message_port_channel.h"
+ #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
+@@ -106,6 +108,9 @@ class MockSharedWorkerFactory : public b
+       const std::string& user_agent,
+       const blink::UserAgentMetadata& ua_metadata,
+       const blink::HeliumPersonaSnapshot& persona_snapshot,
++      const std::optional<blink::NoiseToken>& helium_canvas_noise_token,
++      const std::optional<blink::NoiseToken>& helium_audio_noise_token,
++      const std::optional<blink::NoiseToken>& helium_font_metric_noise_token,
+       bool pause_on_start,
+       const base::UnguessableToken& devtools_worker_token,
+       const blink::RendererPreferences& renderer_preferences,
+Index: b/content/browser/worker_host/shared_worker_host.cc
+===================================================================
+--- a/content/browser/worker_host/shared_worker_host.cc
++++ b/content/browser/worker_host/shared_worker_host.cc
+@@ -5,6 +5,7 @@
+ #include "content/browser/worker_host/shared_worker_host.h"
+
+ #include <algorithm>
++#include <optional>
+ #include <string>
+ #include <utility>
+ #include <vector>
+@@ -19,6 +20,7 @@
+ #include "content/browser/code_cache/generated_code_cache_context.h"
+ #include "content/browser/devtools/devtools_instrumentation.h"
+ #include "content/browser/devtools/shared_worker_devtools_manager.h"
++#include "content/browser/helium_noise/noise_token_data.h"
+ #include "content/browser/loader/url_loader_factory_utils.h"
+ #include "content/browser/network/cross_origin_embedder_policy_reporter.h"
+ #include "content/browser/process_lock.h"
+@@ -58,6 +60,8 @@
+ #include "services/network/public/mojom/ip_address_space.mojom-shared.h"
+ #include "storage/browser/blob/blob_url_store_impl.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
+ #include "third_party/blink/public/common/messaging/message_port_channel.h"
+@@ -166,6 +170,34 @@ void ApplyPersonaUserAgentMetadata(
+   }
+ }
+
++std::optional<blink::NoiseToken> GetHeliumWorkerNoiseToken(
++    content::BrowserContext* browser_context,
++    const url::Origin& origin,
++    const blink::HeliumPersonaSnapshot& persona_snapshot,
++    blink::HeliumNoiseFeature feature) {
++  if (!browser_context || !persona_snapshot.IsEnabled())
++    return std::nullopt;
++  if (feature == blink::HeliumNoiseFeature::kCanvas &&
++      !persona_snapshot.canvas_noise) {
++    return std::nullopt;
++  }
++  if (feature == blink::HeliumNoiseFeature::kAudio &&
++      !persona_snapshot.audio_noise) {
++    return std::nullopt;
++  }
++  if (feature == blink::HeliumNoiseFeature::kFontMetric &&
++      !persona_snapshot.font_metric_noise) {
++    return std::nullopt;
++  }
++
++  blink::HeliumNoiseTokenMap tokens = content::HeliumNoiseTokenData::GetTokens(
++      browser_context, origin, persona_snapshot);
++  auto token = tokens.find(feature);
++  if (token == tokens.end())
++    return std::nullopt;
++  return blink::NoiseToken(token->second.Value());
++}
++
+ }  // namespace
+
+ namespace content {
+@@ -545,6 +577,20 @@ void SharedWorkerHost::Start(
+     ApplyPersonaUserAgentMetadata(persona_snapshot, &ua_metadata);
+   }
+
++  const url::Origin worker_origin = instance_.worker_storage_key().origin();
++  std::optional<blink::NoiseToken> helium_canvas_noise_token =
++      GetHeliumWorkerNoiseToken(browser_context, worker_origin,
++                                persona_snapshot,
++                                blink::HeliumNoiseFeature::kCanvas);
++  std::optional<blink::NoiseToken> helium_audio_noise_token =
++      GetHeliumWorkerNoiseToken(browser_context, worker_origin,
++                                persona_snapshot,
++                                blink::HeliumNoiseFeature::kAudio);
++  std::optional<blink::NoiseToken> helium_font_metric_noise_token =
++      GetHeliumWorkerNoiseToken(browser_context, worker_origin,
++                                persona_snapshot,
++                                blink::HeliumNoiseFeature::kFontMetric);
++
+   // Send the CreateSharedWorker message.
+   factory_.Bind(std::move(factory));
+   factory_->CreateSharedWorker(
+@@ -552,7 +598,8 @@ void SharedWorkerHost::Start(
+       instance_.worker_storage_key().origin(),
+       creator_policy_container_host_ &&
+           creator_policy_container_host_->policies().is_web_secure_context,
+-      user_agent, ua_metadata, persona_snapshot,
++      user_agent, ua_metadata, persona_snapshot, helium_canvas_noise_token,
++      helium_audio_noise_token, helium_font_metric_noise_token,
+       devtools_handle_->pause_on_start(), devtools_handle_->dev_tools_token(),
+       std::move(renderer_preferences), std::move(preference_watcher_receiver),
+       std::move(content_settings), std::move(container_info),
+Index: b/content/renderer/service_worker/embedded_worker_instance_client_impl.cc
+===================================================================
+--- a/content/renderer/service_worker/embedded_worker_instance_client_impl.cc
++++ b/content/renderer/service_worker/embedded_worker_instance_client_impl.cc
+@@ -197,6 +197,10 @@ EmbeddedWorkerInstanceClientImpl::BuildS
+   start_data->user_agent = blink::WebString::FromUtf8(params.user_agent);
+   start_data->ua_metadata = params.ua_metadata;
+   start_data->persona_snapshot = params.persona_snapshot;
++  start_data->helium_canvas_noise_token = params.helium_canvas_noise_token;
++  start_data->helium_audio_noise_token = params.helium_audio_noise_token;
++  start_data->helium_font_metric_noise_token =
++      params.helium_font_metric_noise_token;
+   start_data->script_type = params.script_type;
+   start_data->wait_for_debugger_mode =
+       params.wait_for_debugger
+Index: b/content/renderer/worker/embedded_shared_worker_stub.cc
+===================================================================
+--- a/content/renderer/worker/embedded_shared_worker_stub.cc
++++ b/content/renderer/worker/embedded_shared_worker_stub.cc
+@@ -43,6 +43,9 @@ EmbeddedSharedWorkerStub::EmbeddedShared
+     const std::string& user_agent,
+     const blink::UserAgentMetadata& ua_metadata,
+     const blink::HeliumPersonaSnapshot& persona_snapshot,
++    const std::optional<blink::NoiseToken>& helium_canvas_noise_token,
++    const std::optional<blink::NoiseToken>& helium_audio_noise_token,
++    const std::optional<blink::NoiseToken>& helium_font_metric_noise_token,
+     bool pause_on_start,
+     const base::UnguessableToken& devtools_worker_token,
+     const blink::RendererPreferences& renderer_preferences,
+@@ -132,7 +135,8 @@ EmbeddedSharedWorkerStub::EmbeddedShared
+       blink::WebSecurityOrigin(constructor_key.origin()),
+       blink::WebSecurityOrigin(origin), is_constructor_secure_context,
+       blink::WebString::FromUtf8(user_agent), ua_metadata,
+-      persona_snapshot,
++      persona_snapshot, helium_canvas_noise_token, helium_audio_noise_token,
++      helium_font_metric_noise_token,
+       ToWebContentSecurityPolicies(info->content_security_policies),
+       FetchClientSettingsObjectFromMojomToWeb(
+           info->outside_fetch_client_settings_object),
+Index: b/content/renderer/worker/embedded_shared_worker_stub.h
+===================================================================
+--- a/content/renderer/worker/embedded_shared_worker_stub.h
++++ b/content/renderer/worker/embedded_shared_worker_stub.h
+@@ -6,6 +6,7 @@
+ #define CONTENT_RENDERER_WORKER_EMBEDDED_SHARED_WORKER_STUB_H_
+
+ #include <memory>
++#include <optional>
+ #include <vector>
+
+ #include "base/unguessable_token.h"
+@@ -16,6 +17,7 @@
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
+ #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+@@ -66,6 +68,9 @@ class EmbeddedSharedWorkerStub : public
+       const std::string& user_agent,
+       const blink::UserAgentMetadata& ua_metadata,
+       const blink::HeliumPersonaSnapshot& persona_snapshot,
++      const std::optional<blink::NoiseToken>& helium_canvas_noise_token,
++      const std::optional<blink::NoiseToken>& helium_audio_noise_token,
++      const std::optional<blink::NoiseToken>& helium_font_metric_noise_token,
+       bool pause_on_start,
+       const base::UnguessableToken& devtools_worker_token,
+       const blink::RendererPreferences& renderer_preferences,
+Index: b/content/renderer/worker/shared_worker_factory_impl.cc
+===================================================================
+--- a/content/renderer/worker/shared_worker_factory_impl.cc
++++ b/content/renderer/worker/shared_worker_factory_impl.cc
+@@ -31,6 +31,9 @@ void SharedWorkerFactoryImpl::CreateShar
+     const std::string& user_agent,
+     const blink::UserAgentMetadata& ua_metadata,
+     const blink::HeliumPersonaSnapshot& persona_snapshot,
++    std::optional<blink::NoiseToken> helium_canvas_noise_token,
++    std::optional<blink::NoiseToken> helium_audio_noise_token,
++    std::optional<blink::NoiseToken> helium_font_metric_noise_token,
+     bool pause_on_start,
+     const base::UnguessableToken& devtools_worker_token,
+     const blink::RendererPreferences& renderer_preferences,
+@@ -60,7 +63,9 @@ void SharedWorkerFactoryImpl::CreateShar
+   new EmbeddedSharedWorkerStub(
+       std::move(info), token, constructor_key, origin,
+       is_constructor_secure_context, user_agent, ua_metadata, persona_snapshot,
+-      pause_on_start, devtools_worker_token, renderer_preferences,
++      helium_canvas_noise_token, helium_audio_noise_token,
++      helium_font_metric_noise_token, pause_on_start, devtools_worker_token,
++      renderer_preferences,
+       std::move(preference_watcher_receiver), std::move(content_settings),
+       std::move(service_worker_container_info),
+       std::move(main_script_load_params),
+Index: b/content/renderer/worker/shared_worker_factory_impl.h
+===================================================================
+--- a/content/renderer/worker/shared_worker_factory_impl.h
++++ b/content/renderer/worker/shared_worker_factory_impl.h
+@@ -5,9 +5,12 @@
+ #ifndef CONTENT_RENDERER_WORKER_SHARED_WORKER_FACTORY_IMPL_H_
+ #define CONTENT_RENDERER_WORKER_SHARED_WORKER_FACTORY_IMPL_H_
+
++#include <optional>
++
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+@@ -42,6 +45,9 @@ class SharedWorkerFactoryImpl : public b
+       const std::string& user_agent,
+       const blink::UserAgentMetadata& ua_metadata,
+       const blink::HeliumPersonaSnapshot& persona_snapshot,
++      std::optional<blink::NoiseToken> helium_canvas_noise_token,
++      std::optional<blink::NoiseToken> helium_audio_noise_token,
++      std::optional<blink::NoiseToken> helium_font_metric_noise_token,
+       bool pause_on_start,
+       const base::UnguessableToken& devtools_worker_token,
+       const blink::RendererPreferences& renderer_preferences,
+Index: b/third_party/blink/public/mojom/service_worker/embedded_worker.mojom
+===================================================================
+--- a/third_party/blink/public/mojom/service_worker/embedded_worker.mojom
++++ b/third_party/blink/public/mojom/service_worker/embedded_worker.mojom
+@@ -13,6 +13,7 @@ import "third_party/blink/public/mojom/d
+ import "third_party/blink/public/mojom/devtools/devtools_agent.mojom";
+ import "third_party/blink/public/mojom/frame/policy_container.mojom";
+ import "third_party/blink/public/mojom/frame/reporting_observer.mojom";
++import "third_party/blink/public/mojom/fingerprinting_protection/noise_token.mojom";
+ import "third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom";
+ import "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom";
+ import "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom";
+@@ -68,6 +69,11 @@ struct EmbeddedWorkerStartParams {
+   // Full web-visible persona snapshot for this service worker.
+   blink.mojom.HeliumPersonaSnapshot persona_snapshot;
+
++  // Helium persona readback noise tokens for this service worker.
++  blink.mojom.NoiseToken? helium_canvas_noise_token;
++  blink.mojom.NoiseToken? helium_audio_noise_token;
++  blink.mojom.NoiseToken? helium_font_metric_noise_token;
++
+   // The id this service worker uses as render_frame_id in
+   // network::ResourceRequests it makes.
+   int32 service_worker_route_id;
+Index: b/third_party/blink/public/mojom/worker/shared_worker_factory.mojom
+===================================================================
+--- a/third_party/blink/public/mojom/worker/shared_worker_factory.mojom
++++ b/third_party/blink/public/mojom/worker/shared_worker_factory.mojom
+@@ -67,6 +67,9 @@ interface SharedWorkerFactory {
+       string user_agent,
+       UserAgentMetadata ua_metadata,
+       blink.mojom.HeliumPersonaSnapshot persona_snapshot,
++      blink.mojom.NoiseToken? helium_canvas_noise_token,
++      blink.mojom.NoiseToken? helium_audio_noise_token,
++      blink.mojom.NoiseToken? helium_font_metric_noise_token,
+       bool pause_on_start,
+       mojo_base.mojom.UnguessableToken devtools_worker_token,
+       RendererPreferences renderer_preferences,
+Index: b/third_party/blink/public/web/web_embedded_worker_start_data.h
+===================================================================
+--- a/third_party/blink/public/web/web_embedded_worker_start_data.h
++++ b/third_party/blink/public/web/web_embedded_worker_start_data.h
+@@ -53,6 +53,9 @@ struct WebEmbeddedWorkerStartData {
+   WebString user_agent;
+   UserAgentMetadata ua_metadata;
+   HeliumPersonaSnapshot persona_snapshot;
++  std::optional<NoiseToken> helium_canvas_noise_token;
++  std::optional<NoiseToken> helium_audio_noise_token;
++  std::optional<NoiseToken> helium_font_metric_noise_token;
+   mojom::ScriptType script_type;
+   // Whether to pause the initialization and wait for debugger to attach
+   // before proceeding. This technique allows debugging worker startup.
+Index: b/third_party/blink/public/web/web_shared_worker.h
+===================================================================
+--- a/third_party/blink/public/web/web_shared_worker.h
++++ b/third_party/blink/public/web/web_shared_worker.h
+@@ -32,12 +32,14 @@
+ #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_SHARED_WORKER_H_
+
+ #include <memory>
++#include <optional>
+ #include <vector>
+
+ #include "base/unguessable_token.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
+ #include "services/network/public/mojom/content_security_policy.mojom-shared.h"
+ #include "services/network/public/mojom/fetch_api.mojom-shared.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/tokens/tokens.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+@@ -84,6 +86,9 @@ class BLINK_EXPORT WebSharedWorker {
+       const WebString& user_agent,
+       const UserAgentMetadata& ua_metadata,
+       const HeliumPersonaSnapshot& persona_snapshot,
++      const std::optional<NoiseToken>& helium_canvas_noise_token,
++      const std::optional<NoiseToken>& helium_audio_noise_token,
++      const std::optional<NoiseToken>& helium_font_metric_noise_token,
+       const std::vector<WebContentSecurityPolicy>& content_security_policies,
+       const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
+       const base::UnguessableToken& devtools_worker_token,
+Index: b/third_party/blink/renderer/core/exported/web_shared_worker_impl.cc
+===================================================================
+--- a/third_party/blink/renderer/core/exported/web_shared_worker_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_shared_worker_impl.cc
+@@ -219,6 +219,9 @@ void WebSharedWorkerImpl::StartWorkerCon
+     const WebString& user_agent,
+     const UserAgentMetadata& ua_metadata,
+     const HeliumPersonaSnapshot& persona_snapshot,
++    const std::optional<NoiseToken>& helium_canvas_noise_token,
++    const std::optional<NoiseToken>& helium_audio_noise_token,
++    const std::optional<NoiseToken>& helium_font_metric_noise_token,
+     const std::vector<WebContentSecurityPolicy>& content_security_policies,
+     const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
+     const base::UnguessableToken& devtools_worker_token,
+@@ -307,6 +310,10 @@ void WebSharedWorkerImpl::StartWorkerCon
+           url::Origin(origin_from_browser)),
+       std::move(coep_reporting_observer), std::move(dip_reporting_observer));
+   creation_params->persona_snapshot = persona_snapshot;
++  creation_params->helium_canvas_noise_token = helium_canvas_noise_token;
++  creation_params->helium_audio_noise_token = helium_audio_noise_token;
++  creation_params->helium_font_metric_noise_token =
++      helium_font_metric_noise_token;
+
+   auto thread_startup_data = WorkerBackingThreadStartupData::CreateDefault();
+   thread_startup_data.atomics_wait_mode =
+@@ -374,6 +381,9 @@ std::unique_ptr<WebSharedWorker> WebShar
+     const WebString& user_agent,
+     const UserAgentMetadata& ua_metadata,
+     const HeliumPersonaSnapshot& persona_snapshot,
++    const std::optional<NoiseToken>& helium_canvas_noise_token,
++    const std::optional<NoiseToken>& helium_audio_noise_token,
++    const std::optional<NoiseToken>& helium_font_metric_noise_token,
+     const std::vector<WebContentSecurityPolicy>& content_security_policies,
+     const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
+     const base::UnguessableToken& devtools_worker_token,
+@@ -400,7 +410,9 @@ std::unique_ptr<WebSharedWorker> WebShar
+   worker->StartWorkerContext(
+       script_request_url, script_type, credentials_mode, name,
+       constructor_origin, origin_from_browser, is_constructor_secure_context,
+-      user_agent, ua_metadata, persona_snapshot, content_security_policies,
++      user_agent, ua_metadata, persona_snapshot, helium_canvas_noise_token,
++      helium_audio_noise_token, helium_font_metric_noise_token,
++      content_security_policies,
+       outside_fetch_client_settings_object, devtools_worker_token,
+       std::move(content_settings), std::move(browser_interface_broker),
+       pause_worker_context_on_start, std::move(worker_main_script_load_params),
+Index: b/third_party/blink/renderer/core/exported/web_shared_worker_impl.h
+===================================================================
+--- a/third_party/blink/renderer/core/exported/web_shared_worker_impl.h
++++ b/third_party/blink/renderer/core/exported/web_shared_worker_impl.h
+@@ -32,6 +32,7 @@
+ #define THIRD_PARTY_BLINK_RENDERER_CORE_EXPORTED_WEB_SHARED_WORKER_IMPL_H_
+
+ #include <memory>
++#include <optional>
+
+ #include "base/memory/scoped_refptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -41,6 +42,7 @@
+ #include "services/network/public/mojom/content_security_policy.mojom-blink-forward.h"
+ #include "services/network/public/mojom/fetch_api.mojom-shared.h"
+ #include "services/network/public/mojom/source_location.mojom-blink.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
+ #include "third_party/blink/public/mojom/frame/reporting_observer.mojom-blink-forward.h"
+@@ -117,6 +119,9 @@ class CORE_EXPORT WebSharedWorkerImpl fi
+       const WebString& user_agent,
+       const blink::UserAgentMetadata& ua_metadata,
+       const HeliumPersonaSnapshot& persona_snapshot,
++      const std::optional<NoiseToken>& helium_canvas_noise_token,
++      const std::optional<NoiseToken>& helium_audio_noise_token,
++      const std::optional<NoiseToken>& helium_font_metric_noise_token,
+       const std::vector<WebContentSecurityPolicy>& content_security_policies,
+       const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
+       const base::UnguessableToken& devtools_worker_token,
+Index: b/third_party/blink/renderer/core/workers/global_scope_creation_params.h
+===================================================================
+--- a/third_party/blink/renderer/core/workers/global_scope_creation_params.h
++++ b/third_party/blink/renderer/core/workers/global_scope_creation_params.h
+@@ -124,6 +124,9 @@ struct CORE_EXPORT GlobalScopeCreationPa
+   String user_agent;
+   UserAgentMetadata ua_metadata;
+   HeliumPersonaSnapshot persona_snapshot;
++  std::optional<NoiseToken> helium_canvas_noise_token;
++  std::optional<NoiseToken> helium_audio_noise_token;
++  std::optional<NoiseToken> helium_font_metric_noise_token;
+
+   scoped_refptr<WebWorkerFetchContext> web_worker_fetch_context;
+
+Index: b/third_party/blink/renderer/core/workers/worker_global_scope.cc
+===================================================================
+--- a/third_party/blink/renderer/core/workers/worker_global_scope.cc
++++ b/third_party/blink/renderer/core/workers/worker_global_scope.cc
+@@ -722,6 +722,9 @@ WorkerGlobalScope::WorkerGlobalScope(
+       ukm_source_id_(creation_params->ukm_source_id),
+       top_level_frame_security_origin_(
+           std::move(creation_params->top_level_frame_security_origin)) {
++  SetCanvasNoiseToken(creation_params->helium_canvas_noise_token);
++  SetAudioNoiseToken(creation_params->helium_audio_noise_token);
++  SetFontMetricNoiseToken(creation_params->helium_font_metric_noise_token);
+   // Workers should always maintain the default world of an isolate.
+   CHECK(creation_params->is_default_world_of_isolate);
+   TRACE_EVENT("blink.worker", "WorkerGlobalScope::WorkerGlobalScope");
+Index: b/third_party/blink/renderer/modules/exported/web_embedded_worker_impl.cc
+===================================================================
+--- a/third_party/blink/renderer/modules/exported/web_embedded_worker_impl.cc
++++ b/third_party/blink/renderer/modules/exported/web_embedded_worker_impl.cc
+@@ -246,6 +246,12 @@ void WebEmbeddedWorkerImpl::StartWorkerT
+       std::move(dip_reporting_observer));
+   global_scope_creation_params->persona_snapshot =
+       worker_start_data->persona_snapshot;
++  global_scope_creation_params->helium_canvas_noise_token =
++      worker_start_data->helium_canvas_noise_token;
++  global_scope_creation_params->helium_audio_noise_token =
++      worker_start_data->helium_audio_noise_token;
++  global_scope_creation_params->helium_font_metric_noise_token =
++      worker_start_data->helium_font_metric_noise_token;
+
+   worker_thread_ = std::make_unique<ServiceWorkerThread>(
+       std::make_unique<ServiceWorkerGlobalScopeProxy>(

@@ -1,3 +1,5 @@
+Index: b/chrome/browser/ui/view_ids.h
+===================================================================
 --- a/chrome/browser/ui/view_ids.h
 +++ b/chrome/browser/ui/view_ids.h
 @@ -69,6 +69,7 @@ enum ViewID {
@@ -8,6 +10,8 @@
  
    // Location bar content settings icons.
    VIEW_ID_CONTENT_SETTING_JAVASCRIPT,
+Index: b/chrome/browser/ui/views/persona/persona_indicator_button.cc
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/views/persona/persona_indicator_button.cc
 @@ -0,0 +1,167 @@
@@ -80,7 +84,7 @@
 +  return kAccountCircleChromeRefreshIcon;
 +}
 +
-+std::string GetPersonaDisplayName(const base::Value::Dict& persona) {
++std::string GetPersonaDisplayName(const base::DictValue& persona) {
 +  if (const std::string* display_name = persona.FindString("displayName");
 +      display_name && !display_name->empty()) {
 +    return *display_name;
@@ -99,9 +103,9 @@
 +    return {};
 +  }
 +
-+  base::Value::Dict response = service->GetPersonaProfiles();
++  base::DictValue response = service->GetPersonaProfiles();
 +  const std::string* active_persona_id = response.FindString("activePersonaId");
-+  const base::Value::List* profiles = response.FindList("profiles");
++  const base::ListValue* profiles = response.FindList("profiles");
 +  if (!active_persona_id || !profiles) {
 +    return {};
 +  }
@@ -110,7 +114,7 @@
 +    if (!value.is_dict()) {
 +      continue;
 +    }
-+    const base::Value::Dict& persona = value.GetDict();
++    const base::DictValue& persona = value.GetDict();
 +    const std::string* persona_id = persona.FindString("id");
 +    if (!persona_id || *persona_id != *active_persona_id) {
 +      continue;
@@ -178,6 +182,8 @@
 +
 +BEGIN_METADATA(PersonaIndicatorButton)
 +END_METADATA
+Index: b/chrome/browser/ui/views/persona/persona_indicator_button.h
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/views/persona/persona_indicator_button.h
 @@ -0,0 +1,39 @@
@@ -220,6 +226,8 @@
 +};
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_PERSONA_PERSONA_INDICATOR_BUTTON_H_
+Index: b/chrome/browser/ui/views/persona/persona_indicator_menu_model.cc
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/views/persona/persona_indicator_menu_model.cc
 @@ -0,0 +1,181 @@
@@ -240,7 +248,7 @@
 +#include "chrome/browser/ui/chrome_pages.h"
 +#include "chrome/browser/ui/tabs/tab_strip_model.h"
 +#include "content/public/browser/web_contents.h"
-+#include "content/public/common/reload_type.h"
++#include "content/public/browser/reload_type.h"
 +
 +namespace {
 +
@@ -248,7 +256,7 @@
 +constexpr int kCommandOpenPersonaSettings = kPersonaCommandBase;
 +constexpr int kCommandPersonaGroupBase = kPersonaCommandBase + 100;
 +
-+std::string GetDisplayName(const base::Value::Dict& persona) {
++std::string GetDisplayName(const base::DictValue& persona) {
 +  if (const std::string* display_name = persona.FindString("displayName");
 +      display_name && !display_name->empty()) {
 +    return *display_name;
@@ -286,8 +294,8 @@
 +    return;
 +  }
 +
-+  base::Value::Dict response = service->GetPersonaProfiles();
-+  const base::Value::List* profiles = response.FindList("profiles");
++  base::DictValue response = service->GetPersonaProfiles();
++  const base::ListValue* profiles = response.FindList("profiles");
 +  if (!profiles) {
 +    return;
 +  }
@@ -297,7 +305,7 @@
 +    if (!value.is_dict()) {
 +      continue;
 +    }
-+    const base::Value::Dict& persona = value.GetDict();
++    const base::DictValue& persona = value.GetDict();
 +    const std::string* persona_id = persona.FindString("id");
 +    if (!persona_id || persona_id->empty()) {
 +      continue;
@@ -349,7 +357,7 @@
 +    return std::nullopt;
 +  }
 +
-+  base::Value::Dict response = service->GetPersonaProfiles();
++  base::DictValue response = service->GetPersonaProfiles();
 +  const std::string* active_persona_id = response.FindString("activePersonaId");
 +  if (!active_persona_id || active_persona_id->empty()) {
 +    return std::nullopt;
@@ -404,6 +412,8 @@
 +    }
 +  }
 +}
+Index: b/chrome/browser/ui/views/persona/persona_indicator_menu_model.h
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/views/persona/persona_indicator_menu_model.h
 @@ -0,0 +1,52 @@
@@ -459,6 +469,8 @@
 +};
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_PERSONA_PERSONA_INDICATOR_MENU_MODEL_H_
+Index: b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+===================================================================
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
 @@ -85,6 +85,7 @@
@@ -493,6 +505,8 @@
  }
  
  bool ToolbarView::UpdateSecurityState() {
+Index: b/chrome/browser/ui/views/toolbar/toolbar_view.h
+===================================================================
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.h
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
 @@ -66,6 +66,7 @@ class ToolbarController;
@@ -521,9 +535,11 @@
  
    // Subscription for when tab strip mode changes
    base::CallbackListSubscription vertical_tab_subscription_;
+Index: b/chrome/browser/ui/BUILD.gn
+===================================================================
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -4479,6 +4479,10 @@ static_library("ui") {
+@@ -4480,6 +4480,10 @@ static_library("ui") {
        "views/performance_controls/tab_list_row_view.h",
        "views/performance_controls/tab_list_view.cc",
        "views/performance_controls/tab_list_view.h",

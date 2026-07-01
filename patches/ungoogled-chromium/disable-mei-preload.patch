@@ -5,31 +5,39 @@
 # is enough local data to determine the user's preferred behavior." This feature
 # does not seem to outweigh the benefit of removing the binary, thus this patch.
 
+Index: chrome/BUILD.gn
+===================================================================
 --- a/chrome/BUILD.gn
 +++ b/chrome/BUILD.gn
-@@ -372,7 +372,6 @@ if (!is_android && !is_mac) {
+@@ -372,9 +372,7 @@ if (!is_android && !is_mac) {
      }
- 
+
      data_deps += [
 -      "//chrome/browser/resources/media/mei_preload:component",
        "//chrome/browser/web_applications/isolated_web_apps/key_distribution/preload:component",
-       "//components/privacy_sandbox/privacy_sandbox_attestations/preload:component",
+-      "//components/privacy_sandbox/privacy_sandbox_attestations/preload:component",
        "//third_party/widevine/cdm",
-@@ -1198,7 +1197,6 @@ if (is_win) {
+     ]
+
+@@ -1198,9 +1196,7 @@ if (is_win) {
        ":optimization_guide_library",
        ":swiftshader_binaries",
        ":widevine_cdm_library",
 -      "//chrome/browser/resources/media/mei_preload:component_bundle",
        "//chrome/browser/web_applications/isolated_web_apps/key_distribution/preload:component_bundle",
-       "//components/privacy_sandbox/privacy_sandbox_attestations/preload:component_bundle",
+-      "//components/privacy_sandbox/privacy_sandbox_attestations/preload:component_bundle",
      ]
+
+     if (is_chrome_branded) {
+Index: chrome/browser/resources/BUILD.gn
+===================================================================
 --- a/chrome/browser/resources/BUILD.gn
 +++ b/chrome/browser/resources/BUILD.gn
-@@ -120,7 +120,6 @@ group("resources") {
+@@ -120,7 +120,5 @@ group("resources") {
    if (is_mac) {
      public_deps += [
        "unexportable_keys_internals:resources",
 -      "//chrome/browser/resources/media/mei_preload:component",
-       "//components/privacy_sandbox/privacy_sandbox_attestations/preload:component",
+-      "//components/privacy_sandbox/privacy_sandbox_attestations/preload:component",
      ]
    }

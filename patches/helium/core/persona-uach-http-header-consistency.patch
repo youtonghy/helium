@@ -1,0 +1,331 @@
+--- a/content/browser/client_hints/client_hints.cc
++++ b/content/browser/client_hints/client_hints.cc
+@@ -679,10 +679,14 @@ void UpdateNavigationRequestClientUaHead
+     net::HttpRequestHeaders* headers,
+     const network::ParsedPermissionsPolicy& container_policy,
+     const ClientHintsExtendedData& data,
+-    FrameTreeNode* ftn_for_devtools_override) {
++    FrameTreeNode* ftn_for_devtools_override,
++    std::optional<blink::UserAgentMetadata> persona_ua_metadata) {
+   std::optional<blink::UserAgentMetadata> ua_metadata;
++  const bool has_persona_ua_metadata = persona_ua_metadata.has_value();
+   bool disable_due_to_custom_ua = false;
+-  if (is_ua_override_on) {
++  if (has_persona_ua_metadata) {
++    ua_metadata = std::move(persona_ua_metadata);
++  } else if (is_ua_override_on) {
+     NavigatorDelegate* nav_delegate =
+         ftn_for_web_contents_override
+             ? ftn_for_web_contents_override->navigator().GetDelegate()
+@@ -698,7 +702,7 @@ void UpdateNavigationRequestClientUaHead
+     disable_due_to_custom_ua = !ua_metadata.has_value();
+   }
+
+-  if (ftn_for_devtools_override &&
++  if (!has_persona_ua_metadata && ftn_for_devtools_override &&
+       devtools_instrumentation::ApplyUserAgentMetadataOverrides(
+           ftn_for_devtools_override, &ua_metadata)) {
+     // Likewise, if devtools says to override client hints but provides no
+@@ -821,7 +825,8 @@ void UpdateNavigationRequestClientUaHead
+     bool override_ua,
+     FrameTreeNode* frame_tree_node,
+     net::HttpRequestHeaders* headers,
+-    const std::optional<GURL>& request_url) {
++    const std::optional<GURL>& request_url,
++    std::optional<blink::UserAgentMetadata> persona_ua_metadata) {
+   DCHECK(frame_tree_node);
+   if (!ShouldAddClientHints(origin, frame_tree_node, delegate, request_url)) {
+     return;
+@@ -833,7 +838,8 @@ void UpdateNavigationRequestClientUaHead
+   UpdateNavigationRequestClientUaHeadersImpl(
+       delegate, override_ua, frame_tree_node,
+       ClientUaHeaderCallType::kAfterCreated, headers, {}, data,
+-      /*ftn_for_devtools_override=*/frame_tree_node);
++      /*ftn_for_devtools_override=*/frame_tree_node,
++      std::move(persona_ua_metadata));
+ }
+ namespace {
+
+@@ -853,7 +859,8 @@ void AddRequestClientHintsHeaders(
+     bool is_ua_override_on,
+     FrameTreeNode* frame_tree_node,
+     const network::ParsedPermissionsPolicy& container_policy,
+-    FrameTreeNode* ftn_for_devtools_override) {
++    FrameTreeNode* ftn_for_devtools_override,
++    std::optional<blink::UserAgentMetadata> persona_ua_metadata) {
+   ClientHintsExtendedData data(origin, frame_tree_node, delegate);
+   UpdateIFramePermissionsPolicyWithDelegationSupportForClientHints(
+       data, container_policy);
+@@ -900,7 +907,7 @@ void AddRequestClientHintsHeaders(
+   UpdateNavigationRequestClientUaHeadersImpl(
+       delegate, is_ua_override_on, frame_tree_node,
+       ClientUaHeaderCallType::kDuringCreation, headers, container_policy, data,
+-      ftn_for_devtools_override);
++      ftn_for_devtools_override, std::move(persona_ua_metadata));
+
+   if (ShouldAddClientHint(data, WebClientHintsType::kPrefersColorScheme)) {
+     AddPrefersColorSchemeHeader(headers, frame_tree_node);
+@@ -954,7 +961,7 @@ void AddPrefetchNavigationRequestClientH
+   // workaround for DevTools-initiated UA overrides.
+   AddRequestClientHintsHeaders(origin, headers, context, delegate,
+                                is_ua_override_on, nullptr, {},
+-                               ftn_for_devtools_override);
++                               ftn_for_devtools_override, std::nullopt);
+ }
+
+ void AddNavigationRequestClientHintsHeaders(
+@@ -965,7 +972,8 @@ void AddNavigationRequestClientHintsHead
+     bool is_ua_override_on,
+     FrameTreeNode* frame_tree_node,
+     const network::ParsedPermissionsPolicy& container_policy,
+-    const std::optional<GURL>& request_url) {
++    const std::optional<GURL>& request_url,
++    std::optional<blink::UserAgentMetadata> persona_ua_metadata) {
+   DCHECK(frame_tree_node);
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+   DCHECK(context);
+@@ -977,7 +985,8 @@ void AddNavigationRequestClientHintsHead
+   // the DevTools UA override logic.
+   AddRequestClientHintsHeaders(
+       origin, headers, context, delegate, is_ua_override_on, frame_tree_node,
+-      container_policy, /*ftn_for_devtools_override=*/frame_tree_node);
++      container_policy, /*ftn_for_devtools_override=*/frame_tree_node,
++      std::move(persona_ua_metadata));
+ }
+
+ std::optional<std::vector<WebClientHintsType>>
+--- a/content/browser/client_hints/client_hints.h
++++ b/content/browser/client_hints/client_hints.h
+@@ -6,6 +6,7 @@
+ #define CONTENT_BROWSER_CLIENT_HINTS_CLIENT_HINTS_H_
+
+ #include <memory>
++#include <optional>
+ #include <string>
+
+ #include "content/common/content_export.h"
+@@ -14,6 +15,7 @@
+ #include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
+ #include "services/network/public/cpp/resource_request.h"
+ #include "services/network/public/mojom/parsed_headers.mojom-forward.h"
++#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ #include "url/gurl.h"
+
+ namespace net {
+@@ -105,7 +107,9 @@ CONTENT_EXPORT void UpdateNavigationRequ
+     bool override_ua,
+     FrameTreeNode* frame_tree_node,
+     net::HttpRequestHeaders* headers,
+-    const std::optional<GURL>& request_url = std::nullopt);
++    const std::optional<GURL>& request_url = std::nullopt,
++    std::optional<blink::UserAgentMetadata> persona_ua_metadata =
++        std::nullopt);
+
+ CONTENT_EXPORT void AddNavigationRequestClientHintsHeaders(
+     const url::Origin& origin,
+@@ -115,7 +119,9 @@ CONTENT_EXPORT void AddNavigationRequest
+     bool is_ua_override_on,
+     FrameTreeNode* frame_tree_node,
+     const network::ParsedPermissionsPolicy& container_policy,
+-    const std::optional<GURL>& request_url = std::nullopt);
++    const std::optional<GURL>& request_url = std::nullopt,
++    std::optional<blink::UserAgentMetadata> persona_ua_metadata =
++        std::nullopt);
+
+ // Adds client hints headers for a prefetch navigation that is not associated
+ // with a frame. It must be a main frame navigation. `ftn_for_devtools_override`
+--- a/content/browser/renderer_host/navigation_request.cc
++++ b/content/browser/renderer_host/navigation_request.cc
+@@ -369,6 +369,53 @@ std::string ComputeUserAgentValue(const
+   return GetContentClient()->browser()->GetUserAgent();
+ }
+
++std::string GetPersonaAwareUserAgentValue(
++    const blink::HeliumPersonaSnapshot& persona_snapshot,
++    const std::string& user_agent_override) {
++  if (persona_snapshot.IsEnabled() && !persona_snapshot.user_agent.empty())
++    return ComputeUserAgentValue(persona_snapshot.user_agent);
++  return ComputeUserAgentValue(user_agent_override);
++}
++
++std::optional<blink::UserAgentMetadata> GetPersonaUserAgentMetadata(
++    const blink::HeliumPersonaSnapshot& snapshot,
++    const blink::UserAgentMetadata& defaults) {
++  if (!snapshot.IsEnabled() || !snapshot.client_hints_enabled)
++    return std::nullopt;
++
++  blink::UserAgentMetadata metadata = defaults;
++  if (!snapshot.ua_ch_platform.empty())
++    metadata.platform = snapshot.ua_ch_platform;
++  if (!snapshot.ua_ch_platform_version.empty())
++    metadata.platform_version = snapshot.ua_ch_platform_version;
++  if (!snapshot.ua_ch_architecture.empty())
++    metadata.architecture = snapshot.ua_ch_architecture;
++  if (!snapshot.ua_ch_model.empty())
++    metadata.model = snapshot.ua_ch_model;
++  if (!snapshot.ua_ch_bitness.empty())
++    metadata.bitness = snapshot.ua_ch_bitness;
++  if (!snapshot.ua_ch_full_version.empty())
++    metadata.full_version = snapshot.ua_ch_full_version;
++
++  metadata.mobile = snapshot.ua_ch_mobile;
++  metadata.wow64 = snapshot.ua_ch_wow64;
++
++  if (!snapshot.ua_ch_form_factors.empty())
++    metadata.form_factors = snapshot.ua_ch_form_factors;
++
++  if (!snapshot.ua_ch_brands.empty()) {
++    metadata.brand_version_list.clear();
++    metadata.brand_full_version_list.clear();
++    for (const auto& brand : snapshot.ua_ch_brands) {
++      metadata.brand_version_list.emplace_back(brand.brand, brand.version);
++      metadata.brand_full_version_list.emplace_back(brand.brand,
++                                                    brand.version);
++    }
++  }
++
++  return metadata;
++}
++
+ void AddAdditionalRequestHeaders(
+     net::HttpRequestHeaders* headers,
+     const GURL& url,
+@@ -401,7 +448,10 @@ void AddAdditionalRequestHeaders(
+
+   headers->SetHeaderIfMissing(
+       net::HttpRequestHeaders::kUserAgent,
+-      ComputeUserAgentValue(user_agent_override));
++      GetPersonaAwareUserAgentValue(
++          GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++              browser_context),
++          user_agent_override));
+
+   if (!render_prefs.enable_referrers) {
+     *referrer =
+@@ -2088,7 +2138,10 @@ NavigationRequest::NavigationRequest(
+           GetTentativeOriginAtRequestTime(), &client_hints_headers,
+           browser_context, client_hints_delegate, is_overriding_user_agent(),
+           frame_tree_node_, commit_params_->frame_policy.container_policy,
+-          common_params_->url);
++          common_params_->url,
++          GetPersonaUserAgentMetadata(
++              commit_params_->persona_snapshot,
++              GetContentClient()->browser()->GetUserAgentMetadata()));
+       headers.MergeFrom(client_hints_headers);
+     }
+
+@@ -6095,14 +6148,18 @@ void NavigationRequest::OnRedirectChecks
+         GetTentativeOriginAtRequestTime(), &client_hints_extra_headers,
+         browser_context, client_hints_delegate, is_overriding_user_agent(),
+         frame_tree_node_, commit_params_->frame_policy.container_policy,
+-        common_params_->url);
++        common_params_->url,
++        GetPersonaUserAgentMetadata(
++            commit_params_->persona_snapshot,
++            GetContentClient()->browser()->GetUserAgentMetadata()));
+     modified_headers.MergeFrom(client_hints_extra_headers);
+     // On a redirect, unless devtools has overridden the User-Agent header, we
+     // should send the User-Agent string based on policy.
+     if (!devtools_user_agent_override_) {
+       modified_headers.SetHeader(
+           net::HttpRequestHeaders::kUserAgent,
+-          ComputeUserAgentValue(GetUserAgentOverride()));
++          GetPersonaAwareUserAgentValue(commit_params_->persona_snapshot,
++                                        GetUserAgentOverride()));
+     }
+   }
+
+@@ -10065,10 +10122,15 @@ void NavigationRequest::SetIsOverridingU
+     UpdateNavigationRequestClientUaHeaders(
+         GetTentativeOriginAtRequestTime(), client_hints_delegate,
+         is_overriding_user_agent(), frame_tree_node_, &headers,
+-        common_params_->url);
++        common_params_->url,
++        GetPersonaUserAgentMetadata(
++            commit_params_->persona_snapshot,
++            GetContentClient()->browser()->GetUserAgentMetadata()));
+   }
+   headers.SetHeader(net::HttpRequestHeaders::kUserAgent,
+-                    ComputeUserAgentValue(GetUserAgentOverride()));
++                    GetPersonaAwareUserAgentValue(
++                        commit_params_->persona_snapshot,
++                        GetUserAgentOverride()));
+   begin_params_->headers = headers.ToString();
+   // |request_headers_| comes from |begin_params_|. Clear |request_headers_| now
+   // so that if |request_headers_| are needed, they will be updated.
+--- a/content/browser/client_hints/critical_client_hints_throttle.cc
++++ b/content/browser/client_hints/critical_client_hints_throttle.cc
+@@ -24,8 +24,10 @@
+ #include "services/network/public/cpp/features.h"
+ #include "services/network/public/mojom/parsed_headers.mojom-forward.h"
+ #include "services/network/public/mojom/url_response_head.mojom.h"
+ #include "third_party/blink/public/common/client_hints/client_hints.h"
+ #include "third_party/blink/public/common/client_hints/enabled_client_hints.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ #include "third_party/blink/public/common/loader/url_loader_throttle.h"
+
+ namespace {
+@@ -36,6 +38,45 @@ void LogCriticalCHStatus(CriticalCHResta
+   base::UmaHistogramEnumeration("ClientHints.CriticalCHRestart", status);
+ }
+
++std::optional<blink::UserAgentMetadata> GetPersonaUserAgentMetadata(
++    const blink::HeliumPersonaSnapshot& snapshot,
++    const blink::UserAgentMetadata& defaults) {
++  if (!snapshot.IsEnabled() || !snapshot.client_hints_enabled)
++    return std::nullopt;
++
++  blink::UserAgentMetadata metadata = defaults;
++  if (!snapshot.ua_ch_platform.empty())
++    metadata.platform = snapshot.ua_ch_platform;
++  if (!snapshot.ua_ch_platform_version.empty())
++    metadata.platform_version = snapshot.ua_ch_platform_version;
++  if (!snapshot.ua_ch_architecture.empty())
++    metadata.architecture = snapshot.ua_ch_architecture;
++  if (!snapshot.ua_ch_model.empty())
++    metadata.model = snapshot.ua_ch_model;
++  if (!snapshot.ua_ch_bitness.empty())
++    metadata.bitness = snapshot.ua_ch_bitness;
++  if (!snapshot.ua_ch_full_version.empty())
++    metadata.full_version = snapshot.ua_ch_full_version;
++
++  metadata.mobile = snapshot.ua_ch_mobile;
++  metadata.wow64 = snapshot.ua_ch_wow64;
++
++  if (!snapshot.ua_ch_form_factors.empty())
++    metadata.form_factors = snapshot.ua_ch_form_factors;
++
++  if (!snapshot.ua_ch_brands.empty()) {
++    metadata.brand_version_list.clear();
++    metadata.brand_full_version_list.clear();
++    for (const auto& brand : snapshot.ua_ch_brands) {
++      metadata.brand_version_list.emplace_back(brand.brand, brand.version);
++      metadata.brand_full_version_list.emplace_back(brand.brand,
++                                                    brand.version);
++    }
++  }
++
++  return metadata;
++}
++
+ }  // namespace
+
+ namespace content {
+@@ -163,8 +206,14 @@ void CriticalClientHintsThrottle::MaybeR
+         frame_tree_node->navigation_request()->is_overriding_user_agent(),
+         frame_tree_node,
+         frame_tree_node->navigation_request()
+-            ->commit_params()
+-            .frame_policy.container_policy);
++            ->commit_params()
++            .frame_policy.container_policy,
++        std::nullopt,
++        GetPersonaUserAgentMetadata(
++            frame_tree_node->navigation_request()
++                ->commit_params()
++                .persona_snapshot,
++            GetContentClient()->browser()->GetUserAgentMetadata()));
+   } else {
+     // TODO(crbug.com/427866914): Set correct `ftn_for_devtools_override` to
+     // apply DevTools-initiated UA overrides.

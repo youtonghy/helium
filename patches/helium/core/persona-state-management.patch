@@ -1,3 +1,5 @@
+Index: b/content/public/browser/content_browser_client.h
+===================================================================
 --- a/content/public/browser/content_browser_client.h
 +++ b/content/public/browser/content_browser_client.h
 @@ -85,6 +85,7 @@
@@ -17,6 +19,8 @@
  
    // Returns the default favicon.
    virtual gfx::ImageSkia GetDefaultFavicon();
+Index: b/content/public/browser/content_browser_client.cc
+===================================================================
 --- a/content/public/browser/content_browser_client.cc
 +++ b/content/public/browser/content_browser_client.cc
 @@ -461,6 +461,11 @@ std::string ContentBrowserClient::GetAcc
@@ -31,6 +35,8 @@
  gfx::ImageSkia ContentBrowserClient::GetDefaultFavicon() {
    return gfx::ImageSkia();
  }
+Index: b/chrome/browser/chrome_content_browser_client.h
+===================================================================
 --- a/chrome/browser/chrome_content_browser_client.h
 +++ b/chrome/browser/chrome_content_browser_client.h
 @@ -50,6 +50,7 @@
@@ -50,6 +56,8 @@
    gfx::ImageSkia GetDefaultFavicon() override;
    bool IsDataSaverEnabled(content::BrowserContext* context) override;
    bool IsPinchToZoomAllowed(content::BrowserContext* context) override;
+Index: b/chrome/browser/chrome_content_browser_client.cc
+===================================================================
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -88,6 +88,8 @@
@@ -81,6 +89,8 @@
  gfx::ImageSkia ChromeContentBrowserClient::GetDefaultFavicon() {
    return favicon::GetDefaultFavicon().AsImageSkia();
  }
+Index: b/chrome/browser/BUILD.gn
+===================================================================
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
 @@ -249,6 +249,12 @@ static_library("browser") {
@@ -96,6 +106,8 @@
      "icon_loader.cc",
      "icon_loader.h",
      "icon_manager.cc",
+Index: b/third_party/blink/public/common/BUILD.gn
+===================================================================
 --- a/third_party/blink/public/common/BUILD.gn
 +++ b/third_party/blink/public/common/BUILD.gn
 @@ -162,6 +162,8 @@ source_set("headers") {
@@ -107,6 +119,8 @@
      "history/session_history_constants.h",
      "indexeddb/indexed_db_default_mojom_traits.h",
      "indexeddb/indexeddb_key.h",
+Index: b/third_party/blink/public/mojom/BUILD.gn
+===================================================================
 --- a/third_party/blink/public/mojom/BUILD.gn
 +++ b/third_party/blink/public/mojom/BUILD.gn
 @@ -1357,6 +1357,9 @@ mojom("mojom_core") {
@@ -139,6 +153,8 @@
            mojom = "blink.mojom.CloneableMessage"
            cpp = "::blink::CloneableMessage"
            move_only = true
+Index: b/components/helium_persona/persona_snapshot.h
+===================================================================
 --- /dev/null
 +++ b/components/helium_persona/persona_snapshot.h
 @@ -0,0 +1,17 @@
@@ -159,6 +175,8 @@
 +}  // namespace helium_persona
 +
 +#endif
+Index: b/components/helium_persona/persona_snapshot.cc
+===================================================================
 --- /dev/null
 +++ b/components/helium_persona/persona_snapshot.cc
 @@ -0,0 +1,16 @@
@@ -178,6 +196,8 @@
 +}
 +
 +}  // namespace helium_persona
+Index: b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+===================================================================
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
 @@ -0,0 +1,88 @@
@@ -269,6 +289,8 @@
 +}  // namespace blink
 +
 +#endif
+Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+===================================================================
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
 @@ -0,0 +1,399 @@
@@ -671,6 +693,8 @@
 +}  // namespace mojo
 +
 +#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_MOJOM_TRAITS_H_
+Index: b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+===================================================================
 --- /dev/null
 +++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
 @@ -0,0 +1,76 @@
@@ -750,6 +774,8 @@
 +  array<string> font_aliases;
 +  array<HeliumPersonaUaChBrand> ua_ch_brands;
 +};
+Index: b/chrome/browser/helium_persona/persona_service.h
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.h
 @@ -0,0 +1,50 @@
@@ -803,9 +829,11 @@
 +}  // namespace helium_persona
 +
 +#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
+Index: b/chrome/browser/helium_persona/persona_service.cc
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -0,0 +1,1046 @@
+@@ -0,0 +1,1033 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -920,9 +948,6 @@
 +                           int outer_height,
 +                           double device_scale_factor,
 +                           std::string_view fonts_id,
-+                           std::string_view font_profile_version,
-+                           std::string_view media_device_id,
-+                           int video_width,
 +                           double audio_base_latency,
 +                           std::string_view network_type,
 +                           double network_downlink_max) {
@@ -965,7 +990,6 @@
 +  screen.Set("availTop", 0);
 +  screen.Set("outerWidth", outer_width);
 +  screen.Set("outerHeight", outer_height);
-+  screen.Set("windowScreenX", 0);
 +  screen.Set("windowScreenY", 0);
 +  screen.Set("deviceScaleFactor", device_scale_factor);
 +  screen.Set("orientationType", "landscape-primary");
@@ -978,15 +1002,11 @@
 +  fonts.Set("id", fonts_id);
 +
 +  base::DictValue font_rendering;
-+  font_rendering.Set("profileVersion", font_profile_version);
 +  font_rendering.Set("engine", platform == "Windows" ? "directwrite"
 +                                                      : "coretext");
-+  font_rendering.Set("textGamma", 2.2);
 +  font_rendering.Set("useAutohinter", platform == "Linux");
 +
 +  base::DictValue media_devices;
-+  media_devices.Set("audioInputDeviceId", media_device_id);
-+  media_devices.Set("videoWidth", video_width);
 +  media_devices.Set("videoFrameRate", 30);
 +  media_devices.Set("audioBaseLatency", audio_base_latency);
 +  media_devices.Set("audioOutputLatency", audio_base_latency * 2);
@@ -1032,8 +1052,7 @@
 +      "America/Los_Angeles", "en-US", "en-US,en;q=0.9", "macOS", "14.5.0",
 +      "arm", "64", "137.0.0.0", "Apple Inc.",
 +      "ANGLE (Apple, Apple M2, Metal)", "Apple M2", 8, 16, 0, 1512, 982, 1512,
-+      982, 2.0, "sf-pro-us-west", "macos-14-coretext",
-+      "default-integrated-microphone", 1280, 0.01, "wifi", 30.0));
++      982, 2.0, "sf-pro-us-west", 0.01, "wifi", 30.0));
 +  presets.Append(MakePreset(
 +      "us-east-windows", "US East Coast (Windows)",
 +      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -1042,8 +1061,7 @@
 +      "x86", "64", "137.0.0.0", "Intel Inc.",
 +      "ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)",
 +      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 864, 1536, 911, 1.25,
-+      "segoe-us-east", "windows-11-directwrite",
-+      "default-laptop-microphone", 1280, 0.02, "ethernet", 10.0));
++      "segoe-us-east", 0.02, "ethernet", 10.0));
 +  presets.Append(MakePreset(
 +      "sg-macos", "Singapore (macOS)",
 +      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -1051,8 +1069,7 @@
 +      "Asia/Singapore", "en-SG", "en-SG,en;q=0.9", "macOS", "14.5.0", "arm",
 +      "64", "137.0.0.0", "Apple Inc.",
 +      "ANGLE (Apple, Apple M2, Metal)", "Apple M2", 8, 8, 0, 1440, 900, 1440,
-+      900, 2.0, "sf-pro-sg", "macos-14-coretext",
-+      "default-laptop-microphone", 1280, 0.02, "wifi", 20.0));
++      900, 2.0, "sf-pro-sg", 0.02, "wifi", 20.0));
 +  presets.Append(MakePreset(
 +      "uk-windows", "United Kingdom (Windows)",
 +      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -1060,8 +1077,7 @@
 +      "Europe/London", "en-GB", "en-GB,en;q=0.9", "Windows", "15.0.0", "x86",
 +      "64", "137.0.0.0", "ATI Technologies Inc.",
 +      "ANGLE (AMD, AMD Radeon Graphics Direct3D11)", "AMD Radeon Graphics", 12,
-+      32, 0, 1728, 1117, 1728, 1170, 1.5, "segoe-uk",
-+      "windows-11-directwrite", "default-usb-audio", 1920, 0.02, "ethernet",
++      32, 0, 1728, 1117, 1728, 1170, 1.5, "segoe-uk", 0.02, "ethernet",
 +      10.0));
 +  presets.Append(MakePreset(
 +      "de-linux", "Germany (Linux)",
@@ -1071,7 +1087,7 @@
 +      "x86", "64", "137.0.0.0", "Intel Inc.",
 +      "ANGLE (Intel, Intel Iris Xe Graphics Vulkan 1.3)",
 +      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 960, 1536, 1007, 1.25,
-+      "noto-de", "linux-freetype", "default-usb-audio", 1280, 0.02, "wifi",
++      "noto-de", 0.02, "wifi",
 +      15.0));
 +  presets.Append(MakePreset(
 +      "jp-macos", "Japan (macOS)",
@@ -1080,8 +1096,7 @@
 +      "Asia/Tokyo", "ja-JP", "ja-JP,ja;q=0.9,en-US;q=0.7", "macOS", "15.0.0",
 +      "arm", "64", "137.0.0.0", "Apple Inc.",
 +      "ANGLE (Apple, Apple M3, Metal)", "Apple M3", 10, 24, 0, 1512, 982,
-+      1512, 982, 2.0, "sf-pro-jp", "macos-15-coretext",
-+      "default-integrated-microphone", 1280, 0.01, "wifi", 25.0));
++      1512, 982, 2.0, "sf-pro-jp", 0.01, "wifi", 25.0));
 +  return presets;
 +}
 +
@@ -1852,6 +1867,8 @@
 +}
 +
 +}  // namespace helium_persona
+Index: b/chrome/browser/helium_persona/persona_service_factory.h
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service_factory.h
 @@ -0,0 +1,40 @@
@@ -1895,6 +1912,8 @@
 +}  // namespace helium_persona
 +
 +#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_FACTORY_H_
+Index: b/chrome/browser/helium_persona/persona_service_factory.cc
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service_factory.cc
 @@ -0,0 +1,41 @@
@@ -1939,6 +1958,8 @@
 +}
 +
 +}  // namespace helium_persona
+Index: b/chrome/browser/helium_persona/persona_runtime_override.cc
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_runtime_override.cc
 @@ -0,0 +1,16 @@
@@ -1958,6 +1979,8 @@
 +// persona_snapshot = browser_client->GetHeliumPersonaSnapshot
 +// SetHeliumPersonaSnapshot(creation_params->persona_snapshot)
 +// ApplyPersonaUserAgentMetadata
+Index: b/chrome/browser/prefs/browser_prefs.cc
+===================================================================
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
 @@ -35,6 +35,7 @@
@@ -1976,6 +1999,8 @@
    permissions::PermissionHatsTriggerHelper::RegisterProfilePrefs(registry);
    history_clusters::prefs::RegisterProfilePrefs(registry);
    HostContentSettingsMap::RegisterProfilePrefs(registry);
+Index: b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
+===================================================================
 --- a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
 +++ b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
 @@ -164,6 +164,8 @@

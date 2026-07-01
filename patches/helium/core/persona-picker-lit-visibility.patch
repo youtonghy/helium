@@ -1,0 +1,12 @@
+Index: third_party/lit/v3_0/BUILD.gn
+===================================================================
+--- a/third_party/lit/v3_0/BUILD.gn
++++ b/third_party/lit/v3_0/BUILD.gn
+@@ -82,6 +82,7 @@ ts_library("build_ts") {
+     "//chrome/browser/resources/print_preview:build_ts",
+     "//chrome/browser/resources/privacy_sandbox/internals/private_state_tokens:build_ts",
+     "//chrome/browser/resources/privacy_sandbox/internals/related_website_sets:build_ts",
++    "//chrome/browser/resources/persona_picker:build_ts",
+     "//chrome/browser/resources/profile_internals:build_ts",
+     "//chrome/browser/resources/search_engine_choice:build_ts",
+     "//chrome/browser/resources/settings:build_ts",

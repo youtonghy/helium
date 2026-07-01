@@ -1,0 +1,124 @@
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -41,10 +41,13 @@
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_font_variant_caps.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_text_rendering.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_texture_format.h"
++#include "third_party/blink/renderer/core/canvas_interventions/noise_hash.h"
++#include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
+ #include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
+ #include "third_party/blink/renderer/core/css/style_change_reason.h"
+ #include "third_party/blink/renderer/core/dom/events/event.h"
+ #include "third_party/blink/renderer/core/dom/node.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/event_type_names.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
+ #include "third_party/blink/renderer/core/geometry/dom_matrix.h"
+@@ -531,6 +534,12 @@ ImageData* BaseRenderingContext2D::getIm
+       SkIRect bounds =
+           snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
+       DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
++    } else if (image_data_pixmap.colorType() == kRGBA_8888_SkColorType) {
++      ExecutionContext* execution_context = GetTopExecutionContext();
++      if (execution_context && execution_context->CanvasNoiseToken()) {
++        NoisePixels(NoiseHash(*execution_context->CanvasNoiseToken()),
++                    image_data->RawByteSpan(), sw, sh);
++      }
+     }
+   }
+
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+@@ -31,8 +31,10 @@
+
+ #include <limits>
+ #include <memory>
++#include <optional>
+ #include <utility>
+
++#include "base/containers/span.h"
+ #include "base/feature_list.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/location.h"
+@@ -50,6 +52,7 @@
+ #include "services/metrics/public/cpp/ukm_recorder.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
+ #include "third_party/blink/public/mojom/gpu/gpu.mojom-blink.h"
+ #include "third_party/blink/public/platform/platform.h"
+@@ -59,6 +62,8 @@
+ #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap_options.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_image_encode_options.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_elementimage.h"
++#include "third_party/blink/renderer/core/canvas_interventions/noise_hash.h"
++#include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
+ #include "third_party/blink/renderer/core/css/css_font_selector.h"
+ #include "third_party/blink/renderer/core/css/style_change_reason.h"
+ #include "third_party/blink/renderer/core/css/style_engine.h"
+@@ -66,6 +71,7 @@
+ #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
+ #include "third_party/blink/renderer/core/dom/element.h"
+ #include "third_party/blink/renderer/core/dom/element_traversal.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/fileapi/file.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+@@ -130,6 +136,7 @@
+ #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+ #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+ #include "third_party/blink/renderer/platform/wtf/functional.h"
++#include "third_party/skia/include/core/SkData.h"
+ #include "ui/base/resource/resource_scale_factor.h"
+ #include "ui/gfx/geometry/rect_conversions.h"
+ #include "ui/gfx/geometry/size_conversions.h"
+@@ -168,6 +175,30 @@ constexpr int kDefaultCanvasHeight = 150
+ constexpr int kUndefinedQualityValue = -1.0;
+ constexpr int kMinimumAccelerated2dCanvasSize = 128 * 129;
+
++scoped_refptr<StaticBitmapImage> ApplyHeliumCanvasNoiseForExport(
++    scoped_refptr<StaticBitmapImage> image_bitmap,
++    ExecutionContext* execution_context) {
++  if (!execution_context || !execution_context->CanvasNoiseToken())
++    return image_bitmap;
++
++  const gfx::Size size = image_bitmap->Size();
++  const SkImageInfo info =
++      SkImageInfo::MakeN32Premul(size.width(), size.height());
++  Vector<uint8_t> pixels =
++      image_bitmap->CopyImageData(info, /*apply_orientation=*/false);
++  if (pixels.empty())
++    return image_bitmap;
++
++  NoisePixels(NoiseHash(*execution_context->CanvasNoiseToken()),
++              base::span(pixels), size.width(), size.height());
++
++  scoped_refptr<StaticBitmapImage> noisy_bitmap = StaticBitmapImage::Create(
++      SkData::MakeWithCopy(pixels.data(), pixels.size()), info,
++      image_bitmap->Orientation());
++  noisy_bitmap->SetOriginClean(image_bitmap->OriginClean());
++  return noisy_bitmap;
++}
++
+ // Tracks whether canvases should start out with acceleration disabled.
+ class DisabledAccelerationCounterSupplement final
+     : public GarbageCollected<DisabledAccelerationCounterSupplement>,
+@@ -1318,6 +1349,8 @@ String HTMLCanvasElement::ToDataURLInter
+
+   scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
+   if (image_bitmap) {
++    image_bitmap = ApplyHeliumCanvasNoiseForExport(std::move(image_bitmap),
++                                                   GetExecutionContext());
+     std::unique_ptr<ImageDataBuffer> data_buffer =
+         ImageDataBuffer::Create(image_bitmap);
+     if (!data_buffer)
+@@ -1429,6 +1462,8 @@ void HTMLCanvasElement::toBlob(V8BlobCal
+   CanvasAsyncBlobCreator* async_creator = nullptr;
+   scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(kBackBuffer);
+   if (image_bitmap) {
++    image_bitmap = ApplyHeliumCanvasNoiseForExport(std::move(image_bitmap),
++                                                   GetExecutionContext());
+     auto* options = ImageEncodeOptions::Create();
+     options->setType(ImageEncoderUtils::MimeTypeName(encoding_mime_type));
+     async_creator = MakeGarbageCollected<CanvasAsyncBlobCreator>(
