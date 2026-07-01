@@ -1,3 +1,5 @@
+Index: b/chrome/browser/resources/BUILD.gn
+===================================================================
 --- a/chrome/browser/resources/BUILD.gn
 +++ b/chrome/browser/resources/BUILD.gn
 @@ -67,6 +67,7 @@ group("resources") {
@@ -8,55 +10,40 @@
        "privacy_sandbox/internals:resources",
        "private_ai_internals:resources",
        "profile_internals:resources",
+Index: b/chrome/browser/resources/persona_picker/persona_picker.html
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/persona_picker/persona_picker.html
-@@ -0,0 +1,27 @@
-+<!DOCTYPE html>
+@@ -0,0 +1,12 @@
++<!doctype html>
 +<html dir="$i18n{textdirection}" lang="$i18n{language}">
 +<head>
 +  <meta charset="utf-8">
-+  <meta name="color-scheme" content="light dark">
-+  <title>Persona Picker</title>
-+
-+  <style>
-+    html {
-+      background: var(--md-background-color);
-+      height: 100%;
-+    }
-+
-+    body {
-+      margin: 0;
-+      min-height: 100%;
-+    }
-+  </style>
++  <title>$i18n{appTitle}</title>
++  <link rel="stylesheet" href="chrome://resources/css/text_defaults.css">
++  <script type="module" src="persona_picker_app.js"></script>
 +</head>
 +<body>
 +  <persona-picker-app></persona-picker-app>
-+
-+  <link rel="stylesheet" href="chrome://resources/css/md_colors.css">
-+  <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
-+  <script type="module" src="persona_picker.js"></script>
 +</body>
 +</html>
+Index: b/chrome/browser/ui/BUILD.gn
+===================================================================
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -172,6 +172,8 @@ static_library("ui") {
+@@ -172,6 +172,10 @@ static_library("ui") {
      "webui/predictors/predictors_handler.h",
      "webui/predictors/predictors_ui.cc",
      "webui/predictors/predictors_ui.h",
++    "persona_picker/persona_picker_launcher.cc",
++    "persona_picker/persona_picker_ui.h",
 +    "webui/persona_picker/persona_picker_ui.cc",
 +    "webui/persona_picker/persona_picker_ui.h",
      "webui/prefs_internals_source.cc",
      "webui/prefs_internals_source.h",
      "webui/privacy_sandbox/privacy_sandbox_internals_handler.cc",
-@@ -3338,6 +3340,7 @@ static_library("ui") {
-       "//chrome/browser/ui/webui/app_home:impl",
-       "//chrome/browser/ui/webui/app_settings",
-       "//chrome/browser/ui/webui/app_settings:impl",
-+      "//chrome/browser/ui/webui/persona_picker",
-       "//chrome/browser/ui/webui/signin:profile",
-       "//chrome/browser/ui/webui/signin:profile_impl",
-       "//chrome/browser/ui/webui/updater:mojo_bindings",
+Index: b/chrome/browser/ui/startup/startup_browser_creator.cc
+===================================================================
 --- a/chrome/browser/ui/startup/startup_browser_creator.cc
 +++ b/chrome/browser/ui/startup/startup_browser_creator.cc
 @@ -6,6 +6,8 @@
@@ -77,15 +64,16 @@
  #include "base/metrics/histogram_base.h"
  #include "base/metrics/histogram_functions.h"
  #include "base/metrics/histogram_macros.h"
-@@ -43,6 +47,7 @@
+@@ -43,6 +47,8 @@
  #include "chrome/browser/browser_process.h"
  #include "chrome/browser/extensions/startup_helper.h"
  #include "chrome/browser/first_run/first_run.h"
++#include "chrome/browser/helium_persona/persona_service.h"
 +#include "chrome/browser/helium_persona/persona_service_factory.h"
  #include "chrome/browser/lifetime/browser_shutdown.h"
  #include "chrome/browser/policy/chrome_browser_policy_connector.h"
  #include "chrome/browser/prefs/incognito_mode_prefs.h"
-@@ -64,6 +69,7 @@
+@@ -64,6 +70,7 @@
  #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
  #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
  #include "chrome/browser/ui/extensions/application_launch.h"
@@ -93,7 +81,7 @@
  #include "chrome/browser/ui/startup/launch_mode_recorder.h"
  #include "chrome/browser/ui/startup/profile_launch_observer.h"
  #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
-@@ -80,6 +86,7 @@
+@@ -80,6 +87,7 @@
  #include "chrome/common/chrome_switches.h"
  #include "chrome/common/pref_names.h"
  #include "chrome/common/url_constants.h"
@@ -101,7 +89,7 @@
  #include "components/prefs/pref_registry_simple.h"
  #include "components/prefs/pref_service.h"
  #include "components/search_engines/util.h"
-@@ -153,6 +160,92 @@ using content::ChildProcessSecurityPolic
+@@ -153,6 +161,95 @@ using content::ChildProcessSecurityPolic
  
  namespace {
  
@@ -109,6 +97,9 @@
 +constexpr char kDefaultPersonaId[] = "default";
 +
 +struct PendingPersonaLaunchRequest {
++  explicit PendingPersonaLaunchRequest(const base::CommandLine& command_line)
++      : command_line(command_line) {}
++
 +  base::CommandLine command_line;
 +  base::FilePath cur_dir;
 +  base::FilePath profile_path;
@@ -194,7 +185,7 @@
  // Dumps the current set of the browser process's histograms to |output_file|.
  // The file is overwritten if it exists. This function should only be called in
  // the blocking pool.
-@@ -693,6 +786,71 @@ bool StartupBrowserCreator::InSynchronou
+@@ -693,6 +790,70 @@ bool StartupBrowserCreator::InSynchronou
    return in_synchronous_profile_launch_;
  }
  
@@ -213,15 +204,14 @@
 +  }
 +
 +  auto& pending_requests = GetPendingPersonaLaunchRequests();
-+  PendingPersonaLaunchRequest request;
-+  request.command_line = command_line;
++  PendingPersonaLaunchRequest request(command_line);
 +  request.cur_dir = cur_dir;
 +  request.profile_path = profile->GetPath();
 +  request.process_startup = process_startup;
 +  request.is_first_run = is_first_run;
 +  request.restore_tabbed_browser = restore_tabbed_browser;
 +  request.first_run_tabs = first_run_tabs;
-+  pending_requests[request.profile_path] = std::move(request);
++  pending_requests.insert_or_assign(request.profile_path, std::move(request));
 +
 +  persona_picker::ShowPersonaPickerForStartup(profile, BuildPersonaPickerUrl());
 +  return true;
@@ -266,7 +256,7 @@
  void StartupBrowserCreator::LaunchBrowser(
      const base::CommandLine& command_line,
      Profile* profile,
-@@ -793,6 +951,17 @@ void StartupBrowserCreator::LaunchBrowse
+@@ -793,6 +954,17 @@ void StartupBrowserCreator::LaunchBrowse
                                       ? profile->GetPrimaryOTRProfile(
                                             /*create_if_needed=*/true)
                                       : profile;
@@ -284,6 +274,8 @@
  #if BUILDFLAG(IS_CHROMEOS)
        if (process_startup == chrome::startup::IsProcessStartup::kYes) {
          if (ash::floating_workspace_util::IsFloatingWorkspaceV2Enabled() ||
+Index: b/chrome/browser/ui/startup/startup_browser_creator.h
+===================================================================
 --- a/chrome/browser/ui/startup/startup_browser_creator.h
 +++ b/chrome/browser/ui/startup/startup_browser_creator.h
 @@ -5,6 +5,7 @@
@@ -318,6 +310,8 @@
   private:
    friend class StartupBrowserCreatorImpl;
    friend class StartupBrowserCreatorInfobarsTest;
+Index: b/chrome/browser/ui/webui/BUILD.gn
+===================================================================
 --- a/chrome/browser/ui/webui/BUILD.gn
 +++ b/chrome/browser/ui/webui/BUILD.gn
 @@ -98,6 +98,7 @@ source_set("configs") {
@@ -328,6 +322,8 @@
        ]
      }
    } else {
+Index: b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+===================================================================
 --- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
 +++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
 @@ -205,6 +205,7 @@
@@ -346,9 +342,11 @@
    map.AddWebUIConfig(std::make_unique<ProfileCustomizationUIConfig>());
    map.AddWebUIConfig(std::make_unique<ProfilePickerUIConfig>());
    map.AddWebUIConfig(std::make_unique<SigninErrorUIConfig>());
+Index: b/chrome/browser/ui/webui/persona_picker/persona_picker_ui.cc
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/webui/persona_picker/persona_picker_ui.cc
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,143 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -361,6 +359,7 @@
 +#include "base/check.h"
 +#include "base/functional/bind.h"
 +#include "base/values.h"
++#include "chrome/browser/helium_persona/persona_service.h"
 +#include "chrome/browser/helium_persona/persona_service_factory.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/ui/browser_commands.h"
@@ -372,6 +371,7 @@
 +#include "chrome/grit/persona_picker_resources_map.h"
 +#include "content/public/browser/web_ui.h"
 +#include "content/public/browser/web_ui_data_source.h"
++#include "content/public/browser/web_ui_message_handler.h"
 +#include "ui/webui/webui_util.h"
 +
 +namespace {
@@ -433,11 +433,12 @@
 +  }
 +
 +  void HandleContinueStartup(const base::ListValue& args) {
-+    CHECK_EQ(1U, args.size());
-+    CHECK(args[0].is_string());
++    AllowJavascript();
++    CHECK_EQ(2U, args.size());
++    CHECK(args[1].is_string());
 +
-+    Profile* profile = Profile::FromWebUI(web_ui());
-+    pending_persona_id_ = args[0].GetString();
++    pending_persona_id_ = args[1].GetString();
++    ResolveJavascriptCallback(args[0], base::Value());
 +
 +    if (Browser* browser = chrome::FindBrowserWithTab(web_ui()->GetWebContents())) {
 +      browser->window()->Close();
@@ -489,6 +490,8 @@
 +PersonaPickerUI::~PersonaPickerUI() = default;
 +
 +WEB_UI_CONTROLLER_TYPE_IMPL(PersonaPickerUI)
+Index: b/chrome/browser/ui/webui/webui_urls_for_test.cc
+===================================================================
 --- a/chrome/browser/ui/webui/webui_urls_for_test.cc
 +++ b/chrome/browser/ui/webui/webui_urls_for_test.cc
 @@ -127,6 +127,7 @@ base::span<const std::string_view> GetCh
@@ -499,6 +502,8 @@
        "chrome://policy",
        "chrome://predictors",
        "chrome://prefs-internals",
+Index: b/chrome/common/webui_url_constants.cc
+===================================================================
 --- a/chrome/common/webui_url_constants.cc
 +++ b/chrome/common/webui_url_constants.cc
 @@ -164,6 +164,7 @@ base::span<const base::cstring_view> Chr
@@ -509,6 +514,8 @@
        kChromeUIPolicyHost,
        kChromeUIPredictorsHost,
        kChromeUIPrefsInternalsHost,
+Index: b/chrome/common/webui_url_constants.h
+===================================================================
 --- a/chrome/common/webui_url_constants.h
 +++ b/chrome/common/webui_url_constants.h
 @@ -503,6 +503,8 @@ inline constexpr char kChromeUIProfileCu
@@ -520,6 +527,8 @@
  inline constexpr char kChromeUIProfilePickerHost[] = "profile-picker";
  inline constexpr char kChromeUIProfilePickerStartupQuery[] = "startup";
  inline constexpr char kChromeUIProfilePickerGlicQuery[] = "glic";
+Index: b/chrome/browser/resources/persona_picker/BUILD.gn
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/persona_picker/BUILD.gn
 @@ -0,0 +1,27 @@
@@ -535,8 +544,8 @@
 +  grd_prefix = "persona_picker"
 +
 +  static_files = [ "persona_picker.html" ]
++  web_component_files = [ "persona_picker_app.ts" ]
 +  ts_files = [
-+    "persona_picker.ts",
 +    "persona_picker_browser_proxy.ts",
 +  ]
 +  css_files = [ "persona_picker.css" ]
@@ -550,20 +559,262 @@
 +
 +  webui_context_type = "trusted"
 +}
+Index: b/chrome/browser/resources/persona_picker/persona_picker.css
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/persona_picker/persona_picker.css
-@@ -0,0 +1,7 @@
+@@ -0,0 +1,14 @@
 +/* Copyright 2026 The Helium Authors
 + * You can use, redistribute, and/or modify this source code under
 + * the terms of the GPL-3.0 license that can be found in the LICENSE file.
 + */
++
++/* #css_wrapper_metadata_start
++ * #type=style-lit
++ * #scheme=relative
++ * #css_wrapper_metadata_end */
++
 +:host {
 +  color: var(--cr-primary-text-color);
 +  display: block;
 +}
+Index: b/chrome/browser/resources/persona_picker/persona_picker_browser_proxy.ts
+===================================================================
 --- /dev/null
-+++ b/chrome/browser/resources/persona_picker/persona_picker.ts
-@@ -0,0 +1,303 @@
++++ b/chrome/browser/resources/persona_picker/persona_picker_browser_proxy.ts
+@@ -0,0 +1,61 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++import {sendWithPromise} from 'chrome://resources/js/cr.js';
++
++export interface PersonaProfile {
++  id?: string;
++  displayName?: string;
++  name?: string;
++  icon?: string;
++  platform?: string;
++  uaCh?: {
++    platform?: string;
++  };
++  region?: {
++    locale?: string;
++    timezone?: string;
++  };
++  lastUsedAt?: string;
++}
++
++export interface PersonaProfilesResponse {
++  profiles: PersonaProfile[];
++  presets?: PersonaProfile[];
++  activePersonaId: string;
++  lastUsedPersonaId?: string;
++  launchSelectionMode?: string;
++}
++
++export interface PersonaPickerBrowserProxy {
++  getPersonaProfiles(): Promise<PersonaProfilesResponse>;
++  setLaunchSelectionMode(mode: string): Promise<string>;
++  continueStartupWithPersona(personaId: string): Promise<void>;
++  skipPersonaForStartup(): Promise<void>;
++}
++
++let instance: PersonaPickerBrowserProxy|null = null;
++
++export class PersonaPickerBrowserProxyImpl
++    implements PersonaPickerBrowserProxy {
++  getPersonaProfiles() {
++    return sendWithPromise<PersonaProfilesResponse>('getPersonaProfiles');
++  }
++
++  setLaunchSelectionMode(mode: string) {
++    return sendWithPromise<string>('setLaunchSelectionMode', mode);
++  }
++
++  continueStartupWithPersona(personaId: string) {
++    return sendWithPromise<void>('continueStartupWithPersona', personaId);
++  }
++
++  skipPersonaForStartup() {
++    return sendWithPromise<void>('continueStartupWithPersona', '');
++  }
++
++  static getInstance(): PersonaPickerBrowserProxy {
++    return instance || (instance = new PersonaPickerBrowserProxyImpl());
++  }
++}
+Index: b/chrome/browser/ui/persona_picker/persona_picker_ui.h
+===================================================================
+--- /dev/null
++++ b/chrome/browser/ui/persona_picker/persona_picker_ui.h
+@@ -0,0 +1,17 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
++#define CHROME_BROWSER_UI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
++
++#include "chrome/browser/profiles/profile.h"
++#include "url/gurl.h"
++
++namespace persona_picker {
++
++void ShowPersonaPickerForStartup(Profile* profile, const GURL& url);
++
++}  // namespace persona_picker
++
++#endif  // CHROME_BROWSER_UI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
+Index: b/chrome/browser/ui/webui/persona_picker/BUILD.gn
+===================================================================
+--- /dev/null
++++ b/chrome/browser/ui/webui/persona_picker/BUILD.gn
+@@ -0,0 +1,25 @@
++# Copyright 2026 The Helium Authors
++# You can use, redistribute, and/or modify this source code under
++# the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++assert(!is_android && !is_chromeos)
++
++source_set("persona_picker") {
++  sources = [
++    "persona_picker_ui.cc",
++    "persona_picker_ui.h",
++  ]
++
++  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
++
++  deps = [
++    "//base",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/resources/persona_picker:resources",
++    "//chrome/browser/ui",
++    "//chrome/browser/ui/webui/top_chrome",
++    "//chrome/common",
++    "//content/public/browser",
++    "//ui/webui",
++  ]
++}
+Index: b/chrome/browser/ui/webui/persona_picker/persona_picker_ui.h
+===================================================================
+--- /dev/null
++++ b/chrome/browser/ui/webui/persona_picker/persona_picker_ui.h
+@@ -0,0 +1,31 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_WEBUI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
++#define CHROME_BROWSER_UI_WEBUI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
++
++#include "chrome/browser/ui/webui/top_chrome/top_chrome_web_ui_controller.h"
++#include "content/public/browser/webui_config.h"
++
++class PersonaPickerUI;
++
++class PersonaPickerUIConfig
++    : public content::DefaultWebUIConfig<PersonaPickerUI> {
++ public:
++  PersonaPickerUIConfig();
++};
++
++class PersonaPickerUI : public TopChromeWebUIController {
++ public:
++  explicit PersonaPickerUI(content::WebUI* web_ui);
++  ~PersonaPickerUI() override;
++
++  PersonaPickerUI(const PersonaPickerUI&) = delete;
++  PersonaPickerUI& operator=(const PersonaPickerUI&) = delete;
++
++ private:
++  WEB_UI_CONTROLLER_TYPE_DECL();
++};
++
++#endif  // CHROME_BROWSER_UI_WEBUI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
+Index: b/chrome/browser/resources/persona_picker/persona_picker_app.html
+===================================================================
+--- /dev/null
++++ b/chrome/browser/resources/persona_picker/persona_picker_app.html
+@@ -0,0 +1,73 @@
++<div class="header">
++  <h1>Choose persona</h1>
++  <p>Select the persona to use for this browser startup.</p>
++</div>
++<div class="section">
++  <h2>Saved profiles</h2>
++  <div class="grid">
++    ${this.profiles_.map(profile => html`
++      <button class="card"
++          ?selected=${this.selectedPersonaId_ === (profile.id || '')}
++          @click=${() => this.onSelect_(profile.id || '')}>
++        <div class="card-header">
++          <div class="card-title">
++            <strong>${profile.displayName || profile.name || profile.id || 'Persona'}</strong>
++            <div class="card-subtitle">${this.computeProfileSubtitle_(profile)}</div>
++          </div>
++          <div class="card-status"
++              ?selected=${this.selectedPersonaId_ === (profile.id || '')}>
++            ${this.computeProfileStatus_(profile)}
++          </div>
++        </div>
++        <div class="card-meta">
++          ${this.computeProfileMeta_(profile)}
++        </div>
++        <div class="card-footer">
++          Last used: ${this.computeLastUsedText_(profile.lastUsedAt)}
++        </div>
++      </button>`)}
++  </div>
++</div>
++<div class="section">
++  <h2>System presets</h2>
++  <div class="grid">
++    ${this.presets_.map(profile => html`
++      <button class="card"
++          ?selected=${this.selectedPersonaId_ === (profile.id || '')}
++          @click=${() => this.onSelect_(profile.id || '')}>
++        <div class="card-header">
++          <div class="card-title">
++            <strong>${profile.displayName || profile.name || profile.id || 'Persona'}</strong>
++            <div class="card-subtitle">${this.computeProfileSubtitle_(profile)}</div>
++          </div>
++          <div class="card-status"
++              ?selected=${this.selectedPersonaId_ === (profile.id || '')}>
++            Preset
++          </div>
++        </div>
++        <div class="card-meta">
++          ${this.computeProfileMeta_(profile)}
++        </div>
++        <div class="card-footer">
++          Ready to clone into a session
++        </div>
++      </button>`)}
++  </div>
++</div>
++<div class="actions">
++  <div class="actions-left">
++    <cr-checkbox
++        .checked=${this.rememberChoice_}
++        @change=${this.onRememberChoiceChange_}>
++      Remember and use last selected persona next time
++    </cr-checkbox>
++  </div>
++  <div class="actions-right">
++    <cr-button @click=${this.onSkip_}>
++      Skip
++    </cr-button>
++    <cr-button class="action-button" @click=${this.onContinue_}>
++      Use Persona
++    </cr-button>
++  </div>
++</div>
+Index: b/chrome/browser/resources/persona_picker/persona_picker_app.ts
+===================================================================
+--- /dev/null
++++ b/chrome/browser/resources/persona_picker/persona_picker_app.ts
+@@ -0,0 +1,244 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -573,9 +824,10 @@
 +import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 +
 +import {I18nMixinLit} from 'chrome://resources/cr_elements/i18n_mixin_lit.js';
-+import {CrLitElement, css, html} from 'chrome://resources/lit/v3_0/lit.rollup.js';
++import {CrLitElement, css} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 +
-+import type {PersonaPickerBrowserProxy} from './persona_picker_browser_proxy.js';
++import {getHtml} from './persona_picker_app.html.js';
++import type {PersonaPickerBrowserProxy, PersonaProfile} from './persona_picker_browser_proxy.js';
 +import {PersonaPickerBrowserProxyImpl} from './persona_picker_browser_proxy.js';
 +
 +const PersonaPickerAppElementBase = I18nMixinLit(CrLitElement);
@@ -704,6 +956,10 @@
 +    `;
 +  }
 +
++  override render() {
++    return getHtml.bind(this)();
++  }
++
 +  static override get properties() {
 +    return {
 +      activePersonaId_: {type: String},
@@ -715,56 +971,18 @@
 +    };
 +  }
 +
-+  private accessor activePersonaId_: string = '';
-+  private accessor lastUsedPersonaId_: string = '';
-+  private accessor profiles_: any[] = [];
-+  private accessor presets_: any[] = [];
-+  private accessor selectedPersonaId_: string = '';
-+  private accessor rememberChoice_: boolean = false;
++  accessor activePersonaId_: string = '';
++  accessor lastUsedPersonaId_: string = '';
++  accessor profiles_: PersonaProfile[] = [];
++  accessor presets_: PersonaProfile[] = [];
++  accessor selectedPersonaId_: string = '';
++  accessor rememberChoice_: boolean = false;
 +  private readonly browserProxy_: PersonaPickerBrowserProxy =
 +      PersonaPickerBrowserProxyImpl.getInstance();
 +
 +  override connectedCallback() {
 +    super.connectedCallback();
 +    void this.load_();
-+  }
-+
-+  override render() {
-+    return html`
-+      <div class="header">
-+        <h1>Choose persona</h1>
-+        <p>Select the persona to use for this browser startup.</p>
-+      </div>
-+      <div class="section">
-+        <h2>Saved profiles</h2>
-+        <div class="grid">
-+          ${this.profiles_.map(profile => this.renderPersonaCard_(profile, false))}
-+        </div>
-+      </div>
-+      <div class="section">
-+        <h2>System presets</h2>
-+        <div class="grid">
-+          ${this.presets_.map(profile => this.renderPersonaCard_(profile, true))}
-+        </div>
-+      </div>
-+      <div class="actions">
-+        <div class="actions-left">
-+          <cr-checkbox
-+              .checked=${this.rememberChoice_}
-+              @change=${this.onRememberChoiceChange_}>
-+            Remember and use last selected persona next time
-+          </cr-checkbox>
-+        </div>
-+        <div class="actions-right">
-+          <cr-button @click=${this.onSkip_}>
-+            Skip
-+          </cr-button>
-+          <cr-button class="action-button" @click=${this.onContinue_}>
-+            Use Persona
-+          </cr-button>
-+        </div>
-+      </div>
-+    `;
 +  }
 +
 +  private async load_() {
@@ -779,36 +997,36 @@
 +    this.rememberChoice_ = response.launchSelectionMode === 'use_last';
 +  }
 +
-+  private onSelect_(personaId: string) {
++  onSelect_(personaId: string) {
 +    this.selectedPersonaId_ = personaId;
 +  }
 +
-+  private onRememberChoiceChange_(event: Event) {
++  onRememberChoiceChange_(event: Event) {
 +    const target = event.target as HTMLInputElement;
-+    this.rememberChoice_ = !!target.checked;
++    this.rememberChoice_ = target.checked;
 +  }
 +
-+  private computeProfileSubtitle_(profile: any): string {
++  computeProfileSubtitle_(profile: PersonaProfile): string {
 +    const platform = profile.platform || profile.uaCh?.platform ||
 +        'Unknown platform';
 +    const locale = profile.region?.locale || 'en-US';
 +    return `${platform} | ${locale}`;
 +  }
 +
-+  private computeProfileMeta_(profile: any): string {
++  computeProfileMeta_(profile: PersonaProfile): string {
 +    const region = profile.region?.timezone || 'UTC';
 +    const icon = profile.icon || 'default';
 +    return `Icon: ${icon} | Timezone: ${region}`;
 +  }
 +
-+  private computeLastUsedText_(lastUsedAt?: string): string {
++  computeLastUsedText_(lastUsedAt?: string): string {
 +    if (!lastUsedAt) {
 +      return 'Never';
 +    }
 +    return lastUsedAt;
 +  }
 +
-+  private computeProfileStatus_(profile: any): string {
++  computeProfileStatus_(profile: PersonaProfile): string {
 +    if (profile.id === this.selectedPersonaId_) {
 +      return 'Selected';
 +    }
@@ -821,42 +1039,16 @@
 +    return 'Saved';
 +  }
 +
-+  private renderPersonaCard_(profile: any, isPreset: boolean) {
-+    return html`
-+      <button class="card"
-+          ?selected=${this.selectedPersonaId_ === (profile.id || '')}
-+          @click=${() => this.onSelect_(profile.id || '')}>
-+        <div class="card-header">
-+          <div class="card-title">
-+            <strong>${profile.displayName || profile.name || profile.id || 'Persona'}</strong>
-+            <div class="card-subtitle">${this.computeProfileSubtitle_(profile)}</div>
-+          </div>
-+          <div class="card-status"
-+              ?selected=${this.selectedPersonaId_ === (profile.id || '')}>
-+            ${isPreset ? 'Preset' : this.computeProfileStatus_(profile)}
-+          </div>
-+        </div>
-+        <div class="card-meta">
-+          ${this.computeProfileMeta_(profile)}
-+        </div>
-+        <div class="card-footer">
-+          ${isPreset ? 'Ready to clone into a session' :
-+              `Last used: ${this.computeLastUsedText_(profile.lastUsedAt)}`}
-+        </div>
-+      </button>
-+    `;
-+  }
-+
-+  private async onSkip_() {
++  async onSkip_() {
 +    await this.browserProxy_.setLaunchSelectionMode(
 +        this.rememberChoice_ ? 'use_last' : 'always_ask');
-+    this.browserProxy_.skipPersonaForStartup();
++    await this.browserProxy_.skipPersonaForStartup();
 +  }
 +
-+  private async onContinue_() {
++  async onContinue_() {
 +    await this.browserProxy_.setLaunchSelectionMode(
 +        this.rememberChoice_ ? 'use_last' : 'always_ask');
-+    this.browserProxy_.continueStartupWithPersona(this.selectedPersonaId_);
++    await this.browserProxy_.continueStartupWithPersona(this.selectedPersonaId_);
 +  }
 +}
 +
@@ -867,57 +1059,37 @@
 +}
 +
 +customElements.define(PersonaPickerAppElement.is, PersonaPickerAppElement);
+Index: b/tools/gritsettings/resource_ids.spec
+===================================================================
+--- a/tools/gritsettings/resource_ids.spec
++++ b/tools/gritsettings/resource_ids.spec
+@@ -628,6 +628,10 @@
+     "META": {"sizes": {"includes": [200]}},
+     "includes": [4520],
+   },
++  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/persona_picker/resources.grd": {
++    "META": {"sizes": {"includes": [20]}},
++    "includes": [4530],
++  },
+   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/pdf/resources.grd": {
+     "META": {"sizes": {"includes": [200]}},
+     "includes": [4540],
+Index: b/ui/webui/resources/tools/build_webui.gni
+===================================================================
+--- a/ui/webui/resources/tools/build_webui.gni
++++ b/ui/webui/resources/tools/build_webui.gni
+@@ -577,6 +577,7 @@ template("build_webui") {
+         "//chrome/browser/resources/memory_internals",
+         "//chrome/browser/resources/omnibox",
+         "//chrome/browser/resources/password_manager",
++        "//chrome/browser/resources/persona_picker",
+         "//chrome/browser/resources/predictors",
+         "//chrome/browser/resources/print_preview",
+         "//chrome/browser/resources/profile_internals",
+Index: b/chrome/browser/ui/persona_picker/persona_picker_launcher.cc
+===================================================================
 --- /dev/null
-+++ b/chrome/browser/resources/persona_picker/persona_picker_browser_proxy.ts
-@@ -0,0 +1,46 @@
-+// Copyright 2026 The Helium Authors
-+// You can use, redistribute, and/or modify this source code under
-+// the terms of the GPL-3.0 license that can be found in the LICENSE file.
-+
-+import {chromeSend} from 'chrome://resources/js/cr.js';
-+import {sendWithPromise} from 'chrome://resources/js/cr.js';
-+
-+export interface PersonaProfilesResponse {
-+  profiles: any[];
-+  presets?: any[];
-+  activePersonaId: string;
-+  lastUsedPersonaId?: string;
-+  launchSelectionMode?: string;
-+}
-+
-+export interface PersonaPickerBrowserProxy {
-+  getPersonaProfiles(): Promise<PersonaProfilesResponse>;
-+  setLaunchSelectionMode(mode: string): Promise<string>;
-+  continueStartupWithPersona(personaId: string): void;
-+  skipPersonaForStartup(): void;
-+}
-+
-+let instance: PersonaPickerBrowserProxy|null = null;
-+
-+export class PersonaPickerBrowserProxyImpl
-+    implements PersonaPickerBrowserProxy {
-+  getPersonaProfiles() {
-+    return sendWithPromise<PersonaProfilesResponse>('getPersonaProfiles');
-+  }
-+
-+  setLaunchSelectionMode(mode: string) {
-+    return sendWithPromise<string>('setLaunchSelectionMode', mode);
-+  }
-+
-+  continueStartupWithPersona(personaId: string) {
-+    chromeSend('continueStartupWithPersona', [personaId]);
-+  }
-+
-+  skipPersonaForStartup() {
-+    chromeSend('continueStartupWithPersona', ['']);
-+  }
-+
-+  static getInstance(): PersonaPickerBrowserProxy {
-+    return instance || (instance = new PersonaPickerBrowserProxyImpl());
-+  }
-+}
---- /dev/null
-+++ b/chrome/browser/ui/persona_picker/persona_picker_ui.cc
++++ b/chrome/browser/ui/persona_picker/persona_picker_launcher.cc
 @@ -0,0 +1,25 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
@@ -944,85 +1116,3 @@
 +
 +}  // namespace persona_picker
 +
---- /dev/null
-+++ b/chrome/browser/ui/persona_picker/persona_picker_ui.h
-@@ -0,0 +1,17 @@
-+// Copyright 2026 The Helium Authors
-+// You can use, redistribute, and/or modify this source code under
-+// the terms of the GPL-3.0 license that can be found in the LICENSE file.
-+
-+#ifndef CHROME_BROWSER_UI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
-+#define CHROME_BROWSER_UI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
-+
-+#include "chrome/browser/profiles/profile.h"
-+#include "url/gurl.h"
-+
-+namespace persona_picker {
-+
-+void ShowPersonaPickerForStartup(Profile* profile, const GURL& url);
-+
-+}  // namespace persona_picker
-+
-+#endif  // CHROME_BROWSER_UI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
---- /dev/null
-+++ b/chrome/browser/ui/webui/persona_picker/BUILD.gn
-@@ -0,0 +1,25 @@
-+# Copyright 2026 The Helium Authors
-+# You can use, redistribute, and/or modify this source code under
-+# the terms of the GPL-3.0 license that can be found in the LICENSE file.
-+
-+assert(!is_android && !is_chromeos)
-+
-+source_set("persona_picker") {
-+  sources = [
-+    "persona_picker_ui.cc",
-+    "persona_picker_ui.h",
-+  ]
-+
-+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
-+
-+  deps = [
-+    "//base",
-+    "//chrome/browser/profiles:profile",
-+    "//chrome/browser/resources/persona_picker:resources",
-+    "//chrome/browser/ui",
-+    "//chrome/browser/ui/webui/top_chrome",
-+    "//chrome/common",
-+    "//content/public/browser",
-+    "//ui/webui",
-+  ]
-+}
---- /dev/null
-+++ b/chrome/browser/ui/webui/persona_picker/persona_picker_ui.h
-@@ -0,0 +1,31 @@
-+// Copyright 2026 The Helium Authors
-+// You can use, redistribute, and/or modify this source code under
-+// the terms of the GPL-3.0 license that can be found in the LICENSE file.
-+
-+#ifndef CHROME_BROWSER_UI_WEBUI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
-+#define CHROME_BROWSER_UI_WEBUI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
-+
-+#include "chrome/browser/ui/webui/top_chrome/top_chrome_web_ui_controller.h"
-+#include "content/public/browser/webui_config.h"
-+
-+class PersonaPickerUI;
-+
-+class PersonaPickerUIConfig
-+    : public content::DefaultWebUIConfig<PersonaPickerUI> {
-+ public:
-+  PersonaPickerUIConfig();
-+};
-+
-+class PersonaPickerUI : public TopChromeWebUIController {
-+ public:
-+  explicit PersonaPickerUI(content::WebUI* web_ui);
-+  ~PersonaPickerUI() override;
-+
-+  PersonaPickerUI(const PersonaPickerUI&) = delete;
-+  PersonaPickerUI& operator=(const PersonaPickerUI&) = delete;
-+
-+ private:
-+  WEB_UI_CONTROLLER_TYPE_DECL();
-+};
-+
-+#endif  // CHROME_BROWSER_UI_WEBUI_PERSONA_PICKER_PERSONA_PICKER_UI_H_

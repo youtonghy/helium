@@ -1,31 +1,38 @@
+Index: b/content/browser/renderer_host/navigation_controller_impl.cc
+===================================================================
 --- a/content/browser/renderer_host/navigation_controller_impl.cc
 +++ b/content/browser/renderer_host/navigation_controller_impl.cc
 @@ -38,6 +38,7 @@
  #include <algorithm>
  #include <utility>
- 
+
 +#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
  #include "base/command_line.h"
  #include "base/containers/adapters.h"
  #include "base/debug/crash_logging.h"
-@@ -4682,6 +4683,7 @@ NavigationControllerImpl::CreateNavigati
+@@ -4682,6 +4683,10 @@ NavigationControllerImpl::CreateNavigati
            /*visited_link_salt=*/std::nullopt,
            /*local_surface_id=*/std::nullopt,
            node->current_frame_host()->GetCachedPermissionStatuses(),
 +          blink::HeliumPersonaSnapshot(),
++          /*helium_canvas_noise_token=*/std::nullopt,
++          /*helium_audio_noise_token=*/std::nullopt,
++          /*helium_font_metric_noise_token=*/std::nullopt,
            /*should_skip_screentshot=*/false,
            /*force_new_document_sequence_number=*/false,
            /*navigation_metrics_token=*/base::UnguessableToken::Create(),
-@@ -4695,6 +4697,9 @@ NavigationControllerImpl::CreateNavigati
+@@ -4695,6 +4700,9 @@ NavigationControllerImpl::CreateNavigati
            /*permissions_policy_override=*/std::nullopt,
            /*internal_scroll_to_text_fragment=*/
            params.internal_scroll_to_text_fragment);
 +  commit_params->persona_snapshot =
 +      GetContentClient()->browser()->GetHeliumPersonaSnapshot(
 +          node->navigator().controller().GetBrowserContext());
- 
+
    // internal_scroll_to_text_fragment should only be set for browser-initiated
    // navigations.
+Index: b/content/browser/renderer_host/navigation_entry_impl.cc
+===================================================================
 --- a/content/browser/renderer_host/navigation_entry_impl.cc
 +++ b/content/browser/renderer_host/navigation_entry_impl.cc
 @@ -34,6 +34,7 @@
@@ -36,24 +43,32 @@
  #include "third_party/blink/public/common/navigation/navigation_params.h"
  #include "third_party/blink/public/common/page_state/page_state_serialization.h"
  #include "third_party/blink/public/mojom/frame/frame.mojom.h"
-@@ -1072,6 +1073,7 @@ NavigationEntryImpl::ConstructCommitNavi
+@@ -1072,6 +1073,10 @@ NavigationEntryImpl::ConstructCommitNavi
            /*visited_link_salt=*/std::nullopt,
            /*local_surface_id=*/std::nullopt,
            /*initial_permission_statuses=*/std::nullopt,
 +          blink::HeliumPersonaSnapshot(),
++          /*helium_canvas_noise_token=*/std::nullopt,
++          /*helium_audio_noise_token=*/std::nullopt,
++          /*helium_font_metric_noise_token=*/std::nullopt,
            /*should_skip_screenshot*/ false,
            /*force_new_document_sequence_number=*/false,
            /*navigation_metrics_token=*/base::UnguessableToken::Create(),
-@@ -1084,6 +1086,9 @@ NavigationEntryImpl::ConstructCommitNavi
+@@ -1084,6 +1089,12 @@ NavigationEntryImpl::ConstructCommitNavi
  #endif
            /*permissions_policy_override=*/std::nullopt,
            /*internal_scroll_to_text_fragment=*/std::nullopt);
-+  commit_params->persona_snapshot =
-+      GetContentClient()->browser()->GetHeliumPersonaSnapshot(
-+          frame_tree_node()->navigator().controller().GetBrowserContext());
++  if (FrameTreeNode* frame_tree_node =
++          FrameTreeNode::GloballyFindByID(frame_tree_node_id())) {
++    commit_params->persona_snapshot =
++        GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++            frame_tree_node->navigator().controller().GetBrowserContext());
++  }
  #if BUILDFLAG(IS_ANDROID)
    // `data_url_as_string` is saved in NavigationEntry but should only be used by
    // main frames, because loadData* navigations can only happen on the main
+Index: b/content/browser/renderer_host/navigation_request.cc
+===================================================================
 --- a/content/browser/renderer_host/navigation_request.cc
 +++ b/content/browser/renderer_host/navigation_request.cc
 @@ -150,6 +150,7 @@
@@ -100,6 +115,8 @@
    blink::mojom::BeginNavigationParamsPtr begin_params =
        blink::mojom::BeginNavigationParams::New();
    std::unique_ptr<NavigationRequest> navigation_request(new NavigationRequest(
+Index: b/content/public/renderer/render_frame.h
+===================================================================
 --- a/content/public/renderer/render_frame.h
 +++ b/content/public/renderer/render_frame.h
 @@ -18,6 +18,7 @@
@@ -113,7 +130,7 @@
 @@ -221,6 +222,10 @@ class CONTENT_EXPORT RenderFrame :
    // Returns the device scale factor of the display the render frame is in.
    virtual float GetDeviceScaleFactor() = 0;
- 
+
 +  // Returns the currently committed Helium persona snapshot for this frame.
 +  virtual const blink::HeliumPersonaSnapshot& GetHeliumPersonaSnapshot()
 +      const = 0;
@@ -121,6 +138,8 @@
    // Return the dedicated scheduler for the AgentSchedulingGroup associated with
    // this RenderFrame.
    virtual blink::scheduler::WebAgentGroupScheduler&
+Index: b/content/renderer/render_frame_impl.cc
+===================================================================
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
 @@ -102,6 +102,7 @@
@@ -131,15 +150,80 @@
  #include "content/renderer/policy_container_util.h"
  #include "content/renderer/render_process.h"
  #include "content/renderer/render_thread_impl.h"
-@@ -3778,6 +3779,7 @@ blink::WebFrame* RenderFrameImpl::FindFr
+@@ -342,6 +343,41 @@ enum class RendererBlockedURLReason {
+   kMaxValue = kBadAboutURL
+ };
+
++blink::UserAgentMetadata ApplyHeliumPersonaUserAgentMetadata(
++    const blink::HeliumPersonaSnapshot& snapshot,
++    blink::UserAgentMetadata metadata) {
++  if (!snapshot.ua_ch_platform.empty())
++    metadata.platform = snapshot.ua_ch_platform;
++  if (!snapshot.ua_ch_platform_version.empty())
++    metadata.platform_version = snapshot.ua_ch_platform_version;
++  if (!snapshot.ua_ch_architecture.empty())
++    metadata.architecture = snapshot.ua_ch_architecture;
++  if (!snapshot.ua_ch_model.empty())
++    metadata.model = snapshot.ua_ch_model;
++  if (!snapshot.ua_ch_bitness.empty())
++    metadata.bitness = snapshot.ua_ch_bitness;
++  if (!snapshot.ua_ch_full_version.empty())
++    metadata.full_version = snapshot.ua_ch_full_version;
++
++  metadata.mobile = snapshot.ua_ch_mobile;
++  metadata.wow64 = snapshot.ua_ch_wow64;
++
++  if (!snapshot.ua_ch_form_factors.empty())
++    metadata.form_factors = snapshot.ua_ch_form_factors;
++
++  if (!snapshot.ua_ch_brands.empty()) {
++    metadata.brand_version_list.clear();
++    metadata.brand_full_version_list.clear();
++    for (const auto& brand : snapshot.ua_ch_brands) {
++      metadata.brand_version_list.emplace_back(brand.brand, brand.version);
++      metadata.brand_full_version_list.emplace_back(brand.brand,
++                                                    brand.version);
++    }
++  }
++
++  return metadata;
++}
++
+ int64_t ExtractPostId(const WebHistoryItem& item) {
+   if (item.IsNull() || item.HttpBody().IsNull())
+     return -1;
+@@ -3778,6 +3814,7 @@ blink::WebFrame* RenderFrameImpl::FindFr
  }
- 
+
  void RenderFrameImpl::WillDetach(blink::DetachReason detach_reason) {
 +  PersonaTimezoneCoordinator::GetInstance().Clear(this);
    if (detach_reason == blink::DetachReason::kNavigation) {
      if (navigation_client_impl_) {
        navigation_client_impl_->ResetWithoutCancelling();
-@@ -5297,6 +5299,13 @@ void RenderFrameImpl::PrepareFrameForCom
+@@ -4796,6 +4833,9 @@ blink::WebEncryptedMediaClient* RenderFr
+ }
+
+ blink::WebString RenderFrameImpl::UserAgentOverride() {
++  if (persona_snapshot_.IsEnabled() && !persona_snapshot_.user_agent.empty())
++    return WebString::FromUtf8(persona_snapshot_.user_agent);
++
+   if (ShouldUseUserAgentOverride()) {
+     return WebString::FromUtf8(GetWebView()
+                                    ->GetRendererPreferences()
+@@ -4807,6 +4847,12 @@ blink::WebString RenderFrameImpl::UserAg
+
+ std::optional<blink::UserAgentMetadata>
+ RenderFrameImpl::UserAgentMetadataOverride() {
++  if (persona_snapshot_.IsEnabled() &&
++      persona_snapshot_.client_hints_enabled) {
++    return ApplyHeliumPersonaUserAgentMetadata(
++        persona_snapshot_, RenderThread::Get()->GetUserAgentMetadata());
++  }
++
+   if (ShouldUseUserAgentOverride()) {
+     return GetWebView()
+         ->GetRendererPreferences()
+@@ -5297,6 +5343,13 @@ void RenderFrameImpl::PrepareFrameForCom
      const GURL& url,
      const blink::mojom::CommitNavigationParams& commit_params) {
    is_requesting_navigation_ = false;
@@ -152,7 +236,9 @@
 +                                          : std::string());
    GetContentClient()->SetActiveURL(
        url, frame_->Top()->GetSecurityOrigin().ToString().Utf8());
- 
+
+Index: b/content/renderer/render_frame_impl.h
+===================================================================
 --- a/content/renderer/render_frame_impl.h
 +++ b/content/renderer/render_frame_impl.h
 @@ -76,6 +76,7 @@
@@ -165,41 +251,45 @@
  #include "third_party/blink/public/common/permissions_policy/document_policy.h"
 @@ -644,6 +645,9 @@ class CONTENT_EXPORT RenderFrameImpl
    base::ScopedClosureRunner CreateScopedClientNavigationThrottler() override;
- 
+
    bool IsForInitialWebUI() const override;
 +  const blink::HeliumPersonaSnapshot& GetHeliumPersonaSnapshot() const override {
 +    return persona_snapshot_;
 +  }
- 
+
    // Dispatches the current state of selection on the webpage to the browser if
    // it has changed or if the forced flag is passed. The forced flag is used
 @@ -1499,6 +1503,8 @@ class CONTENT_EXPORT RenderFrameImpl
    // scroll offset) within the main frame document.
    std::optional<gfx::Rect> main_frame_viewport_rect_;
- 
+
 +  blink::HeliumPersonaSnapshot persona_snapshot_;
 +
    std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
        websocket_handshake_throttle_provider_;
- 
+
+Index: b/third_party/blink/common/navigation/navigation_params.cc
+===================================================================
 --- a/third_party/blink/common/navigation/navigation_params.cc
 +++ b/third_party/blink/common/navigation/navigation_params.cc
 @@ -4,6 +4,7 @@
- 
+
  #include "third_party/blink/public/common/navigation/navigation_params.h"
- 
+
 +#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
  #include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
- 
+
  namespace blink {
 @@ -28,6 +29,7 @@ mojom::CommitNavigationParamsPtr CreateC
    commit_params->navigation_metrics_token = base::UnguessableToken::Create();
    commit_params->agent_cluster_key =
        blink::mojom::AgentClusterKey::NewSiteKey(GURL());
 +  commit_params->persona_snapshot = blink::HeliumPersonaSnapshot();
- 
+
    return commit_params;
  }
+Index: b/third_party/blink/public/mojom/navigation/navigation_params.mojom
+===================================================================
 --- a/third_party/blink/public/mojom/navigation/navigation_params.mojom
 +++ b/third_party/blink/public/mojom/navigation/navigation_params.mojom
 @@ -26,6 +26,7 @@ import "third_party/blink/public/mojom/f
@@ -213,13 +303,15 @@
 @@ -687,6 +688,9 @@ struct CommitNavigationParams {
    //  Could be null for synchronous commit, same document navigations.
    map<PermissionName, PermissionStatus>? initial_permission_statuses;
- 
+
 +  // Helium persona runtime snapshot to apply to the committed document.
 +  blink.mojom.HeliumPersonaSnapshot persona_snapshot;
 +
    // Whether to skip taking a screenshot of the contents when doing a
    // navigation. The screenshot is used for back/forward transition animations.
    bool should_skip_screenshot;
+Index: b/third_party/blink/public/web/web_local_frame_client.h
+===================================================================
 --- a/third_party/blink/public/web/web_local_frame_client.h
 +++ b/third_party/blink/public/web/web_local_frame_client.h
 @@ -49,6 +49,7 @@
@@ -233,7 +325,7 @@
 @@ -595,6 +596,11 @@ class BLINK_EXPORT WebLocalFrameClient {
    // A PingLoader was created, and a request dispatched to a URL.
    virtual void DidDispatchPingLoader(const WebURL&) {}
- 
+
 +  virtual const HeliumPersonaSnapshot& GetHeliumPersonaSnapshot() const {
 +    static const HeliumPersonaSnapshot kEmptySnapshot;
 +    return kEmptySnapshot;
@@ -241,22 +333,29 @@
 +
    // A performance timing event (e.g. first paint) occurred
    virtual void DidChangePerformanceTiming() {}
- 
+
+Index: b/third_party/blink/renderer/core/frame/navigator.cc
+===================================================================
 --- a/third_party/blink/renderer/core/frame/navigator.cc
 +++ b/third_party/blink/renderer/core/frame/navigator.cc
-@@ -24,6 +24,8 @@
+@@ -24,9 +24,13 @@
  #include "third_party/blink/renderer/core/frame/navigator.h"
- 
+
  #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 +#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/web/web_local_frame.h"
 +#include "third_party/blink/public/web/web_local_frame_client.h"
  #include "third_party/blink/renderer/core/dom/document.h"
  #include "third_party/blink/renderer/core/execution_context/navigator_base.h"
  #include "third_party/blink/renderer/core/frame/local_dom_window.h"
-@@ -37,13 +39,37 @@
- 
++#include "third_party/blink/renderer/core/frame/local_frame_client.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/frame/settings.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+@@ -37,13 +41,37 @@
+
  namespace blink {
- 
+
 +namespace {
 +
 +const HeliumPersonaSnapshot* GetPersonaSnapshot(LocalDOMWindow* window) {
@@ -274,41 +373,44 @@
 +}  // namespace
 +
  Navigator::Navigator(ExecutionContext* context) : NavigatorBase(context) {}
- 
+
  String Navigator::productSub() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(DomWindow());
 +      snapshot && !snapshot->navigator_product_sub.empty()) {
-+    return String::FromUTF8(snapshot->navigator_product_sub);
++    return String::FromUtf8(snapshot->navigator_product_sub);
 +  }
    return "20030107";
  }
- 
+
  String Navigator::vendor() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(DomWindow());
 +      snapshot && !snapshot->navigator_vendor.empty()) {
-+    return String::FromUTF8(snapshot->navigator_vendor);
++    return String::FromUtf8(snapshot->navigator_vendor);
 +  }
    // Do not change without good cause. History:
    // https://code.google.com/p/chromium/issues/detail?id=276813
    // https://www.w3.org/Bugs/Public/show_bug.cgi?id=27786
+Index: b/third_party/blink/renderer/core/frame/local_dom_window.cc
+===================================================================
 --- a/third_party/blink/renderer/core/frame/local_dom_window.cc
 +++ b/third_party/blink/renderer/core/frame/local_dom_window.cc
-@@ -40,8 +40,10 @@
+@@ -40,8 +40,11 @@
  #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
  #include "net/storage_access_api/status.h"
  #include "third_party/blink/public/common/features.h"
 +#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
  #include "third_party/blink/public/common/navigation/impression.h"
  #include "third_party/blink/public/common/switches.h"
++#include "third_party/blink/public/web/web_local_frame.h"
 +#include "third_party/blink/public/web/web_local_frame_client.h"
  #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
  #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
  #include "third_party/blink/public/mojom/permissions_policy/policy_disposition.mojom-blink.h"
-@@ -177,6 +179,18 @@
+@@ -177,6 +180,18 @@
  namespace blink {
- 
+
  namespace {
-+const HeliumPersonaSnapshot* GetPersonaSnapshot(LocalDOMWindow* window) {
++const HeliumPersonaSnapshot* GetPersonaSnapshot(const LocalDOMWindow* window) {
 +  if (!window || !window->GetFrame() || !window->GetFrame()->Client() ||
 +      !window->GetFrame()->Client()->GetWebFrame() ||
 +      !window->GetFrame()->Client()->GetWebFrame()->Client()) {
@@ -323,9 +425,9 @@
  bool IsRunningMicrotasks(ScriptState* script_state) {
    if (auto* microtask_queue = ToMicrotaskQueue(script_state))
      return microtask_queue->IsRunningMicrotasks();
-@@ -1572,6 +1586,10 @@ bool LocalDOMWindow::offscreenBuffering(
+@@ -1572,6 +1587,10 @@ bool LocalDOMWindow::offscreenBuffering(
  }
- 
+
  int LocalDOMWindow::outerHeight() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(this);
 +      snapshot && snapshot->outer_height > 0) {
@@ -333,10 +435,10 @@
 +  }
    if (!GetFrame())
      return 0;
- 
-@@ -1597,6 +1615,10 @@ int LocalDOMWindow::outerHeight() const
+
+@@ -1597,6 +1616,10 @@ int LocalDOMWindow::outerHeight() const
  }
- 
+
  int LocalDOMWindow::outerWidth() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(this);
 +      snapshot && snapshot->outer_width > 0) {
@@ -344,10 +446,10 @@
 +  }
    if (!GetFrame())
      return 0;
- 
-@@ -1800,6 +1822,10 @@ CSSStyleDeclaration* LocalDOMWindow::get
+
+@@ -1800,6 +1823,10 @@ CSSStyleDeclaration* LocalDOMWindow::get
  }
- 
+
  double LocalDOMWindow::devicePixelRatio() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(this);
 +      snapshot && snapshot->device_scale_factor > 0.0) {
@@ -355,20 +457,26 @@
 +  }
    if (!GetFrame())
      return 0.0;
- 
+
+Index: b/third_party/blink/renderer/core/events/navigator_events.cc
+===================================================================
 --- a/third_party/blink/renderer/core/events/navigator_events.cc
 +++ b/third_party/blink/renderer/core/events/navigator_events.cc
-@@ -30,6 +30,8 @@
- 
+@@ -30,8 +30,12 @@
+
  #include "third_party/blink/renderer/core/events/navigator_events.h"
- 
+
 +#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/web/web_local_frame.h"
 +#include "third_party/blink/public/web/web_local_frame_client.h"
  #include "third_party/blink/renderer/core/frame/local_dom_window.h"
  #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/frame/local_frame_client.h"
  #include "third_party/blink/renderer/core/frame/navigator.h"
-@@ -39,6 +41,16 @@ namespace blink {
- 
+ #include "third_party/blink/renderer/core/frame/settings.h"
+
+@@ -39,6 +43,16 @@ namespace blink {
+
  int32_t NavigatorEvents::maxTouchPoints(Navigator& navigator) {
    LocalDOMWindow* window = navigator.DomWindow();
 +  if (window && window->GetFrame() && window->GetFrame()->Client() &&
@@ -383,24 +491,28 @@
 +  }
    return window ? window->GetFrame()->GetSettings()->GetMaxTouchPoints() : 0;
  }
- 
+
+Index: b/third_party/blink/renderer/core/execution_context/navigator_base.cc
+===================================================================
 --- a/third_party/blink/renderer/core/execution_context/navigator_base.cc
 +++ b/third_party/blink/renderer/core/execution_context/navigator_base.cc
-@@ -7,7 +7,10 @@
+@@ -7,7 +7,12 @@
  #include "base/feature_list.h"
  #include "build/build_config.h"
  #include "third_party/blink/public/common/features.h"
 +#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/web/web_local_frame.h"
 +#include "third_party/blink/public/web/web_local_frame_client.h"
  #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 +#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/frame/local_frame_client.h"
  #include "third_party/blink/renderer/core/frame/navigator_concurrent_hardware.h"
  #include "third_party/blink/renderer/core/probe/core_probes.h"
  #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-@@ -41,6 +44,22 @@ String GetReducedNavigatorPlatform() {
+@@ -41,6 +46,22 @@ String GetReducedNavigatorPlatform() {
  #endif
  }
- 
+
 +const HeliumPersonaSnapshot* GetPersonaSnapshot(ExecutionContext* context) {
 +  if (!context || !context->IsWindow()) {
 +    return nullptr;
@@ -418,23 +530,23 @@
 +}
 +
  }  // namespace
- 
+
  NavigatorBase::NavigatorBase(ExecutionContext* context)
-@@ -52,6 +71,11 @@ String NavigatorBase::userAgent() const
+@@ -52,6 +73,11 @@ String NavigatorBase::userAgent() const
  }
- 
+
  String NavigatorBase::platform() const {
 +  if (const HeliumPersonaSnapshot* snapshot =
 +          GetPersonaSnapshot(GetExecutionContext());
 +      snapshot && !snapshot->platform.empty()) {
-+    return String::FromUTF8(snapshot->platform);
++    return String::FromUtf8(snapshot->platform);
 +  }
  #if BUILDFLAG(IS_ANDROID)
    // We need to check the ReduceUserAgentMinorVersion feature flag for
    // Android WebView, which does not currently ship a reduced User-Agent.
-@@ -70,6 +94,11 @@ void NavigatorBase::Trace(Visitor* visit
+@@ -70,6 +96,11 @@ void NavigatorBase::Trace(Visitor* visit
  }
- 
+
  unsigned int NavigatorBase::hardwareConcurrency() const {
 +  if (const HeliumPersonaSnapshot* snapshot =
 +          GetPersonaSnapshot(GetExecutionContext());
@@ -443,11 +555,11 @@
 +  }
    unsigned int hardware_concurrency =
        NavigatorConcurrentHardware::hardwareConcurrency();
- 
-@@ -78,6 +107,15 @@ unsigned int NavigatorBase::hardwareConc
+
+@@ -78,6 +109,15 @@ unsigned int NavigatorBase::hardwareConc
    return hardware_concurrency;
  }
- 
+
 +float NavigatorBase::deviceMemory() const {
 +  if (const HeliumPersonaSnapshot* snapshot =
 +          GetPersonaSnapshot(GetExecutionContext());
@@ -460,23 +572,39 @@
  ExecutionContext* NavigatorBase::GetUAExecutionContext() const {
    return GetExecutionContext();
  }
+Index: b/third_party/blink/renderer/core/execution_context/navigator_base.h
+===================================================================
+--- a/third_party/blink/renderer/core/execution_context/navigator_base.h
++++ b/third_party/blink/renderer/core/execution_context/navigator_base.h
+@@
+   void Trace(Visitor* visitor) const override;
+
+   unsigned int hardwareConcurrency() const override;
++  float deviceMemory() const;
+
+  protected:
+   ExecutionContext* GetUAExecutionContext() const override;
+Index: b/third_party/blink/renderer/core/frame/navigator_language.cc
+===================================================================
 --- a/third_party/blink/renderer/core/frame/navigator_language.cc
 +++ b/third_party/blink/renderer/core/frame/navigator_language.cc
-@@ -6,7 +6,10 @@
- 
+@@ -6,7 +6,12 @@
+
  #include "base/command_line.h"
  #include "services/network/public/cpp/features.h"
 +#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/web/web_local_frame.h"
 +#include "third_party/blink/public/web/web_local_frame_client.h"
  #include "third_party/blink/public/common/switches.h"
 +#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/frame/local_frame_client.h"
  #include "third_party/blink/renderer/core/frame/web_feature.h"
  #include "third_party/blink/renderer/core/probe/core_probes.h"
  #include "third_party/blink/renderer/platform/language.h"
-@@ -14,6 +17,26 @@
- 
+@@ -14,6 +19,26 @@
+
  namespace blink {
- 
+
 +namespace {
 +
 +const HeliumPersonaSnapshot* GetPersonaSnapshot(ExecutionContext* context) {
@@ -499,17 +627,17 @@
 +
  Vector<String> ParseAndSanitize(const String& accept_languages) {
    Vector<String> languages = accept_languages.SplitSkippingEmpty(',');
- 
-@@ -69,6 +92,17 @@ void NavigatorLanguage::SetLanguagesForT
+
+@@ -69,6 +94,17 @@ void NavigatorLanguage::SetLanguagesForT
  }
- 
+
  void NavigatorLanguage::EnsureUpdatedLanguage() {
 +  if (const HeliumPersonaSnapshot* snapshot =
 +          GetPersonaSnapshot(execution_context_.Get());
 +      snapshot && !snapshot->navigator_languages.empty()) {
 +    languages_.clear();
 +    for (const std::string& language : snapshot->navigator_languages) {
-+      languages_.push_back(String::FromUTF8(language));
++      languages_.push_back(String::FromUtf8(language));
 +    }
 +    languages_dirty_ = false;
 +    return;
@@ -518,21 +646,28 @@
    String accept_languages_override;
    probe::ApplyAcceptLanguageOverride(execution_context_,
                                       &accept_languages_override);
+Index: b/third_party/blink/renderer/core/frame/screen.cc
+===================================================================
 --- a/third_party/blink/renderer/core/frame/screen.cc
 +++ b/third_party/blink/renderer/core/frame/screen.cc
-@@ -30,6 +30,8 @@
- 
+@@ -30,9 +30,13 @@
+
  #include "base/numerics/safe_conversions.h"
  #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 +#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/web/web_local_frame.h"
 +#include "third_party/blink/public/web/web_local_frame_client.h"
  #include "third_party/blink/renderer/core/event_target_names.h"
  #include "third_party/blink/renderer/core/frame/local_dom_window.h"
  #include "third_party/blink/renderer/core/frame/local_frame.h"
-@@ -40,6 +42,22 @@
- 
++#include "third_party/blink/renderer/core/frame/local_frame_client.h"
+ #include "third_party/blink/renderer/core/frame/settings.h"
+ #include "third_party/blink/renderer/core/page/chrome_client.h"
+ #include "ui/display/screen_info.h"
+@@ -40,6 +44,22 @@
+
  namespace blink {
- 
+
 +namespace {
 +
 +const HeliumPersonaSnapshot* GetPersonaSnapshot(LocalDOMWindow* window) {
@@ -551,10 +686,10 @@
 +
  Screen::Screen(LocalDOMWindow* window, int64_t display_id)
      : ExecutionContextClient(window), display_id_(display_id) {}
- 
-@@ -79,12 +97,18 @@ bool Screen::AreWebExposedScreenProperti
+
+@@ -79,12 +99,18 @@ bool Screen::AreWebExposedScreenProperti
  }
- 
+
  int Screen::height() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(DomWindow())) {
 +    return snapshot->screen_height;
@@ -563,7 +698,7 @@
      return 0;
    return GetRect(/*available=*/false).height();
  }
- 
+
  int Screen::width() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(DomWindow())) {
 +    return snapshot->screen_width;
@@ -571,7 +706,7 @@
    if (!DomWindow())
      return 0;
    return GetRect(/*available=*/false).width();
-@@ -100,34 +124,54 @@ unsigned Screen::colorDepth() const {
+@@ -100,34 +126,54 @@ unsigned Screen::colorDepth() const {
    if (!DomWindow()) {
      return unknown_color_depth;
    }
@@ -583,7 +718,7 @@
               ? unknown_color_depth
               : base::saturated_cast<unsigned>(GetScreenInfo().depth);
  }
- 
+
  unsigned Screen::pixelDepth() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(DomWindow());
 +      snapshot && snapshot->pixel_depth > 0) {
@@ -591,7 +726,7 @@
 +  }
    return colorDepth();
  }
- 
+
  int Screen::availLeft() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(DomWindow())) {
 +    return snapshot->avail_left;
@@ -600,7 +735,7 @@
      return 0;
    return GetRect(/*available=*/true).x();
  }
- 
+
  int Screen::availTop() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(DomWindow())) {
 +    return snapshot->avail_top;
@@ -609,7 +744,7 @@
      return 0;
    return GetRect(/*available=*/true).y();
  }
- 
+
  int Screen::availHeight() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(DomWindow())) {
 +    return snapshot->avail_height;
@@ -618,7 +753,7 @@
      return 0;
    return GetRect(/*available=*/true).height();
  }
- 
+
  int Screen::availWidth() const {
 +  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(DomWindow())) {
 +    return snapshot->avail_width;
@@ -626,15 +761,18 @@
    if (!DomWindow())
      return 0;
    return GetRect(/*available=*/true).width();
+Index: b/third_party/blink/renderer/modules/netinfo/network_information.cc
+===================================================================
 --- a/third_party/blink/renderer/modules/netinfo/network_information.cc
 +++ b/third_party/blink/renderer/modules/netinfo/network_information.cc
-@@ -7,13 +7,16 @@
+@@ -7,13 +7,18 @@
  #include <algorithm>
- 
+
  #include "base/time/time.h"
 +#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
  #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
  #include "third_party/blink/public/platform/task_type.h"
++#include "third_party/blink/public/web/web_local_frame.h"
 +#include "third_party/blink/public/web/web_local_frame_client.h"
  #include "third_party/blink/renderer/bindings/modules/v8/v8_connection_type.h"
  #include "third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.h"
@@ -642,13 +780,14 @@
  #include "third_party/blink/renderer/core/execution_context/execution_context.h"
  #include "third_party/blink/renderer/core/execution_context/navigator_base.h"
 +#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/frame/local_frame_client.h"
  #include "third_party/blink/renderer/core/inspector/console_message.h"
  #include "third_party/blink/renderer/core/probe/core_probes.h"
  #include "third_party/blink/renderer/modules/event_target_modules.h"
-@@ -27,6 +30,52 @@ namespace blink {
- 
+@@ -27,6 +32,52 @@ namespace blink {
+
  namespace {
- 
+
 +const HeliumPersonaSnapshot* GetPersonaSnapshot(ExecutionContext* context) {
 +  if (!context || !context->IsWindow()) {
 +    return nullptr;
@@ -698,9 +837,9 @@
  V8ConnectionType::Enum ConnectionTypeToEnum(WebConnectionType type) {
    switch (type) {
      case kWebConnectionTypeCellular2G:
-@@ -84,6 +133,14 @@ bool NetworkInformation::IsObserving() c
+@@ -84,6 +135,14 @@ bool NetworkInformation::IsObserving() c
  }
- 
+
  V8ConnectionType NetworkInformation::type() const {
 +  if (const HeliumPersonaSnapshot* snapshot =
 +          GetPersonaSnapshot(GetExecutionContext());
@@ -713,9 +852,9 @@
    if (RuntimeEnabledFeatures::NetInfoConstantTypeEnabled()) {
      return V8ConnectionType(V8ConnectionType::Enum::kUnknown);
    }
-@@ -100,6 +157,12 @@ V8ConnectionType NetworkInformation::typ
+@@ -100,6 +159,12 @@ V8ConnectionType NetworkInformation::typ
  }
- 
+
  double NetworkInformation::downlinkMax() const {
 +  if (const HeliumPersonaSnapshot* snapshot =
 +          GetPersonaSnapshot(GetExecutionContext());
@@ -726,9 +865,11 @@
    if (RuntimeEnabledFeatures::NetInfoConstantTypeEnabled()) {
      return std::numeric_limits<double>::infinity();
    }
+Index: b/third_party/blink/renderer/modules/webaudio/audio_context.cc
+===================================================================
 --- a/third_party/blink/renderer/modules/webaudio/audio_context.cc
 +++ b/third_party/blink/renderer/modules/webaudio/audio_context.cc
-@@ -19,11 +19,13 @@
+@@ -19,11 +19,14 @@
  #include "services/metrics/public/cpp/ukm_recorder.h"
  #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
  #include "third_party/blink/public/common/features.h"
@@ -738,14 +879,23 @@
  #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
  #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
  #include "third_party/blink/public/platform/web_audio_latency_hint.h"
++#include "third_party/blink/public/web/web_local_frame.h"
 +#include "third_party/blink/public/web/web_local_frame_client.h"
  #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
  #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
  #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_context_options.h"
-@@ -71,6 +73,22 @@ namespace blink {
- 
+@@ -33,6 +36,7 @@
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_union_audiosinkinfo_string.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/frame/local_frame_client.h"
+ #include "third_party/blink/renderer/core/html/media/html_media_element.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+ #include "third_party/blink/renderer/core/page/page.h"
+@@ -71,6 +75,22 @@ namespace blink {
+
  namespace {
- 
+
 +const HeliumPersonaSnapshot* GetPersonaSnapshot(ExecutionContext* context) {
 +  if (!context || !context->IsWindow()) {
 +    return nullptr;
@@ -765,10 +915,10 @@
  // Number of AudioContexts still alive.  It's incremented when an
  // AudioContext is created and decremented when the context is closed.
  unsigned hardware_context_count = 0;
-@@ -1144,6 +1162,11 @@ double AudioContext::baseLatency() const
+@@ -1144,6 +1164,11 @@ double AudioContext::baseLatency() const
    DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
    DCHECK(destination());
- 
+
 +  if (const HeliumPersonaSnapshot* snapshot =
 +          GetPersonaSnapshot(GetExecutionContext());
 +      snapshot && snapshot->audio_base_latency > 0.0) {
@@ -776,19 +926,21 @@
 +  }
    return base_latency_;
  }
- 
-@@ -1151,6 +1174,11 @@ double AudioContext::outputLatency() con
+
+@@ -1151,6 +1176,11 @@ double AudioContext::outputLatency() con
    DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
    DCHECK(destination());
- 
+
 +  if (const HeliumPersonaSnapshot* snapshot =
 +          GetPersonaSnapshot(GetExecutionContext());
 +      snapshot && snapshot->audio_output_latency > 0.0) {
 +    return snapshot->audio_output_latency;
 +  }
    DeferredTaskHandler::GraphAutoLocker locker(this);
- 
+
    double factor = GetOutputLatencyQuantizingFactor();
+Index: b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+===================================================================
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 @@ -60,10 +60,12 @@
@@ -805,9 +957,9 @@
  #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_elementimage.h"
  #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmlcanvaselement_offscreencanvas.h"
 @@ -203,6 +205,22 @@ unsigned WebGLRenderingContextBase::max_
- 
+
  namespace {
- 
+
 +const HeliumPersonaSnapshot* GetPersonaSnapshot(ExecutionContext* context) {
 +  if (!context || !context->IsWindow()) {
 +    return nullptr;
@@ -851,9 +1003,11 @@
          return WebGLAny(script_state,
                          String(ContextGL()->GetString(GL_VENDOR)));
        }
+Index: b/content/renderer/persona_timezone_coordinator.cc
+===================================================================
 --- /dev/null
 +++ b/content/renderer/persona_timezone_coordinator.cc
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,74 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -917,30 +1071,19 @@
 +  if (effective.empty()) {
 +    // No frame needs an override: release the single handle, which restores
 +    // the host timezone process-wide.
-+    override_.reset();
++    override_.Clear();
 +    return;
 +  }
 +
-+  blink::String tz_blink = blink::String::FromUTF8(effective);
-+  if (override_) {
-+    // change() is a no-op when the timezone is already equal, so recurring
-+    // Updates with the same timezone are cheap.
-+    override_->change(tz_blink);
-+    return;
-+  }
-+
-+  // No handle yet: acquire the one global override. If a non-persona owner
-+  // (e.g. DevTools emulation) already holds it, leave |override_| null and do
-+  // not steal it; persona timezone is best-effort relative to such a session.
-+  auto result = blink::TimeZoneController::SetTimeZoneOverride(tz_blink);
-+  if (result.status ==
-+          blink::TimeZoneController::TimeZoneOverrideStatus::kSuccess &&
-+      result.handle) {
-+    override_ = std::move(result.handle);
-+  }
++  // If a non-persona owner (e.g. DevTools emulation) already holds the
++  // override, Blink rejects this request and persona timezone remains
++  // best-effort relative to that session.
++  override_.SetOrChange(effective);
 +}
 +
 +}  // namespace content
+Index: b/content/renderer/persona_timezone_coordinator.h
+===================================================================
 --- /dev/null
 +++ b/content/renderer/persona_timezone_coordinator.h
 @@ -0,0 +1,78 @@
@@ -957,7 +1100,7 @@
 +
 +#include "base/memory/raw_ptr.h"
 +#include "base/no_destructor.h"
-+#include "third_party/blink/renderer/core/timezone/timezone_controller.h"
++#include "third_party/blink/public/web/web_time_zone_override.h"
 +
 +namespace content {
 +
@@ -1014,11 +1157,131 @@
 +  // RenderFrameImpl is destroyed, so entries never dangle.
 +  std::vector<std::pair<raw_ptr<RenderFrameImpl>, std::string>> desired_;
 +
-+  // The single process-wide handle. Present iff at least one frame wants an
-+  // override and its timezone was accepted by TimeZoneController.
-+  std::unique_ptr<blink::TimeZoneController::TimeZoneOverride> override_;
++  // The single process-wide handle. Active iff at least one frame wants an
++  // override and Blink accepted the requested timezone.
++  blink::WebTimeZoneOverride override_;
 +};
 +
 +}  // namespace content
 +
 +#endif  // CONTENT_RENDERER_PERSONA_TIMEZONE_COORDINATOR_H_
+Index: b/content/renderer/BUILD.gn
+===================================================================
+--- a/content/renderer/BUILD.gn
++++ b/content/renderer/BUILD.gn
+@@ -108,6 +108,8 @@ target(link_target_type, "renderer") {
+     "navigation_state.h",
+     "net_info_helper.cc",
+     "net_info_helper.h",
++    "persona_timezone_coordinator.cc",
++    "persona_timezone_coordinator.h",
+     "policy_container_util.cc",
+     "policy_container_util.h",
+     "render_frame_impl.cc",
+Index: b/third_party/blink/renderer/core/BUILD.gn
+===================================================================
+--- a/third_party/blink/renderer/core/BUILD.gn
++++ b/third_party/blink/renderer/core/BUILD.gn
+@@ -289,6 +289,7 @@ component("core") {
+   sources += rebase_path(blink_core_sources_dom, "", "dom")
+   sources += rebase_path(blink_core_sources_editing, "", "editing")
+   sources += rebase_path(blink_core_sources_events, "", "events")
++  sources += [ "exported/web_time_zone_override.cc" ]
+   sources +=
+       rebase_path(blink_core_sources_execution_context, "", "execution_context")
+   sources += rebase_path(blink_core_sources_permissions_policy,
+Index: b/third_party/blink/public/web/web_time_zone_override.h
+===================================================================
+--- /dev/null
++++ b/third_party/blink/public/web/web_time_zone_override.h
+@@ -0,0 +1,34 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_TIME_ZONE_OVERRIDE_H_
++#define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_TIME_ZONE_OVERRIDE_H_
++
++#include <memory>
++#include <string>
++
++#include "third_party/blink/public/platform/web_common.h"
++
++namespace blink {
++
++// Public wrapper for the renderer-process timezone override. The implementation
++// owns Blink's internal TimeZoneController handle inside Blink core.
++class BLINK_EXPORT WebTimeZoneOverride {
++ public:
++  WebTimeZoneOverride();
++  WebTimeZoneOverride(const WebTimeZoneOverride&) = delete;
++  WebTimeZoneOverride& operator=(const WebTimeZoneOverride&) = delete;
++  ~WebTimeZoneOverride();
++
++  bool SetOrChange(const std::string& timezone);
++  void Clear();
++
++ private:
++  class Impl;
++  std::unique_ptr<Impl> impl_;
++};
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_TIME_ZONE_OVERRIDE_H_
+Index: b/third_party/blink/renderer/core/exported/web_time_zone_override.cc
+===================================================================
+--- /dev/null
++++ b/third_party/blink/renderer/core/exported/web_time_zone_override.cc
+@@ -0,0 +1,51 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "third_party/blink/public/web/web_time_zone_override.h"
++
++#include <utility>
++
++#include "base/containers/span.h"
++#include "third_party/blink/renderer/core/timezone/timezone_controller.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++
++namespace blink {
++
++class WebTimeZoneOverride::Impl {
++ public:
++  bool SetOrChange(const std::string& timezone) {
++    String tz_blink = String::FromUtf8(base::as_byte_span(timezone));
++    if (handle_) {
++      handle_->change(tz_blink);
++      return true;
++    }
++
++    auto result = TimeZoneController::SetTimeZoneOverride(tz_blink);
++    if (result.status !=
++        TimeZoneController::TimeZoneOverrideStatus::kSuccess) {
++      return false;
++    }
++    handle_ = std::move(result.handle);
++    return true;
++  }
++
++  void Clear() { handle_.reset(); }
++
++ private:
++  std::unique_ptr<TimeZoneController::TimeZoneOverride> handle_;
++};
++
++WebTimeZoneOverride::WebTimeZoneOverride() : impl_(std::make_unique<Impl>()) {}
++
++WebTimeZoneOverride::~WebTimeZoneOverride() = default;
++
++bool WebTimeZoneOverride::SetOrChange(const std::string& timezone) {
++  return impl_->SetOrChange(timezone);
++}
++
++void WebTimeZoneOverride::Clear() {
++  impl_->Clear();
++}
++
++}  // namespace blink

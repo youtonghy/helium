@@ -1,0 +1,66 @@
+Index: b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+===================================================================
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -30,6 +30,7 @@
+
+ #include "base/bit_cast.h"
+ #include "base/byte_size.h"
++#include "base/containers/span.h"
+ #include "base/compiler_specific.h"
+ #include "base/feature_list.h"
+ #include "base/memory/scoped_refptr.h"
+@@ -65,6 +66,7 @@
+ #include "third_party/blink/public/mojom/gpu/gpu.mojom-blink.h"
+ #include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/public/platform/task_type.h"
++#include "third_party/blink/public/web/web_local_frame.h"
+ #include "third_party/blink/public/web/web_local_frame_client.h"
+ #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_elementimage.h"
+@@ -77,6 +79,8 @@
+ #include "third_party/blink/renderer/core/frame/settings.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
+ #include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
++#include "third_party/blink/renderer/core/canvas_interventions/noise_hash.h"
++#include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
+ #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.h"
+ #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
+ #include "third_party/blink/renderer/core/html/canvas/image_data.h"
+@@ -4122,7 +4126,9 @@ ScriptValue WebGLRenderingContextBase::g
+         if (const HeliumPersonaSnapshot* snapshot =
+                 GetPersonaSnapshot(Host()->GetTopExecutionContext());
+             snapshot && !snapshot->gpu_renderer.empty()) {
+-          return WebGLAny(script_state, String::FromUTF8(snapshot->gpu_renderer));
++          return WebGLAny(script_state,
++                          String::FromUtf8(base::as_byte_span(
++                              snapshot->gpu_renderer)));
+         }
+         return WebGLAny(script_state,
+                         String(ContextGL()->GetString(GL_RENDERER)));
+@@ -4136,7 +4142,9 @@ ScriptValue WebGLRenderingContextBase::g
+         if (const HeliumPersonaSnapshot* snapshot =
+                 GetPersonaSnapshot(Host()->GetTopExecutionContext());
+             snapshot && !snapshot->gpu_vendor.empty()) {
+-          return WebGLAny(script_state, String::FromUTF8(snapshot->gpu_vendor));
++          return WebGLAny(script_state,
++                          String::FromUtf8(base::as_byte_span(
++                              snapshot->gpu_vendor)));
+         }
+         return WebGLAny(script_state,
+                         String(ContextGL()->GetString(GL_VENDOR)));
+@@ -5285,6 +5293,14 @@ void WebGLRenderingContextBase::ReadPixe
+     }
+     ContextGL()->ReadPixels(x, y, width, height, format, type, data);
+   }
++  ExecutionContext* execution_context = Host()->GetTopExecutionContext();
++  if (!IsWebGL2() && format == GL_RGBA && type == GL_UNSIGNED_BYTE &&
++      execution_context && execution_context->CanvasNoiseToken()) {
++    NoisePixels(NoiseHash(*execution_context->CanvasNoiseToken()),
++                base::span(data, static_cast<size_t>(width) *
++                                     static_cast<size_t>(height) * 4u),
++                width, height);
++  }
+ }
+
+ void WebGLRenderingContextBase::RenderbufferStorageImpl(

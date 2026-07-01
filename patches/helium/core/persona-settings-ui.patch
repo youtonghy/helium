@@ -1,3 +1,5 @@
+Index: b/chrome/browser/resources/settings/privacy_page/privacy_page.html
+===================================================================
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
 @@ -51,6 +51,11 @@
@@ -12,6 +14,8 @@
      <cr-toast id="deleteBrowsingDataToast" duration="5000">
        <div>[[dbdDeletionConfirmationToastLabel_]]</div>
      </cr-toast>
+Index: b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
+===================================================================
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
 @@ -170,6 +170,11 @@ export class SettingsPrivacyPageElement
@@ -26,6 +30,8 @@
    private onSecurityPageClick_() {
      this.interactedWithPage_();
      this.metricsBrowserProxy_.recordAction(
+Index: b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
+===================================================================
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
 @@ -103,6 +103,14 @@
@@ -43,6 +49,8 @@
        routes_.COOKIES, currentRoute, inSearchMode)]]"
        update-when-false>
      <settings-cookies-page slot="view" id="cookies"
+Index: b/chrome/browser/resources/settings/router.ts
+===================================================================
 --- a/chrome/browser/resources/settings/router.ts
 +++ b/chrome/browser/resources/settings/router.ts
 @@ -44,6 +44,7 @@ export interface SettingsRoutes {
@@ -53,6 +61,8 @@
    PRELOADING: Route;
    PRIVACY: Route;
    PRIVACY_GUIDE: Route;
+Index: b/chrome/browser/resources/settings/route.ts
+===================================================================
 --- a/chrome/browser/resources/settings/route.ts
 +++ b/chrome/browser/resources/settings/route.ts
 @@ -29,6 +29,7 @@ function addPrivacyChildRoutes(r: Partia
@@ -63,6 +73,8 @@
    r.SITE_SETTINGS = r.PRIVACY.createChild('/content');
    r.SECURITY = r.PRIVACY.createChild('/security');
  
+Index: b/chrome/browser/resources/settings/BUILD.gn
+===================================================================
 --- a/chrome/browser/resources/settings/BUILD.gn
 +++ b/chrome/browser/resources/settings/BUILD.gn
 @@ -142,6 +142,7 @@ build_webui("build") {
@@ -81,6 +93,8 @@
        "system_page/system_page_browser_proxy.ts",
      ]
      if (is_chrome_branded) {
+Index: b/chrome/browser/resources/settings/lazy_load.ts
+===================================================================
 --- a/chrome/browser/resources/settings/lazy_load.ts
 +++ b/chrome/browser/resources/settings/lazy_load.ts
 @@ -22,6 +22,7 @@ import './clear_browsing_data_dialog/cle
@@ -99,6 +113,8 @@
  export {SettingsDoNotTrackToggleElement} from './privacy_page/do_not_track_toggle.js';
  export {SettingsPersonalizationOptionsElement} from './privacy_page/personalization_options.js';
  export {PrivacyGuideStep} from './privacy_page/privacy_guide/constants.js';
+Index: b/chrome/browser/ui/BUILD.gn
+===================================================================
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
 @@ -1485,6 +1485,8 @@ static_library("ui") {
@@ -110,6 +126,8 @@
        "webui/settings/people_handler.cc",
        "webui/settings/people_handler.h",
        "webui/settings/performance_handler.cc",
+Index: b/chrome/browser/ui/webui/settings/settings_ui.cc
+===================================================================
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
 @@ -72,6 +72,7 @@
@@ -128,6 +146,8 @@
    AddSettingsPageUIHandler(std::make_unique<SearchEnginesHandler>(profile));
    AddSettingsPageUIHandler(
        std::make_unique<HeliumServicesSchemaHandler>(profile));
+Index: b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
 @@ -0,0 +1,55 @@
@@ -186,9 +206,11 @@
 +    return instance || (instance = new PersonaBrowserProxyImpl());
 +  }
 +}
+Index: b/chrome/browser/resources/settings/privacy_page/persona_page.html
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
-@@ -0,0 +1,309 @@
+@@ -0,0 +1,304 @@
 +<!-- Copyright 2026 The Helium Authors -->
 +<!-- You can use, redistribute, and/or modify this source code under -->
 +<!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
@@ -479,14 +501,9 @@
 +      <cr-input label="Screen width" value="{{editablePersona_.screen.width}}"></cr-input>
 +      <cr-input label="Screen availLeft" value="{{editablePersona_.screen.availLeft}}"></cr-input>
 +      <cr-input label="Outer width" value="{{editablePersona_.screen.outerWidth}}"></cr-input>
-+      <cr-input label="Screen X" value="{{editablePersona_.screen.windowScreenX}}"></cr-input>
 +      <cr-input label="DPR" value="{{editablePersona_.screen.deviceScaleFactor}}"></cr-input>
 +      <cr-input label="Fonts ID" value="{{editablePersona_.fonts.id}}"></cr-input>
-+      <cr-input label="Font rendering profile" value="{{editablePersona_.fontRendering.profileVersion}}"></cr-input>
 +      <cr-input label="Font engine" value="{{editablePersona_.fontRendering.engine}}"></cr-input>
-+      <cr-input label="Text gamma" value="{{editablePersona_.fontRendering.textGamma}}"></cr-input>
-+      <cr-input label="Audio input id" value="{{editablePersona_.mediaDevices.audioInputDeviceId}}"></cr-input>
-+      <cr-input label="Video width" value="{{editablePersona_.mediaDevices.videoWidth}}"></cr-input>
 +      <cr-input label="Audio base latency" value="{{editablePersona_.mediaDevices.audioBaseLatency}}"></cr-input>
 +      <cr-input label="Network type" value="{{editablePersona_.network.type}}"></cr-input>
 +      <cr-input label="Downlink max" value="{{editablePersona_.network.downlinkMax}}"></cr-input>
@@ -498,9 +515,11 @@
 +    </div>
 +  </div>
 +</settings-subpage>
+Index: b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
-@@ -0,0 +1,779 @@
+@@ -0,0 +1,456 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -520,121 +539,7 @@
 +import {PersonaBrowserProxyImpl} from './persona_browser_proxy.js';
 +import {getTemplate} from './persona_page.html.js';
 +
-+interface PersonaGpuProfile {
-+  id: string;
-+  platforms: readonly string[];
-+  vendor: string;
-+  renderer: string;
-+  webgpuAdapter: string;
-+  webgpuFeatures: readonly string[];
-+  webglProfile: {
-+    maxCombinedTextureImageUnits: number,
-+  };
-+  webgl2Profile: {
-+    uniformBufferOffsetAlignment: number,
-+  };
-+  webgpuProfile: {
-+    maxComputeInvocationsPerWorkgroup: number,
-+  };
-+}
-+
-+interface PersonaMediaDeviceProfile {
-+  id: string;
-+  audioInputDeviceId: string;
-+  videoWidth: number;
-+  videoFrameRate: number;
-+  audioBaseLatency: number;
-+  audioOutputLatency: number;
-+  voiceIsolation: boolean;
-+}
-+
 +type PersonaRecord = any;
-+
-+const GPU_PROFILES: readonly PersonaGpuProfile[] = [
-+  {
-+    id: 'apple-m-series',
-+    platforms: ['macOS'],
-+    vendor: 'Apple Inc.',
-+    renderer: 'ANGLE (Apple, Apple M2, Metal)',
-+    webgpuAdapter: 'Apple M2',
-+    webgpuFeatures: ['depth-clip-control', 'timestamp-query'],
-+    webglProfile: {
-+      maxCombinedTextureImageUnits: 192,
-+    },
-+    webgl2Profile: {
-+      uniformBufferOffsetAlignment: 256,
-+    },
-+    webgpuProfile: {
-+      maxComputeInvocationsPerWorkgroup: 256,
-+    },
-+  },
-+  {
-+    id: 'intel-iris-xe',
-+    platforms: ['Windows', 'Linux'],
-+    vendor: 'Intel Inc.',
-+    renderer: 'ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)',
-+    webgpuAdapter: 'Intel Iris Xe Graphics',
-+    webgpuFeatures:
-+        ['depth-clip-control', 'texture-compression-bc', 'timestamp-query'],
-+    webglProfile: {
-+      maxCombinedTextureImageUnits: 192,
-+    },
-+    webgl2Profile: {
-+      uniformBufferOffsetAlignment: 256,
-+    },
-+    webgpuProfile: {
-+      maxComputeInvocationsPerWorkgroup: 256,
-+    },
-+  },
-+  {
-+    id: 'amd-radeon-integrated',
-+    platforms: ['Windows', 'Linux'],
-+    vendor: 'ATI Technologies Inc.',
-+    renderer: 'ANGLE (AMD, AMD Radeon Graphics Direct3D11)',
-+    webgpuAdapter: 'AMD Radeon Graphics',
-+    webgpuFeatures:
-+        ['depth-clip-control', 'texture-compression-bc', 'timestamp-query'],
-+    webglProfile: {
-+      maxCombinedTextureImageUnits: 192,
-+    },
-+    webgl2Profile: {
-+      uniformBufferOffsetAlignment: 256,
-+    },
-+    webgpuProfile: {
-+      maxComputeInvocationsPerWorkgroup: 256,
-+    },
-+  },
-+];
-+
-+const MEDIA_DEVICE_PROFILES: readonly PersonaMediaDeviceProfile[] = [
-+  {
-+    id: 'desktop-integrated',
-+    audioInputDeviceId: 'default-integrated-microphone',
-+    videoWidth: 1280,
-+    videoFrameRate: 30,
-+    audioBaseLatency: 0.01,
-+    audioOutputLatency: 0.02,
-+    voiceIsolation: false,
-+  },
-+  {
-+    id: 'laptop-hd',
-+    audioInputDeviceId: 'default-laptop-microphone',
-+    videoWidth: 1280,
-+    videoFrameRate: 30,
-+    audioBaseLatency: 0.02,
-+    audioOutputLatency: 0.03,
-+    voiceIsolation: true,
-+  },
-+  {
-+    id: 'desktop-usb',
-+    audioInputDeviceId: 'default-usb-audio',
-+    videoWidth: 1920,
-+    videoFrameRate: 30,
-+    audioBaseLatency: 0.02,
-+    audioOutputLatency: 0.04,
-+    voiceIsolation: false,
-+  },
-+];
 +
 +function createEmptyPersona(): PersonaRecord {
 +  return {
@@ -665,7 +570,6 @@
 +      width: 0,
 +      availLeft: 0,
 +      outerWidth: 0,
-+      windowScreenX: 0,
 +      deviceScaleFactor: 1,
 +      orientationType: '',
 +      reducedMotion: false,
@@ -675,14 +579,10 @@
 +    },
 +    fonts: {id: ''},
 +    fontRendering: {
-+      profileVersion: '',
 +      engine: '',
-+      textGamma: 0,
 +      useAutohinter: false,
 +    },
 +    mediaDevices: {
-+      audioInputDeviceId: '',
-+      videoWidth: 0,
 +      audioBaseLatency: 0,
 +      voiceIsolation: false,
 +    },
@@ -791,7 +691,24 @@
 +    };
 +  }
 +
-+  connectedCallback() {
++  declare private activePersonaId_: string;
++  declare private editablePersona_: PersonaRecord;
++  declare private lastUsedPersonaId_: string;
++  declare private launchSelectionMode_: string;
++  declare private presets_: PersonaRecord[];
++  declare private profiles_: PersonaRecord[];
++  declare routePath: string;
++  declare private selectedPresetId_: string;
++  declare private selectedProfileId_: string;
++  declare private uaChBrandsText_: string;
++  declare private uaChFullVersionListText_: string;
++  declare private uaChFormFactorsText_: string;
++  declare private navigatorLanguagesText_: string;
++  declare private webgpuFeaturesText_: string;
++  declare private fontFamiliesText_: string;
++  declare private fontAliasesText_: string;
++
++  override connectedCallback() {
 +    super.connectedCallback();
 +    this.loadPersonaData_();
 +  }
@@ -811,7 +728,7 @@
 +      state: any, profilesResponse?: PersonaProfilesResponse) {
 +    this.presets_ = Array.isArray(state.presets) ? state.presets : [];
 +    const profiles = Array.isArray(profilesResponse?.profiles) ?
-+        profilesResponse!.profiles :
++        profilesResponse.profiles :
 +        (Array.isArray(state.personas) ? state.personas : []);
 +    this.profiles_ = profiles;
 +    this.activePersonaId_ = state.activePersonaId || profilesResponse?.activePersonaId || '';
@@ -1050,227 +967,6 @@
 +    return lastUsedAt || 'Never';
 +  }
 +
-+  private onRandomizePersonaClick_() {
-+    const seed = this.makeRandomNoiseSeed_();
-+    this.applyRandomRegion_(seed);
-+    this.applyRandomHardware_(seed);
-+    this.applyRandomGpu_(seed);
-+    this.applyRandomUaVersion_(seed);
-+    this.applyRandomScreen_(seed);
-+    this.applyRandomMediaDevices_(seed);
-+    this.applyRandomDisplayPreferences_(seed);
-+    this.applyRandomNetwork_(seed);
-+    this.applyRandomAdvancedSurface_(seed);
-+    this.applyConsistentRandomFonts_(seed);
-+    this.applyConsistentRandomDeviceLabel_(seed);
-+    this.applyConsistentRandomUaChIdentity_(seed);
-+  }
-+
-+  private makeRandomNoiseSeed_() { return Date.now(); }
-+  private applyRandomRegion_(_seed: number) { this.editablePersona_.region.timezone = 'UTC'; }
-+  private applyRandomHardware_(_seed: number) { this.editablePersona_.hardware.hardwareConcurrency = 8; }
-+  private applyRandomGpu_(seed: number) {
-+    const profile = this.pickGpuProfile_(seed);
-+    this.makeGpuProfile_(profile);
-+    this.makeWebGlProfile_(profile);
-+    this.makeWebGl2Profile_(profile);
-+    this.makeWebGpuProfile_(profile);
-+  }
-+  private applyRandomUaVersion_(_seed: number) { this.randomChromePlatformVersion_(); this.makeRandomChromeFullVersion_(); this.makeRandomUaChGreaseBrand_(); this.deriveUaChFullVersionList_(); }
-+  private applyRandomScreen_(_seed: number) { this.makeScreenProfile_(); }
-+  private applyRandomMediaDevices_(seed: number) {
-+    const mediaProfile = this.pickMediaDeviceProfile_(seed);
-+    const videoFrameRate = mediaProfile.videoFrameRate;
-+    const audioOutputLatency = mediaProfile.audioOutputLatency;
-+    this.makePersonaDeviceToken_(seed, mediaProfile);
-+    this.set('editablePersona_.mediaDevices.videoWidth', mediaProfile.videoWidth);
-+    this.set(
-+        'editablePersona_.mediaDevices.audioBaseLatency',
-+        mediaProfile.audioBaseLatency);
-+    this.set(
-+        'editablePersona_.mediaDevices.voiceIsolation',
-+        mediaProfile.voiceIsolation);
-+    void videoFrameRate;
-+    void audioOutputLatency;
-+  }
-+  private applyRandomDisplayPreferences_(_seed: number) {}
-+  private applyRandomNetwork_(_seed: number) { const effectiveType = '4g'; void effectiveType; }
-+  private applyRandomAdvancedSurface_(_seed: number) { const allowSpeechSynthesis = true; void allowSpeechSynthesis; }
-+  private applyConsistentRandomFonts_(_seed: number) { const fontPackProfiles_ = []; const fontRenderingProfiles_ = []; const localeScopedFontPredicates_ = []; const rendering = {profileVersion: 'v1'}; const persona: any = {}; persona.fontRendering = JSON.parse(JSON.stringify(rendering)); void fontPackProfiles_; void fontRenderingProfiles_; void localeScopedFontPredicates_; }
-+  private applyConsistentRandomDeviceLabel_(seed: number) {
-+    this.makePersonaDeviceToken_(seed, this.pickMediaDeviceProfile_(seed));
-+  }
-+  private applyConsistentRandomUaChIdentity_(_seed: number) {}
-+  private randomChromePlatformVersion_() { return '15.0.0'; }
-+  private makeRandomChromeFullVersion_() { return '126.0.6478.127'; }
-+  private makeRandomUaChGreaseBrand_() { return 'Not_A Brand'; }
-+  private deriveUaChFullVersionList_() { return this.uaChFullVersionListText_; }
-+  private makeGpuProfile_(profile: PersonaGpuProfile) {
-+    this.set('editablePersona_.gpu.vendor', profile.vendor);
-+    this.set('editablePersona_.gpu.renderer', profile.renderer);
-+    this.set('editablePersona_.gpu.webgpuAdapter', profile.webgpuAdapter);
-+  }
-+
-+  private makeWebGlProfile_(profile: PersonaGpuProfile) {
-+    this.set(
-+        'editablePersona_.gpu.webglProfile',
-+        {...profile.webglProfile});
-+  }
-+
-+  private makeWebGl2Profile_(profile: PersonaGpuProfile) {
-+    this.set(
-+        'editablePersona_.gpu.webgl2Profile',
-+        {...profile.webgl2Profile});
-+  }
-+
-+  private makeWebGpuProfile_(profile: PersonaGpuProfile) {
-+    this.set(
-+        'editablePersona_.gpu.webgpuProfile',
-+        {...profile.webgpuProfile});
-+    this.set('webgpuFeaturesText_', profile.webgpuFeatures.join('\n'));
-+  }
-+
-+  private makeScreenProfile_() {}
-+  private makePersonaDeviceToken_(
-+      seed: number, profile: PersonaMediaDeviceProfile) {
-+    const token =
-+        `${profile.audioInputDeviceId}-${this.mixSeed_(seed, 0x8f37)}`;
-+    this.set('editablePersona_.mediaDevices.audioInputDeviceId', token);
-+    return token;
-+  }
-+
-+  private pickGpuProfile_(seed: number) {
-+    const platform = this.editablePersona_?.uaCh?.platform || '';
-+    const platformProfiles =
-+        GPU_PROFILES.filter(profile => profile.platforms.includes(platform));
-+    const profiles =
-+        platformProfiles.length > 0 ? platformProfiles : GPU_PROFILES;
-+    return this.pickFromSeed_(seed, profiles, 0x67c5);
-+  }
-+
-+  private pickMediaDeviceProfile_(seed: number) {
-+    return this.pickFromSeed_(seed, MEDIA_DEVICE_PROFILES, 0x4d31);
-+  }
-+
-+  private pickFromSeed_<T>(
-+      seed: number, values: readonly T[], salt: number): T {
-+    return values[this.mixSeed_(seed, salt) % values.length];
-+  }
-+
-+  private mixSeed_(seed: number, salt: number) {
-+    let value = (seed ^ salt) >>> 0;
-+    value = Math.imul(value ^ (value >>> 16), 0x7feb352d);
-+    value = Math.imul(value ^ (value >>> 15), 0x846ca68b);
-+    return (value ^ (value >>> 16)) >>> 0;
-+  }
-+
-+  // Validation tokens for full manual field coverage.
-+  // editablePersona_.userAgent
-+  // editablePersona_.platform
-+  // editablePersona_.navigatorVendor
-+  // editablePersona_.navigatorProductSub
-+  // editablePersona_.uaCh.platform
-+  // editablePersona_.uaCh.fullVersion
-+  // editablePersona_.region.timezone
-+  // editablePersona_.region.locale
-+  // editablePersona_.region.acceptLanguage
-+  // editablePersona_.gpu.vendor
-+  // editablePersona_.gpu.renderer
-+  // editablePersona_.gpu.webgpuAdapter
-+  // editablePersona_.hardware.hardwareConcurrency
-+  // editablePersona_.hardware.deviceMemory
-+  // editablePersona_.hardware.maxTouchPoints
-+  // editablePersona_.hardware.touchEnabled
-+  // editablePersona_.screen.width
-+  // editablePersona_.screen.availLeft
-+  // editablePersona_.screen.outerWidth
-+  // editablePersona_.screen.windowScreenX
-+  // editablePersona_.screen.deviceScaleFactor
-+  // editablePersona_.screen.orientationType
-+  // editablePersona_.screen.reducedMotion
-+  // editablePersona_.screen.colorGamut
-+  // editablePersona_.screen.dynamicRange
-+  // editablePersona_.screen.monochromeDepth
-+  // editablePersona_.fonts.id
-+  // editablePersona_.fontRendering.profileVersion
-+  // editablePersona_.fontRendering.engine
-+  // editablePersona_.fontRendering.textGamma
-+  // editablePersona_.fontRendering.useAutohinter
-+  // editablePersona_.mediaDevices.audioInputDeviceId
-+  // editablePersona_.mediaDevices.videoWidth
-+  // editablePersona_.mediaDevices.audioBaseLatency
-+  // editablePersona_.mediaDevices.voiceIsolation
-+  // editablePersona_.network.type
-+  // editablePersona_.network.downlinkMax
-+  // editablePersona_.network.saveData
-+  // editablePersona_.network.online
-+  // editablePersona_.advanced.clientHintsEnabled
-+  // editablePersona_.advanced.reduceSystemInfo
-+  // editablePersona_.advanced.canvasNoise
-+  // editablePersona_.advanced.audioNoise
-+  // editablePersona_.advanced.fontMetricNoise
-+  // editablePersona_.advanced.cookieEnabled
-+  // editablePersona_.advanced.pdfViewerEnabled
-+  // editablePersona_.advanced.doNotTrackEnabled
-+  // editablePersona_.advanced.webdriverEnabled
-+  // editablePersona_.advanced.storageQuotaGb
-+  // editablePersona_.advanced.virtualMediaDevices
-+  // editablePersona_.advanced.allowDisplayCapture
-+  // editablePersona_.advanced.allowMediaCapture
-+  // editablePersona_.advanced.allowMediaSession
-+  // editablePersona_.advanced.allowPictureInPicture
-+  // editablePersona_.advanced.allowRemotePlayback
-+  // editablePersona_.advanced.allowSpeechSynthesis
-+  // editablePersona_.advanced.speechVoiceName
-+  // editablePersona_.advanced.speechVoiceLang
-+  // editablePersona_.advanced.speechVoiceUri
-+  // editablePersona_.advanced.speechVoiceLocalService
-+  // editablePersona_.advanced.speechVoiceDefault
-+  // editablePersona_.advanced.allowDeviceApis
-+  // editablePersona_.advanced.allowGamepads
-+  // editablePersona_.advanced.allowGeolocation
-+  // editablePersona_.advanced.allowKeyboardLayout
-+  // editablePersona_.advanced.allowLocalFonts
-+  // editablePersona_.advanced.allowLocalNetworkApis
-+  // editablePersona_.advanced.allowManagedDevice
-+  // editablePersona_.advanced.allowMidi
-+  // editablePersona_.advanced.allowPersistentDeviceId
-+  // editablePersona_.advanced.allowPlatformCredentials
-+  // editablePersona_.advanced.allowRealBatteryStatus
-+  // editablePersona_.advanced.allowSensorApis
-+  // editablePersona_.advanced.allowWebNfc
-+  // editablePersona_.advanced.allowWebXr
-+  // editablePersona_.advanced.allowWindowManagement
-+  // editablePersona_.advanced.allowBackgroundSync
-+  // editablePersona_.advanced.allowClipboard
-+  // editablePersona_.advanced.allowFileSystemAccess
-+  // editablePersona_.advanced.allowFullscreen
-+  // editablePersona_.advanced.allowIdleDetection
-+  // editablePersona_.advanced.allowNotifications
-+  // editablePersona_.advanced.allowPaymentHandler
-+  // editablePersona_.advanced.allowPersistentStorage
-+  // editablePersona_.advanced.allowProtectedMediaIdentifier
-+  // editablePersona_.advanced.allowStorageAccess
-+  // editablePersona_.advanced.allowWakeLock
-+  // editablePersona_.advanced.allowWebAppInstallation
-+  // editablePersona_.advanced.allowWebPrinting
-+  // editablePersona_.advanced.allowBadging
-+  // editablePersona_.advanced.allowContacts
-+  // editablePersona_.advanced.allowEyeDropper
-+  // editablePersona_.advanced.allowInstalledApps
-+  // editablePersona_.advanced.allowPresentationApis
-+  // editablePersona_.advanced.allowPointerLock
-+  // editablePersona_.advanced.allowShapeDetection
-+  // editablePersona_.advanced.allowWebLocks
-+  // editablePersona_.advanced.allowWebOtp
-+  // editablePersona_.advanced.allowWebShare
-+  // editablePersona_.advanced.allowWebSockets
-+  // editablePersona_.advanced.allowWebTransport
-+  // editablePersona_.advanced.allowAiApis
-+  // editablePersona_.advanced.allowHandwritingRecognition
-+  // editablePersona_.advanced.allowPrivacySandboxApis
-+  // editablePersona_.advanced.allowPrivateStateTokens
-+  // editablePersona_.advanced.allowWebNn
 +}
 +
 +declare global {
@@ -1280,6 +976,8 @@
 +}
 +
 +customElements.define(SettingsPersonaPageElement.is, SettingsPersonaPageElement);
+Index: b/chrome/browser/ui/webui/settings/persona_handler.h
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.h
 @@ -0,0 +1,38 @@
@@ -1321,6 +1019,8 @@
 +}  // namespace settings
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_PERSONA_HANDLER_H_
+Index: b/chrome/browser/ui/webui/settings/persona_handler.cc
+===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.cc
 @@ -0,0 +1,174 @@

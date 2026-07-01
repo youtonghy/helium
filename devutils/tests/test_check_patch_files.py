@@ -17,11 +17,11 @@ sys.path.pop(0)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from check_patch_files import (
-    _PERSONA_PROFILE_MANAGEMENT_GROUPS, _PERSONA_RANDOMIZATION_FIELD_GROUPS,
-    _PERSONA_CONTRACT_GROUPS, _PERSONA_RUNTIME_HOOK_GROUPS, _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS,
-    check_persona_contract_coverage, check_persona_profile_management_coverage,
-    check_persona_randomization_coverage, check_persona_runtime_hook_coverage,
-    check_persona_settings_manual_field_coverage, check_series_duplicates)
+    _PERSONA_PROFILE_MANAGEMENT_GROUPS, _PERSONA_CONTRACT_GROUPS, _PERSONA_RUNTIME_HOOK_GROUPS,
+    _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS, check_persona_contract_coverage,
+    check_persona_profile_management_coverage, check_persona_runtime_hook_coverage,
+    check_persona_randomization_coverage, check_persona_settings_manual_field_coverage,
+    check_series_duplicates)
 
 sys.path.pop(0)
 
@@ -57,7 +57,13 @@ def test_check_series_duplicates():
 def _write_persona_guard_patch(patches_dir, body, patch_name='persona-guard.patch'):
     patch_path = patches_dir / 'helium' / 'core'
     patch_path.mkdir(parents=True, exist_ok=True)
-    (patch_path / patch_name).write_text(body, encoding=ENCODING)
+    added_lines = ''.join(f'+{line}\n' for line in body.splitlines())
+    (patch_path / patch_name).write_text(
+        f'--- /dev/null\n'
+        f'+++ b/chrome/browser/resources/settings/persona_page.ts\n'
+        f'@@ -0,0 +1,{len(body.splitlines())} @@\n'
+        f'{added_lines}',
+        encoding=ENCODING)
     (patches_dir / 'series').write_text(f'helium/core/{patch_name}\n', encoding=ENCODING)
 
 
@@ -75,7 +81,7 @@ def test_check_persona_runtime_hook_coverage():
         assert not check_persona_runtime_hook_coverage(patches_dir)
 
         _write_persona_guard_patch(patches_dir,
-                                   full_guard_tokens.replace('HeliumPersonaAllowsWebNn\n', ''))
+                                   full_guard_tokens.replace('HeliumNoiseFeature::kCanvas\n', ''))
         assert check_persona_runtime_hook_coverage(patches_dir)
 
 
@@ -88,9 +94,9 @@ def test_check_persona_contract_coverage():
         _write_persona_guard_patch(patches_dir, full_guard_tokens, 'persona-contract-guard.patch')
         assert not check_persona_contract_coverage(patches_dir)
 
-        _write_persona_guard_patch(
-            patches_dir, full_guard_tokens.replace('PersonaRuntimeOverride::ApplyGlobal\n', ''),
-            'persona-contract-guard.patch')
+        _write_persona_guard_patch(patches_dir,
+                                   full_guard_tokens.replace('ClonePresetIntoProfile\n', ''),
+                                   'persona-contract-guard.patch')
         assert check_persona_contract_coverage(patches_dir)
 
 
@@ -110,22 +116,6 @@ def test_check_persona_profile_management_coverage():
         assert check_persona_profile_management_coverage(patches_dir)
 
 
-def test_check_persona_randomization_coverage():
-    """Test persona randomization coverage guard."""
-
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        patches_dir = Path(tmpdirname)
-        full_guard_tokens = _tokens_from_groups(_PERSONA_RANDOMIZATION_FIELD_GROUPS)
-
-        _write_persona_guard_patch(patches_dir, full_guard_tokens, 'persona-random-guard.patch')
-        assert not check_persona_randomization_coverage(patches_dir)
-
-        _write_persona_guard_patch(patches_dir,
-                                   full_guard_tokens.replace('applyRandomMediaDevices_\n', ''),
-                                   'persona-random-guard.patch')
-        assert check_persona_randomization_coverage(patches_dir)
-
-
 def test_check_persona_settings_manual_field_coverage():
     """Test persona settings manual field coverage guard."""
 
@@ -137,9 +127,22 @@ def test_check_persona_settings_manual_field_coverage():
         assert not check_persona_settings_manual_field_coverage(patches_dir)
 
         _write_persona_guard_patch(
-            patches_dir,
-            full_guard_tokens.replace('editablePersona_.fontRendering.profileVersion\n', ''))
+            patches_dir, full_guard_tokens.replace('editablePersona_.fontRendering.engine\n', ''))
         assert check_persona_settings_manual_field_coverage(patches_dir)
+
+
+def test_check_persona_randomization_coverage_requires_configured_tokens():
+    """Test randomization patches cannot silently bypass coverage checks."""
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        patches_dir = Path(tmpdirname)
+
+        _write_persona_guard_patch(patches_dir, 'SavePersona();', 'persona-settings-ui.patch')
+        assert not check_persona_randomization_coverage(patches_dir)
+
+        _write_persona_guard_patch(patches_dir, 'SavePersona();',
+                                   'persona-consistent-randomize-ui.patch')
+        assert check_persona_randomization_coverage(patches_dir)
 
 
 if __name__ == '__main__':
@@ -147,5 +150,5 @@ if __name__ == '__main__':
     test_check_persona_contract_coverage()
     test_check_persona_profile_management_coverage()
     test_check_persona_runtime_hook_coverage()
-    test_check_persona_randomization_coverage()
+    test_check_persona_randomization_coverage_requires_configured_tokens()
     test_check_persona_settings_manual_field_coverage()

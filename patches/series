@@ -90,10 +90,12 @@ helium/core/ublock-install-as-component.patch
 helium/core/clean-omnibox-suggestions.patch
 helium/core/persona-state-management.patch
 helium/core/persona-navigator-runtime-overrides.patch
+helium/core/persona-uach-http-header-consistency.patch
 helium/core/persona-settings-ui.patch
+helium/core/persona-noise-token-infra.patch
 helium/core/persona-launch-picker.patch
+helium/core/persona-picker-lit-visibility.patch
 helium/core/persona-session-indicator.patch
-helium/core/persona-consistent-randomize-ui.patch
 helium/core/persona-accept-language-reducer-guard.patch
 helium/core/enable-parallel-downloading.patch
 helium/core/infinite-tab-freezing.patch
@@ -164,3 +166,9 @@ helium/core/persona-noise-token-determinism-test.patch
 helium/core/persona-background-worker-snapshot-propagation.patch
 helium/core/persona-contacts-background-fetch-runtime-gating.patch
 helium/core/persona-privacy-sandbox-runtime-gates.patch
+helium/core/persona-noise-token-propagation.patch
+helium/core/persona-worker-noise-token-propagation.patch
+helium/core/persona-canvas-noise.patch
+helium/core/persona-webgl-readpixels-noise.patch
+helium/core/persona-audio-noise.patch
+helium/core/persona-font-metric-noise.patch

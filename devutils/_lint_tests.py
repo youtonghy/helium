@@ -17,7 +17,20 @@ def _read_text(path):
 
 
 def _read_patch(path):
-    return unidiff.PatchSet('\n'.join(_read_text(path)))
+    normalized_lines = []
+    in_hunk = False
+    with open(patches_dir / path, "r", encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    for line in lines:
+        if line.startswith('@@'):
+            in_hunk = True
+        elif line.startswith(('Index:', '--- ', '+++ ')):
+            in_hunk = False
+        if in_hunk and line == '':
+            normalized_lines.append(' ')
+        else:
+            normalized_lines.append(line)
+    return unidiff.PatchSet('\n'.join(normalized_lines))
 
 
 def _init(root):

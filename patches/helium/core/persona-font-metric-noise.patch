@@ -1,0 +1,116 @@
+Index: third_party/blink/renderer/core/html/canvas/text_metrics.cc
+===================================================================
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.cc
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+@@ -4,7 +4,11 @@
+
+ #include "third_party/blink/renderer/core/html/canvas/text_metrics.h"
+
++#include <cmath>
++#include <cstdint>
++
+ #include "base/numerics/checked_math.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_align.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_baseline.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_text_cluster_options.h"
+@@ -30,6 +34,25 @@
+ namespace blink {
+
+ constexpr int kHangingAsPercentOfAscent = 80;
++constexpr uint64_t kFnvPrime = 0x00000100000001b3;
++constexpr double kHeliumFontMetricNoiseDelta = 0.001;
++
++uint64_t MixHeliumFontMetricNoise(uint64_t hash, uint64_t value) {
++  hash ^= value;
++  hash *= kFnvPrime;
++  return hash;
++}
++
++double ApplyHeliumFontMetricNoise(double value,
++                                  uint64_t token_hash,
++                                  uint64_t field_index) {
++  if (!std::isfinite(value) || value == 0.0)
++    return value;
++  const uint64_t field_hash = MixHeliumFontMetricNoise(token_hash, field_index);
++  const double direction = (field_hash & 1) ? 1.0 : -1.0;
++  const double magnitude = 1.0 + static_cast<double>((field_hash >> 1) % 31);
++  return value + direction * magnitude * kHeliumFontMetricNoiseDelta;
++}
+
+ float TextMetrics::GetFontBaseline(
+     const V8CanvasTextBaseline::Enum text_baseline,
+@@ -79,6 +102,33 @@ void TextMetrics::Trace(Visitor* visitor
+   ScriptWrappable::Trace(visitor);
+ }
+
++void TextMetrics::ApplyFontMetricNoise(const NoiseToken& token) {
++  const uint64_t token_hash = token.Value();
++  width_ = ApplyHeliumFontMetricNoise(width_, token_hash, 1);
++  actual_bounding_box_left_ =
++      ApplyHeliumFontMetricNoise(actual_bounding_box_left_, token_hash, 2);
++  actual_bounding_box_right_ =
++      ApplyHeliumFontMetricNoise(actual_bounding_box_right_, token_hash, 3);
++  font_bounding_box_ascent_ =
++      ApplyHeliumFontMetricNoise(font_bounding_box_ascent_, token_hash, 4);
++  font_bounding_box_descent_ =
++      ApplyHeliumFontMetricNoise(font_bounding_box_descent_, token_hash, 5);
++  actual_bounding_box_ascent_ =
++      ApplyHeliumFontMetricNoise(actual_bounding_box_ascent_, token_hash, 6);
++  actual_bounding_box_descent_ =
++      ApplyHeliumFontMetricNoise(actual_bounding_box_descent_, token_hash, 7);
++  em_height_ascent_ =
++      ApplyHeliumFontMetricNoise(em_height_ascent_, token_hash, 8);
++  em_height_descent_ =
++      ApplyHeliumFontMetricNoise(em_height_descent_, token_hash, 9);
++  baselines_->setAlphabetic(
++      ApplyHeliumFontMetricNoise(baselines_->alphabetic(), token_hash, 10));
++  baselines_->setHanging(
++      ApplyHeliumFontMetricNoise(baselines_->hanging(), token_hash, 11));
++  baselines_->setIdeographic(
++      ApplyHeliumFontMetricNoise(baselines_->ideographic(), token_hash, 12));
++}
++
+ TextMetrics::TextMetrics() : baselines_(Baselines::Create()) {}
+
+ TextMetrics::TextMetrics(const Font* font,
+Index: third_party/blink/renderer/core/html/canvas/text_metrics.h
+===================================================================
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.h
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.h
+@@ -42,6 +42,7 @@ namespace blink {
+
+ class DOMRectReadOnly;
+ class ExceptionState;
++class NoiseToken;
+ class PlainTextPainter;
+ class TextClusterOptions;
+
+@@ -75,6 +76,8 @@ class CORE_EXPORT TextMetrics final : pu
+   static float GetFontBaseline(const V8CanvasTextBaseline::Enum,
+                                const SimpleFontData&);
+
++  void ApplyFontMetricNoise(const NoiseToken&);
++
+   unsigned getIndexFromOffset(double x);
+
+   const HeapVector<Member<DOMRectReadOnly>> getSelectionRects(
+Index: third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+===================================================================
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -1181,9 +1181,13 @@ TextMetrics* BaseRenderingContext2D::mea
+   TextDirection direction =
+       ToTextDirection(state.GetDirection(), host, computed_style);
+
+-  return MakeGarbageCollected<TextMetrics>(
++  TextMetrics* metrics = MakeGarbageCollected<TextMetrics>(
+       font, direction, state.GetTextBaseline(), state.GetTextAlign(), text,
+       host->GetPlainTextPainter());
++  ExecutionContext* execution_context = GetTopExecutionContext();
++  if (execution_context && execution_context->FontMetricNoiseToken())
++    metrics->ApplyFontMetricNoise(*execution_context->FontMetricNoiseToken());
++  return metrics;
+ }
+
+ String BaseRenderingContext2D::lang() const {

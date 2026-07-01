@@ -1,0 +1,77 @@
+--- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
++++ b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+@@ -25,9 +25,14 @@
+
+ #include "third_party/blink/renderer/modules/webaudio/offline_audio_context.h"
+
++#include <cmath>
++#include <limits>
++
++#include "base/containers/span.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/metrics/histogram_macros.h"
+ #include "media/base/audio_glitch_info.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_offline_audio_context_options.h"
+@@ -35,6 +40,7 @@
+ #include "third_party/blink/renderer/core/dom/dom_exception.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/modules/webaudio/audio_buffer.h"
+ #include "third_party/blink/renderer/modules/webaudio/audio_listener.h"
+ #include "third_party/blink/renderer/modules/webaudio/deferred_task_handler.h"
+ #include "third_party/blink/renderer/modules/webaudio/offline_audio_completion_event.h"
+@@ -53,6 +59,39 @@
+
+ namespace {
+
++constexpr uint64_t kFnvPrime = 0x00000100000001b3;
++
++uint64_t MixHeliumAudioNoise(uint64_t hash, uint64_t value) {
++  hash ^= value;
++  hash *= kFnvPrime;
++  return hash;
++}
++
++void ApplyHeliumAudioNoise(AudioBuffer* rendered_buffer, NoiseToken token) {
++  const uint64_t token_hash = token.Value();
++  for (uint32_t channel = 0; channel < rendered_buffer->numberOfChannels();
++       ++channel) {
++    base::span<float> samples =
++        rendered_buffer->getChannelData(channel)->AsSpan();
++    const uint64_t channel_hash = MixHeliumAudioNoise(token_hash, channel + 1);
++    for (size_t i = 0; i < samples.size(); ++i) {
++      const float sample = samples[i];
++      if (!std::isfinite(sample) || sample == 0.0f)
++        continue;
++
++      uint64_t sample_hash = MixHeliumAudioNoise(channel_hash, i + 1);
++      const float target = (sample_hash & 1)
++                               ? std::numeric_limits<float>::infinity()
++                               : -std::numeric_limits<float>::infinity();
++      float jittered = sample;
++      const uint64_t ulp_steps = ((sample_hash >> 1) % 31) + 1;
++      for (uint64_t step = 0; step < ulp_steps; ++step)
++        jittered = std::nextafter(jittered, target);
++      samples[i] = jittered;
++    }
++  }
++}
++
+ OfflineAudioContext* CreateOfflineAudioContext(
+     ExecutionContext* context,
+     unsigned number_of_channels,
+@@ -425,6 +464,11 @@
+       return;
+     }
+
++    if (const std::optional<NoiseToken>& token =
++            GetExecutionContext()->AudioNoiseToken()) {
++      ApplyHeliumAudioNoise(rendered_buffer, *token);
++    }
++
+     // Call the offline rendering completion event listener and resolve the
+     // promise too.
+     DispatchEvent(*OfflineAudioCompletionEvent::Create(rendered_buffer));

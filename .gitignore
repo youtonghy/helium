@@ -19,6 +19,7 @@ __pycache__/
 /devutils/i18n-data
 
 # Ignore local design / validation artifacts
+/plans/
 /codex_tmp/
 /tmp_persona_*/
 /playwright-report/

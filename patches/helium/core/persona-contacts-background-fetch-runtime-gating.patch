@@ -1,5 +1,3 @@
-diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
-index 5d5ee78c..8f2e2f4a 100644
 --- a/content/browser/browser_interface_binders.cc
 +++ b/content/browser/browser_interface_binders.cc
 @@ -138,6 +138,7 @@
@@ -10,8 +8,7 @@ index 5d5ee78c..8f2e2f4a 100644
  #include "third_party/blink/public/common/storage_key/storage_key.h"
  #include "third_party/blink/public/mojom/ai/ai_manager.mojom.h"
  #include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom.h"
-@@ -753,7 +754,39 @@ void BindRenderFrameHostImpl(RenderFrameHost* host,
- {
+@@ -754,6 +755,38 @@ void BindRenderFrameHostImpl(RenderFrame
    (RenderFrameHostImpl::From(host)->*Method)(std::move(receiver));
  }
  
