@@ -317,3 +317,76 @@ he push
 he configure
 he build
 ```
+
+## 快速编译反馈环
+
+目的：不要再用「全量 `he build`（约 2 小时）」去发现「某几个文件编译不过」。编译期错误应在**几秒内**暴露，全量构建只作为最终确认，不作为日常调试手段。
+
+对 Chromium 这种体量，"不编译就一次写对" 做不到（模板实例化、类型推断、跨 TU 链接错误无法靠静态阅读排除）。正确目标不是零编译，而是把「发现错误的成本」从 2 小时压到秒级。
+
+### 两类源码树的职责区分
+
+本文件前面的 patch 规范解决的是 **patch 正确性卫生**；本节解决 **构建增量性**。两者并存，互不冲突：
+
+| 树 | 用途 | 纪律 |
+|----|------|------|
+| `chromium_src` / `codex_tmp/patchcheck_src` | patch 正确性验证 | 保持前述 pristine 流程不变 |
+| `helium-macos/build/src` | 热增量构建 / 修编译错 | 直接改源码 + 增量 build |
+
+`helium-macos/build/src` 是**热增量树**（`is_component_build=true` + `use_siso=true` + 本地 siso）。改完源码后 siso 只重编改动 TU + 重链，通常分钟级，不是两小时。
+
+### 修编译错的标准循环
+
+1. 在热树 `helium-macos/build/src` 里**直接改源码**。
+2. C++ 文件：跑 `-fsyntax-only` 预检（秒级），见下。
+3. 链接 / TypeScript 失败：跑单 target 增量 build（分钟级），见下。
+4. 预检 / 单 target 全过后，再跑一次增量 `he build` 做整体确认。
+5. 逻辑验证通过后，**最后一次性**用 quilt 把改动 refresh 回 `patches/`（遵循前述 patch 标准流程），并按现有 fresh source 验证流程复核。
+
+### 关键约束：修错期间不要每轮 `he merge && he push`
+
+`he merge && he push` 会重新 apply 全部 patch、改写源码时间戳，让 siso 认为大量文件变更，触发接近全量的重编 —— 这正是「每轮都像两小时」的根因。
+
+因此：**在热树里迭代修编译错时，禁止每轮都 `he merge && he push`。** 只在开始一轮修复前同步一次、以及最后收敛 patch 时各做一次即可。
+
+### C++ 秒级预检：`devutils/syntax_check.py`
+
+从 `out/Default/compile_commands.json` 取出对应 TU 的完整 clang 命令，替换为 `-fsyntax-only` 并行执行，直接打印 clang 诊断。只覆盖编译期错误（语法、类型、头文件、模板实例化），不覆盖链接 / TS。
+
+```bash
+# 单/多文件，路径可相对 build/src 或绝对
+python3 devutils/syntax_check.py \
+  content/browser/client_hints/critical_client_hints_throttle.cc
+
+# 显式指定 out 目录（默认自动探测热树）
+python3 devutils/syntax_check.py -o ../helium-macos/build/src/out/Default FILE...
+```
+
+退出码非零表示有编译错误。找不到 TU 的文件（头文件 / 生成文件 / TS）会提示改用单 target 增量 build。
+
+### 链接 / TS / action 失败：`devutils/build_targets.py`
+
+`he build` 默认构建整个产品（`chrome chromedriver`）。修单个失败时只需重建那个失败的库或 action，用本包装器指定 target，复用热 siso 状态。
+
+```bash
+# 显式 target
+python3 devutils/build_targets.py content
+
+# 从 siso_failed_commands*.sh 自动提取失败 target
+python3 devutils/build_targets.py --from-failed
+
+# 只打印命令不执行
+python3 devutils/build_targets.py -n --from-failed
+```
+
+用于 `-fsyntax-only` 覆盖不到的失败：SOLINK / LINK、`ts_library.py` / TypeScript build、其他 action 步骤。
+
+### 反馈环对比
+
+```text
+旧: 改 patch → he build(全量 ~2h) → N 个错 → 改 → 全量 ~2h → ...
+新: 改源码(热树) → syntax_check(秒级/文件) 或 build_targets(分钟级/target)
+    → 全过 → 增量 he build 确认 → 通过后一次性 refresh patch
+```
+
+把「赌一次写对」变成「秒级逼近写对」。这些快速检查**不替代**前述 fresh source patch apply 验证与 `run_validation.py`；它们只是把编译错误的发现成本前移，最终交付仍须走完整 patch 正确性验证。
