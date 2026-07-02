@@ -130,7 +130,7 @@
        std::make_unique<HeliumServicesSchemaHandler>(profile));
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,63 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -140,6 +140,8 @@
 +  ok: boolean;
 +  state: any;
 +  fieldErrors: any;
++  importedCount?: number;
++  skippedCount?: number;
 +}
 +
 +export interface PersonaProfilesResponse {
@@ -154,6 +156,7 @@
 +  getPersonaProfiles(): Promise<PersonaProfilesResponse>;
 +  createPersonaProfile(displayName: string): Promise<PersonaPageResponse>;
 +  savePersona(persona: any): Promise<PersonaPageResponse>;
++  importPersonas(personas: any[]): Promise<PersonaPageResponse>;
 +  setActivePersona(personaId: string): Promise<PersonaPageResponse>;
 +  clonePresetIntoProfile(presetId: string): Promise<PersonaPageResponse>;
 +  deletePersona(personaId: string): Promise<PersonaPageResponse>;
@@ -174,6 +177,7 @@
 +        'createPersonaProfile', displayName);
 +  }
 +  savePersona(persona: any) { return sendWithPromise<PersonaPageResponse>('savePersona', persona); }
++  importPersonas(personas: any[]) { return sendWithPromise<PersonaPageResponse>('importPersonas', personas); }
 +  setActivePersona(personaId: string) { return sendWithPromise<PersonaPageResponse>('setActivePersona', personaId); }
 +  clonePresetIntoProfile(presetId: string) { return sendWithPromise<PersonaPageResponse>('clonePresetIntoProfile', presetId); }
 +  deletePersona(personaId: string) { return sendWithPromise<PersonaPageResponse>('deletePersona', personaId); }
@@ -192,7 +196,7 @@
 +}
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
-@@ -0,0 +1,309 @@
+@@ -0,0 +1,489 @@
 +<!-- Copyright 2026 The Helium Authors -->
 +<!-- You can use, redistribute, and/or modify this source code under -->
 +<!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
@@ -223,6 +227,7 @@
 +
 +  .section-actions {
 +    display: flex;
++    flex-wrap: wrap;
 +    gap: 8px;
 +  }
 +
@@ -306,9 +311,12 @@
 +    gap: 6px;
 +  }
 +
-+  .field label {
++  .field-label {
++    align-items: center;
 +    color: var(--cr-secondary-text-color);
++    display: flex;
 +    font-size: 0.75rem;
++    gap: 4px;
 +  }
 +
 +  .field select {
@@ -331,8 +339,13 @@
 +
 +  .actions {
 +    display: flex;
++    gap: 8px;
 +    justify-content: flex-end;
 +    margin-top: 20px;
++  }
++
++  #personaImportInput {
++    display: none;
 +  }
 +</style>
 +<settings-subpage page-title="$i18n{personaTitle}" route-path$="[[routePath]]">
@@ -343,11 +356,22 @@
 +        <div class="profile-card-meta">Manage saved persona profiles for different browsing identities.</div>
 +      </div>
 +      <div class="section-actions">
++        <cr-button on-click="onImportClick_">
++          $i18n{personaImport}
++        </cr-button>
++        <cr-button on-click="onExportAllProfilesClick_">
++          $i18n{personaExportAll}
++        </cr-button>
 +        <cr-button class="action-button" on-click="onCreateProfileClick_">
 +          New Profile
 +        </cr-button>
++        <input id="personaImportInput" type="file" accept=".json,application/json"
++            on-change="onImportFileChange_">
 +      </div>
 +    </div>
++    <template is="dom-if" if="[[importStatus_]]">
++      <div class="profile-card-meta">[[importStatus_]]</div>
++    </template>
 +    <div class="profiles-grid">
 +      <template is="dom-repeat" items="[[profiles_]]">
 +        <div class="profile-card"
@@ -390,7 +414,9 @@
 +      </div>
 +    </div>
 +    <div class="field preset-select">
-+      <label>Launch behavior</label>
++      <div class="field-label">
++        <span>Launch behavior</span>
++      </div>
 +      <select value$="[[launchSelectionMode_]]"
 +          on-change="onLaunchSelectionModeChange_">
 +        <option value="always_ask">Always ask</option>
@@ -413,7 +439,9 @@
 +    </div>
 +    <div class="preset-actions">
 +      <div class="field preset-select">
-+        <label>Preset</label>
++        <div class="field-label">
++          <span>Preset</span>
++        </div>
 +        <select value$="[[selectedPresetId_]]" on-change="onPresetChange_">
 +          <option value="">Choose a preset...</option>
 +          <template is="dom-repeat" items="[[presets_]]">
@@ -433,67 +461,223 @@
 +        <h3>Edit Profile</h3>
 +        <div class="profile-card-meta">Selected profile: [[editablePersona_.displayName]]</div>
 +      </div>
++      <div class="section-actions">
++        <cr-button on-click="onExportCurrentProfileClick_"
++            disabled="[[!canDeleteProfile_(editablePersona_.id)]]">
++          $i18n{personaExportCurrent}
++        </cr-button>
++      </div>
 +    </div>
 +    <div class="field-grid">
 +      <cr-input label="Display name"
 +          value="{{editablePersona_.displayName}}"></cr-input>
 +      <cr-input label="Icon"
 +          value="{{editablePersona_.icon}}"></cr-input>
-+      <cr-input label="User agent" value="{{editablePersona_.userAgent}}"></cr-input>
-+      <cr-input label="Platform" value="{{editablePersona_.platform}}"></cr-input>
-+      <cr-input label="Navigator vendor" value="{{editablePersona_.navigatorVendor}}"></cr-input>
-+      <cr-input label="ProductSub" value="{{editablePersona_.navigatorProductSub}}"></cr-input>
-+      <div class="field">
-+        <label>UA-CH platform</label>
-+        <select value$="[[editablePersona_.uaCh.platform]]"
-+            on-change="onUaChPlatformChange_">
-+          <option value="macOS">macOS</option>
-+          <option value="Windows">Windows</option>
-+          <option value="Linux">Linux</option>
-+          <option value="Chrome OS">Chrome OS</option>
-+          <option value="Android">Android</option>
-+        </select>
-+      </div>
-+      <cr-input label="UA-CH full version" value="{{editablePersona_.uaCh.fullVersion}}"></cr-input>
-+      <div class="field">
-+        <label>Timezone</label>
-+        <select value$="[[editablePersona_.region.timezone]]"
-+            on-change="onTimezoneChange_">
-+          <option value="UTC">UTC</option>
-+          <option value="America/New_York">America/New_York</option>
-+          <option value="Europe/London">Europe/London</option>
-+          <option value="Europe/Berlin">Europe/Berlin</option>
-+          <option value="Asia/Tokyo">Asia/Tokyo</option>
-+          <option value="Australia/Melbourne">Australia/Melbourne</option>
-+        </select>
++      <div class="field full-row">
++        <div class="field-label">
++          <span>$i18n{personaFieldUserAgentLabel}</span>
++          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldUserAgentTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input value="{{editablePersona_.userAgent}}"></cr-input>
 +      </div>
 +      <div class="field">
-+        <label>Locale</label>
-+        <select value$="[[editablePersona_.region.locale]]"
-+            on-change="onLocaleChange_">
-+          <option value="en-US">en-US</option>
-+          <option value="en-GB">en-GB</option>
-+          <option value="de-DE">de-DE</option>
-+          <option value="ja-JP">ja-JP</option>
-+          <option value="zh-CN">zh-CN</option>
++        <div class="field-label">
++          <span>$i18n{personaFieldPlatformLabel}</span>
++          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldPlatformTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select value$="[[getSelectValue_('editablePersona_.platform', 'platform')]]"
++            data-path="editablePersona_.platform" data-option-id="platform"
++            on-change="onOptionFieldChange_">
++          <template is="dom-repeat" items="[[getFieldOptions_('platform')]]">
++            <option value$="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++        <template is="dom-if" if="[[isCustomSelected_('platform')]]">
++          <cr-input value="{{editablePersona_.platform}}"
++              data-path="editablePersona_.platform" data-option-id="platform"
++              on-input="onCustomOptionInput_"></cr-input>
++        </template>
++      </div>
++      <cr-input label="$i18n{personaFieldNavigatorVendorLabel}"
++          value="{{editablePersona_.navigatorVendor}}"></cr-input>
++      <cr-input label="$i18n{personaFieldProductSubLabel}"
++          value="{{editablePersona_.navigatorProductSub}}"></cr-input>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldUaChPlatformLabel}</span>
++          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldUaChPlatformTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select value$="[[getSelectValue_('editablePersona_.uaCh.platform', 'platform')]]"
++            data-path="editablePersona_.uaCh.platform" data-option-id="platform"
++            on-change="onOptionFieldChange_">
++          <template is="dom-repeat" items="[[getFieldOptions_('platform')]]">
++            <option value$="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
 +        </select>
 +      </div>
-+      <cr-input label="Accept-Language" value="{{editablePersona_.region.acceptLanguage}}"></cr-input>
-+      <cr-input label="GPU vendor" value="{{editablePersona_.gpu.vendor}}"></cr-input>
-+      <cr-input label="GPU renderer" value="{{editablePersona_.gpu.renderer}}"></cr-input>
-+      <cr-input label="WebGPU adapter" value="{{editablePersona_.gpu.webgpuAdapter}}"></cr-input>
-+      <cr-input label="CPU threads" value="{{editablePersona_.hardware.hardwareConcurrency}}"></cr-input>
-+      <cr-input label="Device memory" value="{{editablePersona_.hardware.deviceMemory}}"></cr-input>
-+      <cr-input label="Touch points" value="{{editablePersona_.hardware.maxTouchPoints}}"></cr-input>
-+      <cr-input label="Screen width" value="{{editablePersona_.screen.width}}"></cr-input>
-+      <cr-input label="Screen availLeft" value="{{editablePersona_.screen.availLeft}}"></cr-input>
-+      <cr-input label="Outer width" value="{{editablePersona_.screen.outerWidth}}"></cr-input>
-+      <cr-input label="DPR" value="{{editablePersona_.screen.deviceScaleFactor}}"></cr-input>
-+      <cr-input label="Fonts ID" value="{{editablePersona_.fonts.id}}"></cr-input>
-+      <cr-input label="Font engine" value="{{editablePersona_.fontRendering.engine}}"></cr-input>
-+      <cr-input label="Audio base latency" value="{{editablePersona_.mediaDevices.audioBaseLatency}}"></cr-input>
-+      <cr-input label="Network type" value="{{editablePersona_.network.type}}"></cr-input>
-+      <cr-input label="Downlink max" value="{{editablePersona_.network.downlinkMax}}"></cr-input>
++      <cr-input label="$i18n{personaFieldUaChFullVersionLabel}"
++          value="{{editablePersona_.uaCh.fullVersion}}"></cr-input>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldTimezoneLabel}</span>
++          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldTimezoneTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select value$="[[getSelectValue_('editablePersona_.region.timezone', 'timezone')]]"
++            data-path="editablePersona_.region.timezone" data-option-id="timezone"
++            on-change="onOptionFieldChange_">
++          <template is="dom-repeat" items="[[getFieldOptions_('timezone')]]">
++            <option value$="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++        <template is="dom-if" if="[[isCustomSelected_('timezone')]]">
++          <cr-input value="{{editablePersona_.region.timezone}}"
++              data-path="editablePersona_.region.timezone"
++              data-option-id="timezone" on-input="onCustomOptionInput_">
++          </cr-input>
++        </template>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldLocaleLabel}</span>
++          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldLocaleTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select value$="[[getSelectValue_('editablePersona_.region.locale', 'locale')]]"
++            data-path="editablePersona_.region.locale" data-option-id="locale"
++            on-change="onOptionFieldChange_">
++          <template is="dom-repeat" items="[[getFieldOptions_('locale')]]">
++            <option value$="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++        <template is="dom-if" if="[[isCustomSelected_('locale')]]">
++          <cr-input value="{{editablePersona_.region.locale}}"
++              data-path="editablePersona_.region.locale"
++              data-option-id="locale" on-input="onCustomOptionInput_">
++          </cr-input>
++        </template>
++      </div>
++      <cr-input label="$i18n{personaFieldAcceptLanguageLabel}"
++          value="{{editablePersona_.region.acceptLanguage}}"></cr-input>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldGpuVendorLabel}</span>
++          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldGpuVendorTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select value$="[[getSelectValue_('editablePersona_.gpu.vendor', 'gpuVendor')]]"
++            data-path="editablePersona_.gpu.vendor" data-option-id="gpuVendor"
++            on-change="onOptionFieldChange_">
++          <template is="dom-repeat" items="[[getFieldOptions_('gpuVendor')]]">
++            <option value$="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldGpuRendererLabel}</span>
++          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldGpuRendererTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select value$="[[getSelectValue_('editablePersona_.gpu.renderer', 'gpuRenderer')]]"
++            data-path="editablePersona_.gpu.renderer" data-option-id="gpuRenderer"
++            on-change="onOptionFieldChange_">
++          <template is="dom-repeat" items="[[getFieldOptions_('gpuRenderer')]]">
++            <option value$="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++        <template is="dom-if" if="[[isCustomSelected_('gpuRenderer')]]">
++          <cr-input value="{{editablePersona_.gpu.renderer}}"
++              data-path="editablePersona_.gpu.renderer"
++              data-option-id="gpuRenderer" on-input="onCustomOptionInput_">
++          </cr-input>
++        </template>
++      </div>
++      <cr-input label="$i18n{personaFieldWebGpuAdapterLabel}"
++          value="{{editablePersona_.gpu.webgpuAdapter}}"></cr-input>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldHardwareConcurrencyLabel}</span>
++          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldHardwareConcurrencyTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select value$="[[getSelectValue_('editablePersona_.hardware.hardwareConcurrency', 'hardwareConcurrency')]]"
++            data-path="editablePersona_.hardware.hardwareConcurrency"
++            data-option-id="hardwareConcurrency" on-change="onOptionFieldChange_">
++          <template is="dom-repeat"
++              items="[[getFieldOptions_('hardwareConcurrency')]]">
++            <option value$="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldDeviceMemoryLabel}</span>
++          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldDeviceMemoryTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select value$="[[getSelectValue_('editablePersona_.hardware.deviceMemory', 'deviceMemory')]]"
++            data-path="editablePersona_.hardware.deviceMemory"
++            data-option-id="deviceMemory" on-change="onOptionFieldChange_">
++          <template is="dom-repeat" items="[[getFieldOptions_('deviceMemory')]]">
++            <option value$="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++      </div>
++      <cr-input label="$i18n{personaFieldMaxTouchPointsLabel}"
++          value="{{editablePersona_.hardware.maxTouchPoints}}"></cr-input>
++      <cr-input label="$i18n{personaFieldScreenWidthLabel}"
++          value="{{editablePersona_.screen.width}}"></cr-input>
++      <cr-input label="$i18n{personaFieldAvailLeftLabel}"
++          value="{{editablePersona_.screen.availLeft}}"></cr-input>
++      <cr-input label="$i18n{personaFieldOuterWidthLabel}"
++          value="{{editablePersona_.screen.outerWidth}}"></cr-input>
++      <cr-input label="$i18n{personaFieldDprLabel}"
++          value="{{editablePersona_.screen.deviceScaleFactor}}"></cr-input>
++      <cr-input label="$i18n{personaFieldFontsIdLabel}"
++          value="{{editablePersona_.fonts.id}}"></cr-input>
++      <cr-input label="$i18n{personaFieldFontEngineLabel}"
++          value="{{editablePersona_.fontRendering.engine}}"></cr-input>
++      <cr-input label="$i18n{personaFieldAudioBaseLatencyLabel}"
++          value="{{editablePersona_.mediaDevices.audioBaseLatency}}"></cr-input>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldNetworkTypeLabel}</span>
++          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldNetworkTypeTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select value$="[[getSelectValue_('editablePersona_.network.type', 'networkType')]]"
++            data-path="editablePersona_.network.type" data-option-id="networkType"
++            on-change="onOptionFieldChange_">
++          <template is="dom-repeat" items="[[getFieldOptions_('networkType')]]">
++            <option value$="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++      </div>
++      <cr-input label="$i18n{personaFieldDownlinkMaxLabel}"
++          value="{{editablePersona_.network.downlinkMax}}"></cr-input>
 +    </div>
 +    <div class="actions">
 +      <cr-button class="action-button" on-click="onSavePersonaClick_">
@@ -504,7 +688,7 @@
 +</settings-subpage>
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
-@@ -0,0 +1,467 @@
+@@ -0,0 +1,737 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -512,6 +696,7 @@
 +import '../settings_page/settings_subpage.js';
 +import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 +import 'chrome://resources/cr_elements/cr_input/cr_input.js';
++import 'chrome://resources/cr_elements/policy/cr_tooltip_icon.js';
 +
 +import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
 +import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
@@ -525,6 +710,133 @@
 +import {getTemplate} from './persona_page.html.js';
 +
 +type PersonaRecord = any;
++
++interface PersonaFieldOption {
++  label: string;
++  value: string;
++}
++
++interface PersonaFieldOptionGroup {
++  id: string;
++  options: PersonaFieldOption[];
++}
++
++const CUSTOM_OPTION_VALUE = '__custom__';
++const PERSONA_EXPORT_SCHEMA = 'helium.persona/v1';
++
++const FIELD_OPTIONS: PersonaFieldOptionGroup[] = [
++  {
++    id: 'timezone',
++    options: [
++      {label: 'UTC', value: 'UTC'},
++      {label: 'US Pacific', value: 'America/Los_Angeles'},
++      {label: 'US Eastern', value: 'America/New_York'},
++      {label: 'Toronto', value: 'America/Toronto'},
++      {label: 'Sao Paulo', value: 'America/Sao_Paulo'},
++      {label: 'London', value: 'Europe/London'},
++      {label: 'Berlin', value: 'Europe/Berlin'},
++      {label: 'Paris', value: 'Europe/Paris'},
++      {label: 'Tokyo', value: 'Asia/Tokyo'},
++      {label: 'Singapore', value: 'Asia/Singapore'},
++      {label: 'Seoul', value: 'Asia/Seoul'},
++      {label: 'Sydney', value: 'Australia/Sydney'},
++    ],
++  },
++  {
++    id: 'locale',
++    options: [
++      {label: 'English (US)', value: 'en-US'},
++      {label: 'English (UK)', value: 'en-GB'},
++      {label: 'English (Singapore)', value: 'en-SG'},
++      {label: 'Portuguese (Brazil)', value: 'pt-BR'},
++      {label: 'French', value: 'fr-FR'},
++      {label: 'German', value: 'de-DE'},
++      {label: 'Spanish', value: 'es-ES'},
++      {label: 'Japanese', value: 'ja-JP'},
++      {label: 'Korean', value: 'ko-KR'},
++      {label: 'Chinese (Hong Kong)', value: 'zh-HK'},
++    ],
++  },
++  {
++    id: 'platform',
++    options: [
++      {label: 'macOS', value: 'macOS'},
++      {label: 'Windows', value: 'Windows'},
++      {label: 'Linux', value: 'Linux'},
++      {label: 'Chrome OS', value: 'Chrome OS'},
++      {label: 'Android', value: 'Android'},
++    ],
++  },
++  {
++    id: 'gpuVendor',
++    options: [
++      {label: 'Apple Inc.', value: 'Apple Inc.'},
++      {label: 'Intel Inc.', value: 'Intel Inc.'},
++      {label: 'ATI Technologies Inc.', value: 'ATI Technologies Inc.'},
++      {label: 'NVIDIA Corporation', value: 'NVIDIA Corporation'},
++    ],
++  },
++  {
++    id: 'gpuRenderer',
++    options: [
++      {label: 'Apple M2', value: 'ANGLE (Apple, Apple M2, Metal)'},
++      {label: 'Apple M3', value: 'ANGLE (Apple, Apple M3, Metal)'},
++      {
++        label: 'Intel Iris Xe',
++        value: 'ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)',
++      },
++      {
++        label: 'AMD Radeon',
++        value: 'ANGLE (AMD, AMD Radeon Graphics Direct3D11)',
++      },
++      {
++        label: 'NVIDIA RTX 3060',
++        value: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11)',
++      },
++    ],
++  },
++  {
++    id: 'networkType',
++    options: [
++      {label: 'Wi-Fi', value: 'wifi'},
++      {label: 'Ethernet', value: 'ethernet'},
++      {label: 'Cellular', value: 'cellular'},
++      {label: 'None', value: 'none'},
++    ],
++  },
++  {
++    id: 'hardwareConcurrency',
++    options: [
++      {label: '4', value: '4'},
++      {label: '8', value: '8'},
++      {label: '10', value: '10'},
++      {label: '12', value: '12'},
++      {label: '16', value: '16'},
++    ],
++  },
++  {
++    id: 'deviceMemory',
++    options: [
++      {label: '4 GB', value: '4'},
++      {label: '8 GB', value: '8'},
++      {label: '16 GB', value: '16'},
++      {label: '32 GB', value: '32'},
++    ],
++  },
++];
++
++function getOptions(id: string): PersonaFieldOption[] {
++  return FIELD_OPTIONS.find(group => group.id === id)?.options || [];
++}
++
++function hasOption(id: string, value: unknown): boolean {
++  return getOptions(id).some(option => option.value === String(value ?? ''));
++}
++
++function exportFilename(prefix: string): string {
++  const timestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15);
++  return `${prefix}-${timestamp}.json`;
++}
 +
 +function createEmptyPersona(): PersonaRecord {
 +  return {
@@ -662,9 +974,11 @@
 +      launchSelectionMode_: {type: String, value: 'always_ask'},
 +      presets_: {type: Array, value: () => []},
 +      profiles_: {type: Array, value: () => []},
++      importStatus_: {type: String, value: ''},
 +      routePath: String,
 +      selectedPresetId_: {type: String, value: ''},
 +      selectedProfileId_: {type: String, value: ''},
++      customFieldSelections_: {type: Object, value: () => ({})},
 +      uaChBrandsText_: String,
 +      uaChFullVersionListText_: String,
 +      uaChFormFactorsText_: String,
@@ -681,9 +995,11 @@
 +  declare private launchSelectionMode_: string;
 +  declare private presets_: PersonaRecord[];
 +  declare private profiles_: PersonaRecord[];
++  declare private importStatus_: string;
 +  declare routePath: string;
 +  declare private selectedPresetId_: string;
 +  declare private selectedProfileId_: string;
++  declare private customFieldSelections_: Record<string, string>;
 +  declare private uaChBrandsText_: string;
 +  declare private uaChFullVersionListText_: string;
 +  declare private uaChFormFactorsText_: string;
@@ -735,6 +1051,7 @@
 +
 +    this.selectedProfileId_ = selectedProfile.id;
 +    this.editablePersona_ = this.mergePersona_(selectedProfile);
++    this.syncCustomSelections_();
 +    const matchingPreset = this.presets_.find((preset: PersonaRecord) => {
 +      return preset && preset.name === selectedProfile.name;
 +    });
@@ -881,6 +1198,57 @@
 +            this.editablePersona_));
 +  }
 +
++  private onExportCurrentProfileClick_() {
++    const persona = this.editablePersona_;
++    if (!persona || persona.id === 'default') {
++      return;
++    }
++    this.downloadPersonas_([persona], exportFilename('helium-persona'));
++  }
++
++  private onExportAllProfilesClick_() {
++    const personas =
++        this.profiles_.filter(persona => persona && persona.id !== 'default');
++    if (!personas.length) {
++      return;
++    }
++    this.downloadPersonas_(personas, exportFilename('helium-personas'));
++  }
++
++  private onImportClick_() {
++    const input =
++        this.shadowRoot!.querySelector<HTMLInputElement>('#personaImportInput');
++    input?.click();
++  }
++
++  private async onImportFileChange_(event: Event) {
++    const input = event.target as HTMLInputElement;
++    const file = input.files?.[0];
++    input.value = '';
++    if (!file) {
++      return;
++    }
++
++    try {
++      const payload = JSON.parse(await file.text());
++      const personas = Array.isArray(payload) ? payload :
++          (Array.isArray(payload.personas) ? payload.personas : []);
++      if (!personas.length) {
++        this.importStatus_ = this.i18n('personaImportNoProfiles');
++        return;
++      }
++
++      const response =
++          await PersonaBrowserProxyImpl.getInstance().importPersonas(personas);
++      this.importStatus_ = this.i18n(
++          'personaImportResult', String(response.importedCount || 0),
++          String(response.skippedCount || 0));
++      this.applyPersonaResponse_(response);
++    } catch (error) {
++      this.importStatus_ = this.i18n('personaImportFailed');
++    }
++  }
++
 +  private onPresetChange_(event: Event) {
 +    this.selectedPresetId_ = (event.target as HTMLSelectElement).value;
 +  }
@@ -930,6 +1298,51 @@
 +    this.set('editablePersona_.region.acceptLanguage', `${locale},en;q=0.9`);
 +  }
 +
++  private onOptionFieldChange_(event: Event) {
++    const target = event.target as HTMLSelectElement;
++    const path = target.dataset['path'] || '';
++    const optionId = target.dataset['optionId'] || '';
++    if (!path || !optionId) {
++      return;
++    }
++    this.set(`customFieldSelections_.${optionId}`, target.value);
++    if (target.value === CUSTOM_OPTION_VALUE) {
++      return;
++    }
++    this.set(path, this.coerceOptionValue_(path, target.value));
++    if (optionId === 'locale') {
++      this.set(
++          'editablePersona_.region.acceptLanguage',
++          `${target.value},en;q=0.9`);
++    }
++    if (optionId === 'platform') {
++      this.set('editablePersona_.uaCh.platform', target.value);
++    }
++  }
++
++  private onCustomOptionInput_(event: Event) {
++    const target = event.currentTarget as HTMLInputElement;
++    const path = target.dataset['path'] || '';
++    const optionId = target.dataset['optionId'] || '';
++    if (!path || !optionId) {
++      return;
++    }
++    this.set(path, this.coerceOptionValue_(path, target.value));
++  }
++
++  private getFieldOptions_(optionId: string) {
++    return getOptions(optionId);
++  }
++
++  private getSelectValue_(path: string, optionId: string) {
++    const value = this.get(path);
++    return hasOption(optionId, value) ? String(value) : CUSTOM_OPTION_VALUE;
++  }
++
++  private isCustomSelected_(optionId: string) {
++    return this.customFieldSelections_[optionId] === CUSTOM_OPTION_VALUE;
++  }
++
 +  private isSelectedProfile_(personaId: string, selectedProfileId: string) {
 +    return personaId === selectedProfileId;
 +  }
@@ -963,6 +1376,47 @@
 +    return lastUsedAt || 'Never';
 +  }
 +
++  private syncCustomSelections_() {
++    const selections: Record<string, string> = {};
++    const fieldPaths = {
++      timezone: 'editablePersona_.region.timezone',
++      locale: 'editablePersona_.region.locale',
++      platform: 'editablePersona_.platform',
++      gpuVendor: 'editablePersona_.gpu.vendor',
++      gpuRenderer: 'editablePersona_.gpu.renderer',
++      networkType: 'editablePersona_.network.type',
++      hardwareConcurrency: 'editablePersona_.hardware.hardwareConcurrency',
++      deviceMemory: 'editablePersona_.hardware.deviceMemory',
++    };
++    for (const [optionId, path] of Object.entries(fieldPaths)) {
++      selections[optionId] = this.getSelectValue_(path, optionId);
++    }
++    this.customFieldSelections_ = selections;
++  }
++
++  private coerceOptionValue_(path: string, value: string) {
++    if (path.includes('hardwareConcurrency') ||
++        path.includes('deviceMemory')) {
++      return Number(value);
++    }
++    return value;
++  }
++
++  private downloadPersonas_(personas: PersonaRecord[], filename: string) {
++    const blob = new Blob([JSON.stringify({
++                            schema: PERSONA_EXPORT_SCHEMA,
++                            exportedAt: new Date().toISOString(),
++                            personas,
++                          }, null, 2)],
++                          {type: 'application/json'});
++    const url = URL.createObjectURL(blob);
++    const anchor = document.createElement('a');
++    anchor.href = url;
++    anchor.download = filename;
++    anchor.click();
++    URL.revokeObjectURL(url);
++  }
++
 +}
 +
 +declare global {
@@ -974,7 +1428,7 @@
 +customElements.define(SettingsPersonaPageElement.is, SettingsPersonaPageElement);
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.h
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,40 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -1001,6 +1455,7 @@
 +  void HandleGetPersonaProfiles(const base::ListValue& args);
 +  void HandleCreatePersonaProfile(const base::ListValue& args);
 +  void HandleSavePersona(const base::ListValue& args);
++  void HandleImportPersonas(const base::ListValue& args);
 +  void HandleSetActivePersona(const base::ListValue& args);
 +  void HandleClonePresetIntoProfile(const base::ListValue& args);
 +  void HandleDeletePersona(const base::ListValue& args);
@@ -1016,7 +1471,7 @@
 +#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_PERSONA_HANDLER_H_
 --- /dev/null
 +++ b/chrome/browser/ui/webui/settings/persona_handler.cc
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,208 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -1060,6 +1515,10 @@
 +  web_ui()->RegisterMessageCallback(
 +      "savePersona",
 +      base::BindRepeating(&PersonaHandler::HandleSavePersona,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "importPersonas",
++      base::BindRepeating(&PersonaHandler::HandleImportPersonas,
 +                          base::Unretained(this)));
 +  web_ui()->RegisterMessageCallback(
 +      "setActivePersona",
@@ -1133,6 +1592,18 @@
 +  CHECK(service);
 +  ResolveJavascriptCallback(callback_id,
 +                            service->SavePersona(args[1].GetDict()));
++}
++
++void PersonaHandler::HandleImportPersonas(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(2U, args.size());
++  const base::Value& callback_id = args[0];
++  CHECK(args[1].is_list());
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(callback_id,
++                            service->ImportPersonas(args[1].GetList()));
 +}
 +
 +void PersonaHandler::HandleSetActivePersona(const base::ListValue& args) {

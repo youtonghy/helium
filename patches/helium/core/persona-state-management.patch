@@ -1029,7 +1029,7 @@
 +  array<HeliumPersonaFingerprintRotationEpoch> fingerprint_rotation_site_epochs;
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.h
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,60 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -1066,6 +1066,7 @@
 +  base::DictValue GetPersonaProfiles() const;
 +  base::DictValue CreatePersonaProfile(const std::string& display_name);
 +  base::DictValue SavePersona(const base::DictValue& payload);
++  base::DictValue ImportPersonas(const base::ListValue& payload);
 +  base::DictValue ClonePresetIntoProfile(const std::string& preset_id);
 +  base::DictValue SetActivePersona(const std::string& persona_id);
 +  base::DictValue DeletePersona(const std::string& persona_id);
@@ -1091,12 +1092,13 @@
 +#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -0,0 +1,1329 @@
+@@ -0,0 +1,1507 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#include "chrome/browser/helium_persona/persona_service.h"
 +
++#include <algorithm>
 +#include <array>
 +#include <optional>
 +#include <string>
@@ -1105,6 +1107,7 @@
 +
 +#include "base/i18n/time_formatting.h"
 +#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
 +#include "base/time/time.h"
 +#include "base/uuid.h"
 +#include "components/helium_persona/persona_snapshot.h"
@@ -1173,7 +1176,7 @@
 +
 +base::DictValue MakeUaChDefaults() {
 +  base::ListValue brands;
-+  brands.Append(base::DictValue().Set("brand", "Chromium").Set("version", "137"));
++  brands.Append(base::DictValue().Set("brand", "Chromium").Set("version", "150"));
 +  brands.Append(base::DictValue().Set("brand", "Not/A)Brand").Set("version", "24"));
 +
 +  base::ListValue form_factors;
@@ -1355,43 +1358,43 @@
 +  presets.Append(MakePreset(
 +      "us-west-macos", "US West Coast (macOS)",
 +      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
 +      "America/Los_Angeles", "en-US", "en-US,en;q=0.9", "macOS", "14.5.0",
-+      "arm", "64", "137.0.0.0", "Apple Inc.",
++      "arm", "64", "150.0.0.0", "Apple Inc.",
 +      "ANGLE (Apple, Apple M2, Metal)", "Apple M2", 8, 16, 0, 1512, 982, 1512,
 +      982, 2.0, "sf-pro-us-west", 0.01, "wifi", 30.0));
 +  presets.Append(MakePreset(
 +      "us-east-windows", "US East Coast (Windows)",
 +      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
 +      "America/New_York", "en-US", "en-US,en;q=0.9", "Windows", "15.0.0",
-+      "x86", "64", "137.0.0.0", "Intel Inc.",
++      "x86", "64", "150.0.0.0", "Intel Inc.",
 +      "ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)",
 +      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 864, 1536, 911, 1.25,
 +      "segoe-us-east", 0.02, "ethernet", 10.0));
 +  presets.Append(MakePreset(
 +      "sg-macos", "Singapore (macOS)",
 +      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
 +      "Asia/Singapore", "en-SG", "en-SG,en;q=0.9", "macOS", "14.5.0", "arm",
-+      "64", "137.0.0.0", "Apple Inc.",
++      "64", "150.0.0.0", "Apple Inc.",
 +      "ANGLE (Apple, Apple M2, Metal)", "Apple M2", 8, 8, 0, 1440, 900, 1440,
 +      900, 2.0, "sf-pro-sg", 0.02, "wifi", 20.0));
 +  presets.Append(MakePreset(
 +      "uk-windows", "United Kingdom (Windows)",
 +      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
 +      "Europe/London", "en-GB", "en-GB,en;q=0.9", "Windows", "15.0.0", "x86",
-+      "64", "137.0.0.0", "ATI Technologies Inc.",
++      "64", "150.0.0.0", "ATI Technologies Inc.",
 +      "ANGLE (AMD, AMD Radeon Graphics Direct3D11)", "AMD Radeon Graphics", 12,
 +      32, 0, 1728, 1117, 1728, 1170, 1.5, "segoe-uk", 0.02, "ethernet",
 +      10.0));
 +  presets.Append(MakePreset(
 +      "de-linux", "Germany (Linux)",
 +      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
 +      "Europe/Berlin", "de-DE", "de-DE,de;q=0.9,en;q=0.7", "Linux", "6.8.0",
-+      "x86", "64", "137.0.0.0", "Intel Inc.",
++      "x86", "64", "150.0.0.0", "Intel Inc.",
 +      "ANGLE (Intel, Intel Iris Xe Graphics Vulkan 1.3)",
 +      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 960, 1536, 1007, 1.25,
 +      "noto-de", 0.02, "wifi",
@@ -1399,11 +1402,117 @@
 +  presets.Append(MakePreset(
 +      "jp-macos", "Japan (macOS)",
 +      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
 +      "Asia/Tokyo", "ja-JP", "ja-JP,ja;q=0.9,en-US;q=0.7", "macOS", "15.0.0",
-+      "arm", "64", "137.0.0.0", "Apple Inc.",
++      "arm", "64", "150.0.0.0", "Apple Inc.",
 +      "ANGLE (Apple, Apple M3, Metal)", "Apple M3", 10, 24, 0, 1512, 982,
 +      1512, 982, 2.0, "sf-pro-jp", 0.01, "wifi", 25.0));
++  presets.Append(MakePreset(
++      "ca-windows", "Canada (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "America/Toronto", "en-CA", "en-CA,en;q=0.9,fr-CA;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "150.0.0.0", "Intel Inc.",
++      "ANGLE (Intel, Intel UHD Graphics Direct3D11)",
++      "Intel UHD Graphics", 8, 16, 0, 1920, 1080, 1920, 1040, 1.0,
++      "segoe-ca", 0.02, "wifi", 20.0));
++  presets.Append(MakePreset(
++      "br-windows", "Brazil (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "America/Sao_Paulo", "pt-BR", "pt-BR,pt;q=0.9,en-US;q=0.7",
++      "Windows", "15.0.0", "x86", "64", "150.0.0.0", "NVIDIA Corporation",
++      "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11)",
++      "NVIDIA GeForce RTX 3060", 12, 16, 0, 1920, 1080, 1920, 1040, 1.0,
++      "segoe-br", 0.02, "ethernet", 10.0));
++  presets.Append(MakePreset(
++      "mx-windows", "Mexico (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "America/Mexico_City", "es-MX", "es-MX,es;q=0.9,en-US;q=0.7",
++      "Windows", "15.0.0", "x86", "64", "150.0.0.0",
++      "ATI Technologies Inc.",
++      "ANGLE (AMD, AMD Radeon Graphics Direct3D11)", "AMD Radeon Graphics", 8,
++      16, 0, 1366, 768, 1366, 728, 1.0, "segoe-mx", 0.02, "wifi", 15.0));
++  presets.Append(MakePreset(
++      "fr-macos", "France (macOS)",
++      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "Europe/Paris", "fr-FR", "fr-FR,fr;q=0.9,en;q=0.7", "macOS", "15.0.0",
++      "arm", "64", "150.0.0.0", "Apple Inc.",
++      "ANGLE (Apple, Apple M3, Metal)", "Apple M3", 10, 16, 0, 1470, 956,
++      1470, 956, 2.0, "sf-pro-fr", 0.01, "wifi", 25.0));
++  presets.Append(MakePreset(
++      "nl-windows", "Netherlands (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "Europe/Amsterdam", "nl-NL", "nl-NL,nl;q=0.9,en;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "150.0.0.0", "Intel Inc.",
++      "ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)",
++      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 864, 1536, 911, 1.25,
++      "segoe-nl", 0.02, "wifi", 20.0));
++  presets.Append(MakePreset(
++      "es-windows", "Spain (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "Europe/Madrid", "es-ES", "es-ES,es;q=0.9,en;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "150.0.0.0", "Intel Inc.",
++      "ANGLE (Intel, Intel UHD Graphics Direct3D11)",
++      "Intel UHD Graphics", 8, 8, 0, 1366, 768, 1366, 728, 1.0, "segoe-es",
++      0.02, "wifi", 15.0));
++  presets.Append(MakePreset(
++      "it-windows", "Italy (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "Europe/Rome", "it-IT", "it-IT,it;q=0.9,en;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "150.0.0.0", "NVIDIA Corporation",
++      "ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11)",
++      "NVIDIA GeForce GTX 1650", 8, 16, 0, 1920, 1080, 1920, 1040, 1.0,
++      "segoe-it", 0.02, "ethernet", 10.0));
++  presets.Append(MakePreset(
++      "ru-windows", "Russia (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "Europe/Moscow", "ru-RU", "ru-RU,ru;q=0.9,en;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "150.0.0.0",
++      "ATI Technologies Inc.",
++      "ANGLE (AMD, AMD Radeon Graphics Direct3D11)", "AMD Radeon Graphics", 8,
++      16, 0, 1920, 1080, 1920, 1040, 1.0, "segoe-ru", 0.02, "wifi", 15.0));
++  presets.Append(MakePreset(
++      "kr-windows", "South Korea (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "Asia/Seoul", "ko-KR", "ko-KR,ko;q=0.9,en-US;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "150.0.0.0", "NVIDIA Corporation",
++      "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Direct3D11)",
++      "NVIDIA GeForce RTX 4060", 16, 32, 0, 2560, 1440, 2560, 1390, 1.0,
++      "malgun-kr", 0.02, "ethernet", 10.0));
++  presets.Append(MakePreset(
++      "in-windows", "India (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "Asia/Kolkata", "en-IN", "en-IN,en;q=0.9,hi;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "150.0.0.0", "Intel Inc.",
++      "ANGLE (Intel, Intel UHD Graphics Direct3D11)",
++      "Intel UHD Graphics", 8, 8, 0, 1366, 768, 1366, 728, 1.0, "segoe-in",
++      0.02, "wifi", 15.0));
++  presets.Append(MakePreset(
++      "hk-macos", "Hong Kong (macOS)",
++      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "Asia/Hong_Kong", "zh-HK", "zh-HK,zh-TW;q=0.9,en-US;q=0.7", "macOS",
++      "15.0.0", "arm", "64", "150.0.0.0", "Apple Inc.",
++      "ANGLE (Apple, Apple M2, Metal)", "Apple M2", 8, 16, 0, 1512, 982,
++      1512, 982, 2.0, "sf-pro-hk", 0.01, "wifi", 25.0));
++  presets.Append(MakePreset(
++      "au-windows", "Australia (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
++      "Australia/Sydney", "en-AU", "en-AU,en;q=0.9", "Windows", "15.0.0",
++      "x86", "64", "150.0.0.0", "Intel Inc.",
++      "ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)",
++      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 864, 1536, 911, 1.25,
++      "segoe-au", 0.02, "wifi", 20.0));
 +  return presets;
 +}
 +
@@ -1476,6 +1585,29 @@
 +    return *name;
 +  }
 +  return "Custom Persona";
++}
++
++std::string MakeImportNameSuffix() {
++  std::string suffix;
++  base::ReplaceChars(MakeIsoTimestamp(), "-:TZ", "", &suffix);
++  if (suffix.size() > 8) {
++    suffix.insert(8, "-");
++  }
++  return suffix;
++}
++
++bool PersonaNameExists(const base::ListValue* personas,
++                       std::string_view display_name) {
++  if (!personas || display_name.empty()) {
++    return false;
++  }
++  return std::any_of(personas->begin(), personas->end(),
++                     [display_name](const base::Value& value) {
++    if (!value.is_dict()) {
++      return false;
++    }
++    return GetPersonaDisplayName(value.GetDict()) == display_name;
++  });
 +}
 +
 +base::DictValue NormalizePersona(const base::DictValue& payload,
@@ -1900,6 +2032,53 @@
 +  SetLastUsedPersonaId(active_persona_id);
 +  WriteState(state.Clone());
 +  return MakeResponse(true, std::move(state));
++}
++
++base::DictValue PersonaService::ImportPersonas(const base::ListValue& payload) {
++  base::DictValue state = ReadState();
++  base::ListValue personas = state.FindList("personas")
++                                ? state.FindList("personas")->Clone()
++                                : base::ListValue();
++  int imported_count = 0;
++  int skipped_count = 0;
++  const std::string name_suffix = MakeImportNameSuffix();
++
++  for (const auto& value : payload) {
++    if (!value.is_dict()) {
++      ++skipped_count;
++      continue;
++    }
++
++    base::DictValue persona =
++        NormalizePersona(ValidatePersona(value.GetDict()), MakePersonaId());
++    const std::string* id = persona.FindString("id");
++    if (id && *id == kDefaultPersonaId) {
++      ++skipped_count;
++      continue;
++    }
++    persona.Set("id", MakePersonaId());
++
++    std::string display_name = GetPersonaDisplayName(persona);
++    if (PersonaNameExists(&personas, display_name)) {
++      display_name += " " + name_suffix;
++      persona.Set("name", display_name);
++      persona.Set("displayName", display_name);
++    }
++
++    if (!PersonaHasRequiredFields(persona)) {
++      ++skipped_count;
++      continue;
++    }
++    personas.Append(std::move(persona));
++    ++imported_count;
++  }
++
++  state.Set("personas", std::move(personas));
++  WriteState(state.Clone());
++  base::DictValue response = MakeResponse(imported_count > 0, std::move(state));
++  response.Set("importedCount", imported_count);
++  response.Set("skippedCount", skipped_count);
++  return response;
 +}
 +
 +base::DictValue PersonaService::ClonePresetIntoProfile(const std::string& preset_id) {

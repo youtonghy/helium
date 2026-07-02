@@ -53,7 +53,7 @@
        Info
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -2234,6 +2234,27 @@ void AddPrivacyStrings(content::WebUIDat
+@@ -2234,6 +2234,100 @@ void AddPrivacyStrings(content::WebUIDat
        {"siteSettingsSublabel", IDS_SETTINGS_PERMISSIONS_DESCRIPTION},
        {"securityPageTitle", IDS_SETTINGS_SECURITY},
        {"securityPageDescription", IDS_SETTINGS_SECURITY_DESCRIPTION},
@@ -78,6 +78,79 @@
 +        IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN},
 +      {"personaTitle", IDS_SETTINGS_PERSONA_TITLE},
 +      {"personaDescription", IDS_SETTINGS_PERSONA_DESCRIPTION},
++      {"personaImport", IDS_SETTINGS_PERSONA_IMPORT},
++      {"personaExportAll", IDS_SETTINGS_PERSONA_EXPORT_ALL},
++      {"personaExportCurrent", IDS_SETTINGS_PERSONA_EXPORT_CURRENT},
++      {"personaImportNoProfiles", IDS_SETTINGS_PERSONA_IMPORT_NO_PROFILES},
++      {"personaImportFailed", IDS_SETTINGS_PERSONA_IMPORT_FAILED},
++      {"personaImportResult", IDS_SETTINGS_PERSONA_IMPORT_RESULT},
++      {"personaFieldHelp", IDS_SETTINGS_PERSONA_FIELD_HELP},
++      {"personaFieldCustomOption", IDS_SETTINGS_PERSONA_FIELD_CUSTOM_OPTION},
++      {"personaFieldUserAgentLabel",
++        IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_LABEL},
++      {"personaFieldUserAgentTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_TOOLTIP},
++      {"personaFieldPlatformLabel",
++        IDS_SETTINGS_PERSONA_FIELD_PLATFORM_LABEL},
++      {"personaFieldPlatformTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_PLATFORM_TOOLTIP},
++      {"personaFieldNavigatorVendorLabel",
++        IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_LABEL},
++      {"personaFieldProductSubLabel",
++        IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_LABEL},
++      {"personaFieldUaChPlatformLabel",
++        IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_LABEL},
++      {"personaFieldUaChPlatformTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_TOOLTIP},
++      {"personaFieldUaChFullVersionLabel",
++        IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_LABEL},
++      {"personaFieldTimezoneLabel",
++        IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_LABEL},
++      {"personaFieldTimezoneTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_TOOLTIP},
++      {"personaFieldLocaleLabel", IDS_SETTINGS_PERSONA_FIELD_LOCALE_LABEL},
++      {"personaFieldLocaleTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_LOCALE_TOOLTIP},
++      {"personaFieldAcceptLanguageLabel",
++        IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_LABEL},
++      {"personaFieldGpuVendorLabel",
++        IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_LABEL},
++      {"personaFieldGpuVendorTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_TOOLTIP},
++      {"personaFieldGpuRendererLabel",
++        IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_LABEL},
++      {"personaFieldGpuRendererTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_TOOLTIP},
++      {"personaFieldWebGpuAdapterLabel",
++        IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_LABEL},
++      {"personaFieldHardwareConcurrencyLabel",
++        IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL},
++      {"personaFieldHardwareConcurrencyTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_TOOLTIP},
++      {"personaFieldDeviceMemoryLabel",
++        IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_LABEL},
++      {"personaFieldDeviceMemoryTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_TOOLTIP},
++      {"personaFieldMaxTouchPointsLabel",
++        IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_LABEL},
++      {"personaFieldScreenWidthLabel",
++        IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_LABEL},
++      {"personaFieldAvailLeftLabel",
++        IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_LABEL},
++      {"personaFieldOuterWidthLabel",
++        IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_LABEL},
++      {"personaFieldDprLabel", IDS_SETTINGS_PERSONA_FIELD_DPR_LABEL},
++      {"personaFieldFontsIdLabel", IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_LABEL},
++      {"personaFieldFontEngineLabel",
++        IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_LABEL},
++      {"personaFieldAudioBaseLatencyLabel",
++        IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_LABEL},
++      {"personaFieldNetworkTypeLabel",
++        IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_LABEL},
++      {"personaFieldNetworkTypeTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_TOOLTIP},
++      {"personaFieldDownlinkMaxLabel",
++        IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_LABEL},
        {"advancedProtectionProgramTitle",
         IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM},
        {"advancedProtectionProgramDesc",
@@ -97,7 +170,7 @@
      </cr-toast>
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
-@@ -165,6 +165,11 @@
+@@ -165,6 +165,11 @@ export class SettingsPrivacyPageElement
      Router.getInstance().navigateTo(routes.SITE_SETTINGS);
    }
  
@@ -417,7 +490,7 @@
  #include "components/language/core/browser/pref_names.h"
  #include "components/live_caption/pref_names.h"
  #include "components/media_router/common/pref_names.h"
-@@ -396,6 +397,12 @@
+@@ -396,6 +397,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil
        settings_api::PrefType::kString;
  #endif
  
@@ -753,7 +826,7 @@
      "//components/embedder_support:user_agent",
      "//components/encrypted_messages:encrypted_message_proto",
      "//components/enterprise",
-@@ -1505,6 +1505,8 @@ static_library("ui") {
+@@ -1504,6 +1505,8 @@ static_library("ui") {
        "webui/settings/search_engines_handler.h",
        "webui/settings/security_settings_provider.cc",
        "webui/settings/security_settings_provider.h",
