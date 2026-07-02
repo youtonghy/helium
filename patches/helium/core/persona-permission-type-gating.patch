@@ -1,0 +1,100 @@
+--- a/content/browser/permissions/permission_controller_impl.cc
++++ b/content/browser/permissions/permission_controller_impl.cc
+@@ -18,6 +18,7 @@
+ #include "content/browser/permissions/permission_util.h"
+ #include "content/browser/renderer_host/render_frame_host_impl.h"
+ #include "content/public/browser/browser_context.h"
++#include "content/public/browser/content_browser_client.h"
+ #include "content/public/browser/disallow_activation_reason.h"
+ #include "content/public/browser/permission_controller.h"
+ #include "content/public/browser/permission_controller_delegate.h"
+@@ -26,6 +27,8 @@
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/web_contents.h"
++#include "content/public/common/content_client.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/permissions/permission_utils.h"
+ #include "third_party/blink/public/common/web_preferences/web_preferences.h"
+ #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
+@@ -41,6 +44,43 @@ namespace content {
+ 
+ namespace {
+ 
++bool HeliumPersonaAllowsPermissionType(BrowserContext* browser_context,
++                                       PermissionType permission_type) {
++  if (!browser_context) {
++    return true;
++  }
++  const blink::HeliumPersonaSnapshot persona_snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
++  if (!persona_snapshot.IsEnabled()) {
++    return true;
++  }
++  switch (permission_type) {
++    case PermissionType::GEOLOCATION:
++    case PermissionType::GEOLOCATION_APPROXIMATE:
++      return persona_snapshot.allow_geolocation;
++    case PermissionType::NOTIFICATIONS:
++      return persona_snapshot.allow_notifications;
++    case PermissionType::MIDI:
++    case PermissionType::MIDI_SYSEX:
++      return persona_snapshot.allow_midi;
++    case PermissionType::CLIPBOARD_READ_WRITE:
++    case PermissionType::CLIPBOARD_SANITIZED_WRITE:
++      return persona_snapshot.allow_clipboard;
++    case PermissionType::IDLE_DETECTION:
++      return persona_snapshot.allow_idle_detection;
++    case PermissionType::WINDOW_MANAGEMENT:
++      return persona_snapshot.allow_window_management;
++    case PermissionType::SENSORS:
++      return persona_snapshot.allow_sensor_apis;
++    case PermissionType::NFC:
++      return persona_snapshot.allow_web_nfc;
++    case PermissionType::PAYMENT_HANDLER:
++      return persona_snapshot.allow_payment_handler;
++    default:
++      return true;
++  }
++}
++
+ std::optional<blink::scheduler::WebSchedulerTrackedFeature>
+ PermissionToSchedulingFeature(PermissionType permission_name) {
+   switch (permission_name) {
+@@ -522,6 +562,14 @@ void PermissionControllerImpl::RequestPe
+   }
+ 
+   for (const auto& permission : request_description.permissions) {
++    if (!HeliumPersonaAllowsPermissionType(
++            browser_context_,
++            blink::PermissionDescriptorToPermissionType(permission))) {
++      std::move(callback).Run(std::vector<PermissionResult>(
++          request_description.permissions.size(),
++          PermissionResult(PermissionStatus::DENIED)));
++      return;
++    }
+     NotifySchedulerAboutPermissionRequest(
+         render_frame_host,
+         blink::PermissionDescriptorToPermissionType(permission));
+@@ -618,6 +666,11 @@ PermissionResult PermissionControllerImp
+   if (permission_result) {
+     return permission_result.value();
+   }
++  if (!HeliumPersonaAllowsPermissionType(
++          browser_context_,
++          blink::PermissionDescriptorToPermissionType(permission_descriptor))) {
++    return PermissionResult(PermissionStatus::DENIED);
++  }
+ 
+   PermissionControllerDelegate* delegate =
+       browser_context_->GetPermissionControllerDelegate();
+@@ -643,6 +696,9 @@ PermissionControllerImpl::GetPermissionR
+   if (permission_result) {
+     return permission_result.value();
+   }
++  if (!HeliumPersonaAllowsPermissionType(browser_context_, permission_type)) {
++    return PermissionResult(PermissionStatus::DENIED);
++  }
+ 
+   PermissionControllerDelegate* delegate =
+       browser_context_->GetPermissionControllerDelegate();

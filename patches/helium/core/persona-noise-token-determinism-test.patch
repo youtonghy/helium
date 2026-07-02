@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/content/browser/helium_noise/noise_token_data_unittest.cc
-@@ -0,0 +1,194 @@
+@@ -0,0 +1,218 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -24,7 +24,7 @@
 +
 +namespace {
 +
-+blink::HeliumPersonaSnapshot MakeSeededPersona(std::string noise_seed) {
++blink::HeliumPersonaSnapshot MakeSeededPersona(std::string profile_salt) {
 +  blink::HeliumPersonaSnapshot snapshot;
 +  snapshot.enabled = true;
 +  snapshot.passthrough = false;
@@ -36,7 +36,11 @@
 +      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 +      "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 +  snapshot.platform = "Win32";
-+  snapshot.noise_seed = std::move(noise_seed);
++  snapshot.fingerprint_profile_salt = std::move(profile_salt);
++  snapshot.fingerprint_rotation_scope = "site_profile";
++  snapshot.fingerprint_rotation_interval_days = 14;
++  snapshot.fingerprint_rotation_global_epoch = "2026-01-01T00:00:00Z";
++  snapshot.noise_seed = snapshot.fingerprint_profile_salt + "\n" + snapshot.id;
 +
 +  snapshot.ua_ch_platform = "Windows";
 +  snapshot.ua_ch_platform_version = "15.0.0";
@@ -106,14 +110,13 @@
 +};
 +
 +TEST_F(HeliumNoiseTokenDataTest,
-+       SeededPersonaTokensStayStableAcrossSessionRegeneration) {
++       PersonaTokensStayStableWithinRotationBucket) {
 +  const url::Origin origin =
 +      url::Origin::Create(GURL("https://fingerprint.example/"));
-+  blink::HeliumPersonaSnapshot persona = MakeSeededPersona("manual-seed");
++  blink::HeliumPersonaSnapshot persona = MakeSeededPersona("profile-salt");
 +
 +  const blink::HeliumNoiseTokenMap before =
 +      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
-+  HeliumNoiseTokenData::RegenerateTokens(&browser_context_);
 +  const blink::HeliumNoiseTokenMap after =
 +      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
 +
@@ -129,17 +132,17 @@
 +}
 +
 +TEST_F(HeliumNoiseTokenDataTest,
-+       SeededPersonaTokensVaryByOriginFeatureAndPersonaSalt) {
++       PersonaTokensVaryByOriginFeatureAndProfileSalt) {
 +  const url::Origin origin =
 +      url::Origin::Create(GURL("https://fingerprint.example/"));
 +  const url::Origin other_origin =
 +      url::Origin::Create(GURL("https://other.example/"));
-+  blink::HeliumPersonaSnapshot persona = MakeSeededPersona("manual-seed");
++  blink::HeliumPersonaSnapshot persona = MakeSeededPersona("profile-salt");
 +  blink::HeliumPersonaSnapshot different_persona = persona;
 +  different_persona.locale = "de-DE";
 +  different_persona.timezone = "Europe/Berlin";
 +  blink::HeliumPersonaSnapshot different_seed =
-+      MakeSeededPersona("manual-seed-2");
++      MakeSeededPersona("profile-salt-2");
 +
 +  const blink::HeliumNoiseTokenMap tokens =
 +      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
@@ -172,24 +175,45 @@
 +}
 +
 +TEST_F(HeliumNoiseTokenDataTest,
-+       PersonaWithoutNoiseSeedUsesRegeneratableSessionTokens) {
++       RotationEpochChangesTokensAfterIntervalBoundary) {
 +  const url::Origin origin =
 +      url::Origin::Create(GURL("https://fingerprint.example/"));
-+  blink::HeliumPersonaSnapshot persona = MakeSeededPersona(std::string());
++  blink::HeliumPersonaSnapshot persona = MakeSeededPersona("profile-salt");
++  persona.fingerprint_rotation_interval_days = 1;
++  persona.fingerprint_rotation_global_epoch = "2026-01-01T00:00:00Z";
 +
 +  const blink::HeliumNoiseTokenMap first =
 +      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
-+  const blink::HeliumNoiseTokenMap second =
++  persona.fingerprint_rotation_global_epoch = "1970-01-01T00:00:00Z";
++  const blink::HeliumNoiseTokenMap rotated =
 +      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
 +
-+  EXPECT_EQ(TokenValue(first, blink::HeliumNoiseFeature::kCanvas),
-+            TokenValue(second, blink::HeliumNoiseFeature::kCanvas));
++  EXPECT_TRUE(AnyFeatureChanged(first, rotated));
++}
 +
-+  HeliumNoiseTokenData::RegenerateTokens(&browser_context_);
-+  const blink::HeliumNoiseTokenMap regenerated =
++TEST_F(HeliumNoiseTokenDataTest, SiteEpochChangesOnlyMatchingSiteScope) {
++  const url::Origin origin =
++      url::Origin::Create(GURL("https://fingerprint.example/"));
++  const url::Origin other_origin =
++      url::Origin::Create(GURL("https://other.example/"));
++  blink::HeliumPersonaSnapshot persona = MakeSeededPersona("profile-salt");
++  persona.fingerprint_rotation_interval_days = 1;
++  persona.fingerprint_rotation_global_epoch = "1970-01-01T00:00:00Z";
++
++  const blink::HeliumNoiseTokenMap before =
 +      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
++  const blink::HeliumNoiseTokenMap other_before =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, other_origin, persona);
 +
-+  EXPECT_TRUE(AnyFeatureChanged(first, regenerated));
++  persona.fingerprint_rotation_site_epochs.push_back(
++      {origin.Serialize(), "2026-01-01T00:00:00Z"});
++  const blink::HeliumNoiseTokenMap after =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
++  const blink::HeliumNoiseTokenMap other_after =
++      HeliumNoiseTokenData::GetTokens(&browser_context_, other_origin, persona);
++
++  EXPECT_TRUE(AnyFeatureChanged(before, after));
++  EXPECT_FALSE(AnyFeatureChanged(other_before, other_after));
 +}
 +
 +}  // namespace

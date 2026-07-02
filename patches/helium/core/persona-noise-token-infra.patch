@@ -11,7 +11,7 @@
      "gpu/browser_gpu_client_delegate.cc",
 --- /dev/null
 +++ b/content/browser/helium_noise/noise_token_data.cc
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,144 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -19,52 +19,25 @@
 +#include "content/browser/helium_noise/noise_token_data.h"
 +
 +#include <array>
-+#include <memory>
 +#include <span>
 +#include <string>
 +#include <string_view>
 +
-+#include "base/check.h"
-+#include "base/numerics/byte_conversions.h"
 +#include "base/strings/string_number_conversions.h"
-+#include "base/supports_user_data.h"
++#include "base/time/time.h"
++#include "base/numerics/byte_conversions.h"
 +#include "content/public/browser/browser_context.h"
 +#include "crypto/hash.h"
-+#include "crypto/random.h"
 +#include "url/origin.h"
 +
 +namespace content {
 +
 +namespace {
 +
-+constexpr char kSessionSaltKey[] = "helium_noise_session_salt";
-+
-+class SessionSaltData : public base::SupportsUserData::Data {
-+ public:
-+  SessionSaltData() { Regenerate(); }
-+
-+  std::string_view salt() const { return salt_; }
-+
-+  void Regenerate() {
-+    const std::array<uint8_t, 32> bytes = crypto::RandBytesAsArray<32>();
-+    salt_ = base::HexEncodeLower(bytes);
-+  }
-+
-+ private:
-+  std::string salt_;
-+};
-+
-+SessionSaltData* GetSessionSaltData(BrowserContext* browser_context) {
-+  CHECK(browser_context);
-+  auto* data = static_cast<SessionSaltData*>(
-+      browser_context->GetUserData(kSessionSaltKey));
-+  if (!data) {
-+    auto new_data = std::make_unique<SessionSaltData>();
-+    data = new_data.get();
-+    browser_context->SetUserData(kSessionSaltKey, std::move(new_data));
-+  }
-+  return data;
-+}
++constexpr char kFingerprintRotationScopeSiteProfile[] = "site_profile";
++constexpr char kFingerprintRotationScopeProfile[] = "profile";
++constexpr char kFingerprintRotationScopeGlobal[] = "global";
++constexpr int kDefaultFingerprintRotationIntervalDays = 14;
 +
 +std::string_view FeatureTag(blink::HeliumNoiseFeature feature) {
 +  switch (feature) {
@@ -77,6 +50,57 @@
 +    case blink::HeliumNoiseFeature::kFontMetric:
 +      return "font_metric";
 +  }
++}
++
++std::string FindSiteEpoch(const blink::HeliumPersonaSnapshot& persona,
++                          const url::Origin& origin) {
++  const std::string serialized_origin = origin.Serialize();
++  for (const auto& site_epoch : persona.fingerprint_rotation_site_epochs) {
++    if (site_epoch.scope_key == serialized_origin)
++      return site_epoch.epoch;
++  }
++  return persona.fingerprint_rotation_global_epoch;
++}
++
++int64_t RotationBucket(const blink::HeliumPersonaSnapshot& persona,
++                       const url::Origin& origin) {
++  const int interval_days = persona.fingerprint_rotation_interval_days > 0
++                                ? persona.fingerprint_rotation_interval_days
++                                : kDefaultFingerprintRotationIntervalDays;
++  const std::string epoch_string =
++      persona.fingerprint_rotation_scope == kFingerprintRotationScopeGlobal ||
++              persona.fingerprint_rotation_scope == kFingerprintRotationScopeProfile
++          ? persona.fingerprint_rotation_global_epoch
++          : FindSiteEpoch(persona, origin);
++
++  base::Time epoch;
++  if (!base::Time::FromUTCString(epoch_string.c_str(), &epoch)) {
++    epoch = base::Time::Now();
++  }
++
++  const base::TimeDelta elapsed = base::Time::Now() - epoch;
++  if (elapsed.is_negative()) {
++    return 0;
++  }
++  return elapsed.InDays() / interval_days;
++}
++
++std::string BuildSeed(const url::Origin& origin,
++                      const blink::HeliumPersonaSnapshot& persona) {
++  std::string seed =
++      persona.fingerprint_profile_salt.empty()
++          ? persona.noise_seed
++          : persona.fingerprint_profile_salt + "\n" + persona.id;
++  seed.push_back('\n');
++  seed.append(persona.fingerprint_rotation_scope);
++  if (persona.fingerprint_rotation_scope ==
++      kFingerprintRotationScopeSiteProfile) {
++    seed.push_back('\n');
++    seed.append(origin.Serialize());
++  }
++  seed.push_back('\n');
++  seed.append(base::NumberToString(RotationBucket(persona, origin)));
++  return seed;
 +}
 +
 +uint64_t DeriveToken(std::string_view seed,
@@ -110,8 +134,8 @@
 +              const blink::HeliumPersonaSnapshot& persona,
 +              blink::HeliumNoiseFeature feature) {
 +  tokens.emplace(feature,
-+                 blink::HeliumNoiseToken(DeriveToken(seed, origin, persona,
-+                                                     feature)));
++                 blink::NoiseToken(DeriveToken(seed, origin, persona,
++                                               feature)));
 +}
 +
 +}  // namespace
@@ -120,9 +144,7 @@
 +    BrowserContext* browser_context,
 +    const url::Origin& origin,
 +    const blink::HeliumPersonaSnapshot& persona) {
-+  const std::string_view seed =
-+      persona.noise_seed.empty() ? GetSessionSaltData(browser_context)->salt()
-+                                 : std::string_view(persona.noise_seed);
++  const std::string seed = BuildSeed(origin, persona);
 +
 +  blink::HeliumNoiseTokenMap tokens;
 +  AddToken(tokens, seed, origin, persona, blink::HeliumNoiseFeature::kCanvas);
@@ -133,14 +155,10 @@
 +  return tokens;
 +}
 +
-+void HeliumNoiseTokenData::RegenerateTokens(BrowserContext* browser_context) {
-+  GetSessionSaltData(browser_context)->Regenerate();
-+}
-+
 +}  // namespace content
 --- /dev/null
 +++ b/content/browser/helium_noise/noise_token_data.h
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,26 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -162,8 +180,6 @@
 +      BrowserContext* browser_context,
 +      const url::Origin& origin,
 +      const blink::HeliumPersonaSnapshot& persona);
-+
-+  static void RegenerateTokens(BrowserContext* browser_context);
 +};
 +
 +}  // namespace content
@@ -181,7 +197,7 @@
      "history/session_history_constants.h",
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_noise/noise_token.h
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,25 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -189,8 +205,9 @@
 +#ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_NOISE_NOISE_TOKEN_H_
 +#define THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_NOISE_NOISE_TOKEN_H_
 +
-+#include <cstdint>
 +#include <map>
++
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
 +
 +namespace blink {
 +
@@ -201,18 +218,7 @@
 +  kFontMetric,
 +};
 +
-+class HeliumNoiseToken {
-+ public:
-+  constexpr HeliumNoiseToken() = default;
-+  explicit constexpr HeliumNoiseToken(uint64_t value) : value_(value) {}
-+
-+  constexpr uint64_t Value() const { return value_; }
-+
-+ private:
-+  uint64_t value_ = 0;
-+};
-+
-+using HeliumNoiseTokenMap = std::map<HeliumNoiseFeature, HeliumNoiseToken>;
++using HeliumNoiseTokenMap = std::map<HeliumNoiseFeature, NoiseToken>;
 +
 +}  // namespace blink
 +

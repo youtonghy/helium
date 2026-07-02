@@ -1,5 +1,3 @@
-Index: b/content/public/browser/content_browser_client.h
-===================================================================
 --- a/content/public/browser/content_browser_client.h
 +++ b/content/public/browser/content_browser_client.h
 @@ -85,6 +85,7 @@
@@ -19,8 +17,6 @@ Index: b/content/public/browser/content_browser_client.h
  
    // Returns the default favicon.
    virtual gfx::ImageSkia GetDefaultFavicon();
-Index: b/content/public/browser/content_browser_client.cc
-===================================================================
 --- a/content/public/browser/content_browser_client.cc
 +++ b/content/public/browser/content_browser_client.cc
 @@ -461,6 +461,11 @@ std::string ContentBrowserClient::GetAcc
@@ -35,8 +31,6 @@ Index: b/content/public/browser/content_browser_client.cc
  gfx::ImageSkia ContentBrowserClient::GetDefaultFavicon() {
    return gfx::ImageSkia();
  }
-Index: b/chrome/browser/chrome_content_browser_client.h
-===================================================================
 --- a/chrome/browser/chrome_content_browser_client.h
 +++ b/chrome/browser/chrome_content_browser_client.h
 @@ -50,6 +50,7 @@
@@ -56,49 +50,55 @@ Index: b/chrome/browser/chrome_content_browser_client.h
    gfx::ImageSkia GetDefaultFavicon() override;
    bool IsDataSaverEnabled(content::BrowserContext* context) override;
    bool IsPinchToZoomAllowed(content::BrowserContext* context) override;
-Index: b/chrome/browser/chrome_content_browser_client.cc
-===================================================================
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -88,6 +88,8 @@
+@@ -88,6 +88,9 @@
  #include "chrome/browser/enterprise/reporting/legacy_tech/legacy_tech_service.h"
  #include "chrome/browser/enterprise/reporting/prefs.h"
  #include "chrome/browser/enterprise/util/managed_browser_utils.h"
++#include "chrome/browser/helium_persona/persona_runtime_override.h"
 +#include "chrome/browser/helium_persona/persona_service.h"
 +#include "chrome/browser/helium_persona/persona_service_factory.h"
  #include "chrome/browser/external_protocol/external_protocol_handler.h"
  #include "chrome/browser/favicon/favicon_utils.h"
  #include "chrome/browser/font_family_cache.h"
-@@ -3200,6 +3202,19 @@ std::string ChromeContentBrowserClient::
+@@ -3200,6 +3203,27 @@ std::string ChromeContentBrowserClient::
    return profile->GetPrefs()->GetString(language::prefs::kAcceptLanguages);
  }
  
 +blink::HeliumPersonaSnapshot ChromeContentBrowserClient::GetHeliumPersonaSnapshot(
 +    content::BrowserContext* browser_context) {
 +  if (!browser_context) {
++    if (auto cached = helium_persona::PersonaRuntimeOverride::GetGlobal()) {
++      return *cached;
++    }
 +    return blink::HeliumPersonaSnapshot();
 +  }
 +  Profile* profile = Profile::FromBrowserContext(browser_context);
 +  auto* service = helium_persona::PersonaServiceFactory::GetForProfile(profile);
 +  if (!service) {
++    if (auto cached = helium_persona::PersonaRuntimeOverride::GetGlobal()) {
++      return *cached;
++    }
 +    return blink::HeliumPersonaSnapshot();
 +  }
-+  return service->GetActiveSnapshot();
++  blink::HeliumPersonaSnapshot snapshot = service->GetActiveSnapshot();
++  helium_persona::PersonaRuntimeOverride::ApplyGlobal(snapshot);
++  return snapshot;
 +}
 +
  gfx::ImageSkia ChromeContentBrowserClient::GetDefaultFavicon() {
    return favicon::GetDefaultFavicon().AsImageSkia();
  }
-Index: b/chrome/browser/BUILD.gn
-===================================================================
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -249,6 +249,12 @@ static_library("browser") {
+@@ -249,6 +249,13 @@ static_library("browser") {
      "font_family_cache.cc",
      "font_family_cache.h",
      "global_features.cc",
 +    "global_features.h",
 +    "helium_persona/persona_runtime_override.cc",
++    "helium_persona/persona_runtime_override.h",
 +    "helium_persona/persona_service.cc",
 +    "helium_persona/persona_service.h",
 +    "helium_persona/persona_service_factory.cc",
@@ -106,8 +106,6 @@ Index: b/chrome/browser/BUILD.gn
      "icon_loader.cc",
      "icon_loader.h",
      "icon_manager.cc",
-Index: b/third_party/blink/public/common/BUILD.gn
-===================================================================
 --- a/third_party/blink/public/common/BUILD.gn
 +++ b/third_party/blink/public/common/BUILD.gn
 @@ -162,6 +162,8 @@ source_set("headers") {
@@ -119,8 +117,6 @@ Index: b/third_party/blink/public/common/BUILD.gn
      "history/session_history_constants.h",
      "indexeddb/indexed_db_default_mojom_traits.h",
      "indexeddb/indexeddb_key.h",
-Index: b/third_party/blink/public/mojom/BUILD.gn
-===================================================================
 --- a/third_party/blink/public/mojom/BUILD.gn
 +++ b/third_party/blink/public/mojom/BUILD.gn
 @@ -1357,6 +1357,9 @@ mojom("mojom_core") {
@@ -153,8 +149,6 @@ Index: b/third_party/blink/public/mojom/BUILD.gn
            mojom = "blink.mojom.CloneableMessage"
            cpp = "::blink::CloneableMessage"
            move_only = true
-Index: b/components/helium_persona/persona_snapshot.h
-===================================================================
 --- /dev/null
 +++ b/components/helium_persona/persona_snapshot.h
 @@ -0,0 +1,17 @@
@@ -175,20 +169,46 @@ Index: b/components/helium_persona/persona_snapshot.h
 +}  // namespace helium_persona
 +
 +#endif
-Index: b/components/helium_persona/persona_snapshot.cc
-===================================================================
 --- /dev/null
 +++ b/components/helium_persona/persona_snapshot.cc
-@@ -0,0 +1,16 @@
+@@ -0,0 +1,44 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#include "components/helium_persona/persona_snapshot.h"
 +
++#include <string_view>
++
 +namespace helium_persona {
 +
++namespace {
++
++bool HasNonEmptyString(const base::DictValue& value, std::string_view key) {
++  const std::string* string_value = value.FindString(key);
++  return string_value && !string_value->empty();
++}
++
++bool HasRequiredRegionFields(const base::DictValue& value) {
++  const base::DictValue* region = value.FindDict("region");
++  return region && HasNonEmptyString(*region, "timezone") &&
++         HasNonEmptyString(*region, "locale") &&
++         HasNonEmptyString(*region, "acceptLanguage");
++}
++
++bool HasRequiredUaChFields(const base::DictValue& value) {
++  const base::DictValue* ua_ch = value.FindDict("uaCh");
++  return ua_ch && HasNonEmptyString(*ua_ch, "platform") &&
++         HasNonEmptyString(*ua_ch, "architecture") &&
++         HasNonEmptyString(*ua_ch, "bitness");
++}
++
++}  // namespace
++
 +bool PersonaHasRequiredFields(const base::DictValue& value) {
-+  return value.contains("id") && value.contains("name");
++  return HasNonEmptyString(value, "id") && HasNonEmptyString(value, "name") &&
++         value.FindBool("enabled").has_value() &&
++         HasRequiredRegionFields(value) && HasRequiredUaChFields(value) &&
++         value.FindDict("advanced");
 +}
 +
 +base::DictValue ValidatePersona(const base::DictValue& value) {
@@ -196,11 +216,9 @@ Index: b/components/helium_persona/persona_snapshot.cc
 +}
 +
 +}  // namespace helium_persona
-Index: b/third_party/blink/public/common/helium_persona/persona_snapshot.h
-===================================================================
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,120 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -217,6 +235,11 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot.h
 +  std::string version;
 +};
 +
++struct HeliumPersonaFingerprintRotationEpoch {
++  std::string scope_key;
++  std::string epoch;
++};
++
 +struct HeliumPersonaSnapshot {
 +  bool enabled = false;
 +  bool client_hints_enabled = true;
@@ -224,11 +247,33 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot.h
 +  bool allow_contacts = false;
 +  bool allow_local_fonts = true;
 +  bool allow_privacy_sandbox_apis = true;
++  bool allow_gamepads = true;
++  bool allow_clipboard = true;
++  bool allow_geolocation = false;
++  bool allow_notifications = false;
++  bool allow_midi = false;
++  bool allow_idle_detection = false;
++  bool allow_window_management = false;
++  bool allow_web_nfc = false;
++  bool allow_web_xr = false;
++  bool allow_sensor_apis = false;
++  bool allow_real_battery_status = false;
++  bool allow_platform_credentials = true;
++  bool allow_payment_handler = false;
++  bool allow_speech_synthesis = true;
++  bool allow_web_printing = true;
++  bool allow_shape_detection = false;
++  bool allow_web_otp = false;
++  bool allow_ai_apis = false;
++  bool allow_handwriting_recognition = false;
++  bool allow_web_nn = false;
++  bool allow_private_state_tokens = false;
 +  bool ua_ch_mobile = false;
 +  bool ua_ch_wow64 = false;
 +  bool passthrough = false;
 +  bool canvas_noise = false;
 +  bool audio_noise = false;
++  bool hardware_noise = false;
 +  bool font_metric_noise = false;
 +  bool font_antialiasing = false;
 +  bool font_subpixel_rendering = false;
@@ -259,6 +304,9 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot.h
 +  std::string font_rendering_engine;
 +  std::string font_rendering_id;
 +  std::string noise_seed;
++  std::string fingerprint_profile_salt;
++  std::string fingerprint_rotation_scope;
++  std::string fingerprint_rotation_global_epoch;
 +  std::string network_type;
 +  int hardware_concurrency = 0;
 +  int device_memory = 0;
@@ -274,6 +322,7 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot.h
 +  int color_depth = 0;
 +  int pixel_depth = 0;
 +  int refresh_rate = 0;
++  int fingerprint_rotation_interval_days = 14;
 +  double device_scale_factor = 0.0;
 +  double audio_base_latency = 0.0;
 +  double audio_output_latency = 0.0;
@@ -283,18 +332,16 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot.h
 +  std::vector<std::string> font_families;
 +  std::vector<std::string> font_aliases;
 +  std::vector<HeliumPersonaUaChBrand> ua_ch_brands;
++  std::vector<HeliumPersonaFingerprintRotationEpoch>
++      fingerprint_rotation_site_epochs;
 +
 +  bool IsEnabled() const { return enabled; }
 +};
 +
 +}  // namespace blink
-+
-+#endif
-Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
-===================================================================
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
-@@ -0,0 +1,399 @@
+@@ -0,0 +1,574 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -330,6 +377,27 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_t
 +};
 +
 +template <>
++struct StructTraits<blink::mojom::HeliumPersonaFingerprintRotationEpochDataView,
++                    ::blink::HeliumPersonaFingerprintRotationEpoch> {
++  static const std::string& scope_key(
++      const ::blink::HeliumPersonaFingerprintRotationEpoch& data) {
++    return data.scope_key;
++  }
++
++  static const std::string& epoch(
++      const ::blink::HeliumPersonaFingerprintRotationEpoch& data) {
++    return data.epoch;
++  }
++
++  static bool Read(
++      blink::mojom::HeliumPersonaFingerprintRotationEpochDataView data,
++      ::blink::HeliumPersonaFingerprintRotationEpoch* out) {
++    return data.ReadScopeKey(&out->scope_key) &&
++           data.ReadEpoch(&out->epoch);
++  }
++};
++
++template <>
 +struct StructTraits<blink::mojom::HeliumPersonaSnapshotDataView,
 +                    ::blink::HeliumPersonaSnapshot> {
 +  static bool enabled(const ::blink::HeliumPersonaSnapshot& data) {
@@ -359,6 +427,98 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_t
 +    return data.allow_privacy_sandbox_apis;
 +  }
 +
++  static bool allow_gamepads(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_gamepads;
++  }
++
++  static bool allow_clipboard(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_clipboard;
++  }
++
++  static bool allow_geolocation(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_geolocation;
++  }
++
++  static bool allow_notifications(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_notifications;
++  }
++
++  static bool allow_midi(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_midi;
++  }
++
++  static bool allow_idle_detection(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_idle_detection;
++  }
++
++  static bool allow_window_management(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_window_management;
++  }
++
++  static bool allow_web_nfc(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_web_nfc;
++  }
++
++  static bool allow_web_xr(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_web_xr;
++  }
++
++  static bool allow_sensor_apis(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_sensor_apis;
++  }
++
++  static bool allow_real_battery_status(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_real_battery_status;
++  }
++
++  static bool allow_platform_credentials(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_platform_credentials;
++  }
++
++  static bool allow_payment_handler(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_payment_handler;
++  }
++
++  static bool allow_speech_synthesis(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_speech_synthesis;
++  }
++
++  static bool allow_web_printing(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_web_printing;
++  }
++
++  static bool allow_shape_detection(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_shape_detection;
++  }
++
++  static bool allow_web_otp(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_web_otp;
++  }
++
++  static bool allow_ai_apis(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_ai_apis;
++  }
++
++  static bool allow_handwriting_recognition(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_handwriting_recognition;
++  }
++
++  static bool allow_web_nn(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_web_nn;
++  }
++
++  static bool allow_private_state_tokens(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_private_state_tokens;
++  }
++
 +  static bool ua_ch_mobile(const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.ua_ch_mobile;
 +  }
@@ -377,6 +537,10 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_t
 +
 +  static bool audio_noise(const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.audio_noise;
++  }
++
++  static bool hardware_noise(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.hardware_noise;
 +  }
 +
 +  static bool font_metric_noise(const ::blink::HeliumPersonaSnapshot& data) {
@@ -521,6 +685,21 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_t
 +    return data.noise_seed;
 +  }
 +
++  static const std::string& fingerprint_profile_salt(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.fingerprint_profile_salt;
++  }
++
++  static const std::string& fingerprint_rotation_scope(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.fingerprint_rotation_scope;
++  }
++
++  static const std::string& fingerprint_rotation_global_epoch(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.fingerprint_rotation_global_epoch;
++  }
++
 +  static const std::string& network_type(
 +      const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.network_type;
@@ -583,6 +762,11 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_t
 +    return data.refresh_rate;
 +  }
 +
++  static int fingerprint_rotation_interval_days(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.fingerprint_rotation_interval_days;
++  }
++
 +  static double device_scale_factor(
 +      const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.device_scale_factor;
@@ -628,6 +812,12 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_t
 +    return data.ua_ch_brands;
 +  }
 +
++  static const std::vector<::blink::HeliumPersonaFingerprintRotationEpoch>&
++  fingerprint_rotation_site_epochs(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.fingerprint_rotation_site_epochs;
++  }
++
 +  static bool Read(blink::mojom::HeliumPersonaSnapshotDataView data,
 +                   ::blink::HeliumPersonaSnapshot* out) {
 +    out->enabled = data.enabled();
@@ -636,11 +826,34 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_t
 +    out->allow_contacts = data.allow_contacts();
 +    out->allow_local_fonts = data.allow_local_fonts();
 +    out->allow_privacy_sandbox_apis = data.allow_privacy_sandbox_apis();
++    out->allow_gamepads = data.allow_gamepads();
++    out->allow_clipboard = data.allow_clipboard();
++    out->allow_geolocation = data.allow_geolocation();
++    out->allow_notifications = data.allow_notifications();
++    out->allow_midi = data.allow_midi();
++    out->allow_idle_detection = data.allow_idle_detection();
++    out->allow_window_management = data.allow_window_management();
++    out->allow_web_nfc = data.allow_web_nfc();
++    out->allow_web_xr = data.allow_web_xr();
++    out->allow_sensor_apis = data.allow_sensor_apis();
++    out->allow_real_battery_status = data.allow_real_battery_status();
++    out->allow_platform_credentials = data.allow_platform_credentials();
++    out->allow_payment_handler = data.allow_payment_handler();
++    out->allow_speech_synthesis = data.allow_speech_synthesis();
++    out->allow_web_printing = data.allow_web_printing();
++    out->allow_shape_detection = data.allow_shape_detection();
++    out->allow_web_otp = data.allow_web_otp();
++    out->allow_ai_apis = data.allow_ai_apis();
++    out->allow_handwriting_recognition =
++        data.allow_handwriting_recognition();
++    out->allow_web_nn = data.allow_web_nn();
++    out->allow_private_state_tokens = data.allow_private_state_tokens();
 +    out->ua_ch_mobile = data.ua_ch_mobile();
 +    out->ua_ch_wow64 = data.ua_ch_wow64();
 +    out->passthrough = data.passthrough();
 +    out->canvas_noise = data.canvas_noise();
 +    out->audio_noise = data.audio_noise();
++    out->hardware_noise = data.hardware_noise();
 +    out->font_metric_noise = data.font_metric_noise();
 +    out->font_antialiasing = data.font_antialiasing();
 +    out->font_subpixel_rendering = data.font_subpixel_rendering();
@@ -659,6 +872,8 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_t
 +    out->color_depth = data.color_depth();
 +    out->pixel_depth = data.pixel_depth();
 +    out->refresh_rate = data.refresh_rate();
++    out->fingerprint_rotation_interval_days =
++        data.fingerprint_rotation_interval_days();
 +    out->device_scale_factor = data.device_scale_factor();
 +    out->audio_base_latency = data.audio_base_latency();
 +    out->audio_output_latency = data.audio_output_latency();
@@ -687,23 +902,23 @@ Index: b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_t
 +           data.ReadFontRenderingEngine(&out->font_rendering_engine) &&
 +           data.ReadFontRenderingId(&out->font_rendering_id) &&
 +           data.ReadNoiseSeed(&out->noise_seed) &&
++           data.ReadFingerprintProfileSalt(&out->fingerprint_profile_salt) &&
++           data.ReadFingerprintRotationScope(
++               &out->fingerprint_rotation_scope) &&
++           data.ReadFingerprintRotationGlobalEpoch(
++               &out->fingerprint_rotation_global_epoch) &&
 +           data.ReadNetworkType(&out->network_type) &&
 +           data.ReadUaChFormFactors(&out->ua_ch_form_factors) &&
 +           data.ReadNavigatorLanguages(&out->navigator_languages) &&
 +           data.ReadFontFamilies(&out->font_families) &&
 +           data.ReadFontAliases(&out->font_aliases) &&
-+           data.ReadUaChBrands(&out->ua_ch_brands);
++           data.ReadUaChBrands(&out->ua_ch_brands) &&
++           data.ReadFingerprintRotationSiteEpochs(
++               &out->fingerprint_rotation_site_epochs);
 +  }
-+};
-+
-+}  // namespace mojo
-+
-+#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_MOJOM_TRAITS_H_
-Index: b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
-===================================================================
 --- /dev/null
 +++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,108 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -714,6 +929,11 @@ Index: b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
 +  string version;
 +};
 +
++struct HeliumPersonaFingerprintRotationEpoch {
++  string scope_key;
++  string epoch;
++};
++
 +struct HeliumPersonaSnapshot {
 +  bool enabled;
 +  bool client_hints_enabled;
@@ -721,11 +941,33 @@ Index: b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
 +  bool allow_contacts;
 +  bool allow_local_fonts;
 +  bool allow_privacy_sandbox_apis;
++  bool allow_gamepads;
++  bool allow_clipboard;
++  bool allow_geolocation;
++  bool allow_notifications;
++  bool allow_midi;
++  bool allow_idle_detection;
++  bool allow_window_management;
++  bool allow_web_nfc;
++  bool allow_web_xr;
++  bool allow_sensor_apis;
++  bool allow_real_battery_status;
++  bool allow_platform_credentials;
++  bool allow_payment_handler;
++  bool allow_speech_synthesis;
++  bool allow_web_printing;
++  bool allow_shape_detection;
++  bool allow_web_otp;
++  bool allow_ai_apis;
++  bool allow_handwriting_recognition;
++  bool allow_web_nn;
++  bool allow_private_state_tokens;
 +  bool ua_ch_mobile;
 +  bool ua_ch_wow64;
 +  bool passthrough;
 +  bool canvas_noise;
 +  bool audio_noise;
++  bool hardware_noise;
 +  bool font_metric_noise;
 +  bool font_antialiasing;
 +  bool font_subpixel_rendering;
@@ -756,6 +998,9 @@ Index: b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
 +  string font_rendering_engine;
 +  string font_rendering_id;
 +  string noise_seed;
++  string fingerprint_profile_salt;
++  string fingerprint_rotation_scope;
++  string fingerprint_rotation_global_epoch;
 +  string network_type;
 +  int32 hardware_concurrency;
 +  int32 device_memory;
@@ -771,6 +1016,7 @@ Index: b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
 +  int32 color_depth;
 +  int32 pixel_depth;
 +  int32 refresh_rate;
++  int32 fingerprint_rotation_interval_days;
 +  double device_scale_factor;
 +  double audio_base_latency;
 +  double audio_output_latency;
@@ -780,12 +1026,10 @@ Index: b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
 +  array<string> font_families;
 +  array<string> font_aliases;
 +  array<HeliumPersonaUaChBrand> ua_ch_brands;
-+};
-Index: b/chrome/browser/helium_persona/persona_service.h
-===================================================================
++  array<HeliumPersonaFingerprintRotationEpoch> fingerprint_rotation_site_epochs;
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.h
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,59 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -806,6 +1050,11 @@ Index: b/chrome/browser/helium_persona/persona_service.h
 +
 +namespace helium_persona {
 +
++enum class FingerprintRefreshScope {
++  kProfile,
++  kSite,
++};
++
 +class PersonaService : public KeyedService {
 + public:
 +  explicit PersonaService(PrefService* prefs);
@@ -824,11 +1073,15 @@ Index: b/chrome/browser/helium_persona/persona_service.h
 +  void SetLastUsedPersonaId(const std::string& persona_id);
 +  std::string GetLaunchSelectionMode() const;
 +  void SetLaunchSelectionMode(const std::string& mode);
++  void RefreshFingerprint(FingerprintRefreshScope scope,
++                          const std::string& site_origin_or_empty);
 +  blink::HeliumPersonaSnapshot GetActiveSnapshot() const;
 +
 + private:
 +  base::DictValue ReadState() const;
 +  void WriteState(base::DictValue state);
++  std::string GetOrCreateFingerprintProfileSalt() const;
++  std::string GetOrCreateFingerprintGlobalEpoch() const;
 +
 +  raw_ptr<PrefService> prefs_;
 +};
@@ -836,26 +1089,28 @@ Index: b/chrome/browser/helium_persona/persona_service.h
 +}  // namespace helium_persona
 +
 +#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
-Index: b/chrome/browser/helium_persona/persona_service.cc
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -0,0 +1,1033 @@
+@@ -0,0 +1,1329 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#include "chrome/browser/helium_persona/persona_service.h"
 +
++#include <array>
 +#include <optional>
 +#include <string>
 +#include <string_view>
 +#include <vector>
 +
 +#include "base/i18n/time_formatting.h"
++#include "base/strings/string_number_conversions.h"
 +#include "base/time/time.h"
 +#include "base/uuid.h"
++#include "components/helium_persona/persona_snapshot.h"
 +#include "components/prefs/pref_service.h"
 +#include "components/pref_registry/pref_registry_syncable.h"
++#include "crypto/random.h"
 +
 +namespace helium_persona {
 +
@@ -865,9 +1120,17 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +constexpr char kPersonaLastUsedIdPref[] = "helium.persona.last_used_id";
 +constexpr char kPersonaLaunchSelectionModePref[] =
 +    "helium.persona.launch_selection_mode";
++constexpr char kPersonaFingerprintProfileSaltPref[] =
++    "helium.persona.fingerprint_profile_salt";
++constexpr char kPersonaFingerprintRotationEpochPref[] =
++    "helium.persona.fingerprint_rotation_epoch";
 +constexpr char kDefaultPersonaId[] = "default";
 +constexpr char kLaunchSelectionModeAlwaysAsk[] = "always_ask";
 +constexpr char kLaunchSelectionModeUseLast[] = "use_last";
++constexpr char kFingerprintRotationScopeSiteProfile[] = "site_profile";
++constexpr char kFingerprintRotationScopeProfile[] = "profile";
++constexpr char kFingerprintRotationScopeGlobal[] = "global";
++constexpr int kDefaultFingerprintRotationIntervalDays = 14;
 +
 +std::string MakeIsoTimestamp(base::Time time = base::Time::Now()) {
 +  return base::TimeFormatAsIso8601(time);
@@ -875,6 +1138,11 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +
 +std::string MakePersonaId() {
 +  return "persona-" + base::Uuid::GenerateRandomV4().AsLowercaseString();
++}
++
++std::string MakeFingerprintSalt() {
++  const std::array<uint8_t, 32> bytes = crypto::RandBytesAsArray<32>();
++  return base::HexEncodeLower(bytes);
 +}
 +
 +std::string GetPersonaIconForPlatform(std::string_view platform) {
@@ -924,13 +1192,44 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +      .Set("formFactors", std::move(form_factors));
 +}
 +
++base::DictValue MakeFingerprintRotationDefaults() {
++  return base::DictValue()
++      .Set("scope", kFingerprintRotationScopeSiteProfile)
++      .Set("rotationIntervalDays", kDefaultFingerprintRotationIntervalDays)
++      .Set("rotateOnManualRefresh", true)
++      .Set("rotateOnBrowserRestart", false)
++      .Set("rotateOnProfileReset", true);
++}
++
 +base::DictValue MakeAdvancedDefaults() {
 +  return base::DictValue()
 +      .Set("clientHintsEnabled", true)
 +      .Set("allowBackgroundSync", false)
 +      .Set("allowContacts", false)
 +      .Set("allowLocalFonts", false)
-+      .Set("allowPrivacySandboxApis", true);
++      .Set("allowPrivacySandboxApis", true)
++      .Set("allowGamepads", true)
++      .Set("allowClipboard", true)
++      .Set("allowGeolocation", false)
++      .Set("allowNotifications", false)
++      .Set("allowMidi", false)
++      .Set("allowIdleDetection", false)
++      .Set("allowWindowManagement", false)
++      .Set("allowWebNfc", false)
++      .Set("allowWebXr", false)
++      .Set("allowSensorApis", false)
++      .Set("allowRealBatteryStatus", false)
++      .Set("allowPlatformCredentials", true)
++      .Set("allowPaymentHandler", false)
++      .Set("allowSpeechSynthesis", true)
++      .Set("allowWebPrinting", true)
++      .Set("allowShapeDetection", false)
++      .Set("allowWebOtp", false)
++      .Set("allowAiApis", false)
++      .Set("allowHandwritingRecognition", false)
++      .Set("allowWebNn", false)
++      .Set("allowPrivateStateTokens", false)
++      .Set("fingerprintRotation", MakeFingerprintRotationDefaults());
 +}
 +
 +base::DictValue MakePreset(std::string_view id,
@@ -1112,8 +1411,8 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +  const std::string created_at = MakeIsoTimestamp();
 +  return base::DictValue()
 +      .Set("id", kDefaultPersonaId)
-+      .Set("name", "Default")
-+      .Set("displayName", "Default")
++      .Set("name", "No Persona (System Real)")
++      .Set("displayName", "No Persona (System Real)")
 +      .Set("icon", "default")
 +      .Set("createdAt", created_at)
 +      .Set("modifiedAt", created_at)
@@ -1281,8 +1580,96 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +  if (!advanced->FindBool("audioNoise").has_value()) {
 +    advanced->Set("audioNoise", true);
 +  }
++  if (!advanced->FindBool("hardwareNoise").has_value()) {
++    advanced->Set("hardwareNoise", true);
++  }
 +  if (!advanced->FindBool("fontMetricNoise").has_value()) {
 +    advanced->Set("fontMetricNoise", false);
++  }
++  if (!advanced->FindBool("allowGamepads").has_value()) {
++    advanced->Set("allowGamepads", true);
++  }
++  if (!advanced->FindBool("allowClipboard").has_value()) {
++    advanced->Set("allowClipboard", true);
++  }
++  if (!advanced->FindBool("allowGeolocation").has_value()) {
++    advanced->Set("allowGeolocation", false);
++  }
++  if (!advanced->FindBool("allowNotifications").has_value()) {
++    advanced->Set("allowNotifications", false);
++  }
++  if (!advanced->FindBool("allowMidi").has_value()) {
++    advanced->Set("allowMidi", false);
++  }
++  if (!advanced->FindBool("allowIdleDetection").has_value()) {
++    advanced->Set("allowIdleDetection", false);
++  }
++  if (!advanced->FindBool("allowWindowManagement").has_value()) {
++    advanced->Set("allowWindowManagement", false);
++  }
++  if (!advanced->FindBool("allowWebNfc").has_value()) {
++    advanced->Set("allowWebNfc", false);
++  }
++  if (!advanced->FindBool("allowWebXr").has_value()) {
++    advanced->Set("allowWebXr", false);
++  }
++  if (!advanced->FindBool("allowSensorApis").has_value()) {
++    advanced->Set("allowSensorApis", false);
++  }
++  if (!advanced->FindBool("allowRealBatteryStatus").has_value()) {
++    advanced->Set("allowRealBatteryStatus", false);
++  }
++  if (!advanced->FindBool("allowPlatformCredentials").has_value()) {
++    advanced->Set("allowPlatformCredentials", true);
++  }
++  if (!advanced->FindBool("allowPaymentHandler").has_value()) {
++    advanced->Set("allowPaymentHandler", false);
++  }
++  if (!advanced->FindBool("allowSpeechSynthesis").has_value()) {
++    advanced->Set("allowSpeechSynthesis", true);
++  }
++  if (!advanced->FindBool("allowWebPrinting").has_value()) {
++    advanced->Set("allowWebPrinting", true);
++  }
++  if (!advanced->FindBool("allowShapeDetection").has_value()) {
++    advanced->Set("allowShapeDetection", false);
++  }
++  if (!advanced->FindBool("allowWebOtp").has_value()) {
++    advanced->Set("allowWebOtp", false);
++  }
++  if (!advanced->FindBool("allowAiApis").has_value()) {
++    advanced->Set("allowAiApis", false);
++  }
++  if (!advanced->FindBool("allowHandwritingRecognition").has_value()) {
++    advanced->Set("allowHandwritingRecognition", false);
++  }
++  if (!advanced->FindBool("allowWebNn").has_value()) {
++    advanced->Set("allowWebNn", false);
++  }
++  if (!advanced->FindBool("allowPrivateStateTokens").has_value()) {
++    advanced->Set("allowPrivateStateTokens", false);
++  }
++  base::DictValue* fingerprint_rotation =
++      advanced->EnsureDict("fingerprintRotation");
++  const std::string* rotation_scope =
++      fingerprint_rotation->FindString("scope");
++  if (!rotation_scope || rotation_scope->empty()) {
++    fingerprint_rotation->Set("scope", kFingerprintRotationScopeSiteProfile);
++  }
++  const std::optional<int> rotation_interval_days =
++      fingerprint_rotation->FindInt("rotationIntervalDays");
++  if (!rotation_interval_days || *rotation_interval_days <= 0) {
++    fingerprint_rotation->Set("rotationIntervalDays",
++                              kDefaultFingerprintRotationIntervalDays);
++  }
++  if (!fingerprint_rotation->FindBool("rotateOnManualRefresh").has_value()) {
++    fingerprint_rotation->Set("rotateOnManualRefresh", true);
++  }
++  if (!fingerprint_rotation->FindBool("rotateOnBrowserRestart").has_value()) {
++    fingerprint_rotation->Set("rotateOnBrowserRestart", false);
++  }
++  if (!fingerprint_rotation->FindBool("rotateOnProfileReset").has_value()) {
++    fingerprint_rotation->Set("rotateOnProfileReset", true);
 +  }
 +
 +  return persona;
@@ -1462,6 +1849,9 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +  registry->RegisterStringPref(kPersonaLastUsedIdPref, kDefaultPersonaId);
 +  registry->RegisterStringPref(kPersonaLaunchSelectionModePref,
 +                               kLaunchSelectionModeAlwaysAsk);
++  registry->RegisterStringPref(kPersonaFingerprintProfileSaltPref,
++                               std::string());
++  registry->RegisterDictionaryPref(kPersonaFingerprintRotationEpochPref);
 +}
 +
 +base::DictValue PersonaService::GetPersonaState() const {
@@ -1491,7 +1881,13 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +
 +base::DictValue PersonaService::SavePersona(const base::DictValue& payload) {
 +  base::DictValue state = ReadState();
-+  base::DictValue persona = NormalizePersona(payload, GetActivePersonaId(state));
++  base::DictValue persona =
++      NormalizePersona(ValidatePersona(payload), GetActivePersonaId(state));
++  if (!PersonaHasRequiredFields(persona)) {
++    base::DictValue errors;
++    errors.Set("persona", "Persona is missing required fields");
++    return MakeResponse(false, std::move(state), std::move(errors));
++  }
 +  const std::string* persona_id = persona.FindString("id");
 +  if (persona_id && !persona_id->empty()) {
 +    persona.Set("lastUsedAt", MakeIsoTimestamp());
@@ -1628,6 +2024,28 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +  }
 +}
 +
++void PersonaService::RefreshFingerprint(
++    FingerprintRefreshScope scope,
++    const std::string& site_origin_or_empty) {
++  if (!prefs_) {
++    return;
++  }
++
++  base::DictValue rotation_epoch =
++      prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  if (scope == FingerprintRefreshScope::kSite &&
++      !site_origin_or_empty.empty()) {
++    rotation_epoch.EnsureDict("sites")
++        ->Set(site_origin_or_empty, MakeIsoTimestamp());
++  } else {
++    prefs_->SetString(kPersonaFingerprintProfileSaltPref,
++                      MakeFingerprintSalt());
++    rotation_epoch.Set("global", MakeIsoTimestamp());
++  }
++  prefs_->SetDict(kPersonaFingerprintRotationEpochPref,
++                  std::move(rotation_epoch));
++}
++
 +blink::HeliumPersonaSnapshot PersonaService::GetActiveSnapshot() const {
 +  base::DictValue state = ReadState();
 +  const base::DictValue* persona =
@@ -1644,7 +2062,44 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +
 +  if (const std::string* value = persona->FindString("id")) {
 +    snapshot.id = *value;
-+    snapshot.noise_seed = *value;
++    snapshot.fingerprint_profile_salt =
++        GetOrCreateFingerprintProfileSalt();
++    snapshot.fingerprint_rotation_global_epoch =
++        GetOrCreateFingerprintGlobalEpoch();
++    snapshot.noise_seed = snapshot.fingerprint_profile_salt + "\n" + *value;
++  }
++  const base::DictValue* fingerprint_rotation =
++      persona->FindDict("advanced")
++          ? persona->FindDict("advanced")->FindDict("fingerprintRotation")
++          : nullptr;
++  if (fingerprint_rotation) {
++    if (const std::string* scope = fingerprint_rotation->FindString("scope");
++        scope && !scope->empty()) {
++      snapshot.fingerprint_rotation_scope = *scope;
++    }
++    snapshot.fingerprint_rotation_interval_days =
++        fingerprint_rotation->FindInt("rotationIntervalDays")
++            .value_or(kDefaultFingerprintRotationIntervalDays);
++  }
++  if (snapshot.fingerprint_rotation_scope.empty()) {
++    snapshot.fingerprint_rotation_scope = kFingerprintRotationScopeSiteProfile;
++  }
++  if (snapshot.fingerprint_rotation_interval_days <= 0) {
++    snapshot.fingerprint_rotation_interval_days =
++        kDefaultFingerprintRotationIntervalDays;
++  }
++  if (prefs_) {
++    const base::DictValue rotation_epoch =
++        prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++    const base::DictValue* site_epochs = rotation_epoch.FindDict("sites");
++    if (site_epochs) {
++      for (auto [scope_key, epoch] : *site_epochs) {
++        if (epoch.is_string()) {
++          snapshot.fingerprint_rotation_site_epochs.push_back(
++              {scope_key, epoch.GetString()});
++        }
++      }
++    }
 +  }
 +  if (const std::string* value = persona->FindString("name")) {
 +    snapshot.name = *value;
@@ -1666,10 +2121,64 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +  snapshot.allow_privacy_sandbox_apis =
 +      FindNestedBool(*persona, "advanced", "allowPrivacySandboxApis")
 +          .value_or(true);
++  snapshot.allow_gamepads =
++      FindNestedBool(*persona, "advanced", "allowGamepads").value_or(true);
++  snapshot.allow_clipboard =
++      FindNestedBool(*persona, "advanced", "allowClipboard").value_or(true);
++  snapshot.allow_geolocation =
++      FindNestedBool(*persona, "advanced", "allowGeolocation").value_or(false);
++  snapshot.allow_notifications =
++      FindNestedBool(*persona, "advanced", "allowNotifications")
++          .value_or(false);
++  snapshot.allow_midi =
++      FindNestedBool(*persona, "advanced", "allowMidi").value_or(false);
++  snapshot.allow_idle_detection =
++      FindNestedBool(*persona, "advanced", "allowIdleDetection")
++          .value_or(false);
++  snapshot.allow_window_management =
++      FindNestedBool(*persona, "advanced", "allowWindowManagement")
++          .value_or(false);
++  snapshot.allow_web_nfc =
++      FindNestedBool(*persona, "advanced", "allowWebNfc").value_or(false);
++  snapshot.allow_web_xr =
++      FindNestedBool(*persona, "advanced", "allowWebXr").value_or(false);
++  snapshot.allow_sensor_apis =
++      FindNestedBool(*persona, "advanced", "allowSensorApis").value_or(false);
++  snapshot.allow_real_battery_status =
++      FindNestedBool(*persona, "advanced", "allowRealBatteryStatus")
++          .value_or(false);
++  snapshot.allow_platform_credentials =
++      FindNestedBool(*persona, "advanced", "allowPlatformCredentials")
++          .value_or(true);
++  snapshot.allow_payment_handler =
++      FindNestedBool(*persona, "advanced", "allowPaymentHandler")
++          .value_or(false);
++  snapshot.allow_speech_synthesis =
++      FindNestedBool(*persona, "advanced", "allowSpeechSynthesis")
++          .value_or(true);
++  snapshot.allow_web_printing =
++      FindNestedBool(*persona, "advanced", "allowWebPrinting").value_or(true);
++  snapshot.allow_shape_detection =
++      FindNestedBool(*persona, "advanced", "allowShapeDetection")
++          .value_or(false);
++  snapshot.allow_web_otp =
++      FindNestedBool(*persona, "advanced", "allowWebOtp").value_or(false);
++  snapshot.allow_ai_apis =
++      FindNestedBool(*persona, "advanced", "allowAiApis").value_or(false);
++  snapshot.allow_handwriting_recognition =
++      FindNestedBool(*persona, "advanced", "allowHandwritingRecognition")
++          .value_or(false);
++  snapshot.allow_web_nn =
++      FindNestedBool(*persona, "advanced", "allowWebNn").value_or(false);
++  snapshot.allow_private_state_tokens =
++      FindNestedBool(*persona, "advanced", "allowPrivateStateTokens")
++          .value_or(false);
 +  snapshot.canvas_noise =
 +      FindNestedBool(*persona, "advanced", "canvasNoise").value_or(true);
 +  snapshot.audio_noise =
 +      FindNestedBool(*persona, "advanced", "audioNoise").value_or(true);
++  snapshot.hardware_noise =
++      FindNestedBool(*persona, "advanced", "hardwareNoise").value_or(true);
 +  snapshot.font_metric_noise =
 +      FindNestedBool(*persona, "advanced", "fontMetricNoise").value_or(false);
 +  snapshot.ua_ch_mobile =
@@ -1879,12 +2388,42 @@ Index: b/chrome/browser/helium_persona/persona_service.cc
 +  }
 +}
 +
++std::string PersonaService::GetOrCreateFingerprintProfileSalt() const {
++  if (!prefs_) {
++    return "transient-profile";
++  }
++
++  std::string salt = prefs_->GetString(kPersonaFingerprintProfileSaltPref);
++  if (salt.empty()) {
++    salt = MakeFingerprintSalt();
++    prefs_->SetString(kPersonaFingerprintProfileSaltPref, salt);
++  }
++  return salt;
++}
++
++std::string PersonaService::GetOrCreateFingerprintGlobalEpoch() const {
++  if (!prefs_) {
++    return MakeIsoTimestamp(base::Time::UnixEpoch());
++  }
++
++  base::DictValue rotation_epoch =
++      prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  const std::string* global_epoch = rotation_epoch.FindString("global");
++  if (global_epoch && !global_epoch->empty()) {
++    return *global_epoch;
++  }
++
++  const std::string epoch = MakeIsoTimestamp();
++  rotation_epoch.Set("global", epoch);
++  prefs_->SetDict(kPersonaFingerprintRotationEpochPref,
++                  std::move(rotation_epoch));
++  return epoch;
++}
++
 +}  // namespace helium_persona
-Index: b/chrome/browser/helium_persona/persona_service_factory.h
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service_factory.h
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,41 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -1920,22 +2459,22 @@ Index: b/chrome/browser/helium_persona/persona_service_factory.h
 +
 +  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
 +      content::BrowserContext* context) const override;
++  void BrowserContextShutdown(content::BrowserContext* context) override;
 +};
 +
 +}  // namespace helium_persona
 +
 +#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_FACTORY_H_
-Index: b/chrome/browser/helium_persona/persona_service_factory.cc
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service_factory.cc
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,48 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#include "chrome/browser/helium_persona/persona_service_factory.h"
 +
 +#include "base/no_destructor.h"
++#include "chrome/browser/helium_persona/persona_runtime_override.h"
 +#include "chrome/browser/helium_persona/persona_service.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/profiles/profile_selections.h"
@@ -1970,30 +2509,59 @@ Index: b/chrome/browser/helium_persona/persona_service_factory.cc
 +  return std::make_unique<PersonaService>(profile->GetPrefs());
 +}
 +
++void PersonaServiceFactory::BrowserContextShutdown(
++    content::BrowserContext* context) {
++  PersonaRuntimeOverride::ClearGlobal();
++  ProfileKeyedServiceFactory::BrowserContextShutdown(context);
++}
++
 +}  // namespace helium_persona
-Index: b/chrome/browser/helium_persona/persona_runtime_override.cc
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_runtime_override.cc
-@@ -0,0 +1,16 @@
+@@ -0,0 +1,43 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
-+// persona_runtime_override.cc
++
++#include "chrome/browser/helium_persona/persona_runtime_override.h"
++
++#include "base/no_destructor.h"
++#include "base/synchronization/lock.h"
++
 +namespace helium_persona {
-+class PersonaRuntimeOverride {
-+ public:
-+  static void ApplyGlobal() {}
-+  static void ClearGlobal() {}
-+};
++
++namespace {
++
++base::Lock& GetPersonaRuntimeOverrideLock() {
++  static base::NoDestructor<base::Lock> lock;
++  return *lock;
++}
++
++std::optional<blink::HeliumPersonaSnapshot>& GetPersonaRuntimeOverrideSnapshot() {
++  static base::NoDestructor<std::optional<blink::HeliumPersonaSnapshot>>
++      snapshot;
++  return *snapshot;
++}
++
++}  // namespace
++
++void PersonaRuntimeOverride::ApplyGlobal(
++    const blink::HeliumPersonaSnapshot& snapshot) {
++  base::AutoLock lock(GetPersonaRuntimeOverrideLock());
++  GetPersonaRuntimeOverrideSnapshot() = snapshot;
++}
++
++void PersonaRuntimeOverride::ClearGlobal() {
++  base::AutoLock lock(GetPersonaRuntimeOverrideLock());
++  GetPersonaRuntimeOverrideSnapshot().reset();
++}
++
++std::optional<blink::HeliumPersonaSnapshot> PersonaRuntimeOverride::GetGlobal() {
++  base::AutoLock lock(GetPersonaRuntimeOverrideLock());
++  return GetPersonaRuntimeOverrideSnapshot();
++}
++
 +}  // namespace helium_persona
-+// PersonaRuntimeOverride::ApplyGlobal
-+// PersonaRuntimeOverride::ClearGlobal
-+// persona_snapshot = browser_client->GetHeliumPersonaSnapshot
-+// SetHeliumPersonaSnapshot(creation_params->persona_snapshot)
-+// ApplyPersonaUserAgentMetadata
-Index: b/chrome/browser/prefs/browser_prefs.cc
-===================================================================
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
 @@ -35,6 +35,7 @@
@@ -2012,25 +2580,129 @@ Index: b/chrome/browser/prefs/browser_prefs.cc
    permissions::PermissionHatsTriggerHelper::RegisterProfilePrefs(registry);
    history_clusters::prefs::RegisterProfilePrefs(registry);
    HostContentSettingsMap::RegisterProfilePrefs(registry);
-Index: b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
-===================================================================
 --- a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
 +++ b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
-@@ -164,6 +164,8 @@
+@@ -164,6 +164,7 @@
  #include "chrome/browser/password_manager/factories/account_password_store_factory.h"
  #include "chrome/browser/password_manager/factories/field_info_manager_factory.h"
  #include "chrome/browser/password_manager/factories/password_manager_settings_service_factory.h"
 +#include "chrome/browser/helium_persona/persona_service_factory.h"
-+#include "chrome/browser/helium_persona/persona_service_factory.h"
  #include "chrome/browser/password_manager/factories/password_reuse_manager_factory.h"
  #include "chrome/browser/password_manager/factories/profile_password_store_factory.h"
  #include "chrome/browser/password_manager/password_change_service_factory.h"
-@@ -1211,6 +1213,8 @@ void ChromeBrowserMainExtraPartsProfiles
+@@ -1211,6 +1212,7 @@ void ChromeBrowserMainExtraPartsProfiles
  #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || \
      BUILDFLAG(IS_CHROMEOS)
    PasswordManagerBlocklistPolicyFactory::GetInstance();
 +  helium_persona::PersonaServiceFactory::GetInstance();
-+  helium_persona::PersonaServiceFactory::GetInstance();
  #endif
    PasswordManagerSettingsServiceFactory::GetInstance();
    PasswordReuseManagerFactory::GetInstance();
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_runtime_override.h
+@@ -0,0 +1,22 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef CHROME_BROWSER_HELIUM_PERSONA_PERSONA_RUNTIME_OVERRIDE_H_
++#define CHROME_BROWSER_HELIUM_PERSONA_PERSONA_RUNTIME_OVERRIDE_H_
++
++#include <optional>
++
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++
++namespace helium_persona {
++
++class PersonaRuntimeOverride {
++ public:
++  static void ApplyGlobal(const blink::HeliumPersonaSnapshot& snapshot);
++  static void ClearGlobal();
++  static std::optional<blink::HeliumPersonaSnapshot> GetGlobal();
++};
++
++}  // namespace helium_persona
++
++#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_RUNTIME_OVERRIDE_H_
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_runtime_override_unittest.cc
+@@ -0,0 +1,70 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/helium_persona/persona_runtime_override.h"
++
++#include <optional>
++#include <string>
++#include <utility>
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace helium_persona {
++
++namespace {
++
++blink::HeliumPersonaSnapshot MakeSnapshot(std::string id, bool enabled) {
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.id = std::move(id);
++  snapshot.name = "Test Persona";
++  snapshot.enabled = enabled;
++  snapshot.locale = "en-US";
++  snapshot.timezone = "UTC";
++  return snapshot;
++}
++
++}  // namespace
++
++class PersonaRuntimeOverrideTest : public testing::Test {
++ protected:
++  void SetUp() override { PersonaRuntimeOverride::ClearGlobal(); }
++  void TearDown() override { PersonaRuntimeOverride::ClearGlobal(); }
++};
++
++TEST_F(PersonaRuntimeOverrideTest, StartsEmpty) {
++  EXPECT_FALSE(PersonaRuntimeOverride::GetGlobal().has_value());
++}
++
++TEST_F(PersonaRuntimeOverrideTest, CachesLastResolvedPersonaSnapshot) {
++  PersonaRuntimeOverride::ApplyGlobal(MakeSnapshot("persona-a", true));
++
++  std::optional<blink::HeliumPersonaSnapshot> cached =
++      PersonaRuntimeOverride::GetGlobal();
++  ASSERT_TRUE(cached.has_value());
++  EXPECT_TRUE(cached->IsEnabled());
++  EXPECT_EQ("persona-a", cached->id);
++  EXPECT_EQ("en-US", cached->locale);
++  EXPECT_EQ("UTC", cached->timezone);
++}
++
++TEST_F(PersonaRuntimeOverrideTest, CachesExplicitSystemRealSnapshot) {
++  PersonaRuntimeOverride::ApplyGlobal(MakeSnapshot("default", false));
++
++  std::optional<blink::HeliumPersonaSnapshot> cached =
++      PersonaRuntimeOverride::GetGlobal();
++  ASSERT_TRUE(cached.has_value());
++  EXPECT_FALSE(cached->IsEnabled());
++  EXPECT_EQ("default", cached->id);
++}
++
++TEST_F(PersonaRuntimeOverrideTest, ClearRemovesCachedSnapshot) {
++  PersonaRuntimeOverride::ApplyGlobal(MakeSnapshot("persona-a", true));
++  ASSERT_TRUE(PersonaRuntimeOverride::GetGlobal().has_value());
++
++  PersonaRuntimeOverride::ClearGlobal();
++
++  EXPECT_FALSE(PersonaRuntimeOverride::GetGlobal().has_value());
++}
++
++}  // namespace helium_persona
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -6655,6 +6655,7 @@ test("unit_tests") {
+     "../browser/download/download_target_determiner_unittest.cc",
+     "../browser/download/download_ui_controller_unittest.cc",
+     "../browser/download/offline_item_utils_unittest.cc",
++    "../browser/helium_persona/persona_runtime_override_unittest.cc",
+     "../browser/enterprise/connectors/interstitials/enterprise_page_unittest.cc",
+     "../browser/enterprise/encryption/cache_encryption_provider_impl_unittest.cc",
+     "../browser/enterprise/identifiers/profile_id_service_factory_unittest.cc",

@@ -38,7 +38,7 @@ try:
     import requests.adapters
     import urllib3.util
 
-    class _VerboseRetry(urllib3.util.Retry):
+    class _VerboseRetry(urllib3.util.Retry): # pylint: disable=too-few-public-methods
         """A more verbose version of HTTP Adatper about retries"""
 
         def sleep_for_retry(self, response=None):
@@ -253,8 +253,9 @@ def _get_gitiles_commit_before_date(repo_url, target_branch, target_datetime):
         return git_log[0]['commit']
     if _get_gitiles_git_log_date(git_log[-1]) > target_datetime:
         # Oldest commit is newer than the target datetime; assume oldest is close enough.
-        get_logger().warning('Oldest entry in gitiles log for repo "%s" is newer than target; '
-                             'continuing with oldest entry...')
+        get_logger().warning(
+            'Oldest entry in gitiles log for repo "%s" is newer than target; '
+            'continuing with oldest entry...', repo_url)
         return git_log[-1]['commit']
     # Do binary search
     low_index = 0

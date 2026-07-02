@@ -1,16 +1,21 @@
-Index: b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-===================================================================
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-@@ -30,6 +30,7 @@
-
+@@ -25,11 +25,14 @@
+ 
+ #include "third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h"
+ 
++#include <algorithm>
+ #include <memory>
++#include <optional>
+ #include <utility>
+ 
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
 +#include "base/containers/span.h"
  #include "base/compiler_specific.h"
  #include "base/feature_list.h"
  #include "base/memory/scoped_refptr.h"
-@@ -65,6 +66,7 @@
+@@ -65,6 +68,7 @@
  #include "third_party/blink/public/mojom/gpu/gpu.mojom-blink.h"
  #include "third_party/blink/public/platform/platform.h"
  #include "third_party/blink/public/platform/task_type.h"
@@ -18,7 +23,7 @@ Index: b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.c
  #include "third_party/blink/public/web/web_local_frame_client.h"
  #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
  #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_elementimage.h"
-@@ -77,6 +79,8 @@
+@@ -77,6 +81,8 @@
  #include "third_party/blink/renderer/core/frame/settings.h"
  #include "third_party/blink/renderer/core/frame/web_feature.h"
  #include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
@@ -27,7 +32,58 @@ Index: b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.c
  #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.h"
  #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
  #include "third_party/blink/renderer/core/html/canvas/image_data.h"
-@@ -4122,7 +4126,9 @@ ScriptValue WebGLRenderingContextBase::g
+@@ -221,6 +227,32 @@ const HeliumPersonaSnapshot* GetPersonaS
+   return snapshot.IsEnabled() ? &snapshot : nullptr;
+ }
+ 
++std::optional<uint64_t> GetHardwareNoiseHash(ExecutionContext* context,
++                                             uint64_t field) {
++  if (!context || !context->HardwareNoiseToken()) {
++    return std::nullopt;
++  }
++  return NoiseHash(*context->HardwareNoiseToken()) ^
++         (field * 0x9e3779b97f4a7c15ULL);
++}
++
++GLfloat ApplyHardwareFloatNoise(GLfloat value, uint64_t hash) {
++  if (value <= 0.0f) {
++    return value;
++  }
++  const GLfloat direction = (hash & 1) ? 1.0f : -1.0f;
++  const GLfloat magnitude = 1.0f + static_cast<GLfloat>((hash >> 1) % 5);
++  return std::max<GLfloat>(0.0f, value + direction * magnitude * 0.01f);
++}
++
++GLint ApplyHardwareIntNoise(GLint value, uint64_t hash) {
++  if (value <= 0) {
++    return value;
++  }
++  const GLint delta = (hash & 1) ? 1 : -1;
++  return std::max<GLint>(1, value + delta);
++}
++
+ enum class WebGLANGLEImplementation {
+   // These values are persisted to logs. Entries should not be renumbered and
+   // numeric values should never be reused.
+@@ -3915,8 +3947,16 @@ ScriptValue WebGLRenderingContextBase::g
+     case GL_ACTIVE_TEXTURE:
+       return GetUnsignedIntParameter(script_state, pname);
+     case GL_ALIASED_LINE_WIDTH_RANGE:
+-      return GetWebGLFloatArrayParameter(script_state, pname);
+     case GL_ALIASED_POINT_SIZE_RANGE:
++      if (auto hash = GetHardwareNoiseHash(Host()->GetTopExecutionContext(),
++                                           pname)) {
++        std::array<GLfloat, 2> value = {0};
++        ContextGL()->GetFloatv(pname, value.data());
++        value[0] = ApplyHardwareFloatNoise(value[0], *hash);
++        value[1] = ApplyHardwareFloatNoise(value[1], *hash >> 8);
++        return WebGLAny(script_state,
++                        DOMFloat32Array::Create(base::span(value)));
++      }
+       return GetWebGLFloatArrayParameter(script_state, pname);
+     case GL_ALPHA_BITS:
+       if (drawing_buffer_->RequiresAlphaChannelToBePreserved())
+@@ -4122,7 +4162,9 @@ ScriptValue WebGLRenderingContextBase::g
          if (const HeliumPersonaSnapshot* snapshot =
                  GetPersonaSnapshot(Host()->GetTopExecutionContext());
              snapshot && !snapshot->gpu_renderer.empty()) {
@@ -38,7 +94,7 @@ Index: b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.c
          }
          return WebGLAny(script_state,
                          String(ContextGL()->GetString(GL_RENDERER)));
-@@ -4136,7 +4142,9 @@ ScriptValue WebGLRenderingContextBase::g
+@@ -4136,7 +4178,9 @@ ScriptValue WebGLRenderingContextBase::g
          if (const HeliumPersonaSnapshot* snapshot =
                  GetPersonaSnapshot(Host()->GetTopExecutionContext());
              snapshot && !snapshot->gpu_vendor.empty()) {
@@ -49,7 +105,33 @@ Index: b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.c
          }
          return WebGLAny(script_state,
                          String(ContextGL()->GetString(GL_VENDOR)));
-@@ -5285,6 +5293,14 @@ void WebGLRenderingContextBase::ReadPixe
+@@ -4157,6 +4201,12 @@ ScriptValue WebGLRenderingContextBase::g
+       return ScriptValue::CreateNull(script_state->GetIsolate());
+     case GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT:  // EXT_texture_filter_anisotropic
+       if (ExtensionEnabled(kEXTTextureFilterAnisotropicName)) {
++        if (auto hash = GetHardwareNoiseHash(Host()->GetTopExecutionContext(),
++                                             pname)) {
++          GLfloat value = 0;
++          ContextGL()->GetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &value);
++          return WebGLAny(script_state, ApplyHardwareFloatNoise(value, *hash));
++        }
+         return GetFloatParameter(script_state,
+                                  GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+       }
+@@ -4439,6 +4489,12 @@ WebGLShaderPrecisionFormat* WebGLRenderi
+   GLint precision = 0;
+   ContextGL()->GetShaderPrecisionFormat(shader_type, precision_type, range,
+                                         &precision);
++  if (auto hash = GetHardwareNoiseHash(Host()->GetTopExecutionContext(),
++                                       shader_type ^ precision_type)) {
++    range[0] = ApplyHardwareIntNoise(range[0], *hash);
++    range[1] = ApplyHardwareIntNoise(range[1], *hash >> 8);
++    precision = ApplyHardwareIntNoise(precision, *hash >> 16);
++  }
+   return MakeGarbageCollected<WebGLShaderPrecisionFormat>(range[0], range[1],
+                                                           precision);
+ }
+@@ -5285,6 +5341,14 @@ void WebGLRenderingContextBase::ReadPixe
      }
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
    }
@@ -62,5 +144,5 @@ Index: b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.c
 +                width, height);
 +  }
  }
-
+ 
  void WebGLRenderingContextBase::RenderbufferStorageImpl(

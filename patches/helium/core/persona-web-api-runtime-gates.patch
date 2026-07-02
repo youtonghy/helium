@@ -1,0 +1,509 @@
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -787,6 +787,43 @@ bool HeliumPersonaAllowsBackgroundFetch(
+   return !snapshot.IsEnabled() || snapshot.allow_background_sync;
+ }
+ 
++BrowserContext* GetHeliumPersonaBrowserContext(ServiceWorkerHost* host) {
++  if (!host) {
++    return nullptr;
++  }
++  return host->version()->context()->wrapper()->browser_context();
++}
++
++bool HeliumPersonaAllowsAiApis(BrowserContext* browser_context) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(browser_context);
++  return !snapshot.IsEnabled() || snapshot.allow_ai_apis;
++}
++
++bool HeliumPersonaAllowsShapeDetection(BrowserContext* browser_context) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(browser_context);
++  return !snapshot.IsEnabled() || snapshot.allow_shape_detection;
++}
++
++bool HeliumPersonaAllowsGamepads(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_gamepads;
++}
++
++bool HeliumPersonaAllowsWebNn(BrowserContext* browser_context) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(browser_context);
++  return !snapshot.IsEnabled() || snapshot.allow_web_nn;
++}
++
++bool HeliumPersonaAllowsWebXr(RenderFrameHost* host) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
++  return !snapshot.IsEnabled() || snapshot.allow_web_xr;
++}
++
+ }  // namespace
+ 
+ // Documents/frames
+@@ -900,8 +937,10 @@ void PopulateBinderMapWithContext(
+         &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetFontAccessManager>);
+   }
+ 
+-  map->Add<device::mojom::GamepadHapticsManager>(
+-      &device::GamepadHapticsManager::Create);
++  if (HeliumPersonaAllowsGamepads(host)) {
++    map->Add<device::mojom::GamepadHapticsManager>(
++        &device::GamepadHapticsManager::Create);
++  }
+ 
+   map->Add<blink::mojom::GeolocationService>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetGeolocationService>);
+@@ -1010,7 +1049,9 @@ void PopulateBinderMapWithContext(
+       base::ThreadPool::CreateSequencedTaskRunner(
+           {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
+ 
+-  map->Add<device::mojom::GamepadMonitor>(&device::GamepadMonitor::Create);
++  if (HeliumPersonaAllowsGamepads(host)) {
++    map->Add<device::mojom::GamepadMonitor>(&device::GamepadMonitor::Create);
++  }
+ 
+   map->Add<blink::mojom::WebSensorProvider>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetSensorProvider>);
+@@ -1021,7 +1062,8 @@ void PopulateBinderMapWithContext(
+   map->Add<handwriting::mojom::HandwritingRecognitionService>(
+       &CreateHandwritingRecognitionService);
+ 
+-  if (base::FeatureList::IsEnabled(
++  if (HeliumPersonaAllowsWebNn(host->GetBrowserContext()) &&
++      base::FeatureList::IsEnabled(
+           webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
+     map->Add<webnn::mojom::WebNNContextProvider>(
+         &BindWebNNContextProviderForRenderFrame);
+@@ -1154,23 +1196,25 @@ void PopulateBinderMapWithContext(
+       &BindRenderFrameHostImpl<
+           &RenderFrameHostImpl::BindTrustTokenQueryAnswerer>);
+ 
+-  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-      base::BindRepeating(
+-          [](RenderFrameHost* host,
+-             mojo::PendingReceiver<
+-                 shape_detection::mojom::BarcodeDetectionProvider> receiver) {
+-            BindBarcodeDetectionProvider(std::move(receiver));
+-          }));
++  if (HeliumPersonaAllowsShapeDetection(host->GetBrowserContext())) {
++    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
++        base::BindRepeating(
++            [](RenderFrameHost* host,
++               mojo::PendingReceiver<
++                   shape_detection::mojom::BarcodeDetectionProvider> receiver) {
++              BindBarcodeDetectionProvider(std::move(receiver));
++            }));
+ 
+-  map->Add<shape_detection::mojom::FaceDetectionProvider>(base::BindRepeating(
+-      [](RenderFrameHost* host,
+-         mojo::PendingReceiver<shape_detection::mojom::FaceDetectionProvider>
+-             receiver) { BindFaceDetectionProvider(std::move(receiver)); }));
++    map->Add<shape_detection::mojom::FaceDetectionProvider>(base::BindRepeating(
++        [](RenderFrameHost* host,
++           mojo::PendingReceiver<shape_detection::mojom::FaceDetectionProvider>
++               receiver) { BindFaceDetectionProvider(std::move(receiver)); }));
+ 
+-  map->Add<shape_detection::mojom::TextDetection>(base::BindRepeating(
+-      [](RenderFrameHost* host,
+-         mojo::PendingReceiver<shape_detection::mojom::TextDetection>
+-             receiver) { BindTextDetection(std::move(receiver)); }));
++    map->Add<shape_detection::mojom::TextDetection>(base::BindRepeating(
++        [](RenderFrameHost* host,
++           mojo::PendingReceiver<shape_detection::mojom::TextDetection>
++               receiver) { BindTextDetection(std::move(receiver)); }));
++  }
+ 
+   auto* command_line = base::CommandLine::ForCurrentProcess();
+   if (command_line->HasSwitch(switches::kEnableGpuBenchmarking)) {
+@@ -1219,15 +1263,17 @@ void PopulateBinderMapWithContext(
+       &BindRenderFrameHostImpl<
+           &RenderFrameHostImpl::BindNonAssociatedLocalFrameHost>);
+ 
+-  map->Add<blink::mojom::AIManager>(base::BindRepeating(
+-      [](ContentBrowserClient* browser_client, RenderFrameHost* host,
+-         mojo::PendingReceiver<blink::mojom::AIManager> receiver) {
+-        browser_client->BindAIManager(
+-            host->GetBrowserContext(),
+-            &RenderFrameHostImpl::From(host)->document_associated_data(), host,
+-            std::move(receiver));
+-      },
+-      base::Unretained(GetContentClient()->browser())));
++  if (HeliumPersonaAllowsAiApis(host->GetBrowserContext())) {
++    map->Add<blink::mojom::AIManager>(base::BindRepeating(
++        [](ContentBrowserClient* browser_client, RenderFrameHost* host,
++           mojo::PendingReceiver<blink::mojom::AIManager> receiver) {
++          browser_client->BindAIManager(
++              host->GetBrowserContext(),
++              &RenderFrameHostImpl::From(host)->document_associated_data(), host,
++              std::move(receiver));
++        },
++        base::Unretained(GetContentClient()->browser())));
++  }
+ 
+ #if BUILDFLAG(IS_FUCHSIA)
+   map->Add<media::mojom::FuchsiaMediaCodecProvider>(base::BindRepeating(
+@@ -1281,7 +1327,12 @@ void PopulateBinderMapWithContext(
+       &PictureInPictureServiceImpl::Create);
+   map->Add<blink::mojom::WakeLockService>(&WakeLockServiceImpl::Create);
+ #if BUILDFLAG(ENABLE_VR)
+-  map->Add<device::mojom::VRService>(&VRServiceImpl::Create);
++  if (HeliumPersonaAllowsWebXr(host)) {
++    map->Add<device::mojom::VRService>(&VRServiceImpl::Create);
++  } else {
++    map->Add<device::mojom::VRService>(
++        &EmptyBinderForFrame<device::mojom::VRService>);
++  }
+ #else
+   map->Add<device::mojom::VRService>(
+       &EmptyBinderForFrame<device::mojom::VRService>);
+@@ -1402,11 +1453,14 @@ void PopulateDedicatedWorkerBinders(Dedi
+   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
+ 
+   // static binders
+-  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-      &BindBarcodeDetectionProvider);
+-  map->Add<shape_detection::mojom::FaceDetectionProvider>(
+-      &BindFaceDetectionProvider);
+-  map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  if (HeliumPersonaAllowsShapeDetection(
++          host->GetProcessHost()->GetBrowserContext())) {
++    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
++        &BindBarcodeDetectionProvider);
++    map->Add<shape_detection::mojom::FaceDetectionProvider>(
++        &BindFaceDetectionProvider);
++    map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  }
+   map->Add<ukm::mojom::UkmRecorderFactory>(&BindUkmRecorderFactory);
+ 
+   // worker host binders
+@@ -1426,7 +1480,8 @@ void PopulateDedicatedWorkerBinders(Dedi
+       base::ThreadPool::CreateSequencedTaskRunner(
+           {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
+ 
+-  if (base::FeatureList::IsEnabled(
++  if (HeliumPersonaAllowsWebNn(host->GetProcessHost()->GetBrowserContext()) &&
++      base::FeatureList::IsEnabled(
+           webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
+     // base::Unretained(host->GetProcessHost()) is safe because the map is owned
+     // by |DedicatedWorkerHost::broker_|.
+@@ -1507,11 +1562,13 @@ void PopulateDedicatedWorkerBinders(Dedi
+       host->GetAncestorRenderFrameHostId(),
+       RenderProcessHost::NotificationServiceCreatorType::kDedicatedWorker,
+       host));
+-  map->Add<blink::mojom::AIManager>(
+-      base::BindRepeating(&ContentBrowserClient::BindAIManager,
+-                          base::Unretained(GetContentClient()->browser()),
+-                          host->GetProcessHost()->GetBrowserContext(),
+-                          base::Unretained(host), /*rfh=*/nullptr));
++  if (HeliumPersonaAllowsAiApis(host->GetProcessHost()->GetBrowserContext())) {
++    map->Add<blink::mojom::AIManager>(
++        base::BindRepeating(&ContentBrowserClient::BindAIManager,
++                            base::Unretained(GetContentClient()->browser()),
++                            host->GetProcessHost()->GetBrowserContext(),
++                            base::Unretained(host), /*rfh=*/nullptr));
++  }
+   map->Add<blink::mojom::TranslationManager>(base::BindRepeating(
+       [](DedicatedWorkerHost* host,
+          mojo::PendingReceiver<blink::mojom::TranslationManager> receiver) {
+@@ -1579,11 +1636,14 @@ void PopulateSharedWorkerBinders(SharedW
+   map->Add<blink::mojom::ContentSecurityNotifier>(base::DoNothing());
+ 
+   // static binders
+-  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-      &BindBarcodeDetectionProvider);
+-  map->Add<shape_detection::mojom::FaceDetectionProvider>(
+-      &BindFaceDetectionProvider);
+-  map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  if (HeliumPersonaAllowsShapeDetection(
++          host->GetProcessHost()->GetBrowserContext())) {
++    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
++        &BindBarcodeDetectionProvider);
++    map->Add<shape_detection::mojom::FaceDetectionProvider>(
++        &BindFaceDetectionProvider);
++    map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  }
+   map->Add<ukm::mojom::UkmRecorderFactory>(&BindUkmRecorderFactory);
+ 
+   // worker host binders
+@@ -1612,11 +1672,13 @@ void PopulateSharedWorkerBinders(SharedW
+       &CreateReportingServiceProxyForSharedWorker, base::Unretained(host)));
+   map->Add<blink::mojom::BucketManagerHost>(base::BindRepeating(
+       &SharedWorkerHost::CreateBucketManagerHost, base::Unretained(host)));
+-  map->Add<blink::mojom::AIManager>(
+-      base::BindRepeating(&ContentBrowserClient::BindAIManager,
+-                          base::Unretained(GetContentClient()->browser()),
+-                          host->GetProcessHost()->GetBrowserContext(),
+-                          base::Unretained(host), /*rfh=*/nullptr));
++  if (HeliumPersonaAllowsAiApis(host->GetProcessHost()->GetBrowserContext())) {
++    map->Add<blink::mojom::AIManager>(
++        base::BindRepeating(&ContentBrowserClient::BindAIManager,
++                            base::Unretained(GetContentClient()->browser()),
++                            host->GetProcessHost()->GetBrowserContext(),
++                            base::Unretained(host), /*rfh=*/nullptr));
++  }
+   map->Add<blink::mojom::LockManager>(base::BindRepeating(
+       &SharedWorkerHost::CreateLockManager, base::Unretained(host)));
+ 
+@@ -1626,7 +1688,8 @@ void PopulateSharedWorkerBinders(SharedW
+         &SharedWorkerHost::BindPressureService, base::Unretained(host)));
+   }
+ #endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
+-  if (base::FeatureList::IsEnabled(
++  if (HeliumPersonaAllowsWebNn(host->GetProcessHost()->GetBrowserContext()) &&
++      base::FeatureList::IsEnabled(
+           webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
+     map->Add<webnn::mojom::WebNNContextProvider>(base::BindRepeating(
+         &BindWebNNContextProviderForWorker<SharedWorkerHost>,
+@@ -1758,11 +1821,14 @@ void PopulateServiceWorkerBinders(Servic
+   // static binders
+   map->Add<blink::mojom::FileUtilitiesHost>(
+       base::BindRepeating(&BindFileUtilitiesHost, host));
+-  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-      &BindBarcodeDetectionProvider);
+-  map->Add<shape_detection::mojom::FaceDetectionProvider>(
+-      &BindFaceDetectionProvider);
+-  map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  if (HeliumPersonaAllowsShapeDetection(
++          GetHeliumPersonaBrowserContext(host))) {
++    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
++        &BindBarcodeDetectionProvider);
++    map->Add<shape_detection::mojom::FaceDetectionProvider>(
++        &BindFaceDetectionProvider);
++    map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
++  }
+   map->Add<ukm::mojom::UkmRecorderFactory>(&BindUkmRecorderFactory);
+ 
+   // worker host binders
+@@ -1796,10 +1862,13 @@ void PopulateServiceWorkerBinders(Servic
+       &ServiceWorkerHost::CreateBucketManagerHost, base::Unretained(host)));
+   map->Add<blink::mojom::WebUsbService>(base::BindRepeating(
+       &ServiceWorkerHost::BindUsbService, base::Unretained(host)));
+-  map->Add<blink::mojom::AIManager>(base::BindRepeating(
+-      &ServiceWorkerHost::BindAIManager, base::Unretained(host)));
++  if (HeliumPersonaAllowsAiApis(GetHeliumPersonaBrowserContext(host))) {
++    map->Add<blink::mojom::AIManager>(base::BindRepeating(
++        &ServiceWorkerHost::BindAIManager, base::Unretained(host)));
++  }
+ 
+-  if (base::FeatureList::IsEnabled(
++  if (HeliumPersonaAllowsWebNn(GetHeliumPersonaBrowserContext(host)) &&
++      base::FeatureList::IsEnabled(
+           webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
+     map->Add<webnn::mojom::WebNNContextProvider>(base::BindRepeating(
+         &BindWebNNContextProviderForWorker<ServiceWorkerHost>,
+--- a/content/browser/renderer_host/render_frame_host_impl.cc
++++ b/content/browser/renderer_host/render_frame_host_impl.cc
+@@ -14785,6 +14785,13 @@ void RenderFrameHostImpl::BindInputInjec
+ 
+ void RenderFrameHostImpl::BindWebOTPServiceReceiver(
+     mojo::PendingReceiver<blink::mojom::WebOTPService> receiver) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(
++          GetProcess()->GetBrowserContext());
++  if (snapshot.IsEnabled() && !snapshot.allow_web_otp) {
++    return;
++  }
++
+   auto* fetcher = SmsFetcher::Get(GetProcess()->GetBrowserContext());
+   if (WebOTPService::Create(fetcher, this, std::move(receiver))) {
+     document_used_web_otp_ = true;
+--- a/content/browser/webauth/authenticator_common_impl.cc
++++ b/content/browser/webauth/authenticator_common_impl.cc
+@@ -95,6 +95,7 @@
+ #include "services/metrics/public/cpp/ukm_builders.h"
+ #include "services/metrics/public/cpp/ukm_recorder.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/mojom/credentialmanagement/credential_type_flags.mojom.h"
+ #include "third_party/blink/public/mojom/webauthn/authenticator.mojom.h"
+ #include "third_party/boringssl/src/pki/input.h"
+@@ -1034,6 +1035,12 @@ bool AuthenticatorCommonImpl::IsFocused(
+              WebContents::FromRenderFrameHost(GetRenderFrameHost()));
+ }
+ 
++bool HeliumPersonaAllowsPlatformCredentials(BrowserContext* browser_context) {
++  blink::HeliumPersonaSnapshot snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
++  return !snapshot.IsEnabled() || snapshot.allow_platform_credentials;
++}
++
+ // mojom::Authenticator
+ void AuthenticatorCommonImpl::MakeCredential(
+     url::Origin caller_origin,
+@@ -1050,6 +1057,14 @@ void AuthenticatorCommonImpl::MakeCreden
+                             nullptr, nullptr);
+     return;
+   }
++  if (!HeliumPersonaAllowsPlatformCredentials(GetBrowserContext()) &&
++      options->authenticator_selection &&
++      options->authenticator_selection->authenticator_attachment ==
++          blink::mojom::AuthenticatorAttachment::PLATFORM) {
++    std::move(callback).Run(
++        blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr, nullptr);
++    return;
++  }
+   req_state_ = std::make_unique<RequestState>();
+   req_state_->request_key = RequestKey(next_request_key_);
+ 
+@@ -1449,6 +1464,13 @@ void AuthenticatorCommonImpl::GetCredent
+         blink::mojom::AuthenticatorStatus::PENDING_REQUEST, nullptr, nullptr));
+     return;
+   }
++  if (!HeliumPersonaAllowsPlatformCredentials(GetBrowserContext()) &&
++      options->mediation == Mediation::CONDITIONAL) {
++    std::move(callback).Run(AuthenticatorImpl::MakeGetAssertionResponse(
++        blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr,
++        nullptr));
++    return;
++  }
+ 
+   if (!public_key_options) {
+     if (!options->password) {
+@@ -1960,6 +1982,34 @@ void AuthenticatorCommonImpl::ContinueGe
+ void AuthenticatorCommonImpl::GetClientCapabilities(
+     url::Origin caller_origin,
+     blink::mojom::Authenticator::GetClientCapabilitiesCallback callback) {
++  if (!HeliumPersonaAllowsPlatformCredentials(GetBrowserContext())) {
++    std::vector<blink::mojom::WebAuthnClientCapabilityPtr> capabilities;
++    capabilities.push_back(
++        MakeCapability(client_capabilities::kRelatedOrigins, true));
++    capabilities.push_back(
++        MakeCapability(client_capabilities::kConditionalCreate, false));
++    capabilities.push_back(
++        MakeCapability(client_capabilities::kHybridTransport, false));
++    capabilities.push_back(MakeCapability(
++        client_capabilities::kUserVerifyingPlatformAuthenticator, false));
++    capabilities.push_back(
++        MakeCapability(client_capabilities::kConditionalGet, false));
++    if (base::FeatureList::IsEnabled(device::kWebAuthnImmediateGet)) {
++      capabilities.push_back(
++          MakeCapability(client_capabilities::kImmediateGet, false));
++    }
++    capabilities.push_back(MakeCapability(
++        client_capabilities::kSignalAllAcceptedCredentials, true));
++    capabilities.push_back(
++        MakeCapability(client_capabilities::kSignalCurrentUserDetails, true));
++    capabilities.push_back(
++        MakeCapability(client_capabilities::kSignalUnknownCredential, true));
++    capabilities.push_back(MakeCapability(
++        client_capabilities::kPasskeyPlatformAuthenticator, false));
++    std::move(callback).Run(std::move(capabilities));
++    return;
++  }
++
+   // IsPPAA is computed based on the results of IsUVPAA and HybridTransport.
+   auto completion_callback =
+       base::BindOnce(&InsertIsPPAACapability).Then(std::move(callback));
+@@ -2049,6 +2099,11 @@ void AuthenticatorCommonImpl::IsUserVeri
+     url::Origin caller_origin,
+     blink::mojom::Authenticator::
+         IsUserVerifyingPlatformAuthenticatorAvailableCallback callback) {
++  if (!HeliumPersonaAllowsPlatformCredentials(GetBrowserContext())) {
++    std::move(callback).Run(false);
++    return;
++  }
++
+   IsUvpaaAvailableInternal(caller_origin, std::move(callback),
+                            /*is_get_client_capabilities_call=*/false);
+ }
+@@ -2090,6 +2145,11 @@ void AuthenticatorCommonImpl::IsConditio
+     url::Origin caller_origin,
+     blink::mojom::Authenticator::IsConditionalMediationAvailableCallback
+         callback) {
++  if (!HeliumPersonaAllowsPlatformCredentials(GetBrowserContext())) {
++    std::move(callback).Run(false);
++    return;
++  }
++
+   // Conditional mediation is always supported if the virtual environment is
+   // providing a platform authenticator.
+   GetWebAuthenticationDelegate()
+--- a/third_party/blink/renderer/modules/battery/battery_manager.cc
++++ b/third_party/blink/renderer/modules/battery/battery_manager.cc
+@@ -5,6 +5,9 @@
+ #include "third_party/blink/renderer/modules/battery/battery_manager.h"
+ 
+ #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/web/web_local_frame.h"
++#include "third_party/blink/public/web/web_local_frame_client.h"
+ #include "third_party/blink/renderer/core/dom/dom_exception.h"
+ #include "third_party/blink/renderer/core/dom/events/event.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+@@ -16,6 +19,27 @@
+ 
+ namespace blink {
+ 
++namespace {
++
++const HeliumPersonaSnapshot* GetPersonaSnapshot(LocalDOMWindow* window) {
++  if (!window || !window->GetFrame() || !window->GetFrame()->Client() ||
++      !window->GetFrame()->Client()->GetWebFrame() ||
++      !window->GetFrame()->Client()->GetWebFrame()->Client()) {
++    return nullptr;
++  }
++  const HeliumPersonaSnapshot& snapshot =
++      window->GetFrame()->Client()->GetWebFrame()->Client()
++          ->GetHeliumPersonaSnapshot();
++  return snapshot.IsEnabled() ? &snapshot : nullptr;
++}
++
++bool HeliumPersonaAllowsRealBatteryStatus(LocalDOMWindow* window) {
++  const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(window);
++  return !snapshot || snapshot->allow_real_battery_status;
++}
++
++}  // namespace
++
+ const char BatteryManager::kSupplementName[] = "BatteryManager";
+ 
+ // static
+@@ -67,6 +91,11 @@ ScriptPromise<BatteryManager> BatteryMan
+     battery_property_ = MakeGarbageCollected<BatteryProperty>(
+         ExecutionContext::From(script_state));
+ 
++    if (!HeliumPersonaAllowsRealBatteryStatus(DomWindow())) {
++      battery_property_->Resolve(this);
++      return battery_property_->Promise(script_state->World());
++    }
++
+     // If the context is in a stopped state already, do not start updating.
+     if (!GetExecutionContext() || GetExecutionContext()->IsContextDestroyed()) {
+       battery_property_->Resolve(this);
+@@ -123,6 +152,9 @@ void BatteryManager::DidUpdateData() {
+ }
+ 
+ void BatteryManager::RegisterWithDispatcher() {
++  if (!HeliumPersonaAllowsRealBatteryStatus(DomWindow())) {
++    return;
++  }
+   battery_dispatcher_->AddController(this, DomWindow());
+ }
+ 
+@@ -136,7 +168,8 @@ bool BatteryManager::HasLastData() {
+ 
+ void BatteryManager::ContextLifecycleStateChanged(
+     mojom::FrameLifecycleState state) {
+-  if (state == mojom::FrameLifecycleState::kRunning) {
++  if (state == mojom::FrameLifecycleState::kRunning &&
++      HeliumPersonaAllowsRealBatteryStatus(DomWindow())) {
+     has_event_listener_ = true;
+     StartUpdating();
+   } else {
+--- a/content/renderer/render_frame_impl.cc
++++ b/content/renderer/render_frame_impl.cc
+@@ -2130,6 +2130,10 @@ blink::WebFrameWidget* RenderFrameImpl::
+ }
+ 
+ void RenderFrameImpl::ScriptedPrint() {
++  if (persona_snapshot_.IsEnabled() && !persona_snapshot_.allow_web_printing) {
++    return;
++  }
++
+   bool user_initiated = GetLocalRootWebFrameWidget()->HandlingInputEvent();
+   for (auto& observer : observers_)
+     observer.ScriptedPrint(user_initiated);

@@ -6,6 +6,7 @@
 """Run Pylint over any module"""
 
 import argparse
+import inspect
 import os
 import shutil
 import subprocess
@@ -45,6 +46,13 @@ def _is_excluded_path(path):
     return any(path.parts[:len(prefix)] == prefix for prefix in _EXCLUDED_DIR_PREFIXES)
 
 
+def _run_pylint(args):
+    run_kwargs = {'exit': False}
+    if 'exit' not in inspect.signature(lint.Run).parameters:
+        run_kwargs = {'do_exit': False}
+    return lint.Run(args, **run_kwargs)
+
+
 def run_pylint(module_path, pylint_options, ignore_prefixes=tuple()):
     """Runs Pylint. Returns a boolean indicating success"""
     pylint_stats = Path(f'/run/user/{os.getuid()}/pylint_stats')
@@ -72,7 +80,7 @@ def run_pylint(module_path, pylint_options, ignore_prefixes=tuple()):
             input_paths.append(str(path))
     else:
         input_paths.append(str(module_path))
-    runner = lint.Run((*input_paths, *pylint_options), do_exit=False)
+    runner = _run_pylint((*input_paths, *pylint_options))
 
     if pylint_stats.is_dir():
         shutil.rmtree(str(pylint_stats))
