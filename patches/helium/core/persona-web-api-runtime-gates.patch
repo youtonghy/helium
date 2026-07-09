@@ -496,7 +496,7 @@
    } else {
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -2130,6 +2130,10 @@ blink::WebFrameWidget* RenderFrameImpl::
+@@ -2130,6 +2131,10 @@ blink::WebFrameWidget* RenderFrameImpl::
  }
  
  void RenderFrameImpl::ScriptedPrint() {

@@ -84,6 +84,7 @@ _PERSONA_RUNTIME_HOOK_GROUPS = {
     ),
     'noise token infra': (
         'HeliumNoiseTokenData::GetTokens',
+        'HeliumNoiseTokenData::GetFeatureToken',
         'HeliumNoiseFeature::kCanvas',
         'HeliumNoiseFeature::kAudio',
         'HeliumNoiseFeature::kHardware',
@@ -110,7 +111,8 @@ _PERSONA_RUNTIME_HOOK_GROUPS = {
         'CanvasNoiseToken',
         'noise_helper.h',
         'NoisePixels',
-        '!IsWebGL2()',
+        # WebGL1 and WebGL2 ArrayBufferView readPixels (not PIXEL_PACK GPU path).
+        'format == GL_RGBA && type == GL_UNSIGNED_BYTE && width > 0',
     ),
     'hardware webgl noise': (
         'HardwareNoiseToken',
@@ -233,8 +235,13 @@ _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS = {
     ),
     'manual display and media preference fields': (
         'editablePersona_.screen.width',
+        'editablePersona_.screen.height',
         'editablePersona_.screen.availLeft',
+        'editablePersona_.screen.availTop',
+        'editablePersona_.screen.availWidth',
+        'editablePersona_.screen.availHeight',
         'editablePersona_.screen.outerWidth',
+        'editablePersona_.screen.outerHeight',
         'editablePersona_.screen.deviceScaleFactor',
     ),
     'manual font and font rendering fields': (
@@ -242,6 +249,12 @@ _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS = {
         'fontFamiliesText_',
         'fontAliasesText_',
         'editablePersona_.fontRendering.engine',
+    ),
+    'manual noise toggles': (
+        'editablePersona_.advanced.canvasNoise',
+        'editablePersona_.advanced.audioNoise',
+        'editablePersona_.advanced.hardwareNoise',
+        'editablePersona_.advanced.fontMetricNoise',
     ),
     'manual media device fields': ('editablePersona_.mediaDevices.audioBaseLatency', ),
     'manual network fields': (

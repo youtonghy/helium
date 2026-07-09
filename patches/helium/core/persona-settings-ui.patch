@@ -196,7 +196,7 @@
 +}
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
-@@ -0,0 +1,489 @@
+@@ -0,0 +1,521 @@
 +<!-- Copyright 2026 The Helium Authors -->
 +<!-- You can use, redistribute, and/or modify this source code under -->
 +<!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
@@ -648,18 +648,50 @@
 +          value="{{editablePersona_.hardware.maxTouchPoints}}"></cr-input>
 +      <cr-input label="$i18n{personaFieldScreenWidthLabel}"
 +          value="{{editablePersona_.screen.width}}"></cr-input>
++      <cr-input label="Screen height"
++          value="{{editablePersona_.screen.height}}"></cr-input>
 +      <cr-input label="$i18n{personaFieldAvailLeftLabel}"
 +          value="{{editablePersona_.screen.availLeft}}"></cr-input>
++      <cr-input label="Screen avail top"
++          value="{{editablePersona_.screen.availTop}}"></cr-input>
++      <cr-input label="Screen avail width"
++          value="{{editablePersona_.screen.availWidth}}"></cr-input>
++      <cr-input label="Screen avail height"
++          value="{{editablePersona_.screen.availHeight}}"></cr-input>
 +      <cr-input label="$i18n{personaFieldOuterWidthLabel}"
 +          value="{{editablePersona_.screen.outerWidth}}"></cr-input>
++      <cr-input label="Outer height"
++          value="{{editablePersona_.screen.outerHeight}}"></cr-input>
 +      <cr-input label="$i18n{personaFieldDprLabel}"
 +          value="{{editablePersona_.screen.deviceScaleFactor}}"></cr-input>
 +      <cr-input label="$i18n{personaFieldFontsIdLabel}"
 +          value="{{editablePersona_.fonts.id}}"></cr-input>
++      <cr-input label="Font families (comma-separated)"
++          value="{{fontFamiliesText_}}"></cr-input>
++      <cr-input label="Font aliases (comma-separated)"
++          value="{{fontAliasesText_}}"></cr-input>
++      <cr-input label="UA-CH brands (Brand/Version, comma-separated)"
++          value="{{uaChBrandsText_}}"></cr-input>
 +      <cr-input label="$i18n{personaFieldFontEngineLabel}"
 +          value="{{editablePersona_.fontRendering.engine}}"></cr-input>
 +      <cr-input label="$i18n{personaFieldAudioBaseLatencyLabel}"
 +          value="{{editablePersona_.mediaDevices.audioBaseLatency}}"></cr-input>
++      <label class="field-label">
++        <input type="checkbox" checked="{{editablePersona_.advanced.canvasNoise::change}}">
++        Canvas noise
++      </label>
++      <label class="field-label">
++        <input type="checkbox" checked="{{editablePersona_.advanced.audioNoise::change}}">
++        Audio noise
++      </label>
++      <label class="field-label">
++        <input type="checkbox" checked="{{editablePersona_.advanced.hardwareNoise::change}}">
++        Hardware noise
++      </label>
++      <label class="field-label">
++        <input type="checkbox" checked="{{editablePersona_.advanced.fontMetricNoise::change}}">
++        Font metric noise
++      </label>
 +      <div class="field">
 +        <div class="field-label">
 +          <span>$i18n{personaFieldNetworkTypeLabel}</span>
@@ -688,7 +720,7 @@
 +</settings-subpage>
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
-@@ -0,0 +1,737 @@
+@@ -0,0 +1,784 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -865,8 +897,13 @@
 +    },
 +    screen: {
 +      width: 0,
++      height: 0,
 +      availLeft: 0,
++      availTop: 0,
++      availWidth: 0,
++      availHeight: 0,
 +      outerWidth: 0,
++      outerHeight: 0,
 +      deviceScaleFactor: 1,
 +      orientationType: '',
 +      reducedMotion: false,
@@ -874,7 +911,7 @@
 +      dynamicRange: '',
 +      monochromeDepth: 0,
 +    },
-+    fonts: {id: ''},
++    fonts: {id: '', families: [] as string[], aliases: [] as string[]},
 +    fontRendering: {
 +      engine: '',
 +      useAutohinter: false,
@@ -889,7 +926,8 @@
 +      reduceSystemInfo: false,
 +      canvasNoise: true,
 +      audioNoise: true,
-+      fontMetricNoise: true,
++      hardwareNoise: true,
++      fontMetricNoise: false,
 +      cookieEnabled: true,
 +      pdfViewerEnabled: true,
 +      doNotTrackEnabled: false,
@@ -1051,6 +1089,7 @@
 +
 +    this.selectedProfileId_ = selectedProfile.id;
 +    this.editablePersona_ = this.mergePersona_(selectedProfile);
++    this.syncTextFieldsFromPersona_();
 +    this.syncCustomSelections_();
 +    const matchingPreset = this.presets_.find((preset: PersonaRecord) => {
 +      return preset && preset.name === selectedProfile.name;
@@ -1102,6 +1141,12 @@
 +      fonts: {
 +        ...basePersona.fonts,
 +        ...(persona.fonts || {}),
++        families: Array.isArray(persona.fonts?.families) ?
++            persona.fonts.families :
++            (basePersona.fonts.families || []),
++        aliases: Array.isArray(persona.fonts?.aliases) ?
++            persona.fonts.aliases :
++            (basePersona.fonts.aliases || []),
 +      },
 +      fontRendering: {
 +        ...basePersona.fontRendering,
@@ -1193,6 +1238,7 @@
 +    if (personaId) {
 +      this.selectedProfileId_ = personaId;
 +    }
++    this.applyTextFieldsToPersona_();
 +    this.applyPersonaResponse_(
 +        await PersonaBrowserProxyImpl.getInstance().savePersona(
 +            this.editablePersona_));
@@ -1278,6 +1324,39 @@
 +  private async onRefreshFingerprintsClick_() {
 +    await PersonaBrowserProxyImpl.getInstance().refreshFingerprints();
 +    await this.refreshProfiles_();
++    this.importStatus_ =
++        'Fingerprints refreshed. Reload open tabs for tokens to take effect.';
++  }
++
++  private syncTextFieldsFromPersona_() {
++    const fonts = this.editablePersona_?.fonts || {};
++    const families = Array.isArray(fonts.families) ? fonts.families : [];
++    const aliases = Array.isArray(fonts.aliases) ? fonts.aliases : [];
++    this.fontFamiliesText_ = families.join(', ');
++    this.fontAliasesText_ = aliases.join(', ');
++    const brands = Array.isArray(this.editablePersona_?.uaCh?.brands) ?
++        this.editablePersona_.uaCh.brands :
++        [];
++    this.uaChBrandsText_ = brands
++                               .map((item: {brand?: string, version?: string}) =>
++                                        `${item.brand || ''}/${item.version || ''}`)
++                               .filter((item: string) => item !== '/')
++                               .join(', ');
++  }
++
++  private applyTextFieldsToPersona_() {
++    const splitCsv = (value: string) =>
++        (value || '')
++            .split(',')
++            .map(part => part.trim())
++            .filter(part => !!part);
++    this.set('editablePersona_.fonts.families', splitCsv(this.fontFamiliesText_));
++    this.set('editablePersona_.fonts.aliases', splitCsv(this.fontAliasesText_));
++    const brands = splitCsv(this.uaChBrandsText_).map(entry => {
++      const [brand, version] = entry.split('/');
++      return {brand: (brand || '').trim(), version: (version || '').trim()};
++    }).filter(item => item.brand && item.version);
++    this.set('editablePersona_.uaCh.brands', brands);
 +  }
 +
 +  private onUaChPlatformChange_(event: Event) {

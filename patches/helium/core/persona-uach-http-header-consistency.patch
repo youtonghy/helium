@@ -136,7 +136,7 @@
  // with a frame. It must be a main frame navigation. `ftn_for_devtools_override`
 --- a/content/browser/renderer_host/navigation_request.cc
 +++ b/content/browser/renderer_host/navigation_request.cc
-@@ -369,6 +369,53 @@ std::string ComputeUserAgentValue(const
+@@ -369,6 +369,54 @@ std::string ComputeUserAgentValue(const
    return GetContentClient()->browser()->GetUserAgent();
  }
 
@@ -177,10 +177,11 @@
 +  if (!snapshot.ua_ch_brands.empty()) {
 +    metadata.brand_version_list.clear();
 +    metadata.brand_full_version_list.clear();
++    const std::string& full_version = snapshot.ua_ch_full_version;
 +    for (const auto& brand : snapshot.ua_ch_brands) {
 +      metadata.brand_version_list.emplace_back(brand.brand, brand.version);
-+      metadata.brand_full_version_list.emplace_back(brand.brand,
-+                                                    brand.version);
++      metadata.brand_full_version_list.emplace_back(
++          brand.brand, !full_version.empty() ? full_version : brand.version);
 +    }
 +  }
 +
@@ -190,7 +191,7 @@
  void AddAdditionalRequestHeaders(
      net::HttpRequestHeaders* headers,
      const GURL& url,
-@@ -401,7 +448,10 @@ void AddAdditionalRequestHeaders(
+@@ -401,7 +449,10 @@ void AddAdditionalRequestHeaders(
 
    headers->SetHeaderIfMissing(
        net::HttpRequestHeaders::kUserAgent,
@@ -202,7 +203,7 @@
 
    if (!render_prefs.enable_referrers) {
      *referrer =
-@@ -2088,7 +2138,10 @@ NavigationRequest::NavigationRequest(
+@@ -2088,7 +2139,10 @@ NavigationRequest::NavigationRequest(
            GetTentativeOriginAtRequestTime(), &client_hints_headers,
            browser_context, client_hints_delegate, is_overriding_user_agent(),
            frame_tree_node_, commit_params_->frame_policy.container_policy,
@@ -214,7 +215,7 @@
        headers.MergeFrom(client_hints_headers);
      }
 
-@@ -6095,14 +6148,18 @@ void NavigationRequest::OnRedirectChecks
+@@ -6095,14 +6149,18 @@ void NavigationRequest::OnRedirectChecks
          GetTentativeOriginAtRequestTime(), &client_hints_extra_headers,
          browser_context, client_hints_delegate, is_overriding_user_agent(),
          frame_tree_node_, commit_params_->frame_policy.container_policy,
@@ -235,7 +236,7 @@
      }
    }
 
-@@ -10065,10 +10122,15 @@ void NavigationRequest::SetIsOverridingU
+@@ -10065,10 +10123,15 @@ void NavigationRequest::SetIsOverridingU
      UpdateNavigationRequestClientUaHeaders(
          GetTentativeOriginAtRequestTime(), client_hints_delegate,
          is_overriding_user_agent(), frame_tree_node_, &headers,
@@ -266,7 +267,7 @@
  #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 
  namespace {
-@@ -36,6 +38,45 @@ void LogCriticalCHStatus(CriticalCHResta
+@@ -36,6 +38,46 @@ void LogCriticalCHStatus(CriticalCHResta
    base::UmaHistogramEnumeration("ClientHints.CriticalCHRestart", status);
  }
 
@@ -299,10 +300,11 @@
 +  if (!snapshot.ua_ch_brands.empty()) {
 +    metadata.brand_version_list.clear();
 +    metadata.brand_full_version_list.clear();
++    const std::string& full_version = snapshot.ua_ch_full_version;
 +    for (const auto& brand : snapshot.ua_ch_brands) {
 +      metadata.brand_version_list.emplace_back(brand.brand, brand.version);
-+      metadata.brand_full_version_list.emplace_back(brand.brand,
-+                                                    brand.version);
++      metadata.brand_full_version_list.emplace_back(
++          brand.brand, !full_version.empty() ? full_version : brand.version);
 +    }
 +  }
 +
@@ -312,7 +314,7 @@
  }  // namespace
 
  namespace content {
-@@ -163,8 +206,14 @@ void CriticalClientHintsThrottle::MaybeR
+@@ -163,8 +207,14 @@ void CriticalClientHintsThrottle::MaybeR
          frame_tree_node->navigation_request()->is_overriding_user_agent(),
          frame_tree_node,
          frame_tree_node->navigation_request()
