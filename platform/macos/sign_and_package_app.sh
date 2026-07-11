@@ -35,6 +35,8 @@ fi
 _app_path="out/Default/$_app_name.app"
 _framework_path="$_app_path/Contents/Frameworks/$_app_name Framework.framework"
 
+python3 "$_main_repo/devutils/sync_component_dylibs.py" "$_app_path" out/Default
+
 xattr -cs "$_app_path" || true
 
 ___helium_codesign_if_exists() {

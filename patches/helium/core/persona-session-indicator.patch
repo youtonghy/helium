@@ -1,5 +1,3 @@
-Index: b/chrome/browser/ui/view_ids.h
-===================================================================
 --- a/chrome/browser/ui/view_ids.h
 +++ b/chrome/browser/ui/view_ids.h
 @@ -69,6 +69,7 @@ enum ViewID {
@@ -10,8 +8,6 @@ Index: b/chrome/browser/ui/view_ids.h
  
    // Location bar content settings icons.
    VIEW_ID_CONTENT_SETTING_JAVASCRIPT,
-Index: b/chrome/browser/ui/views/persona/persona_indicator_button.cc
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/views/persona/persona_indicator_button.cc
 @@ -0,0 +1,167 @@
@@ -182,8 +178,6 @@ Index: b/chrome/browser/ui/views/persona/persona_indicator_button.cc
 +
 +BEGIN_METADATA(PersonaIndicatorButton)
 +END_METADATA
-Index: b/chrome/browser/ui/views/persona/persona_indicator_button.h
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/views/persona/persona_indicator_button.h
 @@ -0,0 +1,39 @@
@@ -226,8 +220,6 @@ Index: b/chrome/browser/ui/views/persona/persona_indicator_button.h
 +};
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_PERSONA_PERSONA_INDICATOR_BUTTON_H_
-Index: b/chrome/browser/ui/views/persona/persona_indicator_menu_model.cc
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/views/persona/persona_indicator_menu_model.cc
 @@ -0,0 +1,181 @@
@@ -412,8 +404,6 @@ Index: b/chrome/browser/ui/views/persona/persona_indicator_menu_model.cc
 +    }
 +  }
 +}
-Index: b/chrome/browser/ui/views/persona/persona_indicator_menu_model.h
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/views/persona/persona_indicator_menu_model.h
 @@ -0,0 +1,52 @@
@@ -469,8 +459,6 @@ Index: b/chrome/browser/ui/views/persona/persona_indicator_menu_model.h
 +};
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_PERSONA_PERSONA_INDICATOR_MENU_MODEL_H_
-Index: b/chrome/browser/ui/views/toolbar/toolbar_view.cc
-===================================================================
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
 @@ -85,6 +85,7 @@
@@ -505,8 +493,6 @@ Index: b/chrome/browser/ui/views/toolbar/toolbar_view.cc
  }
  
  bool ToolbarView::UpdateSecurityState() {
-Index: b/chrome/browser/ui/views/toolbar/toolbar_view.h
-===================================================================
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.h
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
 @@ -66,6 +66,7 @@ class ToolbarController;
@@ -535,8 +521,6 @@ Index: b/chrome/browser/ui/views/toolbar/toolbar_view.h
  
    // Subscription for when tab strip mode changes
    base::CallbackListSubscription vertical_tab_subscription_;
-Index: b/chrome/browser/ui/BUILD.gn
-===================================================================
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
 @@ -4480,6 +4480,10 @@ static_library("ui") {

@@ -1,5 +1,3 @@
-Index: chromium_src/chrome/browser/ui/color/material_chrome_color_mixer.cc
-===================================================================
 --- a/chrome/browser/ui/color/material_chrome_color_mixer.cc
 +++ b/chrome/browser/ui/color/material_chrome_color_mixer.cc
 @@ -50,6 +50,9 @@ void ApplyDefaultChromeRefreshToolbarCol
@@ -47,8 +45,6 @@ Index: chromium_src/chrome/browser/ui/color/material_chrome_color_mixer.cc
    mixer[kColorToolbarText] = {kColorToolbarTextDefault};
    mixer[kColorToolbarTextDefault] = {ui::kColorSysOnSurfaceSecondary};
    mixer[kColorToolbarTextDisabled] = {kColorToolbarTextDisabledDefault};
-Index: chromium_src/chrome/browser/ui/color/chrome_color_mixer.cc
-===================================================================
 --- a/chrome/browser/ui/color/chrome_color_mixer.cc
 +++ b/chrome/browser/ui/color/chrome_color_mixer.cc
 @@ -119,9 +119,13 @@ ui::ColorTransform GetToolbarTopSeparato
@@ -79,8 +75,6 @@ Index: chromium_src/chrome/browser/ui/color/chrome_color_mixer.cc
    mixer[kColorToolbarFeaturePromoHighlight] =
        ui::PickGoogleColor(ui::kColorAccent, kColorToolbar,
                            color_utils::kMinimumVisibleContrastRatio);
-Index: chromium_src/ui/color/ui_color_mixer.cc
-===================================================================
 --- a/ui/color/ui_color_mixer.cc
 +++ b/ui/color/ui_color_mixer.cc
 @@ -31,7 +31,8 @@ void AddUiColorMixer(ColorProvider* prov
@@ -93,8 +87,6 @@ Index: chromium_src/ui/color/ui_color_mixer.cc
    mixer[kColorBubbleBorderShadowLarge] = {SetAlpha(kColorShadowBase, 0x1A)};
    mixer[kColorBubbleBorderShadowSmall] = {SetAlpha(kColorShadowBase, 0x33)};
    mixer[kColorBubbleFooterBackground] = {kColorSubtleEmphasisBackground};
-Index: chromium_src/chrome/browser/ui/color/material_tab_strip_color_mixer.cc
-===================================================================
 --- a/chrome/browser/ui/color/material_tab_strip_color_mixer.cc
 +++ b/chrome/browser/ui/color/material_tab_strip_color_mixer.cc
 @@ -33,9 +33,9 @@ void AddMaterialTabStripColorMixer(ui::C
@@ -144,8 +136,6 @@ Index: chromium_src/chrome/browser/ui/color/material_tab_strip_color_mixer.cc
  
    mixer[kColorTabSearchButtonCRForegroundFrameActive] = {
        ui::kColorSysOnSurfacePrimary};
-Index: chromium_src/ui/color/sys_color_mixer.cc
-===================================================================
 --- a/ui/color/sys_color_mixer.cc
 +++ b/ui/color/sys_color_mixer.cc
 @@ -66,7 +66,7 @@ void AddThemedSysColorOverrides(ColorMix

@@ -58,7 +58,10 @@ I18N_TOOL_PATHS = {
     'devutils/i18n_lint.py',
 }
 
-SKILL_PATH = '.codex/skills/nitrous-validate'
+SKILL_PATHS = {
+    'nitrous-dev': '.codex/skills/nitrous-dev',
+    'nitrous-validate': '.codex/skills/nitrous-validate',
+}
 PYTHON_SCAN_EXCLUDES = {
     'devutils/i18n-data',
 }
@@ -89,9 +92,7 @@ def run_status(command, *, cwd=ROOT):
 
 
 def git_check_ignore(path):
-    result = subprocess.run(['git', 'check-ignore', '-q', str(path)],
-                            cwd=ROOT,
-                            check=False)
+    result = subprocess.run(['git', 'check-ignore', '-q', str(path)], cwd=ROOT, check=False)
     return result.returncode == 0
 
 
@@ -221,45 +222,49 @@ def run_i18n_checks(python):
 
 
 def run_skill_self_checks():
-    skill_dir = ROOT / SKILL_PATH
-    skill_md = skill_dir / 'SKILL.md'
-    runner = skill_dir / 'scripts' / 'run_validation.py'
-
     print('\nSkill self-checks:', flush=True)
-    if not skill_md.is_file():
-        print(f'ERROR: Missing {skill_md.relative_to(ROOT)}', file=sys.stderr)
-        sys.exit(1)
+    for expected_name, relative_dir in SKILL_PATHS.items():
+        skill_md = ROOT / relative_dir / 'SKILL.md'
+        if not skill_md.is_file():
+            print(f'ERROR: Missing {skill_md.relative_to(ROOT)}', file=sys.stderr)
+            sys.exit(1)
 
-    content = skill_md.read_text(encoding='utf-8')
-    if not content.startswith('---\n'):
-        print('ERROR: SKILL.md must start with YAML frontmatter.', file=sys.stderr)
-        sys.exit(1)
-    try:
-        _, frontmatter, body = content.split('---', 2)
-    except ValueError:
-        print('ERROR: SKILL.md frontmatter is not closed.', file=sys.stderr)
-        sys.exit(1)
+        content = skill_md.read_text(encoding='utf-8')
+        if not content.startswith('---\n'):
+            print(f'ERROR: {skill_md.relative_to(ROOT)} must start with YAML frontmatter.',
+                  file=sys.stderr)
+            sys.exit(1)
+        try:
+            _, frontmatter, body = content.split('---', 2)
+        except ValueError:
+            print(f'ERROR: {skill_md.relative_to(ROOT)} frontmatter is not closed.',
+                  file=sys.stderr)
+            sys.exit(1)
 
-    required = {'name': False, 'description': False}
-    for line in frontmatter.splitlines():
-        if line.startswith('name:'):
-            required['name'] = line.split(':', 1)[1].strip() == 'nitrous-validate'
-        if line.startswith('description:'):
-            required['description'] = bool(line.split(':', 1)[1].strip())
-    missing = [key for key, ok in required.items() if not ok]
-    if missing:
-        print(f"ERROR: SKILL.md missing/invalid frontmatter keys: {', '.join(missing)}",
-              file=sys.stderr)
-        sys.exit(1)
-    if '[TODO' in content:
-        print('ERROR: SKILL.md still contains TODO template text.', file=sys.stderr)
-        sys.exit(1)
-    if not body.strip():
-        print('ERROR: SKILL.md body is empty.', file=sys.stderr)
-        sys.exit(1)
+        required = {'name': False, 'description': False}
+        for line in frontmatter.splitlines():
+            if line.startswith('name:'):
+                required['name'] = line.split(':', 1)[1].strip() == expected_name
+            if line.startswith('description:'):
+                required['description'] = bool(line.split(':', 1)[1].strip())
+        missing = [key for key, ok in required.items() if not ok]
+        if missing:
+            print(
+                f"ERROR: {skill_md.relative_to(ROOT)} missing/invalid frontmatter keys: "
+                f"{', '.join(missing)}",
+                file=sys.stderr)
+            sys.exit(1)
+        if '[TODO' in content:
+            print(f'ERROR: {skill_md.relative_to(ROOT)} contains TODO template text.',
+                  file=sys.stderr)
+            sys.exit(1)
+        if not body.strip():
+            print(f'ERROR: {skill_md.relative_to(ROOT)} body is empty.', file=sys.stderr)
+            sys.exit(1)
+        print(f'  - {skill_md.relative_to(ROOT)} frontmatter/body OK')
 
+    runner = ROOT / SKILL_PATHS['nitrous-validate'] / 'scripts' / 'run_validation.py'
     ast.parse(runner.read_text(encoding='utf-8'), filename=str(runner))
-    print('  - SKILL.md frontmatter/body OK')
     print('  - scripts/run_validation.py syntax OK')
 
 
@@ -285,11 +290,15 @@ def prepare_source_tree(python, source_tree):
     cache_dir.mkdir(exist_ok=True)
 
     run([python, './utils/downloads.py', 'retrieve', '-i', 'deps.ini', '-c', cache_dir])
-    if run_status([python, './utils/downloads.py', 'retrieve', '-i', 'downloads.ini', '-c', cache_dir]) != 0:
+    if run_status(
+        [python, './utils/downloads.py', 'retrieve', '-i', 'downloads.ini', '-c', cache_dir]) != 0:
         run([python, './utils/clone.py', '-o', source_tree])
 
     if not source_tree.is_dir():
-        run([python, './utils/downloads.py', 'unpack', '-i', 'downloads.ini', '-c', cache_dir, source_tree])
+        run([
+            python, './utils/downloads.py', 'unpack', '-i', 'downloads.ini', '-c', cache_dir,
+            source_tree
+        ])
     run([python, './utils/downloads.py', 'unpack', '-i', 'deps.ini', '-c', cache_dir, source_tree])
 
 
@@ -343,7 +352,7 @@ def selected_auto_checks(files, python, lint_python):
         path_in({'.github/workflows/lint.yml'}),
     ]) or any(patch_might_affect_i18n(path) for path in files)
     skill_touched = touches_any(files, [
-        path_under(SKILL_PATH),
+        *(path_under(path) for path in SKILL_PATHS.values()),
     ])
 
     if utils_touched:
@@ -369,9 +378,10 @@ def print_changed(files):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--full',
-                        action='store_true',
-                        help='Run all local CI-equivalent checks except source-backed Chromium checks.')
+    parser.add_argument(
+        '--full',
+        action='store_true',
+        help='Run all local CI-equivalent checks except source-backed Chromium checks.')
     parser.add_argument('--self-check-only',
                         action='store_true',
                         help='Only validate this skill and runner script.')
@@ -386,9 +396,10 @@ def main():
     parser.add_argument('--changed-from',
                         default='HEAD',
                         help='Git ref used for auto-scope validation. Defaults to HEAD.')
-    parser.add_argument('--python',
-                        default=sys.executable,
-                        help='Python executable for CI Python commands. Defaults to this interpreter.')
+    parser.add_argument(
+        '--python',
+        default=sys.executable,
+        help='Python executable for CI Python commands. Defaults to this interpreter.')
     parser.add_argument('--lint-python',
                         help='Python executable for lint.yml checks. Defaults to --python.')
     args = parser.parse_args()

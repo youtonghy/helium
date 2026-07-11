@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import hot_patch_export
+
 ROOT = Path(__file__).resolve().parent.parent
 PATCHES_DIR = ROOT / 'patches'
 CODE_DIRS = ('devutils/', 'utils/')
@@ -22,6 +24,38 @@ FORBIDDEN_PATCH_TOKENS = (
     '.rej',
     'Index:',
 )
+
+
+def normalize_patch_artifacts(content):
+    """Remove quilt Index metadata without modifying diff hunks."""
+    lines = content.splitlines(keepends=True)
+    normalized = []
+    skip_separator = False
+    for line in lines:
+        if line.startswith('Index:'):
+            skip_separator = True
+            continue
+        if skip_separator and line.startswith('==='):
+            skip_separator = False
+            continue
+        skip_separator = False
+        normalized.append(line)
+    return ''.join(normalized)
+
+
+def normalize_all_patch_artifacts():
+    """Normalize patch metadata through the guard's explicit write mode."""
+    changed = []
+    for patch_path in sorted(PATCHES_DIR.rglob('*.patch')):
+        content = patch_path.read_text(encoding='utf-8')
+        normalized = normalize_patch_artifacts(content)
+        if normalized == content:
+            continue
+        temp_path = patch_path.with_suffix(patch_path.suffix + '.tmp')
+        temp_path.write_text(normalized, encoding='utf-8')
+        os.replace(temp_path, patch_path)
+        changed.append(str(patch_path.relative_to(ROOT)))
+    return changed
 
 
 def quote_command(command):
@@ -233,20 +267,126 @@ def run_patch_source(args, files):
     ])
 
 
-def run_after_hotfix(args, files):
-    """Refresh a patch from a disposable hotfix tree, then run both guards."""
-    patchwork_src = ROOT / 'codex_tmp' / 'patchwork_src'
+def _env_path(primary, legacy, default):
+    value = os.environ.get(primary) or os.environ.get(legacy)
+    if not value:
+        return default
+    path = Path(value)
+    return path if path.is_absolute() else ROOT / path
+
+
+def hot_export_paths():
+    """Return the configured hot tree, merged queue, and session directory."""
+    hot_tree = _env_path('NITROUS_SRC_DIR', 'HELIUM_SRC_DIR', ROOT / 'build' / 'src')
+    merged_queue = _env_path('NITROUS_MERGED_PATCHES_DIR', 'HELIUM_MERGED_PATCHES_DIR',
+                             ROOT / 'build' / 'platform_macos_patches')
+    session_dir = ROOT / 'codex_tmp' / 'hot-export'
+    return hot_tree.resolve(), merged_queue.resolve(), session_dir
+
+
+def hot_export_context():
+    """Return the configured export context."""
+    hot_tree, merged_queue, session_dir = hot_export_paths()
+    return hot_patch_export.ExportContext(ROOT, hot_tree, merged_queue, session_dir)
+
+
+def run_hot_start(args):
+    """Capture the pre-edit state for a future top-patch export."""
+    context = hot_export_context()
+    manifest = hot_patch_export.start_session(context, args.patch, args.files)
+    print(f'Hot export session started: {manifest.relative_to(ROOT)}')
+    print('Edit only the declared files in build/src, then run export-hotfix.')
+
+
+def run_hot_add(args):
+    """Capture additional files before expanding an active hot-edit scope."""
+    context = hot_export_context()
+    added = hot_patch_export.add_session_files(context, args.files)
+    print('Added hot export baselines:')
+    for path in added:
+        print(f'  - {path}')
+
+
+def run_export_hotfix(args):
+    """Stage, validate, and publish a new root-stack patch from hot-tree edits."""
+    context = hot_export_context()
+    patchwork_src = context.session_dir / 'patchwork-src'
     unpack_source_tree(args, patchwork_src)
+    staged_queue = hot_patch_export.stage_session(context, patchwork_src)
 
-    env = os.environ.copy()
-    env['NITROUS_QUILT_SRC'] = str(patchwork_src)
-    env['HELIUM_QUILT_SRC'] = str(patchwork_src) # legacy alias
-    run(['./devutils/quilt-fix.sh', args.patch], env=env)
+    chromium_src = ROOT / 'chromium_src'
+    run([args.python, './devutils/check_chromium_src_clean.py', '--source-tree', chromium_src])
+    run([
+        args.python, './devutils/validate_patches.py', '-l', chromium_src, '-p', staged_queue, '-s',
+        staged_queue / 'series', '-v'
+    ])
 
+    staged_merged = context.session_dir / 'staged-merged-patches'
+    run([
+        args.python, './utils/patches.py', 'merge', staged_merged, staged_queue,
+        ROOT / 'platform' / 'macos' / 'patches'
+    ])
+    run([
+        args.python, './devutils/validate_patches.py', '-l', chromium_src, '-p', staged_merged,
+        '-s', staged_merged / 'series', '-v'
+    ])
+
+    hot_patch_export.publish_staged_patch(context, staged_queue)
     files = changed_files(args.changed_from)
     print_changed(files)
     run_quick(args, files)
     run_patch_source(args, files)
+
+
+def run_hot_abort():
+    """Discard an incomplete hot export session without touching source files."""
+    _hot_tree, _merged_queue, session_dir = hot_export_paths()
+    if session_dir.exists():
+        shutil.rmtree(session_dir)
+        print(f'Removed hot export session: {session_dir.relative_to(ROOT)}')
+    else:
+        print('No hot export session exists.')
+
+
+def run_normalize_artifacts():
+    """Remove forbidden quilt metadata, then verify the full patch queue."""
+    changed = normalize_all_patch_artifacts()
+    if changed:
+        print('Normalized patch metadata:')
+        for path in changed:
+            print(f'  - {path}')
+    else:
+        print('No patch metadata needed normalization.')
+    preflight([], scan_all_patches=True)
+
+
+def validate_mode_arguments(parser, args):
+    """Validate mode-specific CLI arguments."""
+    if args.mode == 'hot-start' and (not args.patch or not args.files):
+        parser.error('--mode hot-start requires --patch <new.patch> and at least one --file')
+    if args.mode == 'hot-add' and not args.files:
+        parser.error('--mode hot-add requires at least one --file')
+    if args.mode not in ('hot-start', 'hot-add') and args.files:
+        parser.error('--file is only valid with --mode hot-start or hot-add')
+    if args.mode != 'hot-start' and args.patch:
+        parser.error('--patch is only valid with --mode hot-start')
+    if args.patch and (Path(args.patch).is_absolute() or '..' in Path(args.patch).parts):
+        parser.error('--patch must be a path relative to patches/')
+
+
+def dispatch_mode(args, files):
+    """Dispatch a validated guard mode."""
+    handlers = {
+        'quick': lambda: run_quick(args, files),
+        'patch-source': lambda: run_patch_source(args, files),
+        'pre-build': lambda: run_patch_source(args, files),
+        'hot-start': lambda: run_hot_start(args),
+        'hot-add': lambda: run_hot_add(args),
+        'export-hotfix': lambda: run_export_hotfix(args),
+        'hot-abort': run_hot_abort,
+        'normalize-artifacts': run_normalize_artifacts,
+    }
+    handlers[args.mode]()
 
 
 def main():
@@ -254,29 +394,29 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mode',
                         required=True,
-                        choices=('quick', 'patch-source', 'pre-build', 'after-hotfix'),
+                        choices=('quick', 'patch-source', 'pre-build', 'hot-start', 'hot-add',
+                                 'export-hotfix', 'hot-abort', 'normalize-artifacts'),
                         help='Guard mode to run.')
-    parser.add_argument('--patch', help='Patch name for --mode after-hotfix.')
+    parser.add_argument('--patch', help='New root-stack patch name for --mode hot-start.')
+    parser.add_argument('--file',
+                        action='append',
+                        dest='files',
+                        default=[],
+                        help='Chromium source path for --mode hot-start/hot-add. Repeatable.')
     parser.add_argument('--changed-from', default='HEAD', help='Git ref used for scoped changes.')
     parser.add_argument('--python', default=sys.executable, help='Python executable to use.')
     args = parser.parse_args()
 
-    if args.mode == 'after-hotfix' and not args.patch:
-        parser.error('--mode after-hotfix requires --patch <patch-name>')
-    if args.patch and (Path(args.patch).is_absolute() or '..' in Path(args.patch).parts):
-        parser.error('--patch must be a path relative to patches/')
+    validate_mode_arguments(parser, args)
 
     files = changed_files(args.changed_from)
     print_changed(files)
 
-    if args.mode == 'quick':
-        run_quick(args, files)
-    elif args.mode == 'patch-source':
-        run_patch_source(args, files)
-    elif args.mode == 'pre-build':
-        run_patch_source(args, files)
-    elif args.mode == 'after-hotfix':
-        run_after_hotfix(args, files)
+    try:
+        dispatch_mode(args, files)
+    except hot_patch_export.ExportError as error:
+        print(f'ERROR: {error}', file=sys.stderr)
+        sys.exit(1)
 
     print('\nAgent patch guard completed successfully.')
 

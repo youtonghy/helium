@@ -1,5 +1,3 @@
-Index: b/chrome/browser/resources/BUILD.gn
-===================================================================
 --- a/chrome/browser/resources/BUILD.gn
 +++ b/chrome/browser/resources/BUILD.gn
 @@ -67,6 +67,7 @@ group("resources") {
@@ -10,8 +8,6 @@ Index: b/chrome/browser/resources/BUILD.gn
        "privacy_sandbox/internals:resources",
        "private_ai_internals:resources",
        "profile_internals:resources",
-Index: b/chrome/browser/resources/persona_picker/persona_picker.html
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/persona_picker/persona_picker.html
 @@ -0,0 +1,12 @@
@@ -27,8 +23,6 @@ Index: b/chrome/browser/resources/persona_picker/persona_picker.html
 +  <persona-picker-app></persona-picker-app>
 +</body>
 +</html>
-Index: b/chrome/browser/ui/BUILD.gn
-===================================================================
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
 @@ -172,6 +172,10 @@ static_library("ui") {
@@ -42,8 +36,6 @@ Index: b/chrome/browser/ui/BUILD.gn
      "webui/prefs_internals_source.cc",
      "webui/prefs_internals_source.h",
      "webui/privacy_sandbox/privacy_sandbox_internals_handler.cc",
-Index: b/chrome/browser/ui/startup/startup_browser_creator.cc
-===================================================================
 --- a/chrome/browser/ui/startup/startup_browser_creator.cc
 +++ b/chrome/browser/ui/startup/startup_browser_creator.cc
 @@ -6,6 +6,8 @@
@@ -274,8 +266,6 @@ Index: b/chrome/browser/ui/startup/startup_browser_creator.cc
  #if BUILDFLAG(IS_CHROMEOS)
        if (process_startup == chrome::startup::IsProcessStartup::kYes) {
          if (ash::floating_workspace_util::IsFloatingWorkspaceV2Enabled() ||
-Index: b/chrome/browser/ui/startup/startup_browser_creator.h
-===================================================================
 --- a/chrome/browser/ui/startup/startup_browser_creator.h
 +++ b/chrome/browser/ui/startup/startup_browser_creator.h
 @@ -5,6 +5,7 @@
@@ -310,8 +300,6 @@ Index: b/chrome/browser/ui/startup/startup_browser_creator.h
   private:
    friend class StartupBrowserCreatorImpl;
    friend class StartupBrowserCreatorInfobarsTest;
-Index: b/chrome/browser/ui/webui/BUILD.gn
-===================================================================
 --- a/chrome/browser/ui/webui/BUILD.gn
 +++ b/chrome/browser/ui/webui/BUILD.gn
 @@ -98,6 +98,7 @@ source_set("configs") {
@@ -322,8 +310,6 @@ Index: b/chrome/browser/ui/webui/BUILD.gn
        ]
      }
    } else {
-Index: b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
-===================================================================
 --- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
 +++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
 @@ -205,6 +205,7 @@
@@ -342,8 +328,6 @@ Index: b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
    map.AddWebUIConfig(std::make_unique<ProfileCustomizationUIConfig>());
    map.AddWebUIConfig(std::make_unique<ProfilePickerUIConfig>());
    map.AddWebUIConfig(std::make_unique<SigninErrorUIConfig>());
-Index: b/chrome/browser/ui/webui/persona_picker/persona_picker_ui.cc
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/webui/persona_picker/persona_picker_ui.cc
 @@ -0,0 +1,143 @@
@@ -490,8 +474,6 @@ Index: b/chrome/browser/ui/webui/persona_picker/persona_picker_ui.cc
 +PersonaPickerUI::~PersonaPickerUI() = default;
 +
 +WEB_UI_CONTROLLER_TYPE_IMPL(PersonaPickerUI)
-Index: b/chrome/browser/ui/webui/webui_urls_for_test.cc
-===================================================================
 --- a/chrome/browser/ui/webui/webui_urls_for_test.cc
 +++ b/chrome/browser/ui/webui/webui_urls_for_test.cc
 @@ -127,6 +127,7 @@ base::span<const std::string_view> GetCh
@@ -502,8 +484,6 @@ Index: b/chrome/browser/ui/webui/webui_urls_for_test.cc
        "chrome://policy",
        "chrome://predictors",
        "chrome://prefs-internals",
-Index: b/chrome/common/webui_url_constants.cc
-===================================================================
 --- a/chrome/common/webui_url_constants.cc
 +++ b/chrome/common/webui_url_constants.cc
 @@ -164,6 +164,7 @@ base::span<const base::cstring_view> Chr
@@ -514,8 +494,6 @@ Index: b/chrome/common/webui_url_constants.cc
        kChromeUIPolicyHost,
        kChromeUIPredictorsHost,
        kChromeUIPrefsInternalsHost,
-Index: b/chrome/common/webui_url_constants.h
-===================================================================
 --- a/chrome/common/webui_url_constants.h
 +++ b/chrome/common/webui_url_constants.h
 @@ -503,6 +503,8 @@ inline constexpr char kChromeUIProfileCu
@@ -527,8 +505,6 @@ Index: b/chrome/common/webui_url_constants.h
  inline constexpr char kChromeUIProfilePickerHost[] = "profile-picker";
  inline constexpr char kChromeUIProfilePickerStartupQuery[] = "startup";
  inline constexpr char kChromeUIProfilePickerGlicQuery[] = "glic";
-Index: b/chrome/browser/resources/persona_picker/BUILD.gn
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/persona_picker/BUILD.gn
 @@ -0,0 +1,27 @@
@@ -559,8 +535,6 @@ Index: b/chrome/browser/resources/persona_picker/BUILD.gn
 +
 +  webui_context_type = "trusted"
 +}
-Index: b/chrome/browser/resources/persona_picker/persona_picker.css
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/persona_picker/persona_picker.css
 @@ -0,0 +1,14 @@
@@ -578,8 +552,6 @@ Index: b/chrome/browser/resources/persona_picker/persona_picker.css
 +  color: var(--cr-primary-text-color);
 +  display: block;
 +}
-Index: b/chrome/browser/resources/persona_picker/persona_picker_browser_proxy.ts
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/persona_picker/persona_picker_browser_proxy.ts
 @@ -0,0 +1,61 @@
@@ -644,8 +616,6 @@ Index: b/chrome/browser/resources/persona_picker/persona_picker_browser_proxy.ts
 +    return instance || (instance = new PersonaPickerBrowserProxyImpl());
 +  }
 +}
-Index: b/chrome/browser/ui/persona_picker/persona_picker_ui.h
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/persona_picker/persona_picker_ui.h
 @@ -0,0 +1,17 @@
@@ -666,8 +636,6 @@ Index: b/chrome/browser/ui/persona_picker/persona_picker_ui.h
 +}  // namespace persona_picker
 +
 +#endif  // CHROME_BROWSER_UI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
-Index: b/chrome/browser/ui/webui/persona_picker/BUILD.gn
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/webui/persona_picker/BUILD.gn
 @@ -0,0 +1,25 @@
@@ -696,8 +664,6 @@ Index: b/chrome/browser/ui/webui/persona_picker/BUILD.gn
 +    "//ui/webui",
 +  ]
 +}
-Index: b/chrome/browser/ui/webui/persona_picker/persona_picker_ui.h
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/webui/persona_picker/persona_picker_ui.h
 @@ -0,0 +1,31 @@
@@ -732,8 +698,6 @@ Index: b/chrome/browser/ui/webui/persona_picker/persona_picker_ui.h
 +};
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_PERSONA_PICKER_PERSONA_PICKER_UI_H_
-Index: b/chrome/browser/resources/persona_picker/persona_picker_app.html
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/persona_picker/persona_picker_app.html
 @@ -0,0 +1,73 @@
@@ -810,8 +774,6 @@ Index: b/chrome/browser/resources/persona_picker/persona_picker_app.html
 +    </cr-button>
 +  </div>
 +</div>
-Index: b/chrome/browser/resources/persona_picker/persona_picker_app.ts
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/resources/persona_picker/persona_picker_app.ts
 @@ -0,0 +1,244 @@
@@ -1059,8 +1021,6 @@ Index: b/chrome/browser/resources/persona_picker/persona_picker_app.ts
 +}
 +
 +customElements.define(PersonaPickerAppElement.is, PersonaPickerAppElement);
-Index: b/tools/gritsettings/resource_ids.spec
-===================================================================
 --- a/tools/gritsettings/resource_ids.spec
 +++ b/tools/gritsettings/resource_ids.spec
 @@ -628,6 +628,10 @@
@@ -1074,8 +1034,6 @@ Index: b/tools/gritsettings/resource_ids.spec
    "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/pdf/resources.grd": {
      "META": {"sizes": {"includes": [200]}},
      "includes": [4540],
-Index: b/ui/webui/resources/tools/build_webui.gni
-===================================================================
 --- a/ui/webui/resources/tools/build_webui.gni
 +++ b/ui/webui/resources/tools/build_webui.gni
 @@ -577,6 +577,7 @@ template("build_webui") {
@@ -1086,8 +1044,6 @@ Index: b/ui/webui/resources/tools/build_webui.gni
          "//chrome/browser/resources/predictors",
          "//chrome/browser/resources/print_preview",
          "//chrome/browser/resources/profile_internals",
-Index: b/chrome/browser/ui/persona_picker/persona_picker_launcher.cc
-===================================================================
 --- /dev/null
 +++ b/chrome/browser/ui/persona_picker/persona_picker_launcher.cc
 @@ -0,0 +1,25 @@

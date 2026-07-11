@@ -7,7 +7,7 @@
 #   NITROUS_QUILT_SRC (fallback HELIUM_QUILT_SRC) = source tree
 #   (default: codex_tmp/patchwork_src)
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$SCRIPT_DIR/.." && pwd)
@@ -29,23 +29,38 @@ cd "$SRC"
 source "$REPO/devutils/set_quilt_vars.sh"
 
 echo "→ Pushing to $TARGET_PATCH ..."
-quilt push "$TARGET_PATCH" 2>&1 | tail -5
+set +e
+PUSH_OUTPUT=$(command quilt --quiltrc - push "$TARGET_PATCH" 2>&1)
+PUSH_STATUS=$?
+set -e
+printf '%s\n' "$PUSH_OUTPUT" | tail -5
+if [ "$PUSH_STATUS" -ne 0 ]; then
+    exit "$PUSH_STATUS"
+fi
+
+TOP_PATCH=$(command quilt --quiltrc - top)
+if [ "$TOP_PATCH" != "$TARGET_PATCH" ]; then
+    echo "error: quilt top is $TOP_PATCH; expected $TARGET_PATCH" >&2
+    exit 1
+fi
 
 echo "→ Refreshing ..."
-quilt refresh
+command quilt --quiltrc - refresh "$TARGET_PATCH"
 
 PATCH_FILE="$REPO/patches/$TARGET_PATCH"
 SRC_BASENAME=$(basename "$SRC")
 
 # Fix path prefixes and remove quilt artifacts
-python3 -c "
+python3 - "$PATCH_FILE" "$SRC_BASENAME" <<'PY'
 import re
+import sys
 
-with open('$PATCH_FILE', 'r') as f:
+patch_file, source_basename = sys.argv[1:]
+with open(patch_file, 'r', encoding='utf-8') as f:
     content = f.read()
 
 # Normalize quilt paths from the active source tree back to a/b prefixes.
-source_root = re.escape('$SRC_BASENAME')
+source_root = re.escape(source_basename)
 content = re.sub(rf'^--- {source_root}\.orig/', '--- a/', content, flags=re.MULTILINE)
 content = re.sub(rf'^--- {source_root}/', '--- a/', content, flags=re.MULTILINE)
 content = re.sub(rf'^\+\+\+ {source_root}/', '+++ b/', content, flags=re.MULTILINE)
@@ -64,9 +79,9 @@ for line in lines:
     skip_eq = False
     out.append(line)
 
-with open('$PATCH_FILE', 'w') as f:
+with open(patch_file, 'w', encoding='utf-8') as f:
     f.write('\n'.join(out))
-"
+PY
 
 echo "→ Cleaning up ..."
 find "$SRC" -name '*.orig' -delete 2>/dev/null || true

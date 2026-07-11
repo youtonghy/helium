@@ -1,82 +1,93 @@
 ---
 name: nitrous-dev
 description: >
-  Nitrous Chromium patch development workflow: hot-tree edits, compile feedback
-  (syntax_check / build_targets), quilt export, patch hygiene, persona/feature
-  work without hand-editing .patch diffs. Use when modifying Chromium source,
-  fixing compile errors, changing patches, persona/fingerprint work, hot-dev,
-  export-patch, quilt-fix, he build iteration, or when the user runs /nitrous-dev.
-  Always load this before editing build/src or patches/.
+  Use when modifying Nitrous Chromium source, iterating in build/src, fixing
+  compile errors, exporting a hot-tree change, repairing an existing patch,
+  resolving quilt drift, or preparing a macOS build/package.
 ---
 
 # Nitrous Dev
 
-## Before any edit
+## Core invariant
 
-1. Declare mode: `explore` | `hot-dev` (default) | `export-patch` | `patch-fix` | `package`.
-2. If unclear → **`hot-dev`**.
-3. Do **not** hand-edit `patches/**/*.patch` diff bodies.
+`build/src` is disposable. `patches/` is durable. An automatic hot-tree export
+must begin before the edit, prove the pre-edit baseline, generate a new top
+patch in staging, replay it, validate the root and macOS queues, then publish.
 
-## Modes
+Do not hand-edit patch hunks or `.pc` metadata.
 
-### explore
+## Choose a mode
 
-- Read only. No writes.
+| Mode | Use | Writable state |
+|------|-----|----------------|
+| `explore` | Read-only investigation | None |
+| `hot-dev` | New behavior or compile fix | Declared files in `build/src` |
+| `patch-fix` | Repair an existing patch | Disposable patchwork via quilt |
+| `package` | Build/package after guards | Platform build outputs |
 
-### hot-dev (default development)
+## Hot-dev: automatic new patch
 
-**Writable:** only `build/src`  
-**Forbidden:** `patches/**`, `chromium_src`, per-iteration `he merge && he push`
+Automatic export creates a new root-stack top patch only. Run this before the
+first edit, listing every expected Chromium source path:
 
 ```bash
-# C++ seconds
+python3 devutils/agent_patch_guard.py --mode hot-start \
+  --patch helium/core/my-change.patch \
+  --file chrome/browser/example.cc \
+  --file chrome/browser/example.h
+```
+
+Edit only the declared files in `build/src`. Before editing an additional file:
+
+```bash
+python3 devutils/agent_patch_guard.py --mode hot-add \
+  --file chrome/browser/additional_file.cc
+```
+
+Compile against the hot tree:
+
+```bash
 python3 devutils/syntax_check.py [-o build/src/out/Default] FILE...
-
-# Link / TS / action minutes
 python3 devutils/build_targets.py [--from-failed] [target...]
-
-# Optional product incremental confirm
-source platform/macos/build.sh && he build
 ```
 
-**Done:** compile checks green. Say explicitly: **patch not exported yet**.
-
-### export-patch
-
-Use when hot-dev logic is ready to land in `patches/`.
-
-1. Map changed files → one target patch under `patches/` (e.g. `helium/core/persona-….patch`).
-2. Prefer disposable patchwork + quilt-fix (or guard):
+After compile checks pass, export through isolated staging:
 
 ```bash
-python3 devutils/agent_patch_guard.py --mode after-hotfix --patch helium/core/YOUR.patch
+python3 devutils/agent_patch_guard.py --mode export-hotfix
 ```
 
-If guard's after-hotfix only refreshes from clean push (no hot-tree copy), use standard flow:
+The command refuses stale quilt metadata, changed queues, undeclared baseline
+mismatches, empty changes, existing patch names, failed quilt operations,
+unexpected top patches, and root/macOS fresh-apply failures. It does not write
+the live patch queue until staging has replayed successfully.
+
+The published root queue is newer than the current hot-tree quilt stack. Rebuild
+`build/src` before starting the next hot-dev slice. Never rewrite `.pc` to fake
+synchronization.
+
+Abort an incomplete session without reverting hot-tree files:
 
 ```bash
-# unpack patchwork if needed, copy relevant edited files from build/src, then:
-./devutils/quilt-fix.sh helium/core/YOUR.patch
-python3 devutils/agent_patch_guard.py --mode patch-source
+python3 devutils/agent_patch_guard.py --mode hot-abort
 ```
 
-**Forbidden:** editing `.patch` hunks in an editor to fix line numbers.
+## Patch-fix: existing patch
 
-**Done:** guard / fresh apply green; list refreshed patch names.
-
-### patch-fix
-
-Upstream merge or apply failures only.
+Existing patch updates start from clean patchwork at that patch layer. Do not copy whole files from build/src into an earlier patch; the hot tree contains
+later root/platform layers that would be folded into it.
 
 ```bash
 python3 devutils/check_chromium_src_clean.py --source-tree chromium_src
-# fix via patchwork + quilt-fix, never hand-hunk
+# Rebuild codex_tmp/patchwork_src, push the exact target, edit there, then:
+NITROUS_QUILT_SRC=codex_tmp/patchwork_src \
+  ./devutils/quilt-fix.sh helium/core/existing.patch
 python3 devutils/agent_patch_guard.py --mode patch-source
 ```
 
-### package
+`quilt-fix.sh` stops on push failure and verifies `quilt top` before refresh.
 
-Only after validation:
+## Package
 
 ```bash
 python3 devutils/agent_patch_guard.py --mode pre-build
@@ -84,39 +95,12 @@ source platform/macos/build.sh
 he auto-package
 ```
 
-## Hard rules
-
-| Do | Don't |
-|----|--------|
-| Edit `build/src` while iterating | Edit `patches/*.patch` diff text |
-| One-shot export at end of slice | Refresh patch every few lines |
-| Rebuild dirty trees | Delete only `.pc/` to "clean" |
-| Main agent applies/refreshes patches | Multi-agent write same patch set |
-| `NITROUS_*` env (fallback `HELIUM_*`) | Assume standalone `helium-macos` tree |
-
-## Tree cheat sheet
-
-| Path | Role |
-|------|------|
-| `build/src` | Hot tree |
-| `codex_tmp/patchwork_src` | Quilt export |
-| `codex_tmp/patchcheck_src` | Fresh apply only |
-| `chromium_src` | Clean baseline only |
-| `patches/` | Delivered SoT |
-
-## Env
-
-- `NITROUS_OUT_DIR` / `HELIUM_OUT_DIR` → `syntax_check`
-- `NITROUS_BUILD_ROOT` / `HELIUM_BUILD_ROOT` → `build_targets`
-- `NITROUS_QUILT_SRC` / `HELIUM_QUILT_SRC` → `quilt-fix.sh`
-
-## After export → validate
+## Recovery
 
 ```bash
-python3 .codex/skills/nitrous-validate/scripts/run_validation.py
-# or full / with-source per impact
+python3 devutils/agent_patch_guard.py --mode normalize-artifacts
 ```
 
-## Failure report
-
-State: failed command, cause, which tree may be dirty, whether rebuild is required.
+If `.pc` points at a missing/old queue, the applied list differs, quilt leaves
+rejects, or a generated queue differs from source, stop and rebuild that tree.
+Deleting only `.pc` is not recovery. Report the failed command and affected tree.

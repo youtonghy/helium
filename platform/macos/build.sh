@@ -214,6 +214,41 @@ ___helium_has_applied_patches() {
     (cd "$_src_dir" && quilt applied >/dev/null 2>&1)
 }
 
+___helium_validate_hot_tree_metadata() {
+    local metadata_dir="$_src_dir/.pc"
+    [ -d "$metadata_dir" ] || return 0
+
+    local patches_file="$metadata_dir/.quilt_patches"
+    local series_file="$metadata_dir/.quilt_series"
+    local applied_file="$metadata_dir/applied-patches"
+    if [ ! -f "$patches_file" ] || [ ! -f "$series_file" ] || [ ! -f "$applied_file" ]; then
+        echo "error: build/src quilt metadata is incomplete; rebuild build/src" >&2
+        return 1
+    fi
+
+    local recorded_queue
+    recorded_queue="$(cat "$patches_file")"
+    if [ "$(__helium_realpath "$recorded_queue")" != "$(__helium_realpath "$_merged_patches_dir")" ]; then
+        echo "error: build/src quilt metadata is stale; rebuild build/src" >&2
+        echo "recorded queue: $recorded_queue" >&2
+        echo "current queue:  $_merged_patches_dir" >&2
+        return 1
+    fi
+    if [ "$(cat "$series_file")" != "series" ]; then
+        echo "error: build/src quilt series metadata is stale; rebuild build/src" >&2
+        return 1
+    fi
+
+    local expected_applied
+    local recorded_applied
+    expected_applied="$(sed 's/#.*$//' "$_merged_patches_dir/series" | sed '/^[[:space:]]*$/d')"
+    recorded_applied="$(cat "$applied_file")"
+    if [ "$recorded_applied" != "$expected_applied" ]; then
+        echo "error: build/src does not have the current merged queue fully applied; rebuild build/src" >&2
+        return 1
+    fi
+}
+
 ___helium_has_unapplied_patches() {
     ___helium_source_ready || return 1
     [ -n "$(cd "$_src_dir" && quilt unapplied 2>/dev/null || true)" ]
@@ -230,6 +265,7 @@ ___helium_app_ready() {
 
 ___helium_ensure_source() {
     if ___helium_source_ready; then
+        ___helium_validate_hot_tree_metadata
         ___helium_log "source tree ready: $_src_dir"
         return
     fi
@@ -366,6 +402,7 @@ ___helium_check() {
         echo "run he merge after popping applied patches, then retry" >&2
         return 1
     fi
+    ___helium_validate_hot_tree_metadata
     python3 "$_main_repo/devutils/validate_config.py"
     "$_platform_dir/devutils/check_patch_files.sh"
 

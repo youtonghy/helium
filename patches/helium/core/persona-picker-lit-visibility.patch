@@ -1,5 +1,3 @@
-Index: third_party/lit/v3_0/BUILD.gn
-===================================================================
 --- a/third_party/lit/v3_0/BUILD.gn
 +++ b/third_party/lit/v3_0/BUILD.gn
 @@ -82,6 +82,7 @@ ts_library("build_ts") {

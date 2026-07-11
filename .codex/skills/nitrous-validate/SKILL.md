@@ -1,11 +1,9 @@
 ---
 name: nitrous-validate
 description: >
-  Run Nitrous repository validation using CI-equivalent commands after editing
-  code, config, patches, i18n, scripts, AGENTS.md, or validation tooling. Use
-  when choosing/running local checks before handoff, full CI-style validation,
-  Chromium source-backed patch checks, or when the user runs /nitrous-validate
-  or mentions validate patches / cheap validation / with-source.
+  Use when validating Nitrous code, config, patches, i18n, scripts, skills,
+  AGENTS.md, Chromium source-backed patch application, pre-build state, or a
+  change set before handoff.
 ---
 
 # Nitrous Validate
@@ -58,6 +56,7 @@ python3 .codex/skills/nitrous-validate/scripts/run_validation.py --with-source -
 python3 devutils/agent_patch_guard.py --mode quick
 python3 devutils/agent_patch_guard.py --mode patch-source
 python3 devutils/agent_patch_guard.py --mode pre-build
+python3 devutils/agent_patch_guard.py --mode normalize-artifacts
 ```
 
 ## Reporting

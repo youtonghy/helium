@@ -18,8 +18,8 @@
 | 模式 | 何时 | 可写 | 禁止 | 收尾 |
 |------|------|------|------|------|
 | `explore` | 只读调查 | 无 | 一切写 | — |
-| **`hot-dev`（默认）** | 功能 / 修编译 | 仅 `build/src` | `patches/**`、每轮 `he merge&&he push` | `syntax_check` / `build_targets` |
-| `export-patch` | 热树改完要交付 | 经 quilt 写 `patches/` | 手改 diff | `agent_patch_guard --mode after-hotfix --patch …` |
+| **`hot-dev`（默认）** | 功能 / 修编译 | 仅已声明的 `build/src` 文件 | 未 `hot-start` 就编辑、每轮 `he merge&&he push` | `syntax_check` / `build_targets` |
+| `export-patch` | 已有 hot-start 会话要交付 | guard staging 后写 `patches/` | 覆盖已有 patch、整文件回灌旧 patch | `agent_patch_guard --mode export-hotfix` |
 | `patch-fix` | apply 冲突 / 合上游 | patchwork + series | 热树当 SoT | `agent_patch_guard --mode patch-source` |
 | `package` | 出包 | 平台脚本（慎） | 未过 pre-build 就 package | guard pre-build 后 `he *` |
 
@@ -41,6 +41,7 @@
 
 - 在 `chromium_src` / `patchcheck_src` 写业务或做破坏性实验。
 - 手改 patch hunk 行号 / diff 正文来「对齐」。
+- 未先运行 `hot-start` 就把热树修改自动导出，或把完全 applied 热树整文件复制进旧 patch。
 - 只删 `.pc/` 假装干净（源码仍可能已被 patch）。
 - 热树迭代中每轮 `he merge && he push`（会打烂 siso 增量）。
 - cheap / guard 失败仍 `he build` / `he auto-package`。
@@ -50,12 +51,18 @@
 ## 命令入口（优先这些，勿自创流程）
 
 ```bash
-# hot-dev：秒级 / 分钟级
+# hot-dev：修改前先记录新栈顶 patch 和文件基线
+python3 devutils/agent_patch_guard.py --mode hot-start \
+  --patch helium/core/xxx.patch --file chrome/browser/xxx.cc
+# 扩展范围时必须在编辑新文件前添加
+python3 devutils/agent_patch_guard.py --mode hot-add --file chrome/browser/yyy.cc
+
+# 秒级 / 分钟级编译反馈
 python3 devutils/syntax_check.py [-o build/src/out/Default] FILE...
 python3 devutils/build_targets.py [--from-failed] [target...]
 
-# export 某个 patch
-python3 devutils/agent_patch_guard.py --mode after-hotfix --patch helium/core/xxx.patch
+# staging / replay / root+macOS 验证后自动发布新栈顶 patch
+python3 devutils/agent_patch_guard.py --mode export-hotfix
 
 # 改了 patches 或交付前
 python3 devutils/agent_patch_guard.py --mode patch-source
@@ -69,11 +76,11 @@ source platform/macos/build.sh
 he auto-package
 ```
 
-环境变量优先 `NITROUS_*`，回退 `HELIUM_*`（`NITROUS_OUT_DIR` / `NITROUS_BUILD_ROOT` / `NITROUS_QUILT_SRC` 等）。
+环境变量优先 `NITROUS_*`，回退 `HELIUM_*`（`NITROUS_SRC_DIR` / `NITROUS_OUT_DIR` / `NITROUS_BUILD_ROOT` / `NITROUS_MERGED_PATCHES_DIR` / `NITROUS_QUILT_SRC` 等）。
 
 ## 污染处理
 
-发现 quilt 状态与源码不一致、重复 applied、异常 `.orig`、`check_chromium_src_clean` 失败 → **重建该树**，不要在脏树上硬推。
+发现 quilt 路径/series/applied 状态与当前合并队列不一致、重复 applied、异常 `.orig`、`check_chromium_src_clean` 失败 → **重建该树**，不要在脏树上硬推。自动 export 发布后 root 队列已前进，也必须在下一轮 hot-dev 前重建 `build/src`。
 
 ```bash
 rm -rf codex_tmp/patchwork_src codex_tmp/patchcheck_src
