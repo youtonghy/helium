@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nitrous Validate"
+  short_description: "Run Nitrous CI-equivalent checks"
+  default_prompt: "Use $nitrous-validate after editing this repository to run the right local validation checks."

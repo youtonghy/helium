@@ -1,6 +1,6 @@
 --- a/chrome/app/settings_strings.grdp
 +++ b/chrome/app/settings_strings.grdp
-@@ -1705,6 +1705,50 @@
+@@ -1705,6 +1705,638 @@
        </message>
      </if>
  
@@ -47,13 +47,601 @@
 +    <message name="IDS_SETTINGS_PERSONA_DESCRIPTION" desc="Description of the browser persona settings page">
 +      Configure browser persona and fingerprint surface overrides
 +    </message>
++    <message name="IDS_SETTINGS_PERSONA_IMPORT" desc="Button label for importing browser persona profiles">
++      Import
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_EXPORT_ALL" desc="Button label for exporting all saved browser persona profiles">
++      Export all
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_EXPORT_CURRENT" desc="Button label for exporting the currently selected browser persona profile">
++      Export current
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_IMPORT_NO_PROFILES" desc="Status text shown when an imported persona file contains no profiles">
++      No persona profiles found
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_IMPORT_FAILED" desc="Status text shown when importing persona profiles fails">
++      Import failed
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_IMPORT_RESULT" desc="Status text shown after importing persona profiles. COUNT is the number imported; SKIPPED is the number skipped.">
++      Imported <ph name="COUNT">$1<ex>3</ex></ph> persona profiles (<ph name="SKIPPED">$2<ex>1</ex></ph> skipped)
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SAVE_SUCCESS" desc="Status text shown after a persona profile is saved successfully">
++      Profile saved
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SAVE_FAILED" desc="Status text shown when a persona operation fails">
++      Could not complete this operation. Review the configuration and try again.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SECTION_PROFILES" desc="Section title for the persona profiles list">
++      Profiles
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SECTION_PROFILES_DESC" desc="Description under the persona profiles section title">
++      Manage saved persona profiles for different browsing identities.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_NEW_PROFILE" desc="Button label to create a new persona profile">
++      New profile
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_USE_PROFILE" desc="Button label to activate a persona profile">
++      Use profile
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_DELETE_PROFILE" desc="Button label to delete a persona profile">
++      Delete
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SECTION_STARTUP" desc="Section title for persona launch selection settings">
++      Startup selection
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SECTION_STARTUP_DESC" desc="Description under the persona startup selection section">
++      Choose whether Nitrous asks for a persona on launch or reuses the last selected profile.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_LAUNCH_BEHAVIOR" desc="Label for the persona launch behavior dropdown">
++      Launch behavior
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_LAUNCH_ALWAYS_ASK" desc="Launch behavior option that always shows the persona picker">
++      Always ask
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_LAUNCH_USE_LAST" desc="Launch behavior option that reuses the last selected persona">
++      Use last selected profile
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_REFRESH_FINGERPRINTS" desc="Button label to refresh persona fingerprint noise tokens">
++      Refresh fingerprints
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED" desc="Status text after fingerprint tokens are refreshed">
++      Fingerprints refreshed. Reload open tabs for tokens to take effect.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SECTION_PRESETS" desc="Section title for persona quick presets">
++      Quick presets
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SECTION_PRESETS_DESC" desc="Description under the persona quick presets section">
++      Clone a system preset into an editable saved profile.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_PRESET_LABEL" desc="Label for the persona preset dropdown">
++      Preset
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_PRESET_CHOOSE" desc="Placeholder option in the persona preset dropdown">
++      Choose a preset...
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_CLONE_PRESET" desc="Button label to clone a persona preset into a profile">
++      Clone preset
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SECTION_EDIT" desc="Section title for editing a persona profile">
++      Edit profile
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SECTION_EDIT_DESC" desc="Description under the edit profile section. NAME is the selected profile display name.">
++      Selected profile: <ph name="NAME">$1<ex>Work laptop</ex></ph>
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SAVE" desc="Button label to save the persona profile being edited">
++      Save
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_HELP" desc="Accessible label for persona field help icons">
++      Help
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_CUSTOM_OPTION" desc="Select option for entering a custom persona field value">
++      Custom
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_LABEL" desc="Label for the persona display name field">
++      Display name
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_TOOLTIP" desc="Help text for the persona display name field">
++      Friendly name shown in the profile list and persona picker. Does not affect fingerprint surfaces.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ICON_LABEL" desc="Label for the persona icon field">
++      Icon
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ICON_TOOLTIP" desc="Help text for the persona icon field">
++      Icon key used in the profile card and toolbar indicator. Prefer platform-matching keys such as macos or windows.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_LABEL" desc="Label for the persona user agent field">
++      User agent
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_TOOLTIP" desc="Help text for the persona user agent field">
++      Overrides the HTTP User-Agent header and navigator.userAgent. Keep it aligned with platform, UA-CH, and Chrome version.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_PLATFORM_LABEL" desc="Label for the persona navigator platform field">
++      Platform
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_PLATFORM_TOOLTIP" desc="Help text for the persona navigator platform field">
++      Overrides navigator.platform and related OS identity. Choose a value consistent with the user agent and GPU strings.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_LABEL" desc="Label for the persona navigator vendor field">
++      Navigator vendor
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_TOOLTIP" desc="Help text for the persona navigator vendor field">
++      Overrides navigator.vendor. Desktop Chrome commonly reports Google Inc.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_LABEL" desc="Label for the persona navigator productSub field">
++      Product sub
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_TOOLTIP" desc="Help text for the persona navigator productSub field">
++      Overrides navigator.productSub. Most Chromium builds expose 20030107.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_LABEL" desc="Label for the persona user agent client hints platform field">
++      User-Agent Client Hints platform
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_TOOLTIP" desc="Help text for the persona user agent client hints platform field">
++      Overrides the platform Client Hint (Sec-CH-UA-Platform). Keep it matched with navigator platform and the user agent.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_LABEL" desc="Label for the persona user agent client hints full version field">
++      Full version
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_TOOLTIP" desc="Help text for the persona user agent client hints full version field">
++      Overrides the full browser version used in UA-CH (Sec-CH-UA-Full-Version-List). Match the Chrome version in the user agent.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_LABEL" desc="Label for the persona UA-CH brands list field">
++      UA-CH brands
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_TOOLTIP" desc="Help text for the persona UA-CH brands list field">
++      Comma-separated Brand/Version pairs for Sec-CH-UA. Example: Chromium/149, Not/A)Brand/24.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_LABEL" desc="Label for the persona time zone field">
++      Time zone
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_TOOLTIP" desc="Help text for the persona time zone field">
++      Overrides the IANA time zone used by Date and Intl APIs. Keep it consistent with locale and Accept-Language for a believable region.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_LOCALE_LABEL" desc="Label for the persona locale field">
++      Locale
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_LOCALE_TOOLTIP" desc="Help text for the persona locale field">
++      Overrides the primary locale exposed to websites. Selecting a preset locale also updates Accept-Language; you can still edit that field manually.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_LABEL" desc="Label for the persona Accept-Language field">
++      Accept-Language
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_TOOLTIP" desc="Help text for the persona Accept-Language field">
++      Stores the intended Accept-Language chain for this persona. Current runtime coverage is incomplete, so locale remains the primary language override.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_LABEL" desc="Label for the persona GPU vendor field">
++      GPU vendor
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_TOOLTIP" desc="Help text for the persona GPU vendor field">
++      Overrides the WebGL UNMASKED_VENDOR_WEBGL string. Pair it with a matching renderer for the selected platform.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_LABEL" desc="Label for the persona GPU renderer field">
++      GPU renderer
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_TOOLTIP" desc="Help text for the persona GPU renderer field">
++      Overrides the WebGL UNMASKED_RENDERER_WEBGL string (usually an ANGLE adapter description). Must look native to the chosen OS.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_LABEL" desc="Label for the persona WebGPU adapter field">
++      WebGPU adapter
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_TOOLTIP" desc="Help text for the persona WebGPU adapter field">
++      Overrides the adapter name reported by WebGPU. Use a short device name that matches the GPU renderer family.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL" desc="Label for the persona hardware concurrency field">
++      Hardware concurrency
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_TOOLTIP" desc="Help text for the persona hardware concurrency field">
++      Overrides navigator.hardwareConcurrency (logical CPU cores). Common desktop values are 4, 8, 10, 12, or 16.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_LABEL" desc="Label for the persona device memory field">
++      Device memory
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_TOOLTIP" desc="Help text for the persona device memory field">
++      Overrides navigator.deviceMemory and matching Device-Memory Client Hint headers in gigabytes. Supported buckets are 1, 2, 4, 8, 16, and 32.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_LABEL" desc="Label for the persona max touch points field">
++      Max touch points
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_TOOLTIP" desc="Help text for the persona max touch points field">
++      Overrides navigator.maxTouchPoints. Use 0 for most desktop personas and a positive value for touch-capable devices.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_LABEL" desc="Label for the persona screen width field">
++      Screen width
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_TOOLTIP" desc="Help text for the persona screen width field">
++      Overrides screen.width in CSS pixels. Keep width, height, avail*, outer*, and DPR consistent with a real display.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_LABEL" desc="Label for the persona screen height field">
++      Screen height
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_TOOLTIP" desc="Help text for the persona screen height field">
++      Overrides screen.height in CSS pixels. Pair with a realistic width and device pixel ratio for the target device.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_LABEL" desc="Label for the persona available screen left field">
++      Available screen left
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_TOOLTIP" desc="Help text for the persona available screen left field">
++      Overrides screen.availLeft. Usually 0 on single-display desktops; multi-monitor setups may use non-zero values.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_LABEL" desc="Label for the persona available screen top field">
++      Available screen top
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_TOOLTIP" desc="Help text for the persona available screen top field">
++      Overrides screen.availTop. Often 0, or slightly positive when a menu bar or dock reduces usable area.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_LABEL" desc="Label for the persona available screen width field">
++      Available screen width
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_TOOLTIP" desc="Help text for the persona available screen width field">
++      Overrides screen.availWidth. Typically equal to or slightly smaller than screen width.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_LABEL" desc="Label for the persona available screen height field">
++      Available screen height
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_TOOLTIP" desc="Help text for the persona available screen height field">
++      Overrides screen.availHeight. Usually smaller than screen height because of taskbars or docks.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_LABEL" desc="Label for the persona outer window width field">
++      Outer width
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_TOOLTIP" desc="Help text for the persona outer window width field">
++      Overrides window.outerWidth. For maximized windows this is often close to the available screen width.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_LABEL" desc="Label for the persona outer window height field">
++      Outer height
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_TOOLTIP" desc="Help text for the persona outer window height field">
++      Overrides window.outerHeight. Keep it consistent with available screen height for a maximized desktop window.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DPR_LABEL" desc="Label for the persona device pixel ratio field">
++      Device pixel ratio
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DPR_TOOLTIP" desc="Help text for the persona device pixel ratio field">
++      Overrides window.devicePixelRatio and matching DPR Client Hint headers. Common values are 1, 1.25, 1.5, and 2 for Retina-class displays.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_LABEL" desc="Label for the persona fonts profile identifier field">
++      Fonts profile ID
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_TOOLTIP" desc="Help text for the persona fonts profile identifier field">
++      Metadata identifier saved with this profile. It does not select or install fonts by itself.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_LABEL" desc="Label for the persona font families list field">
++      Font families
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP" desc="Help text for the persona font families list field">
++      Comma-separated font family names exposed as the persona font set. Prefer fonts that exist on the target OS.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_LABEL" desc="Label for the persona font aliases list field">
++      Font aliases
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_TOOLTIP" desc="Help text for the persona font aliases list field">
++      Comma-separated alias names mapped onto the persona font set. Leave empty unless you need explicit aliases.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_LABEL" desc="Label for the persona font engine field">
++      Font engine
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP" desc="Help text for the persona font engine field">
++      Stores font engine metadata such as directwrite, coretext, or freetype. It is not currently applied to every font rendering path.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_LABEL" desc="Label for the persona audio base latency field">
++      Audio base latency
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_TOOLTIP" desc="Help text for the persona audio base latency field">
++      Overrides AudioContext base latency. Small values such as 0.01–0.02 are typical; large changes can look synthetic.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_LABEL" desc="Label for the persona canvas noise toggle">
++      Canvas noise
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_TOOLTIP" desc="Help text for the persona canvas noise toggle">
++      Applies deterministic noise to supported canvas readback paths. Some formats and offscreen export paths are not covered yet.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_LABEL" desc="Label for the persona audio noise toggle">
++      Audio noise
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_TOOLTIP" desc="Help text for the persona audio noise toggle">
++      Applies persona-scoped deterministic noise to supported offline audio render results. Live audio analysis paths are not covered yet.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_LABEL" desc="Label for the persona hardware noise toggle">
++      Hardware noise
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP" desc="Help text for the persona hardware noise toggle">
++      Applies deterministic noise to supported low-level hardware readback paths. CPU and memory values use their explicit fields instead.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_LABEL" desc="Label for the persona font metric noise toggle">
++      Font metric noise
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_TOOLTIP" desc="Help text for the persona font metric noise toggle">
++      When enabled, font measurement APIs receive small deterministic noise tied to this persona.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_LABEL" desc="Label for the persona network type field">
++      Network type
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_TOOLTIP" desc="Help text for the persona network type field">
++      Overrides the exposed connection type on supported Network Information API paths. RTT, effective type, and HTTP Client Hints are not fully covered.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_LABEL" desc="Label for the persona maximum downlink field">
++      Downlink max
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_TOOLTIP" desc="Help text for the persona maximum downlink field">
++      Overrides navigator.connection.downlinkMax in megabits per second. Use a value that fits the chosen network type.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_NEW_PROFILE_DEFAULT_NAME" desc="Default display name assigned to a newly created persona profile">
++      New Persona
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_DISCARD_CHANGES_CONFIRM" desc="Confirmation shown before discarding unsaved persona edits">
++      Discard unsaved changes?
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_DELETE_CONFIRM" desc="Confirmation shown before deleting a persona profile">
++      Delete this persona profile?
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_DEFAULT_READ_ONLY" desc="Error shown when attempting to edit the system persona">
++      The system persona is read-only.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_CANCEL" desc="Button label for cancelling persona edits">
++      Cancel
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_STATUS_ACTIVE_SYSTEM" desc="Status badge for the active system persona">
++      Active system
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_STATUS_SYSTEM" desc="Status badge for the inactive system persona">
++      System
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_STATUS_ACTIVE" desc="Status badge for the active saved persona">
++      Active
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_STATUS_SAVED" desc="Status badge for an inactive saved persona">
++      Saved
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SYSTEM_SUMMARY" desc="Summary text for the system persona">
++      Uses the browser's real system values
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_UNKNOWN_VALUE" desc="Fallback text for an unknown persona field value">
++      Unknown
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_NEVER_USED" desc="Fallback text when a persona profile has never been used">
++      Never used
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_PRESET_GROUP_AMERICAS" desc="Region group label for persona presets from the Americas">
++      Americas
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_PRESET_GROUP_EUROPE" desc="Region group label for persona presets from Europe">
++      Europe
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_PRESET_GROUP_ASIA" desc="Region group label for persona presets from Asia">
++      Asia
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_PRESET_GROUP_OCEANIA" desc="Region group label for persona presets from Oceania">
++      Oceania
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SECTION_ROTATION" desc="Section title for persona fingerprint rotation settings">
++      Fingerprint rotation
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SECTION_PERMISSIONS" desc="Section title for persona runtime API gates">
++      Runtime API gates
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_LABEL" desc="Label for the persona UA-CH platform version field">
++      UA-CH platform version
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_TOOLTIP" desc="Help text for the persona UA-CH platform version field">
++      Overrides the operating system version in high-entropy UA-CH values. Keep it consistent with the selected platform and user agent.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_LABEL" desc="Label for the persona UA-CH architecture field">
++      UA-CH architecture
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_TOOLTIP" desc="Help text for the persona UA-CH architecture field">
++      Overrides the CPU architecture in UA-CH metadata. Common desktop values are x86 and arm.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_LABEL" desc="Label for the persona UA-CH model field">
++      UA-CH model
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_TOOLTIP" desc="Help text for the persona UA-CH model field">
++      Overrides the device model in high-entropy UA-CH values. Desktop personas normally leave this empty.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_LABEL" desc="Label for the persona UA-CH bitness field">
++      UA-CH bitness
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_TOOLTIP" desc="Help text for the persona UA-CH bitness field">
++      Overrides the CPU bitness in UA-CH metadata. Match this with the user agent and architecture.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_LABEL" desc="Label for the persona UA-CH form factors field">
++      UA-CH form factors
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_TOOLTIP" desc="Help text for the persona UA-CH form factors field">
++      Comma-separated UA-CH form factors, such as Desktop or Mobile. Use values that match the device identity.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_LABEL" desc="Label for the persona UA-CH mobile flag">
++      UA-CH mobile
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_TOOLTIP" desc="Help text for the persona UA-CH mobile flag">
++      Controls the mobile flag in UA-CH metadata. Leave it disabled for desktop personas.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_LABEL" desc="Label for the persona UA-CH Windows-on-Windows flag">
++      UA-CH WoW64
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_TOOLTIP" desc="Help text for the persona UA-CH Windows-on-Windows flag">
++      Reports a 32-bit browser running on 64-bit Windows. Leave it disabled for native 64-bit Windows and non-Windows personas.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_LABEL" desc="Label for the persona audio output latency field">
++      Audio output latency
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_TOOLTIP" desc="Help text for the persona audio output latency field">
++      Overrides AudioContext output latency in seconds. Keep it close to the base latency and within a realistic device range.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_LABEL" desc="Label for the persona fingerprint rotation scope field">
++      Rotation scope
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_TOOLTIP" desc="Help text for the persona fingerprint rotation scope field">
++      Selects whether deterministic noise tokens are isolated by site and profile, by profile, or globally.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_LABEL" desc="Label for the persona fingerprint rotation interval field">
++      Rotation interval (days)
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_TOOLTIP" desc="Help text for the persona fingerprint rotation interval field">
++      Sets how many days a deterministic fingerprint epoch remains active before rotating automatically.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_LABEL" desc="Label for the persona client hints override toggle">
++      Persona Client Hints
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_TOOLTIP" desc="Help text for the persona client hints override toggle">
++      Applies this persona's UA-CH metadata to navigation, renderer, and worker surfaces. Disabling it falls back to browser defaults.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_LABEL" desc="Label for the persona background activity gate">
++      Background fetch and sync
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_TOOLTIP" desc="Help text for the persona background activity gate">
++      Controls Persona-gated background activity entry points. Current coverage is limited to the implemented browser-side paths.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_LABEL" desc="Label for the persona contacts API gate">
++      Contacts API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_TOOLTIP" desc="Help text for the persona contacts API gate">
++      Controls Persona-gated access to contact selection. Site permissions, platform support, and browser policy still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_LABEL" desc="Label for the persona local fonts API gate">
++      Local Fonts API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_TOOLTIP" desc="Help text for the persona local fonts API gate">
++      Controls queryLocalFonts access. CSS local font lookup and other font rendering paths are not covered by this gate.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_LABEL" desc="Label for the persona Privacy Sandbox APIs gate">
++      Privacy Sandbox APIs
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_TOOLTIP" desc="Help text for the persona Privacy Sandbox APIs gate">
++      Controls supported Persona-gated Privacy Sandbox services. Topics and Protected Audience coverage is not complete yet.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_LABEL" desc="Label for the persona gamepad API gate">
++      Gamepad API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_TOOLTIP" desc="Help text for the persona gamepad API gate">
++      Controls Persona-gated access to gamepad data. Platform support and browser policy still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_LABEL" desc="Label for the persona clipboard API gate">
++      Clipboard API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_TOOLTIP" desc="Help text for the persona clipboard API gate">
++      Controls Persona-gated clipboard access. Secure-context, user-gesture, and site permission checks still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_LABEL" desc="Label for the persona geolocation API gate">
++      Geolocation API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_TOOLTIP" desc="Help text for the persona geolocation API gate">
++      Controls Persona-gated geolocation access. It does not provide a synthetic location; site permission checks still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_LABEL" desc="Label for the persona notifications API gate">
++      Notifications API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_TOOLTIP" desc="Help text for the persona notifications API gate">
++      Controls Persona-gated notification access. Site permissions and operating system notification settings still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_LABEL" desc="Label for the persona Web MIDI API gate">
++      Web MIDI API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_TOOLTIP" desc="Help text for the persona Web MIDI API gate">
++      Controls Persona-gated MIDI access. Device availability, permissions, and browser policy still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_LABEL" desc="Label for the persona idle detection API gate">
++      Idle Detection API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_TOOLTIP" desc="Help text for the persona idle detection API gate">
++      Controls Persona-gated idle detection access. Site permissions and feature policy still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_LABEL" desc="Label for the persona window management API gate">
++      Window Management API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_TOOLTIP" desc="Help text for the persona window management API gate">
++      Controls Persona-gated multi-screen window management access. Site permissions and platform support still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_LABEL" desc="Label for the persona Web NFC API gate">
++      Web NFC API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_TOOLTIP" desc="Help text for the persona Web NFC API gate">
++      Controls Persona-gated Web NFC access. Hardware support, secure-context, and permission checks still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_LABEL" desc="Label for the persona WebXR API gate">
++      WebXR API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_TOOLTIP" desc="Help text for the persona WebXR API gate">
++      Controls Persona-gated immersive XR sessions. Device availability and browser permissions still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_LABEL" desc="Label for the persona sensor APIs gate">
++      Sensor APIs
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_TOOLTIP" desc="Help text for the persona sensor APIs gate">
++      Controls Persona-gated generic sensor access. Individual sensor support and permission policy still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_LABEL" desc="Label for the persona real battery status gate">
++      Real battery status
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_TOOLTIP" desc="Help text for the persona real battery status gate">
++      Allows supported paths to expose the host battery state. Disable it to avoid intentionally revealing real battery values.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_LABEL" desc="Label for the persona platform credentials gate">
++      Platform credentials
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_TOOLTIP" desc="Help text for the persona platform credentials gate">
++      Controls supported WebAuthn platform-credential flows. Some credential operations remain governed by WebAuthn policy and prompts.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_LABEL" desc="Label for the persona payment handler gate">
++      Payment handlers
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_TOOLTIP" desc="Help text for the persona payment handler gate">
++      Controls Persona-gated payment handler access. Merchant, browser, and operating system payment policy still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_LABEL" desc="Label for the persona speech synthesis gate">
++      Speech synthesis
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP" desc="Help text for the persona speech synthesis gate">
++      Controls supported speech synthesis discovery paths. Blocking is not yet complete for every speech operation.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_LABEL" desc="Label for the persona Web Printing API gate">
++      Web Printing API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_TOOLTIP" desc="Help text for the persona Web Printing API gate">
++      Controls Persona-gated Web Printing access. Printer availability, user confirmation, and browser policy still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_LABEL" desc="Label for the persona shape detection APIs gate">
++      Shape Detection APIs
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_TOOLTIP" desc="Help text for the persona shape detection APIs gate">
++      Controls Persona-gated barcode, face, and text detection access on supported platforms.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_LABEL" desc="Label for the persona WebOTP API gate">
++      WebOTP API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_TOOLTIP" desc="Help text for the persona WebOTP API gate">
++      Controls Persona-gated WebOTP access. Secure-context, user consent, and platform support still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_LABEL" desc="Label for the persona built-in AI APIs gate">
++      Built-in AI APIs
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_TOOLTIP" desc="Help text for the persona built-in AI APIs gate">
++      Controls Persona-gated access to supported built-in AI APIs. Feature availability and enterprise policy still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_LABEL" desc="Label for the persona handwriting recognition API gate">
++      Handwriting recognition
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_TOOLTIP" desc="Help text for the persona handwriting recognition API gate">
++      Controls Persona-gated handwriting recognition access. Platform support and language models still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_LABEL" desc="Label for the persona WebNN API gate">
++      WebNN API
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_TOOLTIP" desc="Help text for the persona WebNN API gate">
++      Controls Persona-gated WebNN access. Hardware acceleration, feature availability, and browser policy still apply.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_LABEL" desc="Label for the persona private state tokens gate">
++      Private State Tokens
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP" desc="Help text for the persona private state tokens gate">
++      Controls supported Persona-gated Private State Token operations. Other Privacy Sandbox controls may also apply.
++    </message>
 +
      <!-- Safety check -->
      <message name="IDS_SETTINGS_SAFETY_CHECK_ICON_INFO_ARIA_LABEL" desc="Accessibility text for a safety check child icon, that indicates info for the child check.">
        Info
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -2234,6 +2234,100 @@ void AddPrivacyStrings(content::WebUIDat
+@@ -2234,6 +2234,373 @@ void AddPrivacyStrings(content::WebUIDat
        {"siteSettingsSublabel", IDS_SETTINGS_PERMISSIONS_DESCRIPTION},
        {"securityPageTitle", IDS_SETTINGS_SECURITY},
        {"securityPageDescription", IDS_SETTINGS_SECURITY_DESCRIPTION},
@@ -84,8 +672,37 @@
 +      {"personaImportNoProfiles", IDS_SETTINGS_PERSONA_IMPORT_NO_PROFILES},
 +      {"personaImportFailed", IDS_SETTINGS_PERSONA_IMPORT_FAILED},
 +      {"personaImportResult", IDS_SETTINGS_PERSONA_IMPORT_RESULT},
++      {"personaSaveSuccess", IDS_SETTINGS_PERSONA_SAVE_SUCCESS},
++      {"personaSaveFailed", IDS_SETTINGS_PERSONA_SAVE_FAILED},
++      {"personaSectionProfiles", IDS_SETTINGS_PERSONA_SECTION_PROFILES},
++      {"personaSectionProfilesDesc", IDS_SETTINGS_PERSONA_SECTION_PROFILES_DESC},
++      {"personaNewProfile", IDS_SETTINGS_PERSONA_NEW_PROFILE},
++      {"personaUseProfile", IDS_SETTINGS_PERSONA_USE_PROFILE},
++      {"personaDeleteProfile", IDS_SETTINGS_PERSONA_DELETE_PROFILE},
++      {"personaSectionStartup", IDS_SETTINGS_PERSONA_SECTION_STARTUP},
++      {"personaSectionStartupDesc", IDS_SETTINGS_PERSONA_SECTION_STARTUP_DESC},
++      {"personaLaunchBehavior", IDS_SETTINGS_PERSONA_LAUNCH_BEHAVIOR},
++      {"personaLaunchAlwaysAsk", IDS_SETTINGS_PERSONA_LAUNCH_ALWAYS_ASK},
++      {"personaLaunchUseLast", IDS_SETTINGS_PERSONA_LAUNCH_USE_LAST},
++      {"personaRefreshFingerprints", IDS_SETTINGS_PERSONA_REFRESH_FINGERPRINTS},
++      {"personaFingerprintsRefreshed",
++        IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED},
++      {"personaSectionPresets", IDS_SETTINGS_PERSONA_SECTION_PRESETS},
++      {"personaSectionPresetsDesc", IDS_SETTINGS_PERSONA_SECTION_PRESETS_DESC},
++      {"personaPresetLabel", IDS_SETTINGS_PERSONA_PRESET_LABEL},
++      {"personaPresetChoose", IDS_SETTINGS_PERSONA_PRESET_CHOOSE},
++      {"personaClonePreset", IDS_SETTINGS_PERSONA_CLONE_PRESET},
++      {"personaSectionEdit", IDS_SETTINGS_PERSONA_SECTION_EDIT},
++      {"personaSectionEditDesc", IDS_SETTINGS_PERSONA_SECTION_EDIT_DESC},
++      {"personaSave", IDS_SETTINGS_PERSONA_SAVE},
 +      {"personaFieldHelp", IDS_SETTINGS_PERSONA_FIELD_HELP},
 +      {"personaFieldCustomOption", IDS_SETTINGS_PERSONA_FIELD_CUSTOM_OPTION},
++      {"personaFieldDisplayNameLabel",
++        IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_LABEL},
++      {"personaFieldDisplayNameTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_TOOLTIP},
++      {"personaFieldIconLabel", IDS_SETTINGS_PERSONA_FIELD_ICON_LABEL},
++      {"personaFieldIconTooltip", IDS_SETTINGS_PERSONA_FIELD_ICON_TOOLTIP},
 +      {"personaFieldUserAgentLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_LABEL},
 +      {"personaFieldUserAgentTooltip",
@@ -96,14 +713,24 @@
 +        IDS_SETTINGS_PERSONA_FIELD_PLATFORM_TOOLTIP},
 +      {"personaFieldNavigatorVendorLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_LABEL},
++      {"personaFieldNavigatorVendorTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_TOOLTIP},
 +      {"personaFieldProductSubLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_LABEL},
++      {"personaFieldProductSubTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_TOOLTIP},
 +      {"personaFieldUaChPlatformLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_LABEL},
 +      {"personaFieldUaChPlatformTooltip",
 +        IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_TOOLTIP},
 +      {"personaFieldUaChFullVersionLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_LABEL},
++      {"personaFieldUaChFullVersionTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_TOOLTIP},
++      {"personaFieldUaChBrandsLabel",
++        IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_LABEL},
++      {"personaFieldUaChBrandsTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_TOOLTIP},
 +      {"personaFieldTimezoneLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_LABEL},
 +      {"personaFieldTimezoneTooltip",
@@ -113,6 +740,8 @@
 +        IDS_SETTINGS_PERSONA_FIELD_LOCALE_TOOLTIP},
 +      {"personaFieldAcceptLanguageLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_LABEL},
++      {"personaFieldAcceptLanguageTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_TOOLTIP},
 +      {"personaFieldGpuVendorLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_LABEL},
 +      {"personaFieldGpuVendorTooltip",
@@ -123,6 +752,8 @@
 +        IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_TOOLTIP},
 +      {"personaFieldWebGpuAdapterLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_LABEL},
++      {"personaFieldWebGpuAdapterTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_TOOLTIP},
 +      {"personaFieldHardwareConcurrencyLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL},
 +      {"personaFieldHardwareConcurrencyTooltip",
@@ -133,24 +764,254 @@
 +        IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_TOOLTIP},
 +      {"personaFieldMaxTouchPointsLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_LABEL},
++      {"personaFieldMaxTouchPointsTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_TOOLTIP},
 +      {"personaFieldScreenWidthLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_LABEL},
++      {"personaFieldScreenWidthTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_TOOLTIP},
++      {"personaFieldScreenHeightLabel",
++        IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_LABEL},
++      {"personaFieldScreenHeightTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_TOOLTIP},
 +      {"personaFieldAvailLeftLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_LABEL},
++      {"personaFieldAvailLeftTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_TOOLTIP},
++      {"personaFieldAvailTopLabel",
++        IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_LABEL},
++      {"personaFieldAvailTopTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_TOOLTIP},
++      {"personaFieldAvailWidthLabel",
++        IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_LABEL},
++      {"personaFieldAvailWidthTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_TOOLTIP},
++      {"personaFieldAvailHeightLabel",
++        IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_LABEL},
++      {"personaFieldAvailHeightTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_TOOLTIP},
 +      {"personaFieldOuterWidthLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_LABEL},
++      {"personaFieldOuterWidthTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_TOOLTIP},
++      {"personaFieldOuterHeightLabel",
++        IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_LABEL},
++      {"personaFieldOuterHeightTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_TOOLTIP},
 +      {"personaFieldDprLabel", IDS_SETTINGS_PERSONA_FIELD_DPR_LABEL},
++      {"personaFieldDprTooltip", IDS_SETTINGS_PERSONA_FIELD_DPR_TOOLTIP},
 +      {"personaFieldFontsIdLabel", IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_LABEL},
++      {"personaFieldFontsIdTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_TOOLTIP},
++      {"personaFieldFontFamiliesLabel",
++        IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_LABEL},
++      {"personaFieldFontFamiliesTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP},
++      {"personaFieldFontAliasesLabel",
++        IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_LABEL},
++      {"personaFieldFontAliasesTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_TOOLTIP},
 +      {"personaFieldFontEngineLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_LABEL},
++      {"personaFieldFontEngineTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP},
 +      {"personaFieldAudioBaseLatencyLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_LABEL},
++      {"personaFieldAudioBaseLatencyTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_TOOLTIP},
++      {"personaFieldCanvasNoiseLabel",
++        IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_LABEL},
++      {"personaFieldCanvasNoiseTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_TOOLTIP},
++      {"personaFieldAudioNoiseLabel",
++        IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_LABEL},
++      {"personaFieldAudioNoiseTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_TOOLTIP},
++      {"personaFieldHardwareNoiseLabel",
++        IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_LABEL},
++      {"personaFieldHardwareNoiseTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP},
++      {"personaFieldFontMetricNoiseLabel",
++        IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_LABEL},
++      {"personaFieldFontMetricNoiseTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_TOOLTIP},
 +      {"personaFieldNetworkTypeLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_LABEL},
 +      {"personaFieldNetworkTypeTooltip",
 +        IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_TOOLTIP},
 +      {"personaFieldDownlinkMaxLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_LABEL},
++      {"personaFieldDownlinkMaxTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_TOOLTIP},
++      {"personaNewProfileDefaultName",
++       IDS_SETTINGS_PERSONA_NEW_PROFILE_DEFAULT_NAME},
++      {"personaDiscardChangesConfirm",
++       IDS_SETTINGS_PERSONA_DISCARD_CHANGES_CONFIRM},
++      {"personaDeleteConfirm", IDS_SETTINGS_PERSONA_DELETE_CONFIRM},
++      {"personaDefaultReadOnly", IDS_SETTINGS_PERSONA_DEFAULT_READ_ONLY},
++      {"personaCancel", IDS_SETTINGS_PERSONA_CANCEL},
++      {"personaStatusActiveSystem",
++       IDS_SETTINGS_PERSONA_STATUS_ACTIVE_SYSTEM},
++      {"personaStatusSystem", IDS_SETTINGS_PERSONA_STATUS_SYSTEM},
++      {"personaStatusActive", IDS_SETTINGS_PERSONA_STATUS_ACTIVE},
++      {"personaStatusSaved", IDS_SETTINGS_PERSONA_STATUS_SAVED},
++      {"personaSystemSummary", IDS_SETTINGS_PERSONA_SYSTEM_SUMMARY},
++      {"personaUnknownValue", IDS_SETTINGS_PERSONA_UNKNOWN_VALUE},
++      {"personaNeverUsed", IDS_SETTINGS_PERSONA_NEVER_USED},
++      {"personaPresetGroupAmericas",
++       IDS_SETTINGS_PERSONA_PRESET_GROUP_AMERICAS},
++      {"personaPresetGroupEurope",
++       IDS_SETTINGS_PERSONA_PRESET_GROUP_EUROPE},
++      {"personaPresetGroupAsia", IDS_SETTINGS_PERSONA_PRESET_GROUP_ASIA},
++      {"personaPresetGroupOceania",
++       IDS_SETTINGS_PERSONA_PRESET_GROUP_OCEANIA},
++      {"personaSectionRotation", IDS_SETTINGS_PERSONA_SECTION_ROTATION},
++      {"personaSectionPermissions",
++       IDS_SETTINGS_PERSONA_SECTION_PERMISSIONS},
++      {"personaFieldUaChPlatformVersionLabel",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_LABEL},
++      {"personaFieldUaChPlatformVersionTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_TOOLTIP},
++      {"personaFieldUaChArchitectureLabel",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_LABEL},
++      {"personaFieldUaChArchitectureTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_TOOLTIP},
++      {"personaFieldUaChModelLabel",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_LABEL},
++      {"personaFieldUaChModelTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_TOOLTIP},
++      {"personaFieldUaChBitnessLabel",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_LABEL},
++      {"personaFieldUaChBitnessTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_TOOLTIP},
++      {"personaFieldUaChFormFactorsLabel",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_LABEL},
++      {"personaFieldUaChFormFactorsTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_TOOLTIP},
++      {"personaFieldUaChMobileLabel",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_LABEL},
++      {"personaFieldUaChMobileTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_TOOLTIP},
++      {"personaFieldUaChWow64Label",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_LABEL},
++      {"personaFieldUaChWow64Tooltip",
++       IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_TOOLTIP},
++      {"personaFieldAudioOutputLatencyLabel",
++       IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_LABEL},
++      {"personaFieldAudioOutputLatencyTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_TOOLTIP},
++      {"personaFieldRotationScopeLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_LABEL},
++      {"personaFieldRotationScopeTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_TOOLTIP},
++      {"personaFieldRotationIntervalLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_LABEL},
++      {"personaFieldRotationIntervalTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_TOOLTIP},
++      {"personaFieldClientHintsEnabledLabel",
++       IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_LABEL},
++      {"personaFieldClientHintsEnabledTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_TOOLTIP},
++      {"personaFieldAllowBackgroundSyncLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_LABEL},
++      {"personaFieldAllowBackgroundSyncTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_TOOLTIP},
++      {"personaFieldAllowContactsLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_LABEL},
++      {"personaFieldAllowContactsTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_TOOLTIP},
++      {"personaFieldAllowLocalFontsLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_LABEL},
++      {"personaFieldAllowLocalFontsTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_TOOLTIP},
++      {"personaFieldAllowPrivacySandboxApisLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_LABEL},
++      {"personaFieldAllowPrivacySandboxApisTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_TOOLTIP},
++      {"personaFieldAllowGamepadsLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_LABEL},
++      {"personaFieldAllowGamepadsTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_TOOLTIP},
++      {"personaFieldAllowClipboardLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_LABEL},
++      {"personaFieldAllowClipboardTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_TOOLTIP},
++      {"personaFieldAllowGeolocationLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_LABEL},
++      {"personaFieldAllowGeolocationTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_TOOLTIP},
++      {"personaFieldAllowNotificationsLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_LABEL},
++      {"personaFieldAllowNotificationsTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_TOOLTIP},
++      {"personaFieldAllowMidiLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_LABEL},
++      {"personaFieldAllowMidiTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_TOOLTIP},
++      {"personaFieldAllowIdleDetectionLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_LABEL},
++      {"personaFieldAllowIdleDetectionTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_TOOLTIP},
++      {"personaFieldAllowWindowManagementLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_LABEL},
++      {"personaFieldAllowWindowManagementTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_TOOLTIP},
++      {"personaFieldAllowWebNfcLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_LABEL},
++      {"personaFieldAllowWebNfcTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_TOOLTIP},
++      {"personaFieldAllowWebXrLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_LABEL},
++      {"personaFieldAllowWebXrTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_TOOLTIP},
++      {"personaFieldAllowSensorApisLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_LABEL},
++      {"personaFieldAllowSensorApisTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_TOOLTIP},
++      {"personaFieldAllowRealBatteryStatusLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_LABEL},
++      {"personaFieldAllowRealBatteryStatusTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_TOOLTIP},
++      {"personaFieldAllowPlatformCredentialsLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_LABEL},
++      {"personaFieldAllowPlatformCredentialsTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_TOOLTIP},
++      {"personaFieldAllowPaymentHandlerLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_LABEL},
++      {"personaFieldAllowPaymentHandlerTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_TOOLTIP},
++      {"personaFieldAllowSpeechSynthesisLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_LABEL},
++      {"personaFieldAllowSpeechSynthesisTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP},
++      {"personaFieldAllowWebPrintingLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_LABEL},
++      {"personaFieldAllowWebPrintingTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_TOOLTIP},
++      {"personaFieldAllowShapeDetectionLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_LABEL},
++      {"personaFieldAllowShapeDetectionTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_TOOLTIP},
++      {"personaFieldAllowWebOtpLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_LABEL},
++      {"personaFieldAllowWebOtpTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_TOOLTIP},
++      {"personaFieldAllowAiApisLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_LABEL},
++      {"personaFieldAllowAiApisTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_TOOLTIP},
++      {"personaFieldAllowHandwritingRecognitionLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_LABEL},
++      {"personaFieldAllowHandwritingRecognitionTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_TOOLTIP},
++      {"personaFieldAllowWebNnLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_LABEL},
++      {"personaFieldAllowWebNnTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_TOOLTIP},
++      {"personaFieldAllowPrivateStateTokensLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_LABEL},
++      {"personaFieldAllowPrivateStateTokensTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP},
        {"advancedProtectionProgramTitle",
         IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM},
        {"advancedProtectionProgramDesc",

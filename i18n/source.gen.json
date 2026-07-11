@@ -162,6 +162,1182 @@
     "message": "Configure browser persona and fingerprint surface overrides"
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label for importing browser persona profiles",
+    "message": "Import"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EXPORT_ALL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label for exporting all saved browser persona profiles",
+    "message": "Export all"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EXPORT_CURRENT",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label for exporting the currently selected browser persona profile",
+    "message": "Export current"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_NO_PROFILES",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status text shown when an imported persona file contains no profiles",
+    "message": "No persona profiles found"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_FAILED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status text shown when importing persona profiles fails",
+    "message": "Import failed"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_RESULT",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status text shown after importing persona profiles. COUNT is the number imported; SKIPPED is the number skipped.",
+    "message": "Imported <ph name=\"COUNT\">$1<ex>3</ex></ph> persona profiles (<ph name=\"SKIPPED\">$2<ex>1</ex></ph> skipped)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_SUCCESS",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status text shown after a persona profile is saved successfully",
+    "message": "Profile saved"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_FAILED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status text shown when a persona operation fails",
+    "message": "Could not complete this operation. Review the configuration and try again."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PROFILES",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Section title for the persona profiles list",
+    "message": "Profiles"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PROFILES_DESC",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Description under the persona profiles section title",
+    "message": "Manage saved persona profiles for different browsing identities."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEW_PROFILE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label to create a new persona profile",
+    "message": "New profile"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_USE_PROFILE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label to activate a persona profile",
+    "message": "Use profile"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DELETE_PROFILE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label to delete a persona profile",
+    "message": "Delete"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_STARTUP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Section title for persona launch selection settings",
+    "message": "Startup selection"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_STARTUP_DESC",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Description under the persona startup selection section",
+    "message": "Choose whether Nitrous asks for a persona on launch or reuses the last selected profile."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_BEHAVIOR",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona launch behavior dropdown",
+    "message": "Launch behavior"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_ALWAYS_ASK",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Launch behavior option that always shows the persona picker",
+    "message": "Always ask"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_USE_LAST",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Launch behavior option that reuses the last selected persona",
+    "message": "Use last selected profile"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REFRESH_FINGERPRINTS",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label to refresh persona fingerprint noise tokens",
+    "message": "Refresh fingerprints"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status text after fingerprint tokens are refreshed",
+    "message": "Fingerprints refreshed. Reload open tabs for tokens to take effect."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Section title for persona quick presets",
+    "message": "Quick presets"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS_DESC",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Description under the persona quick presets section",
+    "message": "Clone a system preset into an editable saved profile."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona preset dropdown",
+    "message": "Preset"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_CHOOSE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Placeholder option in the persona preset dropdown",
+    "message": "Choose a preset..."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_CLONE_PRESET",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label to clone a persona preset into a profile",
+    "message": "Clone preset"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_EDIT",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Section title for editing a persona profile",
+    "message": "Edit profile"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_EDIT_DESC",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Description under the edit profile section. NAME is the selected profile display name.",
+    "message": "Selected profile: <ph name=\"NAME\">$1<ex>Work laptop</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label to save the persona profile being edited",
+    "message": "Save"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HELP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Accessible label for persona field help icons",
+    "message": "Help"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CUSTOM_OPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Select option for entering a custom persona field value",
+    "message": "Custom"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona display name field",
+    "message": "Display name"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona display name field",
+    "message": "Friendly name shown in the profile list and persona picker. Does not affect fingerprint surfaces."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ICON_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona icon field",
+    "message": "Icon"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ICON_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona icon field",
+    "message": "Icon key used in the profile card and toolbar indicator. Prefer platform-matching keys such as macos or windows."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona user agent field",
+    "message": "User agent"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona user agent field",
+    "message": "Overrides the HTTP User-Agent header and navigator.userAgent. Keep it aligned with platform, UA-CH, and Nitrous version."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PLATFORM_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona navigator platform field",
+    "message": "Platform"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PLATFORM_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona navigator platform field",
+    "message": "Overrides navigator.platform and related OS identity. Choose a value consistent with the user agent and GPU strings."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona navigator vendor field",
+    "message": "Navigator vendor"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona navigator vendor field",
+    "message": "Overrides navigator.vendor. Desktop Nitrous commonly reports Google Inc."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona navigator productSub field",
+    "message": "Product sub"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona navigator productSub field",
+    "message": "Overrides navigator.productSub. Most Nitrous builds expose 20030107."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona user agent client hints platform field",
+    "message": "User-Agent Client Hints platform"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona user agent client hints platform field",
+    "message": "Overrides the platform Client Hint (Sec-CH-UA-Platform). Keep it matched with navigator platform and the user agent."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona user agent client hints full version field",
+    "message": "Full version"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona user agent client hints full version field",
+    "message": "Overrides the full browser version used in UA-CH (Sec-CH-UA-Full-Version-List). Match the Nitrous version in the user agent."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona UA-CH brands list field",
+    "message": "UA-CH brands"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona UA-CH brands list field",
+    "message": "Comma-separated Brand/Version pairs for Sec-CH-UA. Example: Nitrous/149, Not/A)Brand/24."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona time zone field",
+    "message": "Time zone"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona time zone field",
+    "message": "Overrides the IANA time zone used by Date and Intl APIs. Keep it consistent with locale and Accept-Language for a believable region."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_LOCALE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona locale field",
+    "message": "Locale"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_LOCALE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona locale field",
+    "message": "Overrides the primary locale exposed to websites. Selecting a preset locale also updates Accept-Language; you can still edit that field manually."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona Accept-Language field",
+    "message": "Accept-Language"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona Accept-Language field",
+    "message": "Stores the intended Accept-Language chain for this persona. Current runtime coverage is incomplete, so locale remains the primary language override."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona GPU vendor field",
+    "message": "GPU vendor"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona GPU vendor field",
+    "message": "Overrides the WebGL UNMASKED_VENDOR_WEBGL string. Pair it with a matching renderer for the selected platform."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona GPU renderer field",
+    "message": "GPU renderer"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona GPU renderer field",
+    "message": "Overrides the WebGL UNMASKED_RENDERER_WEBGL string (usually an ANGLE adapter description). Must look native to the chosen OS."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona WebGPU adapter field",
+    "message": "WebGPU adapter"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona WebGPU adapter field",
+    "message": "Overrides the adapter name reported by WebGPU. Use a short device name that matches the GPU renderer family."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona hardware concurrency field",
+    "message": "Hardware concurrency"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona hardware concurrency field",
+    "message": "Overrides navigator.hardwareConcurrency (logical CPU cores). Common desktop values are 4, 8, 10, 12, or 16."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona device memory field",
+    "message": "Device memory"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona device memory field",
+    "message": "Overrides navigator.deviceMemory and matching Device-Memory Client Hint headers in gigabytes. Supported buckets are 1, 2, 4, 8, 16, and 32."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona max touch points field",
+    "message": "Max touch points"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona max touch points field",
+    "message": "Overrides navigator.maxTouchPoints. Use 0 for most desktop personas and a positive value for touch-capable devices."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona screen width field",
+    "message": "Screen width"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona screen width field",
+    "message": "Overrides screen.width in CSS pixels. Keep width, height, avail*, outer*, and DPR consistent with a real display."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona screen height field",
+    "message": "Screen height"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona screen height field",
+    "message": "Overrides screen.height in CSS pixels. Pair with a realistic width and device pixel ratio for the target device."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona available screen left field",
+    "message": "Available screen left"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona available screen left field",
+    "message": "Overrides screen.availLeft. Usually 0 on single-display desktops; multi-monitor setups may use non-zero values."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona available screen top field",
+    "message": "Available screen top"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona available screen top field",
+    "message": "Overrides screen.availTop. Often 0, or slightly positive when a menu bar or dock reduces usable area."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona available screen width field",
+    "message": "Available screen width"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona available screen width field",
+    "message": "Overrides screen.availWidth. Typically equal to or slightly smaller than screen width."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona available screen height field",
+    "message": "Available screen height"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona available screen height field",
+    "message": "Overrides screen.availHeight. Usually smaller than screen height because of taskbars or docks."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona outer window width field",
+    "message": "Outer width"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona outer window width field",
+    "message": "Overrides window.outerWidth. For maximized windows this is often close to the available screen width."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona outer window height field",
+    "message": "Outer height"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona outer window height field",
+    "message": "Overrides window.outerHeight. Keep it consistent with available screen height for a maximized desktop window."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DPR_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona device pixel ratio field",
+    "message": "Device pixel ratio"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DPR_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona device pixel ratio field",
+    "message": "Overrides window.devicePixelRatio and matching DPR Client Hint headers. Common values are 1, 1.25, 1.5, and 2 for Retina-class displays."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona fonts profile identifier field",
+    "message": "Fonts profile ID"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona fonts profile identifier field",
+    "message": "Metadata identifier saved with this profile. It does not select or install fonts by itself."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona font families list field",
+    "message": "Font families"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona font families list field",
+    "message": "Comma-separated font family names exposed as the persona font set. Prefer fonts that exist on the target OS."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona font aliases list field",
+    "message": "Font aliases"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona font aliases list field",
+    "message": "Comma-separated alias names mapped onto the persona font set. Leave empty unless you need explicit aliases."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona font engine field",
+    "message": "Font engine"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona font engine field",
+    "message": "Stores font engine metadata such as directwrite, coretext, or freetype. It is not currently applied to every font rendering path."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona audio base latency field",
+    "message": "Audio base latency"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona audio base latency field",
+    "message": "Overrides AudioContext base latency. Small values such as 0.01–0.02 are typical; large changes can look synthetic."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona canvas noise toggle",
+    "message": "Canvas noise"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona canvas noise toggle",
+    "message": "Applies deterministic noise to supported canvas readback paths. Some formats and offscreen export paths are not covered yet."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona audio noise toggle",
+    "message": "Audio noise"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona audio noise toggle",
+    "message": "Applies persona-scoped deterministic noise to supported offline audio render results. Live audio analysis paths are not covered yet."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona hardware noise toggle",
+    "message": "Hardware noise"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona hardware noise toggle",
+    "message": "Applies deterministic noise to supported low-level hardware readback paths. CPU and memory values use their explicit fields instead."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona font metric noise toggle",
+    "message": "Font metric noise"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona font metric noise toggle",
+    "message": "When enabled, font measurement APIs receive small deterministic noise tied to this persona."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona network type field",
+    "message": "Network type"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona network type field",
+    "message": "Overrides the exposed connection type on supported Network Information API paths. RTT, effective type, and HTTP Client Hints are not fully covered."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona maximum downlink field",
+    "message": "Downlink max"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona maximum downlink field",
+    "message": "Overrides navigator.connection.downlinkMax in megabits per second. Use a value that fits the chosen network type."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEW_PROFILE_DEFAULT_NAME",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Default display name assigned to a newly created persona profile",
+    "message": "New Persona"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DISCARD_CHANGES_CONFIRM",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Confirmation shown before discarding unsaved persona edits",
+    "message": "Discard unsaved changes?"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DELETE_CONFIRM",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Confirmation shown before deleting a persona profile",
+    "message": "Delete this persona profile?"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DEFAULT_READ_ONLY",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Error shown when attempting to edit the system persona",
+    "message": "The system persona is read-only."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_CANCEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label for cancelling persona edits",
+    "message": "Cancel"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_ACTIVE_SYSTEM",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status badge for the active system persona",
+    "message": "Active system"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_SYSTEM",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status badge for the inactive system persona",
+    "message": "System"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_ACTIVE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status badge for the active saved persona",
+    "message": "Active"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_SAVED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status badge for an inactive saved persona",
+    "message": "Saved"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SYSTEM_SUMMARY",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Summary text for the system persona",
+    "message": "Uses the browser's real system values"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNKNOWN_VALUE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Fallback text for an unknown persona field value",
+    "message": "Unknown"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEVER_USED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Fallback text when a persona profile has never been used",
+    "message": "Never used"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_AMERICAS",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Region group label for persona presets from the Americas",
+    "message": "Americas"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_EUROPE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Region group label for persona presets from Europe",
+    "message": "Europe"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_ASIA",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Region group label for persona presets from Asia",
+    "message": "Asia"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_OCEANIA",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Region group label for persona presets from Oceania",
+    "message": "Oceania"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_ROTATION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Section title for persona fingerprint rotation settings",
+    "message": "Fingerprint rotation"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PERMISSIONS",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Section title for persona runtime API gates",
+    "message": "Runtime API gates"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona UA-CH platform version field",
+    "message": "UA-CH platform version"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona UA-CH platform version field",
+    "message": "Overrides the operating system version in high-entropy UA-CH values. Keep it consistent with the selected platform and user agent."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona UA-CH architecture field",
+    "message": "UA-CH architecture"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona UA-CH architecture field",
+    "message": "Overrides the CPU architecture in UA-CH metadata. Common desktop values are x86 and arm."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona UA-CH model field",
+    "message": "UA-CH model"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona UA-CH model field",
+    "message": "Overrides the device model in high-entropy UA-CH values. Desktop personas normally leave this empty."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona UA-CH bitness field",
+    "message": "UA-CH bitness"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona UA-CH bitness field",
+    "message": "Overrides the CPU bitness in UA-CH metadata. Match this with the user agent and architecture."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona UA-CH form factors field",
+    "message": "UA-CH form factors"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona UA-CH form factors field",
+    "message": "Comma-separated UA-CH form factors, such as Desktop or Mobile. Use values that match the device identity."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona UA-CH mobile flag",
+    "message": "UA-CH mobile"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona UA-CH mobile flag",
+    "message": "Controls the mobile flag in UA-CH metadata. Leave it disabled for desktop personas."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona UA-CH Windows-on-Windows flag",
+    "message": "UA-CH WoW64"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona UA-CH Windows-on-Windows flag",
+    "message": "Reports a 32-bit browser running on 64-bit Windows. Leave it disabled for native 64-bit Windows and non-Windows personas."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona audio output latency field",
+    "message": "Audio output latency"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona audio output latency field",
+    "message": "Overrides AudioContext output latency in seconds. Keep it close to the base latency and within a realistic device range."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona fingerprint rotation scope field",
+    "message": "Rotation scope"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona fingerprint rotation scope field",
+    "message": "Selects whether deterministic noise tokens are isolated by site and profile, by profile, or globally."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona fingerprint rotation interval field",
+    "message": "Rotation interval (days)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona fingerprint rotation interval field",
+    "message": "Sets how many days a deterministic fingerprint epoch remains active before rotating automatically."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona client hints override toggle",
+    "message": "Persona Client Hints"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona client hints override toggle",
+    "message": "Applies this persona's UA-CH metadata to navigation, renderer, and worker surfaces. Disabling it falls back to browser defaults."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona background activity gate",
+    "message": "Background fetch and sync"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona background activity gate",
+    "message": "Controls Persona-gated background activity entry points. Current coverage is limited to the implemented browser-side paths."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona contacts API gate",
+    "message": "Contacts API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona contacts API gate",
+    "message": "Controls Persona-gated access to contact selection. Site permissions, platform support, and browser policy still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona local fonts API gate",
+    "message": "Local Fonts API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona local fonts API gate",
+    "message": "Controls queryLocalFonts access. CSS local font lookup and other font rendering paths are not covered by this gate."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona Privacy Sandbox APIs gate",
+    "message": "Privacy Sandbox APIs"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona Privacy Sandbox APIs gate",
+    "message": "Controls supported Persona-gated Privacy Sandbox services. Topics and Protected Audience coverage is not complete yet."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona gamepad API gate",
+    "message": "Gamepad API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona gamepad API gate",
+    "message": "Controls Persona-gated access to gamepad data. Platform support and browser policy still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona clipboard API gate",
+    "message": "Clipboard API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona clipboard API gate",
+    "message": "Controls Persona-gated clipboard access. Secure-context, user-gesture, and site permission checks still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona geolocation API gate",
+    "message": "Geolocation API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona geolocation API gate",
+    "message": "Controls Persona-gated geolocation access. It does not provide a synthetic location; site permission checks still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona notifications API gate",
+    "message": "Notifications API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona notifications API gate",
+    "message": "Controls Persona-gated notification access. Site permissions and operating system notification settings still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona Web MIDI API gate",
+    "message": "Web MIDI API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona Web MIDI API gate",
+    "message": "Controls Persona-gated MIDI access. Device availability, permissions, and browser policy still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona idle detection API gate",
+    "message": "Idle Detection API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona idle detection API gate",
+    "message": "Controls Persona-gated idle detection access. Site permissions and feature policy still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona window management API gate",
+    "message": "Window Management API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona window management API gate",
+    "message": "Controls Persona-gated multi-screen window management access. Site permissions and platform support still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona Web NFC API gate",
+    "message": "Web NFC API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona Web NFC API gate",
+    "message": "Controls Persona-gated Web NFC access. Hardware support, secure-context, and permission checks still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona WebXR API gate",
+    "message": "WebXR API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona WebXR API gate",
+    "message": "Controls Persona-gated immersive XR sessions. Device availability and browser permissions still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona sensor APIs gate",
+    "message": "Sensor APIs"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona sensor APIs gate",
+    "message": "Controls Persona-gated generic sensor access. Individual sensor support and permission policy still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona real battery status gate",
+    "message": "Real battery status"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona real battery status gate",
+    "message": "Allows supported paths to expose the host battery state. Disable it to avoid intentionally revealing real battery values."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona platform credentials gate",
+    "message": "Platform credentials"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona platform credentials gate",
+    "message": "Controls supported WebAuthn platform-credential flows. Some credential operations remain governed by WebAuthn policy and prompts."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona payment handler gate",
+    "message": "Payment handlers"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona payment handler gate",
+    "message": "Controls Persona-gated payment handler access. Merchant, browser, and operating system payment policy still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona speech synthesis gate",
+    "message": "Speech synthesis"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona speech synthesis gate",
+    "message": "Controls supported speech synthesis discovery paths. Blocking is not yet complete for every speech operation."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona Web Printing API gate",
+    "message": "Web Printing API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona Web Printing API gate",
+    "message": "Controls Persona-gated Web Printing access. Printer availability, user confirmation, and browser policy still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona shape detection APIs gate",
+    "message": "Shape Detection APIs"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona shape detection APIs gate",
+    "message": "Controls Persona-gated barcode, face, and text detection access on supported platforms."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona WebOTP API gate",
+    "message": "WebOTP API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona WebOTP API gate",
+    "message": "Controls Persona-gated WebOTP access. Secure-context, user consent, and platform support still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona built-in AI APIs gate",
+    "message": "Built-in AI APIs"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona built-in AI APIs gate",
+    "message": "Controls Persona-gated access to supported built-in AI APIs. Feature availability and enterprise policy still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona handwriting recognition API gate",
+    "message": "Handwriting recognition"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona handwriting recognition API gate",
+    "message": "Controls Persona-gated handwriting recognition access. Platform support and language models still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona WebNN API gate",
+    "message": "WebNN API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona WebNN API gate",
+    "message": "Controls Persona-gated WebNN access. Hardware acceleration, feature availability, and browser policy still apply."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona private state tokens gate",
+    "message": "Private State Tokens"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona private state tokens gate",
+    "message": "Controls supported Persona-gated Private State Token operations. Other Privacy Sandbox controls may also apply."
+  },
+  {
     "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
     "source": "chrome/app/chromium_strings.grd",
     "context": "The tooltip to show for the browser menu when Nitrous services schema changes",

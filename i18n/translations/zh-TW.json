@@ -153,5 +153,995 @@
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
     "source": "Invalid origin",
     "message": "來源無效"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_TITLE",
+    "source": "Persona",
+    "message": "Persona"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DESCRIPTION",
+    "source": "Configure browser persona and fingerprint surface overrides",
+    "message": "設定瀏覽器 Persona 及指紋辨識介面的覆寫值"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT",
+    "source": "Import",
+    "message": "匯入"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EXPORT_ALL",
+    "source": "Export all",
+    "message": "全部匯出"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EXPORT_CURRENT",
+    "source": "Export current",
+    "message": "匯出目前項目"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_NO_PROFILES",
+    "source": "No persona profiles found",
+    "message": "找不到 Persona 設定檔"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_FAILED",
+    "source": "Import failed",
+    "message": "匯入失敗"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_RESULT",
+    "source": "Imported <ph name=\"COUNT\">$1<ex>3</ex></ph> persona profiles (<ph name=\"SKIPPED\">$2<ex>1</ex></ph> skipped)",
+    "message": "已匯入 <ph name=\"COUNT\">$1<ex>3</ex></ph> 個 Persona 設定檔（略過 <ph name=\"SKIPPED\">$2<ex>1</ex></ph> 個）"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_SUCCESS",
+    "source": "Profile saved",
+    "message": "已儲存設定檔"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_FAILED",
+    "source": "Could not complete this operation. Review the configuration and try again.",
+    "message": "無法完成此操作。請檢查設定後再試一次。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PROFILES",
+    "source": "Profiles",
+    "message": "設定檔"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PROFILES_DESC",
+    "source": "Manage saved persona profiles for different browsing identities.",
+    "message": "管理用於不同瀏覽身分的 Persona 設定檔。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEW_PROFILE",
+    "source": "New profile",
+    "message": "新增設定檔"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_USE_PROFILE",
+    "source": "Use profile",
+    "message": "使用設定檔"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DELETE_PROFILE",
+    "source": "Delete",
+    "message": "刪除"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_STARTUP",
+    "source": "Startup selection",
+    "message": "啟動時選擇"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_STARTUP_DESC",
+    "source": "Choose whether Nitrous asks for a persona on launch or reuses the last selected profile.",
+    "message": "選擇 Nitrous 啟動時要詢問使用哪個 Persona，或沿用上次選取的設定檔。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_BEHAVIOR",
+    "source": "Launch behavior",
+    "message": "啟動行為"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_ALWAYS_ASK",
+    "source": "Always ask",
+    "message": "一律詢問"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_USE_LAST",
+    "source": "Use last selected profile",
+    "message": "使用上次選取的設定檔"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REFRESH_FINGERPRINTS",
+    "source": "Refresh fingerprints",
+    "message": "重新整理指紋"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED",
+    "source": "Fingerprints refreshed. Reload open tabs for tokens to take effect.",
+    "message": "已重新整理指紋。請重新載入已開啟的分頁，讓權杖生效。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS",
+    "source": "Quick presets",
+    "message": "快速預設設定"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS_DESC",
+    "source": "Clone a system preset into an editable saved profile.",
+    "message": "複製系統預設設定，建立可編輯的已儲存設定檔。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_LABEL",
+    "source": "Preset",
+    "message": "預設設定"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_CHOOSE",
+    "source": "Choose a preset...",
+    "message": "選擇預設設定..."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_CLONE_PRESET",
+    "source": "Clone preset",
+    "message": "複製預設設定"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_EDIT",
+    "source": "Edit profile",
+    "message": "編輯設定檔"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_EDIT_DESC",
+    "source": "Selected profile: <ph name=\"NAME\">$1<ex>Work laptop</ex></ph>",
+    "message": "已選取的設定檔：<ph name=\"NAME\">$1<ex>Work laptop</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE",
+    "source": "Save",
+    "message": "儲存"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HELP",
+    "source": "Help",
+    "message": "說明"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CUSTOM_OPTION",
+    "source": "Custom",
+    "message": "自訂"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_LABEL",
+    "source": "Display name",
+    "message": "顯示名稱"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_TOOLTIP",
+    "source": "Friendly name shown in the profile list and persona picker. Does not affect fingerprint surfaces.",
+    "message": "顯示在設定檔清單和 Persona 選擇器中的易讀名稱，不會影響指紋辨識介面。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ICON_LABEL",
+    "source": "Icon",
+    "message": "圖示"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ICON_TOOLTIP",
+    "source": "Icon key used in the profile card and toolbar indicator. Prefer platform-matching keys such as macos or windows.",
+    "message": "設定檔資訊卡和工具列指示器使用的圖示鍵。建議使用符合平台的鍵，例如 macos 或 windows。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_LABEL",
+    "source": "User agent",
+    "message": "使用者代理程式"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_TOOLTIP",
+    "source": "Overrides the HTTP User-Agent header and navigator.userAgent. Keep it aligned with platform, UA-CH, and Nitrous version.",
+    "message": "覆寫 HTTP User-Agent 標頭和 navigator.userAgent。請與平台、UA-CH 及 Nitrous 版本保持一致。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PLATFORM_LABEL",
+    "source": "Platform",
+    "message": "平台"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PLATFORM_TOOLTIP",
+    "source": "Overrides navigator.platform and related OS identity. Choose a value consistent with the user agent and GPU strings.",
+    "message": "覆寫 navigator.platform 和相關作業系統身分。請選擇與使用者代理程式及 GPU 字串一致的值。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_LABEL",
+    "source": "Navigator vendor",
+    "message": "Navigator 供應商"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_TOOLTIP",
+    "source": "Overrides navigator.vendor. Desktop Nitrous commonly reports Google Inc.",
+    "message": "覆寫 navigator.vendor。桌面版 Nitrous 通常會回報 Google Inc."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_LABEL",
+    "source": "Product sub",
+    "message": "產品子版本"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_TOOLTIP",
+    "source": "Overrides navigator.productSub. Most Nitrous builds expose 20030107.",
+    "message": "覆寫 navigator.productSub。多數 Nitrous 版本會顯示 20030107。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_LABEL",
+    "source": "User-Agent Client Hints platform",
+    "message": "User-Agent Client Hints 平台"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_TOOLTIP",
+    "source": "Overrides the platform Client Hint (Sec-CH-UA-Platform). Keep it matched with navigator platform and the user agent.",
+    "message": "覆寫平台 Client Hint（Sec-CH-UA-Platform）。請與 navigator 平台及使用者代理程式相符。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_LABEL",
+    "source": "Full version",
+    "message": "完整版本"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_TOOLTIP",
+    "source": "Overrides the full browser version used in UA-CH (Sec-CH-UA-Full-Version-List). Match the Nitrous version in the user agent.",
+    "message": "覆寫 UA-CH（Sec-CH-UA-Full-Version-List）使用的完整瀏覽器版本。請與使用者代理程式中的 Nitrous 版本相符。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_LABEL",
+    "source": "UA-CH brands",
+    "message": "UA-CH 品牌"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_TOOLTIP",
+    "source": "Comma-separated Brand/Version pairs for Sec-CH-UA. Example: Nitrous/149, Not/A)Brand/24.",
+    "message": "以逗號分隔 Sec-CH-UA 的「品牌/版本」配對。例如：Nitrous/149, Not/A)Brand/24。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_LABEL",
+    "source": "Time zone",
+    "message": "時區"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_TOOLTIP",
+    "source": "Overrides the IANA time zone used by Date and Intl APIs. Keep it consistent with locale and Accept-Language for a believable region.",
+    "message": "覆寫 Date 和 Intl API 使用的 IANA 時區。請與語言代碼及 Accept-Language 保持一致，呈現可信的地區。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_LOCALE_LABEL",
+    "source": "Locale",
+    "message": "語言代碼"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_LOCALE_TOOLTIP",
+    "source": "Overrides the primary locale exposed to websites. Selecting a preset locale also updates Accept-Language; you can still edit that field manually.",
+    "message": "覆寫網站可見的主要語言代碼。選取預設語言代碼時也會更新 Accept-Language，但你仍可手動編輯該欄位。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_LABEL",
+    "source": "Accept-Language",
+    "message": "Accept-Language"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_TOOLTIP",
+    "source": "Stores the intended Accept-Language chain for this persona. Current runtime coverage is incomplete, so locale remains the primary language override.",
+    "message": "儲存此 Persona 預期使用的 Accept-Language 鏈。目前執行階段涵蓋仍不完整，因此語言代碼仍是主要的語言覆寫值。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_LABEL",
+    "source": "GPU vendor",
+    "message": "GPU 供應商"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_TOOLTIP",
+    "source": "Overrides the WebGL UNMASKED_VENDOR_WEBGL string. Pair it with a matching renderer for the selected platform.",
+    "message": "覆寫 WebGL UNMASKED_VENDOR_WEBGL 字串。請搭配符合所選平台的轉譯器。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_LABEL",
+    "source": "GPU renderer",
+    "message": "GPU 轉譯器"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_TOOLTIP",
+    "source": "Overrides the WebGL UNMASKED_RENDERER_WEBGL string (usually an ANGLE adapter description). Must look native to the chosen OS.",
+    "message": "覆寫 WebGL UNMASKED_RENDERER_WEBGL 字串（通常為 ANGLE 介面卡描述）。內容必須符合所選作業系統的原生特徵。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_LABEL",
+    "source": "WebGPU adapter",
+    "message": "WebGPU 介面卡"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_TOOLTIP",
+    "source": "Overrides the adapter name reported by WebGPU. Use a short device name that matches the GPU renderer family.",
+    "message": "覆寫 WebGPU 回報的介面卡名稱。請使用與 GPU 轉譯器系列相符的簡短裝置名稱。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL",
+    "source": "Hardware concurrency",
+    "message": "硬體並行處理數"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_TOOLTIP",
+    "source": "Overrides navigator.hardwareConcurrency (logical CPU cores). Common desktop values are 4, 8, 10, 12, or 16.",
+    "message": "覆寫 navigator.hardwareConcurrency（邏輯 CPU 核心數）。常見桌面值為 4、8、10、12 或 16。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_LABEL",
+    "source": "Device memory",
+    "message": "裝置記憶體"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_TOOLTIP",
+    "source": "Overrides navigator.deviceMemory and matching Device-Memory Client Hint headers in gigabytes. Supported buckets are 1, 2, 4, 8, 16, and 32.",
+    "message": "以 GB 為單位覆寫 navigator.deviceMemory 及對應的 Device-Memory 用戶端提示標頭。支援的值為 1、2、4、8、16 和 32。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_LABEL",
+    "source": "Max touch points",
+    "message": "觸控點上限"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_TOOLTIP",
+    "source": "Overrides navigator.maxTouchPoints. Use 0 for most desktop personas and a positive value for touch-capable devices.",
+    "message": "覆寫 navigator.maxTouchPoints。多數桌面 Persona 請設為 0，具觸控功能的裝置則使用正值。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_LABEL",
+    "source": "Screen width",
+    "message": "螢幕寬度"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_TOOLTIP",
+    "source": "Overrides screen.width in CSS pixels. Keep width, height, avail*, outer*, and DPR consistent with a real display.",
+    "message": "覆寫 screen.width，單位為 CSS 像素。寬度、高度、avail*、outer* 和 DPR 應與真實顯示器一致。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_LABEL",
+    "source": "Screen height",
+    "message": "螢幕高度"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_TOOLTIP",
+    "source": "Overrides screen.height in CSS pixels. Pair with a realistic width and device pixel ratio for the target device.",
+    "message": "覆寫 screen.height，單位為 CSS 像素。請搭配符合目標裝置的實際寬度和裝置像素比。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_LABEL",
+    "source": "Available screen left",
+    "message": "可用螢幕左側位置"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_TOOLTIP",
+    "source": "Overrides screen.availLeft. Usually 0 on single-display desktops; multi-monitor setups may use non-zero values.",
+    "message": "覆寫 screen.availLeft。單一顯示器的桌面通常為 0，多螢幕設定可能使用非零值。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_LABEL",
+    "source": "Available screen top",
+    "message": "可用螢幕頂端位置"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_TOOLTIP",
+    "source": "Overrides screen.availTop. Often 0, or slightly positive when a menu bar or dock reduces usable area.",
+    "message": "覆寫 screen.availTop。通常為 0；若選單列或 Dock 縮減可用區域，可能為略大的正值。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_LABEL",
+    "source": "Available screen width",
+    "message": "可用螢幕寬度"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_TOOLTIP",
+    "source": "Overrides screen.availWidth. Typically equal to or slightly smaller than screen width.",
+    "message": "覆寫 screen.availWidth。通常等於或略小於螢幕寬度。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_LABEL",
+    "source": "Available screen height",
+    "message": "可用螢幕高度"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_TOOLTIP",
+    "source": "Overrides screen.availHeight. Usually smaller than screen height because of taskbars or docks.",
+    "message": "覆寫 screen.availHeight。由於工作列或 Dock，通常會小於螢幕高度。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_LABEL",
+    "source": "Outer width",
+    "message": "視窗外部寬度"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_TOOLTIP",
+    "source": "Overrides window.outerWidth. For maximized windows this is often close to the available screen width.",
+    "message": "覆寫 window.outerWidth。視窗最大化時，通常接近可用螢幕寬度。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_LABEL",
+    "source": "Outer height",
+    "message": "視窗外部高度"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_TOOLTIP",
+    "source": "Overrides window.outerHeight. Keep it consistent with available screen height for a maximized desktop window.",
+    "message": "覆寫 window.outerHeight。桌面視窗最大化時，請與可用螢幕高度保持一致。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DPR_LABEL",
+    "source": "Device pixel ratio",
+    "message": "裝置像素比"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DPR_TOOLTIP",
+    "source": "Overrides window.devicePixelRatio and matching DPR Client Hint headers. Common values are 1, 1.25, 1.5, and 2 for Retina-class displays.",
+    "message": "覆寫 window.devicePixelRatio 及對應的 DPR 用戶端提示標頭。常見值為 1、1.25 和 1.5；Retina 等級顯示器通常使用 2。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_LABEL",
+    "source": "Fonts profile ID",
+    "message": "字型設定檔 ID"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_TOOLTIP",
+    "source": "Metadata identifier saved with this profile. It does not select or install fonts by itself.",
+    "message": "與這個設定檔一同儲存的中繼資料識別碼。其本身不會選取或安裝字型。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_LABEL",
+    "source": "Font families",
+    "message": "字型家族"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "Comma-separated font family names exposed as the persona font set. Prefer fonts that exist on the target OS.",
+    "message": "以逗號分隔，作為 Persona 字型集合顯示的字型家族名稱。建議使用目標作業系統實際具備的字型。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_LABEL",
+    "source": "Font aliases",
+    "message": "字型別名"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_TOOLTIP",
+    "source": "Comma-separated alias names mapped onto the persona font set. Leave empty unless you need explicit aliases.",
+    "message": "以逗號分隔，對應至 Persona 字型集合的別名。除非需要明確別名，否則請留空。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_LABEL",
+    "source": "Font engine",
+    "message": "字型引擎"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "Stores font engine metadata such as directwrite, coretext, or freetype. It is not currently applied to every font rendering path.",
+    "message": "儲存 directwrite、coretext 或 freetype 等字型引擎中繼資料。目前尚未套用至所有字型轉譯路徑。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_LABEL",
+    "source": "Audio base latency",
+    "message": "音訊基本延遲"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_TOOLTIP",
+    "source": "Overrides AudioContext base latency. Small values such as 0.01–0.02 are typical; large changes can look synthetic.",
+    "message": "覆寫 AudioContext 基本延遲。0.01–0.02 等較小值較常見；過大的變化可能顯得不自然。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_LABEL",
+    "source": "Canvas noise",
+    "message": "Canvas 雜訊"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_TOOLTIP",
+    "source": "Applies deterministic noise to supported canvas readback paths. Some formats and offscreen export paths are not covered yet.",
+    "message": "在支援的 Canvas 回讀路徑套用確定性雜訊。目前尚未涵蓋部分格式和離屏匯出路徑。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_LABEL",
+    "source": "Audio noise",
+    "message": "音訊雜訊"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_TOOLTIP",
+    "source": "Applies persona-scoped deterministic noise to supported offline audio render results. Live audio analysis paths are not covered yet.",
+    "message": "在支援的離線音訊轉譯結果套用 Persona 範圍的確定性雜訊。目前尚未涵蓋即時音訊分析路徑。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_LABEL",
+    "source": "Hardware noise",
+    "message": "硬體雜訊"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "Applies deterministic noise to supported low-level hardware readback paths. CPU and memory values use their explicit fields instead.",
+    "message": "在支援的低階硬體回讀路徑套用確定性雜訊。CPU 和記憶體值則使用各自的明確欄位。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_LABEL",
+    "source": "Font metric noise",
+    "message": "字型度量雜訊"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_TOOLTIP",
+    "source": "When enabled, font measurement APIs receive small deterministic noise tied to this persona.",
+    "message": "啟用後，字型測量 API 會收到與此 Persona 綁定的小幅確定性雜訊。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_LABEL",
+    "source": "Network type",
+    "message": "網路類型"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_TOOLTIP",
+    "source": "Overrides the exposed connection type on supported Network Information API paths. RTT, effective type, and HTTP Client Hints are not fully covered.",
+    "message": "在支援的 Network Information API 路徑覆寫顯示的連線類型。目前尚未完整涵蓋 RTT、有效連線類型和 HTTP Client Hints。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_LABEL",
+    "source": "Downlink max",
+    "message": "下行速度上限"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_TOOLTIP",
+    "source": "Overrides navigator.connection.downlinkMax in megabits per second. Use a value that fits the chosen network type.",
+    "message": "覆寫 navigator.connection.downlinkMax，單位為 Mbps。請使用符合所選網路類型的值。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEW_PROFILE_DEFAULT_NAME",
+    "source": "New Persona",
+    "message": "新 Persona"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DISCARD_CHANGES_CONFIRM",
+    "source": "Discard unsaved changes?",
+    "message": "要捨棄尚未儲存的變更嗎？"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DELETE_CONFIRM",
+    "source": "Delete this persona profile?",
+    "message": "要刪除此 Persona 設定檔嗎？"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DEFAULT_READ_ONLY",
+    "source": "The system persona is read-only.",
+    "message": "系統 Persona 為唯讀。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_CANCEL",
+    "source": "Cancel",
+    "message": "取消"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_ACTIVE_SYSTEM",
+    "source": "Active system",
+    "message": "使用中的系統設定"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_SYSTEM",
+    "source": "System",
+    "message": "系統"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_ACTIVE",
+    "source": "Active",
+    "message": "使用中"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_SAVED",
+    "source": "Saved",
+    "message": "已儲存"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SYSTEM_SUMMARY",
+    "source": "Uses the browser's real system values",
+    "message": "使用瀏覽器的實際系統值"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNKNOWN_VALUE",
+    "source": "Unknown",
+    "message": "不明"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEVER_USED",
+    "source": "Never used",
+    "message": "從未使用"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_AMERICAS",
+    "source": "Americas",
+    "message": "美洲"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_EUROPE",
+    "source": "Europe",
+    "message": "歐洲"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_ASIA",
+    "source": "Asia",
+    "message": "亞洲"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_OCEANIA",
+    "source": "Oceania",
+    "message": "大洋洲"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_ROTATION",
+    "source": "Fingerprint rotation",
+    "message": "指紋輪替"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PERMISSIONS",
+    "source": "Runtime API gates",
+    "message": "執行階段 API 閘門"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_LABEL",
+    "source": "UA-CH platform version",
+    "message": "UA-CH 平台版本"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_TOOLTIP",
+    "source": "Overrides the operating system version in high-entropy UA-CH values. Keep it consistent with the selected platform and user agent.",
+    "message": "覆寫高熵 UA-CH 值中的作業系統版本。請與所選平台及使用者代理程式保持一致。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_LABEL",
+    "source": "UA-CH architecture",
+    "message": "UA-CH 架構"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_TOOLTIP",
+    "source": "Overrides the CPU architecture in UA-CH metadata. Common desktop values are x86 and arm.",
+    "message": "覆寫 UA-CH 中繼資料中的 CPU 架構。常見桌面值為 x86 和 arm。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_LABEL",
+    "source": "UA-CH model",
+    "message": "UA-CH 型號"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_TOOLTIP",
+    "source": "Overrides the device model in high-entropy UA-CH values. Desktop personas normally leave this empty.",
+    "message": "覆寫高熵 UA-CH 值中的裝置型號。桌面 Persona 通常應留空。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_LABEL",
+    "source": "UA-CH bitness",
+    "message": "UA-CH 位元數"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_TOOLTIP",
+    "source": "Overrides the CPU bitness in UA-CH metadata. Match this with the user agent and architecture.",
+    "message": "覆寫 UA-CH 中繼資料中的 CPU 位元數。請與使用者代理程式及架構相符。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_LABEL",
+    "source": "UA-CH form factors",
+    "message": "UA-CH 裝置類型"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_TOOLTIP",
+    "source": "Comma-separated UA-CH form factors, such as Desktop or Mobile. Use values that match the device identity.",
+    "message": "以逗號分隔 UA-CH 裝置類型，例如 Desktop 或 Mobile。請使用符合裝置身分的值。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_LABEL",
+    "source": "UA-CH mobile",
+    "message": "UA-CH 行動裝置"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_TOOLTIP",
+    "source": "Controls the mobile flag in UA-CH metadata. Leave it disabled for desktop personas.",
+    "message": "控制 UA-CH 中繼資料中的行動裝置旗標。桌面 Persona 請保持停用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_LABEL",
+    "source": "UA-CH WoW64",
+    "message": "UA-CH WoW64"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_TOOLTIP",
+    "source": "Reports a 32-bit browser running on 64-bit Windows. Leave it disabled for native 64-bit Windows and non-Windows personas.",
+    "message": "回報在 64 位元 Windows 上執行的 32 位元瀏覽器。原生 64 位元 Windows 和非 Windows Persona 請保持停用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_LABEL",
+    "source": "Audio output latency",
+    "message": "音訊輸出延遲"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_TOOLTIP",
+    "source": "Overrides AudioContext output latency in seconds. Keep it close to the base latency and within a realistic device range.",
+    "message": "覆寫 AudioContext 輸出延遲，單位為秒。請接近基本延遲，並維持在真實裝置的合理範圍內。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_LABEL",
+    "source": "Rotation scope",
+    "message": "輪替範圍"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_TOOLTIP",
+    "source": "Selects whether deterministic noise tokens are isolated by site and profile, by profile, or globally.",
+    "message": "選擇確定性雜訊權杖要依網站與設定檔隔離、僅依設定檔隔離，或全域共用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_LABEL",
+    "source": "Rotation interval (days)",
+    "message": "輪替間隔（天）"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_TOOLTIP",
+    "source": "Sets how many days a deterministic fingerprint epoch remains active before rotating automatically.",
+    "message": "設定確定性指紋週期在自動輪替前維持有效的天數。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_LABEL",
+    "source": "Persona Client Hints",
+    "message": "Persona Client Hints"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_TOOLTIP",
+    "source": "Applies this persona's UA-CH metadata to navigation, renderer, and worker surfaces. Disabling it falls back to browser defaults.",
+    "message": "將此人格設定的 UA-CH 中繼資料套用至導覽、轉譯器和 Worker 介面。停用後會改用瀏覽器預設值。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_LABEL",
+    "source": "Background fetch and sync",
+    "message": "背景擷取與同步"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_TOOLTIP",
+    "source": "Controls Persona-gated background activity entry points. Current coverage is limited to the implemented browser-side paths.",
+    "message": "控制由 Persona 閘門管理的背景活動進入點。目前涵蓋範圍僅限已實作的瀏覽器端路徑。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_LABEL",
+    "source": "Contacts API",
+    "message": "聯絡人 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_TOOLTIP",
+    "source": "Controls Persona-gated access to contact selection. Site permissions, platform support, and browser policy still apply.",
+    "message": "控制由 Persona 閘門管理的聯絡人選取權限。網站權限、平台支援和瀏覽器政策仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_LABEL",
+    "source": "Local Fonts API",
+    "message": "本機字型 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_TOOLTIP",
+    "source": "Controls queryLocalFonts access. CSS local font lookup and other font rendering paths are not covered by this gate.",
+    "message": "控制 queryLocalFonts 存取權。此閘門未涵蓋 CSS 本機字型查詢及其他字型轉譯路徑。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_LABEL",
+    "source": "Privacy Sandbox APIs",
+    "message": "Privacy Sandbox API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_TOOLTIP",
+    "source": "Controls supported Persona-gated Privacy Sandbox services. Topics and Protected Audience coverage is not complete yet.",
+    "message": "控制支援且由 Persona 閘門管理的 Privacy Sandbox 服務。目前尚未完整涵蓋 Topics 和 Protected Audience。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_LABEL",
+    "source": "Gamepad API",
+    "message": "遊戲控制器 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_TOOLTIP",
+    "source": "Controls Persona-gated access to gamepad data. Platform support and browser policy still apply.",
+    "message": "控制由 Persona 閘門管理的遊戲控制器資料存取權。平台支援和瀏覽器政策仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_LABEL",
+    "source": "Clipboard API",
+    "message": "剪貼簿 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_TOOLTIP",
+    "source": "Controls Persona-gated clipboard access. Secure-context, user-gesture, and site permission checks still apply.",
+    "message": "控制由 Persona 閘門管理的剪貼簿存取權。安全環境、使用者手勢和網站權限檢查仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_LABEL",
+    "source": "Geolocation API",
+    "message": "地理位置 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_TOOLTIP",
+    "source": "Controls Persona-gated geolocation access. It does not provide a synthetic location; site permission checks still apply.",
+    "message": "控制由 Persona 閘門管理的地理位置存取權。這不會提供合成位置，且網站權限檢查仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_LABEL",
+    "source": "Notifications API",
+    "message": "通知 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_TOOLTIP",
+    "source": "Controls Persona-gated notification access. Site permissions and operating system notification settings still apply.",
+    "message": "控制由 Persona 閘門管理的通知存取權。網站權限和作業系統通知設定仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_LABEL",
+    "source": "Web MIDI API",
+    "message": "Web MIDI API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_TOOLTIP",
+    "source": "Controls Persona-gated MIDI access. Device availability, permissions, and browser policy still apply.",
+    "message": "控制由 Persona 閘門管理的 MIDI 存取權。裝置可用性、權限和瀏覽器政策仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_LABEL",
+    "source": "Idle Detection API",
+    "message": "閒置偵測 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_TOOLTIP",
+    "source": "Controls Persona-gated idle detection access. Site permissions and feature policy still apply.",
+    "message": "控制由 Persona 閘門管理的閒置偵測存取權。網站權限和功能政策仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_LABEL",
+    "source": "Window Management API",
+    "message": "視窗管理 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_TOOLTIP",
+    "source": "Controls Persona-gated multi-screen window management access. Site permissions and platform support still apply.",
+    "message": "控制由 Persona 閘門管理的多螢幕視窗管理存取權。網站權限和平台支援仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_LABEL",
+    "source": "Web NFC API",
+    "message": "Web NFC API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_TOOLTIP",
+    "source": "Controls Persona-gated Web NFC access. Hardware support, secure-context, and permission checks still apply.",
+    "message": "控制由 Persona 閘門管理的 Web NFC 存取權。硬體支援、安全環境和權限檢查仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_LABEL",
+    "source": "WebXR API",
+    "message": "WebXR API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_TOOLTIP",
+    "source": "Controls Persona-gated immersive XR sessions. Device availability and browser permissions still apply.",
+    "message": "控制由 Persona 閘門管理的沉浸式 XR 工作階段。裝置可用性和瀏覽器權限仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_LABEL",
+    "source": "Sensor APIs",
+    "message": "感應器 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_TOOLTIP",
+    "source": "Controls Persona-gated generic sensor access. Individual sensor support and permission policy still apply.",
+    "message": "控制由 Persona 閘門管理的一般感應器存取權。各感應器的支援狀況和權限政策仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_LABEL",
+    "source": "Real battery status",
+    "message": "真實電池狀態"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_TOOLTIP",
+    "source": "Allows supported paths to expose the host battery state. Disable it to avoid intentionally revealing real battery values.",
+    "message": "允許支援的路徑顯示主機電池狀態。停用即可避免刻意洩漏真實電池值。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_LABEL",
+    "source": "Platform credentials",
+    "message": "平台憑證"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_TOOLTIP",
+    "source": "Controls supported WebAuthn platform-credential flows. Some credential operations remain governed by WebAuthn policy and prompts.",
+    "message": "控制支援的 WebAuthn 平台憑證流程。部分憑證作業仍受 WebAuthn 政策和提示管理。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_LABEL",
+    "source": "Payment handlers",
+    "message": "付款處理常式"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_TOOLTIP",
+    "source": "Controls Persona-gated payment handler access. Merchant, browser, and operating system payment policy still apply.",
+    "message": "控制由 Persona 閘門管理的付款處理常式存取權。商家、瀏覽器和作業系統的付款政策仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_LABEL",
+    "source": "Speech synthesis",
+    "message": "語音合成"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "Controls supported speech synthesis discovery paths. Blocking is not yet complete for every speech operation.",
+    "message": "控制支援的語音合成探索路徑。目前尚未能完整封鎖所有語音作業。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_LABEL",
+    "source": "Web Printing API",
+    "message": "Web Printing API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_TOOLTIP",
+    "source": "Controls Persona-gated Web Printing access. Printer availability, user confirmation, and browser policy still apply.",
+    "message": "控制由 Persona 閘門管理的 Web Printing 存取權。印表機可用性、使用者確認和瀏覽器政策仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_LABEL",
+    "source": "Shape Detection APIs",
+    "message": "形狀偵測 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_TOOLTIP",
+    "source": "Controls Persona-gated barcode, face, and text detection access on supported platforms.",
+    "message": "在支援的平台上，控制由 Persona 閘門管理的條碼、人臉和文字偵測存取權。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_LABEL",
+    "source": "WebOTP API",
+    "message": "WebOTP API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_TOOLTIP",
+    "source": "Controls Persona-gated WebOTP access. Secure-context, user consent, and platform support still apply.",
+    "message": "控制由 Persona 閘門管理的 WebOTP 存取權。安全環境、使用者同意和平台支援仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_LABEL",
+    "source": "Built-in AI APIs",
+    "message": "內建 AI API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_TOOLTIP",
+    "source": "Controls Persona-gated access to supported built-in AI APIs. Feature availability and enterprise policy still apply.",
+    "message": "控制由 Persona 閘門管理且受支援的內建 AI API 存取權。功能可用性和企業政策仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_LABEL",
+    "source": "Handwriting recognition",
+    "message": "手寫辨識"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_TOOLTIP",
+    "source": "Controls Persona-gated handwriting recognition access. Platform support and language models still apply.",
+    "message": "控制由 Persona 閘門管理的手寫辨識存取權。平台支援和語言模型仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_LABEL",
+    "source": "WebNN API",
+    "message": "WebNN API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_TOOLTIP",
+    "source": "Controls Persona-gated WebNN access. Hardware acceleration, feature availability, and browser policy still apply.",
+    "message": "控制由 Persona 閘門管理的 WebNN 存取權。硬體加速、功能可用性和瀏覽器政策仍然適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_LABEL",
+    "source": "Private State Tokens",
+    "message": "Private State Token"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP",
+    "source": "Controls supported Persona-gated Private State Token operations. Other Privacy Sandbox controls may also apply.",
+    "message": "控制支援且由 Persona 閘門管理的 Private State Token 作業。其他 Privacy Sandbox 控制項也可能適用。"
   }
 ]

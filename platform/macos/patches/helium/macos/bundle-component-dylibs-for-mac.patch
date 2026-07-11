@@ -1,0 +1,53 @@
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -562,5 +562,6 @@ if (is_win) {
+       # for runtime_deps at create_bundle nodes (https://crbug.com/40101435).
+       data_deps = [ ":chrome_framework" ]
++      deps += [ ":chrome_component_dylibs" ]
+     }
+   }
+ 
+@@ -681,6 +682,22 @@ if (is_win) {
+     }
+   }
+ 
++  if (is_component_build) {
++    bundle_data("chrome_component_dylibs") {
++      sources = [
++        "$root_out_dir/libc++_chrome.dylib",
++        "$root_out_dir/libchrome_dll.dylib",
++        "$root_out_dir/libsandbox_mac_seatbelt.dylib",
++      ]
++      outputs = [ "{{bundle_contents_dir}}/Frameworks/{{source_file_part}}" ]
++      public_deps = [
++        ":chrome_dll",
++        "//buildtools/third_party/libc++",
++        "//sandbox/mac:seatbelt",
++      ]
++    }
++  }
++
+   if (enable_updater) {
+     bundle_data("chromium_updater_privileged_helper") {
+       sources = [ "$root_out_dir/$privileged_helper_name" ]
+@@ -1108,6 +1125,7 @@ if (is_win) {
+     visibility = [
+       ":chrome_framework",
+       ":chrome_framework_create_bundle",
+       ":chrome_framework_shared_library",
++      ":chrome_component_dylibs",
+     ]
+ 
+--- a/buildtools/third_party/libc++/BUILD.gn
++++ b/buildtools/third_party/libc++/BUILD.gn
+@@ -492,6 +492,10 @@ target(libcxx_target_type, "libc++") {
+     visibility +=
+         [ "//base/allocator/partition_allocator/src/partition_alloc:*" ]
+   }
++  if (build_with_chromium && is_mac && is_component_build) {
++    # Packages libc++_chrome.dylib into the .app Frameworks directory.
++    visibility += [ "//chrome:chrome_component_dylibs" ]
++  }
+   if (libcxx_is_shared) {
+     no_default_deps = true
+   }

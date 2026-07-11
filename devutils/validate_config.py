@@ -27,11 +27,12 @@ from pathlib import Path
 
 from check_downloads_ini import check_downloads_ini
 from check_gn_flags import check_gn_flags
-from check_patch_files import (check_patch_readability, check_persona_profile_management_coverage,
-                               check_persona_randomization_coverage,
-                               check_persona_runtime_hook_coverage,
-                               check_persona_settings_manual_field_coverage,
-                               check_series_duplicates, check_unused_patches)
+from check_patch_files import (
+    check_patch_readability, check_persona_build_integrity, check_persona_contract_coverage,
+    check_persona_profile_management_coverage, check_persona_randomization_coverage,
+    check_persona_runtime_hook_coverage, check_persona_settings_i18n_key_coverage,
+    check_persona_settings_manual_field_coverage, check_series_duplicates,
+    check_tracked_patch_backups, check_unused_patches)
 
 
 def main():
@@ -45,10 +46,14 @@ def main():
     warnings |= check_patch_readability(patches_dir)
     warnings |= check_series_duplicates(patches_dir)
     warnings |= check_unused_patches(patches_dir)
+    warnings |= check_tracked_patch_backups(patches_dir)
+    warnings |= check_persona_contract_coverage(patches_dir)
+    warnings |= check_persona_build_integrity(patches_dir)
     warnings |= check_persona_profile_management_coverage(patches_dir)
     warnings |= check_persona_runtime_hook_coverage(patches_dir)
     warnings |= check_persona_randomization_coverage(patches_dir)
     warnings |= check_persona_settings_manual_field_coverage(patches_dir)
+    warnings |= check_persona_settings_i18n_key_coverage(patches_dir)
 
     # Check GN flags
     warnings |= check_gn_flags(root_dir / 'flags.gn')

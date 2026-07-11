@@ -17,7 +17,7 @@
  #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
  #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
  #include "third_party/blink/public/common/service_worker/service_worker_type_converters.h"
-@@ -325,6 +328,15 @@ void ApplyPersonaUserAgentMetadata(
+@@ -316,6 +319,15 @@ void ApplyPersonaUserAgentMetadata(
    }
  }
  
@@ -33,7 +33,7 @@
  }  // namespace
  
  constexpr base::TimeDelta ServiceWorkerVersion::kTimeoutTimerDelay;
-@@ -2674,10 +2686,11 @@ void ServiceWorkerVersion::StartWorkerIn
+@@ -2665,10 +2677,11 @@ void ServiceWorkerVersion::StartWorkerIn
        outside_fetch_client_settings_object_.Clone();
  
    ContentBrowserClient* browser_client = GetContentClient()->browser();
@@ -46,7 +46,7 @@
    if (params->persona_snapshot.IsEnabled()) {
      if (!params->persona_snapshot.user_agent.empty()) {
        params->user_agent = params->persona_snapshot.user_agent;
-@@ -2685,6 +2698,19 @@ void ServiceWorkerVersion::StartWorkerIn
+@@ -2676,6 +2689,19 @@ void ServiceWorkerVersion::StartWorkerIn
      ApplyPersonaUserAgentMetadata(params->persona_snapshot,
                                    &params->ua_metadata);
    }
@@ -135,7 +135,7 @@
  #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
  #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
  #include "third_party/blink/public/common/messaging/message_port_channel.h"
-@@ -166,6 +170,15 @@ void ApplyPersonaUserAgentMetadata(
+@@ -157,6 +161,15 @@ void ApplyPersonaUserAgentMetadata(
    }
  }
  
@@ -151,7 +151,7 @@
  }  // namespace
  
  namespace content {
-@@ -545,15 +558,35 @@ void SharedWorkerHost::Start(
+@@ -536,15 +549,35 @@ void SharedWorkerHost::Start(
      ApplyPersonaUserAgentMetadata(persona_snapshot, &ua_metadata);
    }
  

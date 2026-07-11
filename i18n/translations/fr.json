@@ -154,5 +154,995 @@
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
     "source": "Invalid origin",
     "message": "Origine non valide"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_TITLE",
+    "source": "Persona",
+    "message": "Persona"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DESCRIPTION",
+    "source": "Configure browser persona and fingerprint surface overrides",
+    "message": "Configurer les remplacements de l'identité du navigateur et des surfaces d'empreinte"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT",
+    "source": "Import",
+    "message": "Importer"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EXPORT_ALL",
+    "source": "Export all",
+    "message": "Tout exporter"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EXPORT_CURRENT",
+    "source": "Export current",
+    "message": "Exporter le profil actuel"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_NO_PROFILES",
+    "source": "No persona profiles found",
+    "message": "Aucun profil Persona trouvé"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_FAILED",
+    "source": "Import failed",
+    "message": "Échec de l'importation"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_RESULT",
+    "source": "Imported <ph name=\"COUNT\">$1<ex>3</ex></ph> persona profiles (<ph name=\"SKIPPED\">$2<ex>1</ex></ph> skipped)",
+    "message": "<ph name=\"COUNT\">$1<ex>3</ex></ph> profils Persona importés (<ph name=\"SKIPPED\">$2<ex>1</ex></ph> ignorés)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_SUCCESS",
+    "source": "Profile saved",
+    "message": "Profil enregistré"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_FAILED",
+    "source": "Could not complete this operation. Review the configuration and try again.",
+    "message": "Impossible de terminer cette opération. Vérifiez la configuration, puis réessayez."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PROFILES",
+    "source": "Profiles",
+    "message": "Profils"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PROFILES_DESC",
+    "source": "Manage saved persona profiles for different browsing identities.",
+    "message": "Gérez les profils Persona enregistrés pour différentes identités de navigation."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEW_PROFILE",
+    "source": "New profile",
+    "message": "Nouveau profil"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_USE_PROFILE",
+    "source": "Use profile",
+    "message": "Utiliser le profil"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DELETE_PROFILE",
+    "source": "Delete",
+    "message": "Supprimer"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_STARTUP",
+    "source": "Startup selection",
+    "message": "Sélection au démarrage"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_STARTUP_DESC",
+    "source": "Choose whether Nitrous asks for a persona on launch or reuses the last selected profile.",
+    "message": "Choisissez si Nitrous demande une Persona au lancement ou réutilise le dernier profil sélectionné."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_BEHAVIOR",
+    "source": "Launch behavior",
+    "message": "Comportement au lancement"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_ALWAYS_ASK",
+    "source": "Always ask",
+    "message": "Toujours demander"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_USE_LAST",
+    "source": "Use last selected profile",
+    "message": "Utiliser le dernier profil sélectionné"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REFRESH_FINGERPRINTS",
+    "source": "Refresh fingerprints",
+    "message": "Actualiser les empreintes"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED",
+    "source": "Fingerprints refreshed. Reload open tabs for tokens to take effect.",
+    "message": "Empreintes actualisées. Rechargez les onglets ouverts pour appliquer les nouveaux jetons."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS",
+    "source": "Quick presets",
+    "message": "Préréglages rapides"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS_DESC",
+    "source": "Clone a system preset into an editable saved profile.",
+    "message": "Clonez un préréglage système dans un profil enregistré modifiable."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_LABEL",
+    "source": "Preset",
+    "message": "Préréglage"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_CHOOSE",
+    "source": "Choose a preset...",
+    "message": "Choisir un préréglage..."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_CLONE_PRESET",
+    "source": "Clone preset",
+    "message": "Cloner le préréglage"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_EDIT",
+    "source": "Edit profile",
+    "message": "Modifier le profil"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_EDIT_DESC",
+    "source": "Selected profile: <ph name=\"NAME\">$1<ex>Work laptop</ex></ph>",
+    "message": "Profil sélectionné : <ph name=\"NAME\">$1<ex>Work laptop</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE",
+    "source": "Save",
+    "message": "Enregistrer"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HELP",
+    "source": "Help",
+    "message": "Aide"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CUSTOM_OPTION",
+    "source": "Custom",
+    "message": "Personnalisé"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_LABEL",
+    "source": "Display name",
+    "message": "Nom d'affichage"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_TOOLTIP",
+    "source": "Friendly name shown in the profile list and persona picker. Does not affect fingerprint surfaces.",
+    "message": "Nom convivial affiché dans la liste des profils et le sélecteur de Persona. N'affecte pas les surfaces d'empreinte."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ICON_LABEL",
+    "source": "Icon",
+    "message": "Icône"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ICON_TOOLTIP",
+    "source": "Icon key used in the profile card and toolbar indicator. Prefer platform-matching keys such as macos or windows.",
+    "message": "Clé d'icône utilisée dans la fiche du profil et l'indicateur de la barre d'outils. Préférez des clés correspondant à la plateforme, comme macos ou windows."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_LABEL",
+    "source": "User agent",
+    "message": "Agent utilisateur"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_TOOLTIP",
+    "source": "Overrides the HTTP User-Agent header and navigator.userAgent. Keep it aligned with platform, UA-CH, and Nitrous version.",
+    "message": "Remplace l'en-tête HTTP User-Agent et navigator.userAgent. Veillez à la cohérence avec la plateforme, UA-CH et la version de Nitrous."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PLATFORM_LABEL",
+    "source": "Platform",
+    "message": "Plateforme"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PLATFORM_TOOLTIP",
+    "source": "Overrides navigator.platform and related OS identity. Choose a value consistent with the user agent and GPU strings.",
+    "message": "Remplace navigator.platform et l'identité du système d'exploitation associée. Choisissez une valeur cohérente avec l'agent utilisateur et les chaînes du GPU."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_LABEL",
+    "source": "Navigator vendor",
+    "message": "Fournisseur du navigateur"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_TOOLTIP",
+    "source": "Overrides navigator.vendor. Desktop Nitrous commonly reports Google Inc.",
+    "message": "Remplace navigator.vendor. Sur ordinateur, Nitrous indique généralement Google Inc."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_LABEL",
+    "source": "Product sub",
+    "message": "Sous-version du produit"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_TOOLTIP",
+    "source": "Overrides navigator.productSub. Most Nitrous builds expose 20030107.",
+    "message": "Remplace navigator.productSub. La plupart des versions de Nitrous exposent 20030107."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_LABEL",
+    "source": "User-Agent Client Hints platform",
+    "message": "Plateforme des Client Hints User-Agent"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_TOOLTIP",
+    "source": "Overrides the platform Client Hint (Sec-CH-UA-Platform). Keep it matched with navigator platform and the user agent.",
+    "message": "Remplace le Client Hint de plateforme (Sec-CH-UA-Platform). Veillez à la cohérence avec navigator.platform et l'agent utilisateur."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_LABEL",
+    "source": "Full version",
+    "message": "Version complète"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_TOOLTIP",
+    "source": "Overrides the full browser version used in UA-CH (Sec-CH-UA-Full-Version-List). Match the Nitrous version in the user agent.",
+    "message": "Remplace la version complète du navigateur utilisée par UA-CH (Sec-CH-UA-Full-Version-List). Faites-la correspondre à la version de Nitrous dans l'agent utilisateur."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_LABEL",
+    "source": "UA-CH brands",
+    "message": "Marques UA-CH"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_TOOLTIP",
+    "source": "Comma-separated Brand/Version pairs for Sec-CH-UA. Example: Nitrous/149, Not/A)Brand/24.",
+    "message": "Paires Marque/Version séparées par des virgules pour Sec-CH-UA. Exemple : Nitrous/149, Not/A)Brand/24."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_LABEL",
+    "source": "Time zone",
+    "message": "Fuseau horaire"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_TOOLTIP",
+    "source": "Overrides the IANA time zone used by Date and Intl APIs. Keep it consistent with locale and Accept-Language for a believable region.",
+    "message": "Remplace le fuseau horaire IANA utilisé par les API Date et Intl. Veillez à la cohérence avec les paramètres régionaux et Accept-Language pour une région plausible."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_LOCALE_LABEL",
+    "source": "Locale",
+    "message": "Paramètres régionaux"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_LOCALE_TOOLTIP",
+    "source": "Overrides the primary locale exposed to websites. Selecting a preset locale also updates Accept-Language; you can still edit that field manually.",
+    "message": "Remplace les principaux paramètres régionaux exposés aux sites Web. Sélectionner un préréglage met aussi à jour Accept-Language, que vous pouvez ensuite modifier manuellement."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_LABEL",
+    "source": "Accept-Language",
+    "message": "Accept-Language"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_TOOLTIP",
+    "source": "Stores the intended Accept-Language chain for this persona. Current runtime coverage is incomplete, so locale remains the primary language override.",
+    "message": "Enregistre la chaîne Accept-Language prévue pour cette Persona. La couverture actuelle à l'exécution est incomplète : les paramètres régionaux restent donc le principal remplacement de langue."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_LABEL",
+    "source": "GPU vendor",
+    "message": "Fournisseur du GPU"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_TOOLTIP",
+    "source": "Overrides the WebGL UNMASKED_VENDOR_WEBGL string. Pair it with a matching renderer for the selected platform.",
+    "message": "Remplace la chaîne WebGL UNMASKED_VENDOR_WEBGL. Associez-la à un moteur de rendu correspondant à la plateforme choisie."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_LABEL",
+    "source": "GPU renderer",
+    "message": "Moteur de rendu GPU"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_TOOLTIP",
+    "source": "Overrides the WebGL UNMASKED_RENDERER_WEBGL string (usually an ANGLE adapter description). Must look native to the chosen OS.",
+    "message": "Remplace la chaîne WebGL UNMASKED_RENDERER_WEBGL (généralement une description d'adaptateur ANGLE). Elle doit sembler native pour le système choisi."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_LABEL",
+    "source": "WebGPU adapter",
+    "message": "Adaptateur WebGPU"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_TOOLTIP",
+    "source": "Overrides the adapter name reported by WebGPU. Use a short device name that matches the GPU renderer family.",
+    "message": "Remplace le nom de l'adaptateur indiqué par WebGPU. Utilisez un nom d'appareil court correspondant à la famille du moteur de rendu GPU."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL",
+    "source": "Hardware concurrency",
+    "message": "Concurrence matérielle"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_TOOLTIP",
+    "source": "Overrides navigator.hardwareConcurrency (logical CPU cores). Common desktop values are 4, 8, 10, 12, or 16.",
+    "message": "Remplace navigator.hardwareConcurrency (cœurs de processeur logiques). Les valeurs courantes sur ordinateur sont 4, 8, 10, 12 ou 16."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_LABEL",
+    "source": "Device memory",
+    "message": "Mémoire de l'appareil"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_TOOLTIP",
+    "source": "Overrides navigator.deviceMemory and matching Device-Memory Client Hint headers in gigabytes. Supported buckets are 1, 2, 4, 8, 16, and 32.",
+    "message": "Remplace navigator.deviceMemory et les en-têtes Client Hint Device-Memory correspondants, en gigaoctets. Les valeurs prises en charge sont 1, 2, 4, 8, 16 et 32."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_LABEL",
+    "source": "Max touch points",
+    "message": "Nombre maximal de points tactiles"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_TOOLTIP",
+    "source": "Overrides navigator.maxTouchPoints. Use 0 for most desktop personas and a positive value for touch-capable devices.",
+    "message": "Remplace navigator.maxTouchPoints. Utilisez 0 pour la plupart des Personas d'ordinateur et une valeur positive pour les appareils tactiles."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_LABEL",
+    "source": "Screen width",
+    "message": "Largeur de l'écran"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_TOOLTIP",
+    "source": "Overrides screen.width in CSS pixels. Keep width, height, avail*, outer*, and DPR consistent with a real display.",
+    "message": "Remplace screen.width en pixels CSS. Veillez à la cohérence entre largeur, hauteur, valeurs avail*, valeurs outer* et DPR d'un écran réel."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_LABEL",
+    "source": "Screen height",
+    "message": "Hauteur de l'écran"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_TOOLTIP",
+    "source": "Overrides screen.height in CSS pixels. Pair with a realistic width and device pixel ratio for the target device.",
+    "message": "Remplace screen.height en pixels CSS. Associez-la à une largeur et à un rapport de pixels réalistes pour l'appareil ciblé."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_LABEL",
+    "source": "Available screen left",
+    "message": "Position gauche disponible"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_TOOLTIP",
+    "source": "Overrides screen.availLeft. Usually 0 on single-display desktops; multi-monitor setups may use non-zero values.",
+    "message": "Remplace screen.availLeft. La valeur est généralement 0 sur un ordinateur à un seul écran ; une configuration multiécran peut utiliser une valeur non nulle."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_LABEL",
+    "source": "Available screen top",
+    "message": "Position haute disponible"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_TOOLTIP",
+    "source": "Overrides screen.availTop. Often 0, or slightly positive when a menu bar or dock reduces usable area.",
+    "message": "Remplace screen.availTop. La valeur est souvent 0 ou légèrement positive si une barre de menus ou un dock réduit la zone utilisable."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_LABEL",
+    "source": "Available screen width",
+    "message": "Largeur d'écran disponible"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_TOOLTIP",
+    "source": "Overrides screen.availWidth. Typically equal to or slightly smaller than screen width.",
+    "message": "Remplace screen.availWidth. Elle est généralement égale ou légèrement inférieure à la largeur de l'écran."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_LABEL",
+    "source": "Available screen height",
+    "message": "Hauteur d'écran disponible"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_TOOLTIP",
+    "source": "Overrides screen.availHeight. Usually smaller than screen height because of taskbars or docks.",
+    "message": "Remplace screen.availHeight. Elle est généralement inférieure à la hauteur de l'écran à cause des barres des tâches ou des docks."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_LABEL",
+    "source": "Outer width",
+    "message": "Largeur extérieure"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_TOOLTIP",
+    "source": "Overrides window.outerWidth. For maximized windows this is often close to the available screen width.",
+    "message": "Remplace window.outerWidth. Pour une fenêtre agrandie, cette valeur est souvent proche de la largeur d'écran disponible."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_LABEL",
+    "source": "Outer height",
+    "message": "Hauteur extérieure"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_TOOLTIP",
+    "source": "Overrides window.outerHeight. Keep it consistent with available screen height for a maximized desktop window.",
+    "message": "Remplace window.outerHeight. Veillez à la cohérence avec la hauteur d'écran disponible pour une fenêtre d'ordinateur agrandie."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DPR_LABEL",
+    "source": "Device pixel ratio",
+    "message": "Rapport de pixels de l'appareil"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DPR_TOOLTIP",
+    "source": "Overrides window.devicePixelRatio and matching DPR Client Hint headers. Common values are 1, 1.25, 1.5, and 2 for Retina-class displays.",
+    "message": "Remplace window.devicePixelRatio et les en-têtes Client Hint DPR correspondants. Les valeurs courantes sont 1, 1.25 et 1.5 ; la valeur 2 est courante pour les écrans de classe Retina."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_LABEL",
+    "source": "Fonts profile ID",
+    "message": "ID du profil de polices"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_TOOLTIP",
+    "source": "Metadata identifier saved with this profile. It does not select or install fonts by itself.",
+    "message": "Identifiant de métadonnées enregistré avec ce profil. Il ne sélectionne ni n’installe de polices à lui seul."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_LABEL",
+    "source": "Font families",
+    "message": "Familles de polices"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "Comma-separated font family names exposed as the persona font set. Prefer fonts that exist on the target OS.",
+    "message": "Noms de familles de polices séparés par des virgules et exposés comme ensemble de polices de la Persona. Préférez les polices présentes sur le système ciblé."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_LABEL",
+    "source": "Font aliases",
+    "message": "Alias de polices"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_TOOLTIP",
+    "source": "Comma-separated alias names mapped onto the persona font set. Leave empty unless you need explicit aliases.",
+    "message": "Alias séparés par des virgules et associés à l'ensemble de polices de la Persona. Laissez ce champ vide sauf si des alias explicites sont nécessaires."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_LABEL",
+    "source": "Font engine",
+    "message": "Moteur de polices"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "Stores font engine metadata such as directwrite, coretext, or freetype. It is not currently applied to every font rendering path.",
+    "message": "Enregistre les métadonnées du moteur de polices, comme directwrite, coretext ou freetype. Elles ne sont pas encore appliquées à tous les chemins de rendu des polices."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_LABEL",
+    "source": "Audio base latency",
+    "message": "Latence audio de base"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_TOOLTIP",
+    "source": "Overrides AudioContext base latency. Small values such as 0.01–0.02 are typical; large changes can look synthetic.",
+    "message": "Remplace la latence de base d'AudioContext. De petites valeurs, comme 0,01 à 0,02, sont courantes ; des écarts importants peuvent sembler artificiels."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_LABEL",
+    "source": "Canvas noise",
+    "message": "Bruit du canevas"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_TOOLTIP",
+    "source": "Applies deterministic noise to supported canvas readback paths. Some formats and offscreen export paths are not covered yet.",
+    "message": "Applique un bruit déterministe aux chemins de lecture de canevas pris en charge. Certains formats et chemins d'exportation hors écran ne sont pas encore couverts."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_LABEL",
+    "source": "Audio noise",
+    "message": "Bruit audio"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_TOOLTIP",
+    "source": "Applies persona-scoped deterministic noise to supported offline audio render results. Live audio analysis paths are not covered yet.",
+    "message": "Applique un bruit déterministe propre à la Persona aux résultats de rendu audio hors ligne pris en charge. Les chemins d'analyse audio en direct ne sont pas encore couverts."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_LABEL",
+    "source": "Hardware noise",
+    "message": "Bruit matériel"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "Applies deterministic noise to supported low-level hardware readback paths. CPU and memory values use their explicit fields instead.",
+    "message": "Applique un bruit déterministe aux chemins de lecture matérielle de bas niveau pris en charge. Les valeurs de processeur et de mémoire utilisent leurs champs dédiés."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_LABEL",
+    "source": "Font metric noise",
+    "message": "Bruit des métriques de police"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_TOOLTIP",
+    "source": "When enabled, font measurement APIs receive small deterministic noise tied to this persona.",
+    "message": "Lorsque cette option est activée, les API de mesure des polices reçoivent un léger bruit déterministe lié à cette Persona."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_LABEL",
+    "source": "Network type",
+    "message": "Type de réseau"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_TOOLTIP",
+    "source": "Overrides the exposed connection type on supported Network Information API paths. RTT, effective type, and HTTP Client Hints are not fully covered.",
+    "message": "Remplace le type de connexion exposé sur les chemins pris en charge de l'API Network Information. RTT, le type effectif et les HTTP Client Hints ne sont pas entièrement couverts."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_LABEL",
+    "source": "Downlink max",
+    "message": "Débit descendant maximal"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_TOOLTIP",
+    "source": "Overrides navigator.connection.downlinkMax in megabits per second. Use a value that fits the chosen network type.",
+    "message": "Remplace navigator.connection.downlinkMax en mégabits par seconde. Utilisez une valeur adaptée au type de réseau choisi."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEW_PROFILE_DEFAULT_NAME",
+    "source": "New Persona",
+    "message": "Nouvelle Persona"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DISCARD_CHANGES_CONFIRM",
+    "source": "Discard unsaved changes?",
+    "message": "Ignorer les modifications non enregistrées ?"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DELETE_CONFIRM",
+    "source": "Delete this persona profile?",
+    "message": "Supprimer ce profil Persona ?"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DEFAULT_READ_ONLY",
+    "source": "The system persona is read-only.",
+    "message": "La Persona système est en lecture seule."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_CANCEL",
+    "source": "Cancel",
+    "message": "Annuler"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_ACTIVE_SYSTEM",
+    "source": "Active system",
+    "message": "Système actif"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_SYSTEM",
+    "source": "System",
+    "message": "Système"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_ACTIVE",
+    "source": "Active",
+    "message": "Actif"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_SAVED",
+    "source": "Saved",
+    "message": "Enregistré"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SYSTEM_SUMMARY",
+    "source": "Uses the browser's real system values",
+    "message": "Utilise les valeurs réelles du système"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNKNOWN_VALUE",
+    "source": "Unknown",
+    "message": "Inconnu"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEVER_USED",
+    "source": "Never used",
+    "message": "Jamais utilisé"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_AMERICAS",
+    "source": "Americas",
+    "message": "Amériques"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_EUROPE",
+    "source": "Europe",
+    "message": "Europe"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_ASIA",
+    "source": "Asia",
+    "message": "Asie"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_OCEANIA",
+    "source": "Oceania",
+    "message": "Océanie"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_ROTATION",
+    "source": "Fingerprint rotation",
+    "message": "Rotation de l'empreinte"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PERMISSIONS",
+    "source": "Runtime API gates",
+    "message": "Contrôles des API à l'exécution"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_LABEL",
+    "source": "UA-CH platform version",
+    "message": "Version de plateforme UA-CH"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_TOOLTIP",
+    "source": "Overrides the operating system version in high-entropy UA-CH values. Keep it consistent with the selected platform and user agent.",
+    "message": "Remplace la version du système d'exploitation dans les valeurs UA-CH à entropie élevée. Veillez à la cohérence avec la plateforme et l'agent utilisateur choisis."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_LABEL",
+    "source": "UA-CH architecture",
+    "message": "Architecture UA-CH"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_TOOLTIP",
+    "source": "Overrides the CPU architecture in UA-CH metadata. Common desktop values are x86 and arm.",
+    "message": "Remplace l'architecture du processeur dans les métadonnées UA-CH. Les valeurs courantes sur ordinateur sont x86 et arm."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_LABEL",
+    "source": "UA-CH model",
+    "message": "Modèle UA-CH"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_TOOLTIP",
+    "source": "Overrides the device model in high-entropy UA-CH values. Desktop personas normally leave this empty.",
+    "message": "Remplace le modèle de l'appareil dans les valeurs UA-CH à entropie élevée. Ce champ reste normalement vide pour les Personas d'ordinateur."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_LABEL",
+    "source": "UA-CH bitness",
+    "message": "Nombre de bits UA-CH"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_TOOLTIP",
+    "source": "Overrides the CPU bitness in UA-CH metadata. Match this with the user agent and architecture.",
+    "message": "Remplace le nombre de bits du processeur dans les métadonnées UA-CH. Faites-le correspondre à l'agent utilisateur et à l'architecture."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_LABEL",
+    "source": "UA-CH form factors",
+    "message": "Facteurs de forme UA-CH"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_TOOLTIP",
+    "source": "Comma-separated UA-CH form factors, such as Desktop or Mobile. Use values that match the device identity.",
+    "message": "Facteurs de forme UA-CH séparés par des virgules, comme Desktop ou Mobile. Utilisez des valeurs correspondant à l'identité de l'appareil."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_LABEL",
+    "source": "UA-CH mobile",
+    "message": "UA-CH mobile"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_TOOLTIP",
+    "source": "Controls the mobile flag in UA-CH metadata. Leave it disabled for desktop personas.",
+    "message": "Contrôle l'indicateur mobile dans les métadonnées UA-CH. Laissez-le désactivé pour les Personas d'ordinateur."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_LABEL",
+    "source": "UA-CH WoW64",
+    "message": "UA-CH WoW64"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_TOOLTIP",
+    "source": "Reports a 32-bit browser running on 64-bit Windows. Leave it disabled for native 64-bit Windows and non-Windows personas.",
+    "message": "Indique un navigateur 32 bits exécuté sous Windows 64 bits. Laissez cette option désactivée pour Windows 64 bits natif et les Personas non Windows."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_LABEL",
+    "source": "Audio output latency",
+    "message": "Latence de sortie audio"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_TOOLTIP",
+    "source": "Overrides AudioContext output latency in seconds. Keep it close to the base latency and within a realistic device range.",
+    "message": "Remplace la latence de sortie d'AudioContext en secondes. Gardez-la proche de la latence de base et dans une plage réaliste pour l'appareil."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_LABEL",
+    "source": "Rotation scope",
+    "message": "Portée de la rotation"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_TOOLTIP",
+    "source": "Selects whether deterministic noise tokens are isolated by site and profile, by profile, or globally.",
+    "message": "Détermine si les jetons de bruit déterministe sont isolés par site et profil, par profil ou globalement."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_LABEL",
+    "source": "Rotation interval (days)",
+    "message": "Intervalle de rotation (jours)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_TOOLTIP",
+    "source": "Sets how many days a deterministic fingerprint epoch remains active before rotating automatically.",
+    "message": "Définit le nombre de jours pendant lesquels une époque d'empreinte déterministe reste active avant sa rotation automatique."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_LABEL",
+    "source": "Persona Client Hints",
+    "message": "Client Hints de la Persona"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_TOOLTIP",
+    "source": "Applies this persona's UA-CH metadata to navigation, renderer, and worker surfaces. Disabling it falls back to browser defaults.",
+    "message": "Applique les métadonnées UA-CH de ce persona aux contextes de navigation, de rendu et de workers. Si cette option est désactivée, les valeurs par défaut du navigateur sont utilisées."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_LABEL",
+    "source": "Background fetch and sync",
+    "message": "Récupération et synchronisation en arrière-plan"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_TOOLTIP",
+    "source": "Controls Persona-gated background activity entry points. Current coverage is limited to the implemented browser-side paths.",
+    "message": "Contrôle les points d'entrée d'activité en arrière-plan soumis à Persona. La couverture actuelle se limite aux chemins implémentés côté navigateur."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_LABEL",
+    "source": "Contacts API",
+    "message": "API Contacts"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_TOOLTIP",
+    "source": "Controls Persona-gated access to contact selection. Site permissions, platform support, and browser policy still apply.",
+    "message": "Contrôle l'accès à la sélection de contacts soumis à Persona. Les autorisations du site, la prise en charge de la plateforme et les règles du navigateur s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_LABEL",
+    "source": "Local Fonts API",
+    "message": "API Local Fonts"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_TOOLTIP",
+    "source": "Controls queryLocalFonts access. CSS local font lookup and other font rendering paths are not covered by this gate.",
+    "message": "Contrôle l'accès à queryLocalFonts. La recherche de polices locales en CSS et les autres chemins de rendu des polices ne sont pas couverts par ce contrôle."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_LABEL",
+    "source": "Privacy Sandbox APIs",
+    "message": "API Privacy Sandbox"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_TOOLTIP",
+    "source": "Controls supported Persona-gated Privacy Sandbox services. Topics and Protected Audience coverage is not complete yet.",
+    "message": "Contrôle les services Privacy Sandbox pris en charge et soumis à Persona. La couverture de Topics et Protected Audience n'est pas encore complète."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_LABEL",
+    "source": "Gamepad API",
+    "message": "API Gamepad"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_TOOLTIP",
+    "source": "Controls Persona-gated access to gamepad data. Platform support and browser policy still apply.",
+    "message": "Contrôle l'accès aux données des manettes soumis à Persona. La prise en charge de la plateforme et les règles du navigateur s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_LABEL",
+    "source": "Clipboard API",
+    "message": "API Presse-papiers"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_TOOLTIP",
+    "source": "Controls Persona-gated clipboard access. Secure-context, user-gesture, and site permission checks still apply.",
+    "message": "Contrôle l'accès au presse-papiers soumis à Persona. Les contrôles du contexte sécurisé, du geste utilisateur et des autorisations du site s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_LABEL",
+    "source": "Geolocation API",
+    "message": "API Géolocalisation"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_TOOLTIP",
+    "source": "Controls Persona-gated geolocation access. It does not provide a synthetic location; site permission checks still apply.",
+    "message": "Contrôle l'accès à la géolocalisation soumis à Persona. Ne fournit pas de position synthétique ; les contrôles d'autorisation du site s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_LABEL",
+    "source": "Notifications API",
+    "message": "API Notifications"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_TOOLTIP",
+    "source": "Controls Persona-gated notification access. Site permissions and operating system notification settings still apply.",
+    "message": "Contrôle l'accès aux notifications soumis à Persona. Les autorisations du site et les paramètres de notification du système d'exploitation s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_LABEL",
+    "source": "Web MIDI API",
+    "message": "API Web MIDI"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_TOOLTIP",
+    "source": "Controls Persona-gated MIDI access. Device availability, permissions, and browser policy still apply.",
+    "message": "Contrôle l'accès MIDI soumis à Persona. La disponibilité des appareils, les autorisations et les règles du navigateur s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_LABEL",
+    "source": "Idle Detection API",
+    "message": "API Idle Detection"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_TOOLTIP",
+    "source": "Controls Persona-gated idle detection access. Site permissions and feature policy still apply.",
+    "message": "Contrôle l'accès à la détection d'inactivité soumis à Persona. Les autorisations du site et la stratégie de fonctionnalités s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_LABEL",
+    "source": "Window Management API",
+    "message": "API Window Management"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_TOOLTIP",
+    "source": "Controls Persona-gated multi-screen window management access. Site permissions and platform support still apply.",
+    "message": "Contrôle l'accès à la gestion des fenêtres multiécran soumis à Persona. Les autorisations du site et la prise en charge de la plateforme s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_LABEL",
+    "source": "Web NFC API",
+    "message": "API Web NFC"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_TOOLTIP",
+    "source": "Controls Persona-gated Web NFC access. Hardware support, secure-context, and permission checks still apply.",
+    "message": "Contrôle l'accès Web NFC soumis à Persona. La prise en charge matérielle, le contexte sécurisé et les contrôles d'autorisation s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_LABEL",
+    "source": "WebXR API",
+    "message": "API WebXR"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_TOOLTIP",
+    "source": "Controls Persona-gated immersive XR sessions. Device availability and browser permissions still apply.",
+    "message": "Contrôle les sessions XR immersives soumises à Persona. La disponibilité des appareils et les autorisations du navigateur s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_LABEL",
+    "source": "Sensor APIs",
+    "message": "API de capteurs"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_TOOLTIP",
+    "source": "Controls Persona-gated generic sensor access. Individual sensor support and permission policy still apply.",
+    "message": "Contrôle l'accès aux capteurs génériques soumis à Persona. La prise en charge de chaque capteur et la stratégie d'autorisations s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_LABEL",
+    "source": "Real battery status",
+    "message": "État réel de la batterie"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_TOOLTIP",
+    "source": "Allows supported paths to expose the host battery state. Disable it to avoid intentionally revealing real battery values.",
+    "message": "Autorise les chemins pris en charge à exposer l'état de la batterie de l'hôte. Désactivez cette option pour éviter de révéler volontairement les valeurs réelles de la batterie."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_LABEL",
+    "source": "Platform credentials",
+    "message": "Identifiants de la plateforme"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_TOOLTIP",
+    "source": "Controls supported WebAuthn platform-credential flows. Some credential operations remain governed by WebAuthn policy and prompts.",
+    "message": "Contrôle les flux d'identifiants de plateforme WebAuthn pris en charge. Certaines opérations restent régies par les règles et les invites WebAuthn."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_LABEL",
+    "source": "Payment handlers",
+    "message": "Gestionnaires de paiement"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_TOOLTIP",
+    "source": "Controls Persona-gated payment handler access. Merchant, browser, and operating system payment policy still apply.",
+    "message": "Contrôle l'accès aux gestionnaires de paiement soumis à Persona. Les règles de paiement du marchand, du navigateur et du système d'exploitation s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_LABEL",
+    "source": "Speech synthesis",
+    "message": "Synthèse vocale"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "Controls supported speech synthesis discovery paths. Blocking is not yet complete for every speech operation.",
+    "message": "Contrôle les chemins de découverte de synthèse vocale pris en charge. Le blocage n'est pas encore complet pour toutes les opérations vocales."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_LABEL",
+    "source": "Web Printing API",
+    "message": "API Web Printing"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_TOOLTIP",
+    "source": "Controls Persona-gated Web Printing access. Printer availability, user confirmation, and browser policy still apply.",
+    "message": "Contrôle l'accès à Web Printing soumis à Persona. La disponibilité des imprimantes, la confirmation de l'utilisateur et les règles du navigateur s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_LABEL",
+    "source": "Shape Detection APIs",
+    "message": "API de détection de formes"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_TOOLTIP",
+    "source": "Controls Persona-gated barcode, face, and text detection access on supported platforms.",
+    "message": "Contrôle l'accès à la détection de codes-barres, de visages et de texte soumis à Persona sur les plateformes prises en charge."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_LABEL",
+    "source": "WebOTP API",
+    "message": "API WebOTP"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_TOOLTIP",
+    "source": "Controls Persona-gated WebOTP access. Secure-context, user consent, and platform support still apply.",
+    "message": "Contrôle l'accès WebOTP soumis à Persona. Le contexte sécurisé, le consentement de l'utilisateur et la prise en charge de la plateforme s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_LABEL",
+    "source": "Built-in AI APIs",
+    "message": "API d'IA intégrées"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_TOOLTIP",
+    "source": "Controls Persona-gated access to supported built-in AI APIs. Feature availability and enterprise policy still apply.",
+    "message": "Contrôle l'accès aux API d'IA intégrées prises en charge et soumises à Persona. La disponibilité des fonctionnalités et les règles d'entreprise s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_LABEL",
+    "source": "Handwriting recognition",
+    "message": "Reconnaissance de l'écriture manuscrite"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_TOOLTIP",
+    "source": "Controls Persona-gated handwriting recognition access. Platform support and language models still apply.",
+    "message": "Contrôle l'accès à la reconnaissance de l'écriture manuscrite soumis à Persona. La prise en charge de la plateforme et les modèles linguistiques s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_LABEL",
+    "source": "WebNN API",
+    "message": "API WebNN"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_TOOLTIP",
+    "source": "Controls Persona-gated WebNN access. Hardware acceleration, feature availability, and browser policy still apply.",
+    "message": "Contrôle l'accès WebNN soumis à Persona. L'accélération matérielle, la disponibilité des fonctionnalités et les règles du navigateur s'appliquent toujours."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_LABEL",
+    "source": "Private State Tokens",
+    "message": "Private State Tokens"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP",
+    "source": "Controls supported Persona-gated Private State Token operations. Other Privacy Sandbox controls may also apply.",
+    "message": "Contrôle les opérations Private State Token prises en charge et soumises à Persona. D'autres contrôles Privacy Sandbox peuvent également s'appliquer."
   }
 ]

@@ -65,11 +65,15 @@ class DownloadInfo: #pylint: disable=too-few-public-methods
 
     _schema = schema.Schema({
         schema.Optional(schema.And(str, len)): {
-            **{x: schema.And(str, len)
-               for x in _nonempty_keys},
+            **{
+                x: schema.And(str, len)
+                for x in _nonempty_keys
+            },
             'output_path': (lambda x: str(Path(x).relative_to(''))),
-            **{schema.Optional(x): schema.And(str, len)
-               for x in _optional_keys},
+            **{
+                schema.Optional(x): schema.And(str, len)
+                for x in _optional_keys
+            },
             schema.Optional('extractor'): schema.Or(ExtractorEnum.TAR, ExtractorEnum.SEVENZIP,
                                                     ExtractorEnum.WINRAR),
             schema.Optional(schema.Or(*_hashes)): schema.And(str, len),

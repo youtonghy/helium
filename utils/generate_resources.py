@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from PIL import Image
 
+from _common import iter_resource_list_entries
+
 
 def scale_image(input_file, size, output_path):
     """
@@ -34,29 +36,22 @@ def generate_resources(resource_list, resource_dir):
     Parses the resource list and generates resources
     for each valid line
     """
-    with open(resource_list, 'r', encoding='utf-8') as file:
-        for line_number, line in enumerate(file, start=1):
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
+    for line_number, line_parts in iter_resource_list_entries(resource_list):
+        input_file = resource_dir / line_parts[0]
+        size = None
+        output_file = None
 
-            line_parts = line.split()
+        if len(line_parts) == 2:
+            output_file = resource_dir / line_parts[1]
+        elif len(line_parts) == 3:
+            size = int(line_parts[1])
+            output_file = resource_dir / line_parts[2]
+        else:
+            raise ValueError(f"Line {line_number} in the resource file is invalid.")
 
-            input_file = resource_dir / line_parts[0]
-            size = None
-            output_file = None
-
-            if len(line_parts) == 2:
-                output_file = resource_dir / line_parts[1]
-            elif len(line_parts) == 3:
-                size = int(line_parts[1])
-                output_file = resource_dir / line_parts[2]
-            else:
-                raise ValueError(f"Line {line_number} in the resource file is invalid.")
-
-            scale_image(input_file, size, output_file)
-            size_str = "undefined" if size is None else f"{size}x{size}"
-            print(f"Created {output_file} (size {size_str})")
+        scale_image(input_file, size, output_file)
+        size_str = "undefined" if size is None else f"{size}x{size}"
+        print(f"Created {output_file} (size {size_str})")
 
 
 def main():

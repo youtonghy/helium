@@ -73,11 +73,12 @@
      "privacy_page/privacy_page.ts",
      "privacy_page/privacy_page_index.ts",
      "privacy_page/security/fingerprint_progress_arc.ts",
-@@ -397,6 +398,7 @@ build_webui("build") {
+@@ -397,6 +398,8 @@ build_webui("build") {
        "people_page/import_data_browser_proxy.ts",
        "people_page/manage_profile_browser_proxy.ts",
        "privacy_page/changelog_proxy.ts",
 +      "privacy_page/persona_browser_proxy.ts",
++      "privacy_page/persona_config.ts",
        "system_page/system_page_browser_proxy.ts",
      ]
      if (is_chrome_branded) {
@@ -130,45 +131,54 @@
        std::make_unique<HeliumServicesSchemaHandler>(profile));
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,87 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +import {sendWithPromise} from 'chrome://resources/js/cr.js';
 +
++import type {
++  PersonaImportBundle,
++  PersonaRecord,
++  PersonaState,
++} from './persona_config.js';
++
 +export interface PersonaPageResponse {
 +  ok: boolean;
-+  state: any;
-+  fieldErrors: any;
++  state: PersonaState;
++  fieldErrors: Record<string, unknown>;
++  personaId?: string;
 +  importedCount?: number;
 +  skippedCount?: number;
 +}
 +
 +export interface PersonaProfilesResponse {
-+  profiles: any[];
++  profiles: PersonaRecord[];
 +  activePersonaId: string;
 +  lastUsedPersonaId?: string;
 +  launchSelectionMode?: string;
 +}
 +
 +export interface PersonaBrowserProxy {
-+  getPersonaState(): Promise<any>;
++  getPersonaState(): Promise<PersonaState>;
 +  getPersonaProfiles(): Promise<PersonaProfilesResponse>;
 +  createPersonaProfile(displayName: string): Promise<PersonaPageResponse>;
-+  savePersona(persona: any): Promise<PersonaPageResponse>;
-+  importPersonas(personas: any[]): Promise<PersonaPageResponse>;
++  savePersona(persona: PersonaRecord): Promise<PersonaPageResponse>;
++  importPersonas(bundle: PersonaImportBundle): Promise<PersonaPageResponse>;
 +  setActivePersona(personaId: string): Promise<PersonaPageResponse>;
 +  clonePresetIntoProfile(presetId: string): Promise<PersonaPageResponse>;
 +  deletePersona(personaId: string): Promise<PersonaPageResponse>;
 +  getLaunchSelectionMode(): Promise<string>;
 +  setLaunchSelectionMode(mode: string): Promise<string>;
-+  refreshFingerprints(): Promise<any>;
++  refreshFingerprints(): Promise<PersonaState>;
 +}
 +
 +let instance: PersonaBrowserProxy|null = null;
 +
 +export class PersonaBrowserProxyImpl implements PersonaBrowserProxy {
-+  getPersonaState() { return sendWithPromise<any>('getPersonaState'); }
++  getPersonaState() {
++    return sendWithPromise<PersonaState>('getPersonaState');
++  }
 +  getPersonaProfiles() {
 +    return sendWithPromise<PersonaProfilesResponse>('getPersonaProfiles');
 +  }
@@ -176,11 +186,23 @@
 +    return sendWithPromise<PersonaPageResponse>(
 +        'createPersonaProfile', displayName);
 +  }
-+  savePersona(persona: any) { return sendWithPromise<PersonaPageResponse>('savePersona', persona); }
-+  importPersonas(personas: any[]) { return sendWithPromise<PersonaPageResponse>('importPersonas', personas); }
-+  setActivePersona(personaId: string) { return sendWithPromise<PersonaPageResponse>('setActivePersona', personaId); }
-+  clonePresetIntoProfile(presetId: string) { return sendWithPromise<PersonaPageResponse>('clonePresetIntoProfile', presetId); }
-+  deletePersona(personaId: string) { return sendWithPromise<PersonaPageResponse>('deletePersona', personaId); }
++  savePersona(persona: PersonaRecord) {
++    return sendWithPromise<PersonaPageResponse>('savePersona', persona);
++  }
++  importPersonas(bundle: PersonaImportBundle) {
++    return sendWithPromise<PersonaPageResponse>('importPersonas', bundle);
++  }
++  setActivePersona(personaId: string) {
++    return sendWithPromise<PersonaPageResponse>(
++        'setActivePersona', personaId);
++  }
++  clonePresetIntoProfile(presetId: string) {
++    return sendWithPromise<PersonaPageResponse>(
++        'clonePresetIntoProfile', presetId);
++  }
++  deletePersona(personaId: string) {
++    return sendWithPromise<PersonaPageResponse>('deletePersona', personaId);
++  }
 +  getLaunchSelectionMode() {
 +    return sendWithPromise<string>('getLaunchSelectionMode');
 +  }
@@ -188,19 +210,22 @@
 +    return sendWithPromise<string>('setLaunchSelectionMode', mode);
 +  }
 +  refreshFingerprints() {
-+    return sendWithPromise<any>('refreshFingerprints');
++    return sendWithPromise<PersonaState>('refreshFingerprints');
 +  }
 +  static getInstance(): PersonaBrowserProxy {
 +    return instance || (instance = new PersonaBrowserProxyImpl());
 +  }
++  static setInstance(proxy: PersonaBrowserProxy) {
++    instance = proxy;
++  }
 +}
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
-@@ -0,0 +1,521 @@
+@@ -0,0 +1,1169 @@
 +<!-- Copyright 2026 The Helium Authors -->
 +<!-- You can use, redistribute, and/or modify this source code under -->
 +<!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
-+<style include="cr-shared-style settings-shared">
++<style include="cr-shared-style settings-shared md-select">
 +  .section {
 +    border-top: var(--cr-separator-line);
 +    margin-top: 20px;
@@ -240,13 +265,28 @@
 +  .profile-card {
 +    background: var(--cr-card-background-color);
 +    border: 1px solid var(--cr-separator-color);
-+    border-radius: 12px;
-+    cursor: pointer;
++    border-radius: 8px;
 +    display: flex;
 +    flex-direction: column;
 +    gap: 10px;
 +    min-height: 156px;
 +    padding: 14px;
++  }
++
++  .profile-card-main {
++    background: transparent;
++    border: 0;
++    color: inherit;
++    cursor: pointer;
++    font: inherit;
++    padding: 0;
++    text-align: start;
++    width: 100%;
++  }
++
++  .profile-card-main:focus-visible {
++    outline: 2px solid var(--cr-focus-outline-color);
++    outline-offset: 4px;
 +  }
 +
 +  .profile-card[data-selected='true'] {
@@ -305,6 +345,10 @@
 +    grid-template-columns: repeat(2, minmax(0, 1fr));
 +  }
 +
++  .field-grid[data-read-only='true'] {
++    opacity: 0.65;
++  }
++
 +  .field {
 +    display: flex;
 +    flex-direction: column;
@@ -321,6 +365,21 @@
 +
 +  .field select {
 +    min-height: 32px;
++    width: 100%;
++  }
++
++  .config-group-title {
++    font-size: 0.9rem;
++    grid-column: 1 / -1;
++    margin: 14px 0 0;
++  }
++
++  .toggle-field {
++    align-items: center;
++    display: flex;
++    flex-direction: row;
++    justify-content: space-between;
++    min-height: 40px;
 +  }
 +
 +  .full-row {
@@ -337,6 +396,16 @@
 +    min-width: 260px;
 +  }
 +
++  .status-message {
++    color: var(--cr-secondary-text-color);
++    font-size: 0.8rem;
++    margin-bottom: 12px;
++  }
++
++  .status-message[data-error='true'] {
++    color: var(--cr-fallback-color-error);
++  }
++
 +  .actions {
 +    display: flex;
 +    gap: 8px;
@@ -347,58 +416,91 @@
 +  #personaImportInput {
 +    display: none;
 +  }
++
++  @media (max-width: 600px) {
++    .field-grid {
++      grid-template-columns: minmax(0, 1fr);
++    }
++
++    .full-row,
++    .config-group-title {
++      grid-column: 1;
++    }
++
++    .preset-actions,
++    .section-header {
++      align-items: stretch;
++      flex-direction: column;
++    }
++
++    .preset-select {
++      min-width: 0;
++      width: 100%;
++    }
++  }
 +</style>
 +<settings-subpage page-title="$i18n{personaTitle}" route-path$="[[routePath]]">
 +  <div class="section">
 +    <div class="section-header">
 +      <div>
-+        <h3>Profiles</h3>
-+        <div class="profile-card-meta">Manage saved persona profiles for different browsing identities.</div>
++        <h3>$i18n{personaSectionProfiles}</h3>
++        <div class="profile-card-meta">$i18n{personaSectionProfilesDesc}</div>
 +      </div>
 +      <div class="section-actions">
-+        <cr-button on-click="onImportClick_">
++        <cr-button on-click="onImportClick_" disabled="[[pending_]]">
 +          $i18n{personaImport}
 +        </cr-button>
 +        <cr-button on-click="onExportAllProfilesClick_">
 +          $i18n{personaExportAll}
 +        </cr-button>
-+        <cr-button class="action-button" on-click="onCreateProfileClick_">
-+          New Profile
++        <cr-button class="action-button" on-click="onCreateProfileClick_"
++            disabled="[[pending_]]">
++          $i18n{personaNewProfile}
 +        </cr-button>
 +        <input id="personaImportInput" type="file" accept=".json,application/json"
 +            on-change="onImportFileChange_">
 +      </div>
 +    </div>
 +    <template is="dom-if" if="[[importStatus_]]">
-+      <div class="profile-card-meta">[[importStatus_]]</div>
++      <div class="status-message" data-error$="[[importStatusIsError_]]"
++          aria-live="polite" role="status">
++        [[importStatus_]]
++      </div>
 +    </template>
 +    <div class="profiles-grid">
 +      <template is="dom-repeat" items="[[profiles_]]">
 +        <div class="profile-card"
-+            data-profile-id$="[[item.id]]"
-+            on-click="onProfileCardClick_"
 +            data-selected$="[[isSelectedProfile_(item.id, selectedProfileId_)]]">
-+          <div class="profile-card-header">
-+            <div class="profile-card-title">
-+              <strong>[[item.displayName]]</strong>
-+              <div class="profile-card-subtitle">[[computeProfileSummary_(item)]]</div>
++          <button class="profile-card-main" type="button"
++              data-profile-id$="[[item.id]]"
++              aria-pressed$="[[isSelectedProfile_(item.id, selectedProfileId_)]]"
++              disabled="[[pending_]]"
++              on-click="onProfileCardClick_">
++            <div class="profile-card-header">
++              <div class="profile-card-title">
++                <strong>[[item.displayName]]</strong>
++                <div class="profile-card-subtitle">
++                  [[computeProfileSummary_(item)]]
++                </div>
++              </div>
++              <div class="chip"
++                  data-active$="[[isActiveProfile_(item.id, activePersonaId_)]]">
++                [[computeProfileStatus_(item.id, activePersonaId_)]]
++              </div>
 +            </div>
-+            <div class="chip" data-active$="[[isActiveProfile_(item.id, activePersonaId_)]]">
-+              [[computeProfileStatus_(item.id, activePersonaId_)]]
-+            </div>
-+          </div>
++          </button>
 +          <div class="profile-card-meta">
-+            Icon: [[item.icon]] | Last used: [[computeLastUsedText_(item.lastUsedAt)]]
++            [[item.icon]] | [[computeLastUsedText_(item.lastUsedAt)]]
 +          </div>
 +          <div class="profile-card-actions">
 +            <cr-button on-click="onActivateProfileClick_"
-+                data-profile-id$="[[item.id]]">
-+              Use Profile
++                data-profile-id$="[[item.id]]" disabled="[[pending_]]">
++              $i18n{personaUseProfile}
 +            </cr-button>
 +            <cr-button on-click="onDeleteProfileClick_"
 +                data-profile-id$="[[item.id]]"
-+                disabled="[[!canDeleteProfile_(item.id)]]">
-+              Delete
++                disabled="[[isDeleteDisabled_(item.id, pending_)]]">
++              $i18n{personaDeleteProfile}
 +            </cr-button>
 +          </div>
 +        </div>
@@ -409,23 +511,26 @@
 +  <div class="section">
 +    <div class="section-header">
 +      <div>
-+        <h3>Startup Selection</h3>
-+        <div class="profile-card-meta">Choose whether Helium asks for a persona on launch or reuses the last selected profile.</div>
++        <h3>$i18n{personaSectionStartup}</h3>
++        <div class="profile-card-meta">$i18n{personaSectionStartupDesc}</div>
 +      </div>
 +    </div>
 +    <div class="field preset-select">
 +      <div class="field-label">
-+        <span>Launch behavior</span>
++        <span>$i18n{personaLaunchBehavior}</span>
 +      </div>
-+      <select value$="[[launchSelectionMode_]]"
++      <select class="md-select" value="[[launchSelectionMode_]]"
++          aria-label="$i18n{personaLaunchBehavior}"
++          disabled="[[pending_]]"
 +          on-change="onLaunchSelectionModeChange_">
-+        <option value="always_ask">Always ask</option>
-+        <option value="use_last">Use last selected profile</option>
++        <option value="always_ask">$i18n{personaLaunchAlwaysAsk}</option>
++        <option value="use_last">$i18n{personaLaunchUseLast}</option>
 +      </select>
 +    </div>
 +    <div class="actions">
-+      <cr-button on-click="onRefreshFingerprintsClick_">
-+        Refresh Fingerprints
++      <cr-button on-click="onRefreshFingerprintsClick_"
++          disabled="[[pending_]]">
++        $i18n{personaRefreshFingerprints}
 +      </cr-button>
 +    </div>
 +  </div>
@@ -433,24 +538,49 @@
 +  <div class="section">
 +    <div class="section-header">
 +      <div>
-+        <h3>Quick Presets</h3>
-+        <div class="profile-card-meta">Clone a system preset into an editable saved profile.</div>
++        <h3>$i18n{personaSectionPresets}</h3>
++        <div class="profile-card-meta">$i18n{personaSectionPresetsDesc}</div>
 +      </div>
 +    </div>
 +    <div class="preset-actions">
 +      <div class="field preset-select">
 +        <div class="field-label">
-+          <span>Preset</span>
++          <span>$i18n{personaPresetLabel}</span>
 +        </div>
-+        <select value$="[[selectedPresetId_]]" on-change="onPresetChange_">
-+          <option value="">Choose a preset...</option>
-+          <template is="dom-repeat" items="[[presets_]]">
-+            <option value$="[[item.id]]">[[item.name]]</option>
-+          </template>
++        <select class="md-select" value="{{selectedPresetId_::change}}"
++            aria-label="$i18n{personaPresetLabel}"
++            disabled="[[pending_]]"
++            on-change="onPresetChange_">
++          <option value="">$i18n{personaPresetChoose}</option>
++          <optgroup label="$i18n{personaPresetGroupAmericas}">
++            <template is="dom-repeat"
++                items="[[getPresetsForRegion_('americas', presets_)]]">
++              <option value="[[item.id]]">[[item.name]]</option>
++            </template>
++          </optgroup>
++          <optgroup label="$i18n{personaPresetGroupEurope}">
++            <template is="dom-repeat"
++                items="[[getPresetsForRegion_('europe', presets_)]]">
++              <option value="[[item.id]]">[[item.name]]</option>
++            </template>
++          </optgroup>
++          <optgroup label="$i18n{personaPresetGroupAsia}">
++            <template is="dom-repeat"
++                items="[[getPresetsForRegion_('asia', presets_)]]">
++              <option value="[[item.id]]">[[item.name]]</option>
++            </template>
++          </optgroup>
++          <optgroup label="$i18n{personaPresetGroupOceania}">
++            <template is="dom-repeat"
++                items="[[getPresetsForRegion_('oceania', presets_)]]">
++              <option value="[[item.id]]">[[item.name]]</option>
++            </template>
++          </optgroup>
 +        </select>
 +      </div>
-+      <cr-button class="action-button" on-click="onApplyPresetClick_">
-+        Clone Preset
++      <cr-button class="action-button" on-click="onApplyPresetClick_"
++          disabled="[[isPresetActionDisabled_(selectedPresetId_, pending_)]]">
++        $i18n{personaClonePreset}
 +      </cr-button>
 +    </div>
 +  </div>
@@ -458,8 +588,10 @@
 +  <div class="section">
 +    <div class="section-header">
 +      <div>
-+        <h3>Edit Profile</h3>
-+        <div class="profile-card-meta">Selected profile: [[editablePersona_.displayName]]</div>
++        <h3>$i18n{personaSectionEdit}</h3>
++        <div class="profile-card-meta">
++          [[computeEditSectionDesc_(editablePersona_.displayName)]]
++        </div>
 +      </div>
 +      <div class="section-actions">
 +        <cr-button on-click="onExportCurrentProfileClick_"
@@ -468,80 +600,276 @@
 +        </cr-button>
 +      </div>
 +    </div>
-+    <div class="field-grid">
-+      <cr-input label="Display name"
-+          value="{{editablePersona_.displayName}}"></cr-input>
-+      <cr-input label="Icon"
-+          value="{{editablePersona_.icon}}"></cr-input>
++    <template is="dom-if" if="[[saveStatus_]]">
++      <div class="status-message" data-error$="[[saveStatusIsError_]]"
++          aria-live="polite" role="status">
++        [[saveStatus_]]
++      </div>
++    </template>
++    <template is="dom-if"
++        if="[[isDefaultPersona_(editablePersona_.id)]]">
++      <div class="status-message" role="status">
++        $i18n{personaDefaultReadOnly}
++      </div>
++    </template>
++    <div class="field-grid" on-input="onDraftChanged_"
++        on-change="onDraftChanged_"
++        inert="[[isEditorInert_(editablePersona_.id, pending_)]]"
++        aria-disabled$="[[isEditorInert_(editablePersona_.id, pending_)]]"
++        data-read-only$="[[isDefaultPersona_(editablePersona_.id)]]">
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldDisplayNameLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldDisplayNameTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldDisplayNameLabel}"
++            value="{{editablePersona_.displayName}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldIconLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldIconTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldIconLabel}"
++            value="{{editablePersona_.icon}}"></cr-input>
++      </div>
 +      <div class="field full-row">
 +        <div class="field-label">
 +          <span>$i18n{personaFieldUserAgentLabel}</span>
-+          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
 +              tooltip-text="$i18n{personaFieldUserAgentTooltip}">
 +          </cr-tooltip-icon>
 +        </div>
-+        <cr-input value="{{editablePersona_.userAgent}}"></cr-input>
++        <cr-input aria-label="$i18n{personaFieldUserAgentLabel}"
++            value="{{editablePersona_.userAgent}}"></cr-input>
 +      </div>
 +      <div class="field">
 +        <div class="field-label">
 +          <span>$i18n{personaFieldPlatformLabel}</span>
-+          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
 +              tooltip-text="$i18n{personaFieldPlatformTooltip}">
 +          </cr-tooltip-icon>
 +        </div>
-+        <select value$="[[getSelectValue_('editablePersona_.platform', 'platform')]]"
++        <select class="md-select"
++            value="{{customFieldSelections_.platform::change}}"
++            aria-label="$i18n{personaFieldPlatformLabel}"
 +            data-path="editablePersona_.platform" data-option-id="platform"
 +            on-change="onOptionFieldChange_">
 +          <template is="dom-repeat" items="[[getFieldOptions_('platform')]]">
-+            <option value$="[[item.value]]">[[item.label]]</option>
++            <option value="[[item.value]]">[[item.label]]</option>
 +          </template>
 +          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
 +        </select>
-+        <template is="dom-if" if="[[isCustomSelected_('platform')]]">
-+          <cr-input value="{{editablePersona_.platform}}"
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.platform)]]">
++          <cr-input aria-label="$i18n{personaFieldPlatformLabel}"
++              value="{{editablePersona_.platform}}"
 +              data-path="editablePersona_.platform" data-option-id="platform"
 +              on-input="onCustomOptionInput_"></cr-input>
 +        </template>
 +      </div>
-+      <cr-input label="$i18n{personaFieldNavigatorVendorLabel}"
-+          value="{{editablePersona_.navigatorVendor}}"></cr-input>
-+      <cr-input label="$i18n{personaFieldProductSubLabel}"
-+          value="{{editablePersona_.navigatorProductSub}}"></cr-input>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldNavigatorVendorLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldNavigatorVendorTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldNavigatorVendorLabel}"
++            value="{{editablePersona_.navigatorVendor}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldProductSubLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldProductSubTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldProductSubLabel}"
++            value="{{editablePersona_.navigatorProductSub}}"></cr-input>
++      </div>
 +      <div class="field">
 +        <div class="field-label">
 +          <span>$i18n{personaFieldUaChPlatformLabel}</span>
-+          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
 +              tooltip-text="$i18n{personaFieldUaChPlatformTooltip}">
 +          </cr-tooltip-icon>
 +        </div>
-+        <select value$="[[getSelectValue_('editablePersona_.uaCh.platform', 'platform')]]"
-+            data-path="editablePersona_.uaCh.platform" data-option-id="platform"
++        <select class="md-select"
++            value="{{customFieldSelections_.uaChPlatform::change}}"
++            aria-label="$i18n{personaFieldUaChPlatformLabel}"
++            data-path="editablePersona_.uaCh.platform" data-option-id="uaChPlatform"
 +            on-change="onOptionFieldChange_">
-+          <template is="dom-repeat" items="[[getFieldOptions_('platform')]]">
-+            <option value$="[[item.value]]">[[item.label]]</option>
++          <template is="dom-repeat" items="[[getFieldOptions_('uaChPlatform')]]">
++            <option value="[[item.value]]">[[item.label]]</option>
 +          </template>
 +          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
 +        </select>
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.uaChPlatform)]]">
++          <cr-input aria-label="$i18n{personaFieldUaChPlatformLabel}"
++              value="{{editablePersona_.uaCh.platform}}"
++              data-path="editablePersona_.uaCh.platform"
++              data-option-id="uaChPlatform" on-input="onCustomOptionInput_">
++          </cr-input>
++        </template>
 +      </div>
-+      <cr-input label="$i18n{personaFieldUaChFullVersionLabel}"
-+          value="{{editablePersona_.uaCh.fullVersion}}"></cr-input>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldUaChFullVersionLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldUaChFullVersionTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldUaChFullVersionLabel}"
++            value="{{editablePersona_.uaCh.fullVersion}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldUaChPlatformVersionLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldUaChPlatformVersionTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldUaChPlatformVersionLabel}"
++            value="{{editablePersona_.uaCh.platformVersion}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldUaChArchitectureLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldUaChArchitectureTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select class="md-select"
++            value="{{customFieldSelections_.uaChArchitecture::change}}"
++            aria-label="$i18n{personaFieldUaChArchitectureLabel}"
++            data-path="editablePersona_.uaCh.architecture"
++            data-option-id="uaChArchitecture"
++            on-change="onOptionFieldChange_">
++          <template is="dom-repeat"
++              items="[[getFieldOptions_('uaChArchitecture')]]">
++            <option value="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.uaChArchitecture)]]">
++          <cr-input aria-label="$i18n{personaFieldUaChArchitectureLabel}"
++              value="{{editablePersona_.uaCh.architecture}}"
++              data-path="editablePersona_.uaCh.architecture"
++              data-option-id="uaChArchitecture"
++              on-input="onCustomOptionInput_"></cr-input>
++        </template>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldUaChModelLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldUaChModelTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldUaChModelLabel}"
++            value="{{editablePersona_.uaCh.model}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldUaChBitnessLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldUaChBitnessTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select class="md-select"
++            value="{{customFieldSelections_.uaChBitness::change}}"
++            aria-label="$i18n{personaFieldUaChBitnessLabel}"
++            data-path="editablePersona_.uaCh.bitness"
++            data-option-id="uaChBitness" on-change="onOptionFieldChange_">
++          <template is="dom-repeat"
++              items="[[getFieldOptions_('uaChBitness')]]">
++            <option value="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.uaChBitness)]]">
++          <cr-input aria-label="$i18n{personaFieldUaChBitnessLabel}"
++              value="{{editablePersona_.uaCh.bitness}}"
++              data-path="editablePersona_.uaCh.bitness"
++              data-option-id="uaChBitness"
++              on-input="onCustomOptionInput_"></cr-input>
++        </template>
++      </div>
++      <div class="field full-row">
++        <div class="field-label">
++          <span>$i18n{personaFieldUaChFormFactorsLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldUaChFormFactorsTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldUaChFormFactorsLabel}"
++            value="{{uaChFormFactorsText_}}"></cr-input>
++      </div>
++      <div class="field toggle-field">
++        <div class="field-label">
++          <span>$i18n{personaFieldUaChMobileLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldUaChMobileTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-toggle aria-label="$i18n{personaFieldUaChMobileLabel}"
++            checked="{{editablePersona_.uaCh.mobile}}"></cr-toggle>
++      </div>
++      <div class="field toggle-field">
++        <div class="field-label">
++          <span>$i18n{personaFieldUaChWow64Label}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldUaChWow64Tooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-toggle aria-label="$i18n{personaFieldUaChWow64Label}"
++            checked="{{editablePersona_.uaCh.wow64}}"></cr-toggle>
++      </div>
 +      <div class="field">
 +        <div class="field-label">
 +          <span>$i18n{personaFieldTimezoneLabel}</span>
-+          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
 +              tooltip-text="$i18n{personaFieldTimezoneTooltip}">
 +          </cr-tooltip-icon>
 +        </div>
-+        <select value$="[[getSelectValue_('editablePersona_.region.timezone', 'timezone')]]"
++        <select class="md-select"
++            value="{{customFieldSelections_.timezone::change}}"
++            aria-label="$i18n{personaFieldTimezoneLabel}"
 +            data-path="editablePersona_.region.timezone" data-option-id="timezone"
 +            on-change="onOptionFieldChange_">
 +          <template is="dom-repeat" items="[[getFieldOptions_('timezone')]]">
-+            <option value$="[[item.value]]">[[item.label]]</option>
++            <option value="[[item.value]]">[[item.label]]</option>
 +          </template>
 +          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
 +        </select>
-+        <template is="dom-if" if="[[isCustomSelected_('timezone')]]">
-+          <cr-input value="{{editablePersona_.region.timezone}}"
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.timezone)]]">
++          <cr-input aria-label="$i18n{personaFieldTimezoneLabel}"
++              value="{{editablePersona_.region.timezone}}"
 +              data-path="editablePersona_.region.timezone"
 +              data-option-id="timezone" on-input="onCustomOptionInput_">
 +          </cr-input>
@@ -550,177 +878,522 @@
 +      <div class="field">
 +        <div class="field-label">
 +          <span>$i18n{personaFieldLocaleLabel}</span>
-+          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
 +              tooltip-text="$i18n{personaFieldLocaleTooltip}">
 +          </cr-tooltip-icon>
 +        </div>
-+        <select value$="[[getSelectValue_('editablePersona_.region.locale', 'locale')]]"
++        <select class="md-select"
++            value="{{customFieldSelections_.locale::change}}"
++            aria-label="$i18n{personaFieldLocaleLabel}"
 +            data-path="editablePersona_.region.locale" data-option-id="locale"
 +            on-change="onOptionFieldChange_">
 +          <template is="dom-repeat" items="[[getFieldOptions_('locale')]]">
-+            <option value$="[[item.value]]">[[item.label]]</option>
++            <option value="[[item.value]]">[[item.label]]</option>
 +          </template>
 +          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
 +        </select>
-+        <template is="dom-if" if="[[isCustomSelected_('locale')]]">
-+          <cr-input value="{{editablePersona_.region.locale}}"
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.locale)]]">
++          <cr-input aria-label="$i18n{personaFieldLocaleLabel}"
++              value="{{editablePersona_.region.locale}}"
 +              data-path="editablePersona_.region.locale"
 +              data-option-id="locale" on-input="onCustomOptionInput_">
 +          </cr-input>
 +        </template>
 +      </div>
-+      <cr-input label="$i18n{personaFieldAcceptLanguageLabel}"
-+          value="{{editablePersona_.region.acceptLanguage}}"></cr-input>
++      <div class="field full-row">
++        <div class="field-label">
++          <span>$i18n{personaFieldAcceptLanguageLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldAcceptLanguageTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldAcceptLanguageLabel}"
++            value="{{editablePersona_.region.acceptLanguage}}"></cr-input>
++      </div>
 +      <div class="field">
 +        <div class="field-label">
 +          <span>$i18n{personaFieldGpuVendorLabel}</span>
-+          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
 +              tooltip-text="$i18n{personaFieldGpuVendorTooltip}">
 +          </cr-tooltip-icon>
 +        </div>
-+        <select value$="[[getSelectValue_('editablePersona_.gpu.vendor', 'gpuVendor')]]"
++        <select class="md-select"
++            value="{{customFieldSelections_.gpuVendor::change}}"
++            aria-label="$i18n{personaFieldGpuVendorLabel}"
 +            data-path="editablePersona_.gpu.vendor" data-option-id="gpuVendor"
 +            on-change="onOptionFieldChange_">
 +          <template is="dom-repeat" items="[[getFieldOptions_('gpuVendor')]]">
-+            <option value$="[[item.value]]">[[item.label]]</option>
++            <option value="[[item.value]]">[[item.label]]</option>
 +          </template>
 +          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
 +        </select>
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.gpuVendor)]]">
++          <cr-input aria-label="$i18n{personaFieldGpuVendorLabel}"
++              value="{{editablePersona_.gpu.vendor}}"
++              data-path="editablePersona_.gpu.vendor"
++              data-option-id="gpuVendor" on-input="onCustomOptionInput_">
++          </cr-input>
++        </template>
 +      </div>
 +      <div class="field">
 +        <div class="field-label">
 +          <span>$i18n{personaFieldGpuRendererLabel}</span>
-+          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
 +              tooltip-text="$i18n{personaFieldGpuRendererTooltip}">
 +          </cr-tooltip-icon>
 +        </div>
-+        <select value$="[[getSelectValue_('editablePersona_.gpu.renderer', 'gpuRenderer')]]"
++        <select class="md-select"
++            value="{{customFieldSelections_.gpuRenderer::change}}"
++            aria-label="$i18n{personaFieldGpuRendererLabel}"
 +            data-path="editablePersona_.gpu.renderer" data-option-id="gpuRenderer"
 +            on-change="onOptionFieldChange_">
 +          <template is="dom-repeat" items="[[getFieldOptions_('gpuRenderer')]]">
-+            <option value$="[[item.value]]">[[item.label]]</option>
++            <option value="[[item.value]]">[[item.label]]</option>
 +          </template>
 +          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
 +        </select>
-+        <template is="dom-if" if="[[isCustomSelected_('gpuRenderer')]]">
-+          <cr-input value="{{editablePersona_.gpu.renderer}}"
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.gpuRenderer)]]">
++          <cr-input aria-label="$i18n{personaFieldGpuRendererLabel}"
++              value="{{editablePersona_.gpu.renderer}}"
 +              data-path="editablePersona_.gpu.renderer"
 +              data-option-id="gpuRenderer" on-input="onCustomOptionInput_">
 +          </cr-input>
 +        </template>
 +      </div>
-+      <cr-input label="$i18n{personaFieldWebGpuAdapterLabel}"
-+          value="{{editablePersona_.gpu.webgpuAdapter}}"></cr-input>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldWebGpuAdapterLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldWebGpuAdapterTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldWebGpuAdapterLabel}"
++            value="{{editablePersona_.gpu.webgpuAdapter}}"></cr-input>
++      </div>
 +      <div class="field">
 +        <div class="field-label">
 +          <span>$i18n{personaFieldHardwareConcurrencyLabel}</span>
-+          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
 +              tooltip-text="$i18n{personaFieldHardwareConcurrencyTooltip}">
 +          </cr-tooltip-icon>
 +        </div>
-+        <select value$="[[getSelectValue_('editablePersona_.hardware.hardwareConcurrency', 'hardwareConcurrency')]]"
++        <select class="md-select"
++            value="{{customFieldSelections_.hardwareConcurrency::change}}"
++            aria-label="$i18n{personaFieldHardwareConcurrencyLabel}"
 +            data-path="editablePersona_.hardware.hardwareConcurrency"
 +            data-option-id="hardwareConcurrency" on-change="onOptionFieldChange_">
 +          <template is="dom-repeat"
 +              items="[[getFieldOptions_('hardwareConcurrency')]]">
-+            <option value$="[[item.value]]">[[item.label]]</option>
++            <option value="[[item.value]]">[[item.label]]</option>
 +          </template>
 +          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
 +        </select>
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.hardwareConcurrency)]]">
++          <cr-input type="number" min="1" max="256" step="1"
++              aria-label="$i18n{personaFieldHardwareConcurrencyLabel}"
++              value="{{editablePersona_.hardware.hardwareConcurrency}}"
++              data-path="editablePersona_.hardware.hardwareConcurrency"
++              data-option-id="hardwareConcurrency"
++              on-input="onCustomOptionInput_"></cr-input>
++        </template>
 +      </div>
 +      <div class="field">
 +        <div class="field-label">
 +          <span>$i18n{personaFieldDeviceMemoryLabel}</span>
-+          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
 +              tooltip-text="$i18n{personaFieldDeviceMemoryTooltip}">
 +          </cr-tooltip-icon>
 +        </div>
-+        <select value$="[[getSelectValue_('editablePersona_.hardware.deviceMemory', 'deviceMemory')]]"
++        <select class="md-select"
++            value="{{customFieldSelections_.deviceMemory::change}}"
++            aria-label="$i18n{personaFieldDeviceMemoryLabel}"
 +            data-path="editablePersona_.hardware.deviceMemory"
 +            data-option-id="deviceMemory" on-change="onOptionFieldChange_">
 +          <template is="dom-repeat" items="[[getFieldOptions_('deviceMemory')]]">
-+            <option value$="[[item.value]]">[[item.label]]</option>
++            <option value="[[item.value]]">[[item.label]]</option>
 +          </template>
 +          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
 +        </select>
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.deviceMemory)]]">
++          <cr-input type="number" min="1" max="1024" step="1"
++              aria-label="$i18n{personaFieldDeviceMemoryLabel}"
++              value="{{editablePersona_.hardware.deviceMemory}}"
++              data-path="editablePersona_.hardware.deviceMemory"
++              data-option-id="deviceMemory" on-input="onCustomOptionInput_">
++          </cr-input>
++        </template>
 +      </div>
-+      <cr-input label="$i18n{personaFieldMaxTouchPointsLabel}"
-+          value="{{editablePersona_.hardware.maxTouchPoints}}"></cr-input>
-+      <cr-input label="$i18n{personaFieldScreenWidthLabel}"
-+          value="{{editablePersona_.screen.width}}"></cr-input>
-+      <cr-input label="Screen height"
-+          value="{{editablePersona_.screen.height}}"></cr-input>
-+      <cr-input label="$i18n{personaFieldAvailLeftLabel}"
-+          value="{{editablePersona_.screen.availLeft}}"></cr-input>
-+      <cr-input label="Screen avail top"
-+          value="{{editablePersona_.screen.availTop}}"></cr-input>
-+      <cr-input label="Screen avail width"
-+          value="{{editablePersona_.screen.availWidth}}"></cr-input>
-+      <cr-input label="Screen avail height"
-+          value="{{editablePersona_.screen.availHeight}}"></cr-input>
-+      <cr-input label="$i18n{personaFieldOuterWidthLabel}"
-+          value="{{editablePersona_.screen.outerWidth}}"></cr-input>
-+      <cr-input label="Outer height"
-+          value="{{editablePersona_.screen.outerHeight}}"></cr-input>
-+      <cr-input label="$i18n{personaFieldDprLabel}"
-+          value="{{editablePersona_.screen.deviceScaleFactor}}"></cr-input>
-+      <cr-input label="$i18n{personaFieldFontsIdLabel}"
-+          value="{{editablePersona_.fonts.id}}"></cr-input>
-+      <cr-input label="Font families (comma-separated)"
-+          value="{{fontFamiliesText_}}"></cr-input>
-+      <cr-input label="Font aliases (comma-separated)"
-+          value="{{fontAliasesText_}}"></cr-input>
-+      <cr-input label="UA-CH brands (Brand/Version, comma-separated)"
-+          value="{{uaChBrandsText_}}"></cr-input>
-+      <cr-input label="$i18n{personaFieldFontEngineLabel}"
-+          value="{{editablePersona_.fontRendering.engine}}"></cr-input>
-+      <cr-input label="$i18n{personaFieldAudioBaseLatencyLabel}"
-+          value="{{editablePersona_.mediaDevices.audioBaseLatency}}"></cr-input>
-+      <label class="field-label">
-+        <input type="checkbox" checked="{{editablePersona_.advanced.canvasNoise::change}}">
-+        Canvas noise
-+      </label>
-+      <label class="field-label">
-+        <input type="checkbox" checked="{{editablePersona_.advanced.audioNoise::change}}">
-+        Audio noise
-+      </label>
-+      <label class="field-label">
-+        <input type="checkbox" checked="{{editablePersona_.advanced.hardwareNoise::change}}">
-+        Hardware noise
-+      </label>
-+      <label class="field-label">
-+        <input type="checkbox" checked="{{editablePersona_.advanced.fontMetricNoise::change}}">
-+        Font metric noise
-+      </label>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldMaxTouchPointsLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldMaxTouchPointsTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="0" max="32" step="1"
++            aria-label="$i18n{personaFieldMaxTouchPointsLabel}"
++            value="{{editablePersona_.hardware.maxTouchPoints}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldScreenWidthLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldScreenWidthTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="1" max="32768" step="1"
++            aria-label="$i18n{personaFieldScreenWidthLabel}"
++            value="{{editablePersona_.screen.width}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldScreenHeightLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldScreenHeightTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="1" max="32768" step="1"
++            aria-label="$i18n{personaFieldScreenHeightLabel}"
++            value="{{editablePersona_.screen.height}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldAvailLeftLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldAvailLeftTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="-32768" max="32768" step="1"
++            aria-label="$i18n{personaFieldAvailLeftLabel}"
++            value="{{editablePersona_.screen.availLeft}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldAvailTopLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldAvailTopTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="-32768" max="32768" step="1"
++            aria-label="$i18n{personaFieldAvailTopLabel}"
++            value="{{editablePersona_.screen.availTop}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldAvailWidthLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldAvailWidthTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="1" max="32768" step="1"
++            aria-label="$i18n{personaFieldAvailWidthLabel}"
++            value="{{editablePersona_.screen.availWidth}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldAvailHeightLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldAvailHeightTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="1" max="32768" step="1"
++            aria-label="$i18n{personaFieldAvailHeightLabel}"
++            value="{{editablePersona_.screen.availHeight}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldOuterWidthLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldOuterWidthTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="1" max="32768" step="1"
++            aria-label="$i18n{personaFieldOuterWidthLabel}"
++            value="{{editablePersona_.screen.outerWidth}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldOuterHeightLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldOuterHeightTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="1" max="32768" step="1"
++            aria-label="$i18n{personaFieldOuterHeightLabel}"
++            value="{{editablePersona_.screen.outerHeight}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldDprLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldDprTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="0.25" max="8" step="0.25"
++            aria-label="$i18n{personaFieldDprLabel}"
++            value="{{editablePersona_.screen.deviceScaleFactor}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldFontsIdLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldFontsIdTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldFontsIdLabel}"
++            value="{{editablePersona_.fonts.id}}"></cr-input>
++      </div>
++      <div class="field full-row">
++        <div class="field-label">
++          <span>$i18n{personaFieldFontFamiliesLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldFontFamiliesTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldFontFamiliesLabel}"
++            value="{{fontFamiliesText_}}"></cr-input>
++      </div>
++      <div class="field full-row">
++        <div class="field-label">
++          <span>$i18n{personaFieldFontAliasesLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldFontAliasesTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldFontAliasesLabel}"
++            value="{{fontAliasesText_}}"></cr-input>
++      </div>
++      <div class="field full-row">
++        <div class="field-label">
++          <span>$i18n{personaFieldUaChBrandsLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldUaChBrandsTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldUaChBrandsLabel}"
++            value="{{uaChBrandsText_}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldFontEngineLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldFontEngineTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldFontEngineLabel}"
++            value="{{editablePersona_.fontRendering.engine}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldAudioBaseLatencyLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldAudioBaseLatencyTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="0" max="10" step="0.001"
++            aria-label="$i18n{personaFieldAudioBaseLatencyLabel}"
++            value="{{editablePersona_.mediaDevices.audioBaseLatency}}">
++        </cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldAudioOutputLatencyLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldAudioOutputLatencyTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="0" max="10" step="0.001"
++            aria-label="$i18n{personaFieldAudioOutputLatencyLabel}"
++            value="{{editablePersona_.mediaDevices.audioOutputLatency}}">
++        </cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldCanvasNoiseLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldCanvasNoiseTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-toggle aria-label="$i18n{personaFieldCanvasNoiseLabel}"
++            checked="{{editablePersona_.advanced.canvasNoise}}"></cr-toggle>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldAudioNoiseLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldAudioNoiseTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-toggle aria-label="$i18n{personaFieldAudioNoiseLabel}"
++            checked="{{editablePersona_.advanced.audioNoise}}"></cr-toggle>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldHardwareNoiseLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldHardwareNoiseTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-toggle aria-label="$i18n{personaFieldHardwareNoiseLabel}"
++            checked="{{editablePersona_.advanced.hardwareNoise}}"></cr-toggle>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldFontMetricNoiseLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldFontMetricNoiseTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-toggle aria-label="$i18n{personaFieldFontMetricNoiseLabel}"
++            checked="{{editablePersona_.advanced.fontMetricNoise}}"></cr-toggle>
++      </div>
 +      <div class="field">
 +        <div class="field-label">
 +          <span>$i18n{personaFieldNetworkTypeLabel}</span>
-+          <cr-tooltip-icon icon-aria-label="$i18n{personaFieldHelp}"
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
 +              tooltip-text="$i18n{personaFieldNetworkTypeTooltip}">
 +          </cr-tooltip-icon>
 +        </div>
-+        <select value$="[[getSelectValue_('editablePersona_.network.type', 'networkType')]]"
++        <select class="md-select"
++            value="{{customFieldSelections_.networkType::change}}"
++            aria-label="$i18n{personaFieldNetworkTypeLabel}"
 +            data-path="editablePersona_.network.type" data-option-id="networkType"
 +            on-change="onOptionFieldChange_">
 +          <template is="dom-repeat" items="[[getFieldOptions_('networkType')]]">
-+            <option value$="[[item.value]]">[[item.label]]</option>
++            <option value="[[item.value]]">[[item.label]]</option>
 +          </template>
 +          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
 +        </select>
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.networkType)]]">
++          <cr-input aria-label="$i18n{personaFieldNetworkTypeLabel}"
++              value="{{editablePersona_.network.type}}"
++              data-path="editablePersona_.network.type"
++              data-option-id="networkType" on-input="onCustomOptionInput_">
++          </cr-input>
++        </template>
 +      </div>
-+      <cr-input label="$i18n{personaFieldDownlinkMaxLabel}"
-+          value="{{editablePersona_.network.downlinkMax}}"></cr-input>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldDownlinkMaxLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldDownlinkMaxTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="0" max="100000" step="0.1"
++            aria-label="$i18n{personaFieldDownlinkMaxLabel}"
++            value="{{editablePersona_.network.downlinkMax}}"></cr-input>
++      </div>
++      <h4 class="config-group-title">$i18n{personaSectionRotation}</h4>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldRotationScopeLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldRotationScopeTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select class="md-select"
++            value="{{customFieldSelections_.fingerprintRotationScope::change}}"
++            aria-label="$i18n{personaFieldRotationScopeLabel}"
++            data-path="editablePersona_.advanced.fingerprintRotation.scope"
++            data-option-id="fingerprintRotationScope"
++            on-change="onOptionFieldChange_">
++          <template is="dom-repeat"
++              items="[[getFieldOptions_('fingerprintRotationScope')]]">
++            <option value="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++        <template is="dom-if"
++            if="[[isCustomSelected_(customFieldSelections_.fingerprintRotationScope)]]">
++          <cr-input aria-label="$i18n{personaFieldRotationScopeLabel}"
++              value="{{editablePersona_.advanced.fingerprintRotation.scope}}"
++              data-path="editablePersona_.advanced.fingerprintRotation.scope"
++              data-option-id="fingerprintRotationScope"
++              on-input="onCustomOptionInput_"></cr-input>
++        </template>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldRotationIntervalLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldRotationIntervalTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="1" max="3650" step="1"
++            aria-label="$i18n{personaFieldRotationIntervalLabel}"
++            value="{{editablePersona_.advanced.fingerprintRotation.rotationIntervalDays}}">
++        </cr-input>
++      </div>
++      <h4 class="config-group-title">$i18n{personaSectionPermissions}</h4>
++      <template is="dom-repeat" items="[[advancedToggleItems_]]">
++        <div class="field toggle-field">
++          <div class="field-label">
++            <span>[[i18n(item.labelKey)]]</span>
++            <cr-tooltip-icon icon-class="cr:help-outline"
++                icon-aria-label="$i18n{personaFieldHelp}"
++                tooltip-text="[[i18n(item.tooltipKey)]]">
++            </cr-tooltip-icon>
++          </div>
++          <cr-toggle aria-label="[[i18n(item.labelKey)]]"
++              checked="[[item.value]]" data-path$="[[item.path]]"
++              on-change="onAdvancedToggleChange_">
++          </cr-toggle>
++        </div>
++      </template>
 +    </div>
 +    <div class="actions">
-+      <cr-button class="action-button" on-click="onSavePersonaClick_">
-+        Save
++      <cr-button on-click="onCancelPersonaClick_"
++          disabled="[[isCancelDisabled_(hasUnsavedChanges_, pending_)]]">
++        $i18n{personaCancel}
++      </cr-button>
++      <cr-button class="action-button" on-click="onSavePersonaClick_"
++          disabled="[[!canSavePersona_(editablePersona_.id, pending_)]]">
++        $i18n{personaSave}
 +      </cr-button>
 +    </div>
 +  </div>
 +</settings-subpage>
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
-@@ -0,0 +1,784 @@
+@@ -0,0 +1,1095 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -728,6 +1401,7 @@
 +import '../settings_page/settings_subpage.js';
 +import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 +import 'chrome://resources/cr_elements/cr_input/cr_input.js';
++import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 +import 'chrome://resources/cr_elements/policy/cr_tooltip_icon.js';
 +
 +import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
@@ -739,9 +1413,18 @@
 +  PersonaProfilesResponse,
 +} from './persona_browser_proxy.js';
 +import {PersonaBrowserProxyImpl} from './persona_browser_proxy.js';
++import type {
++  PersonaRecord,
++  PersonaState,
++  PersonaTextFields,
++} from './persona_config.js';
++import {
++  createPersonaDraft,
++  parsePersonaImportPayload,
++  PERSONA_EXPORT_SCHEMA,
++  preparePersonaForSave,
++} from './persona_config.js';
 +import {getTemplate} from './persona_page.html.js';
-+
-+type PersonaRecord = any;
 +
 +interface PersonaFieldOption {
 +  label: string;
@@ -754,7 +1437,157 @@
 +}
 +
 +const CUSTOM_OPTION_VALUE = '__custom__';
-+const PERSONA_EXPORT_SCHEMA = 'helium.persona/v1';
++
++interface AdvancedToggleDefinition {
++  path: string;
++  labelKey: string;
++  tooltipKey: string;
++}
++
++interface AdvancedToggleItem extends AdvancedToggleDefinition {
++  value: boolean;
++}
++
++const ADVANCED_TOGGLE_DEFINITIONS: AdvancedToggleDefinition[] = [
++  {
++    path: 'editablePersona_.advanced.clientHintsEnabled',
++    labelKey: 'personaFieldClientHintsEnabledLabel',
++    tooltipKey: 'personaFieldClientHintsEnabledTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowBackgroundSync',
++    labelKey: 'personaFieldAllowBackgroundSyncLabel',
++    tooltipKey: 'personaFieldAllowBackgroundSyncTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowContacts',
++    labelKey: 'personaFieldAllowContactsLabel',
++    tooltipKey: 'personaFieldAllowContactsTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowLocalFonts',
++    labelKey: 'personaFieldAllowLocalFontsLabel',
++    tooltipKey: 'personaFieldAllowLocalFontsTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowPrivacySandboxApis',
++    labelKey: 'personaFieldAllowPrivacySandboxApisLabel',
++    tooltipKey: 'personaFieldAllowPrivacySandboxApisTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowGamepads',
++    labelKey: 'personaFieldAllowGamepadsLabel',
++    tooltipKey: 'personaFieldAllowGamepadsTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowClipboard',
++    labelKey: 'personaFieldAllowClipboardLabel',
++    tooltipKey: 'personaFieldAllowClipboardTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowGeolocation',
++    labelKey: 'personaFieldAllowGeolocationLabel',
++    tooltipKey: 'personaFieldAllowGeolocationTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowNotifications',
++    labelKey: 'personaFieldAllowNotificationsLabel',
++    tooltipKey: 'personaFieldAllowNotificationsTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowMidi',
++    labelKey: 'personaFieldAllowMidiLabel',
++    tooltipKey: 'personaFieldAllowMidiTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowIdleDetection',
++    labelKey: 'personaFieldAllowIdleDetectionLabel',
++    tooltipKey: 'personaFieldAllowIdleDetectionTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowWindowManagement',
++    labelKey: 'personaFieldAllowWindowManagementLabel',
++    tooltipKey: 'personaFieldAllowWindowManagementTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowWebNfc',
++    labelKey: 'personaFieldAllowWebNfcLabel',
++    tooltipKey: 'personaFieldAllowWebNfcTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowWebXr',
++    labelKey: 'personaFieldAllowWebXrLabel',
++    tooltipKey: 'personaFieldAllowWebXrTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowSensorApis',
++    labelKey: 'personaFieldAllowSensorApisLabel',
++    tooltipKey: 'personaFieldAllowSensorApisTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowRealBatteryStatus',
++    labelKey: 'personaFieldAllowRealBatteryStatusLabel',
++    tooltipKey: 'personaFieldAllowRealBatteryStatusTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowPlatformCredentials',
++    labelKey: 'personaFieldAllowPlatformCredentialsLabel',
++    tooltipKey: 'personaFieldAllowPlatformCredentialsTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowPaymentHandler',
++    labelKey: 'personaFieldAllowPaymentHandlerLabel',
++    tooltipKey: 'personaFieldAllowPaymentHandlerTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowSpeechSynthesis',
++    labelKey: 'personaFieldAllowSpeechSynthesisLabel',
++    tooltipKey: 'personaFieldAllowSpeechSynthesisTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowWebPrinting',
++    labelKey: 'personaFieldAllowWebPrintingLabel',
++    tooltipKey: 'personaFieldAllowWebPrintingTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowShapeDetection',
++    labelKey: 'personaFieldAllowShapeDetectionLabel',
++    tooltipKey: 'personaFieldAllowShapeDetectionTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowWebOtp',
++    labelKey: 'personaFieldAllowWebOtpLabel',
++    tooltipKey: 'personaFieldAllowWebOtpTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowAiApis',
++    labelKey: 'personaFieldAllowAiApisLabel',
++    tooltipKey: 'personaFieldAllowAiApisTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowHandwritingRecognition',
++    labelKey: 'personaFieldAllowHandwritingRecognitionLabel',
++    tooltipKey: 'personaFieldAllowHandwritingRecognitionTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowWebNn',
++    labelKey: 'personaFieldAllowWebNnLabel',
++    tooltipKey: 'personaFieldAllowWebNnTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.allowPrivateStateTokens',
++    labelKey: 'personaFieldAllowPrivateStateTokensLabel',
++    tooltipKey: 'personaFieldAllowPrivateStateTokensTooltip',
++  },
++];
++
++const PLATFORM_OPTIONS: PersonaFieldOption[] = [
++  {label: 'macOS', value: 'macOS'},
++  {label: 'Windows', value: 'Windows'},
++  {label: 'Linux', value: 'Linux'},
++  {label: 'Chrome OS', value: 'Chrome OS'},
++  {label: 'Android', value: 'Android'},
++];
 +
 +const FIELD_OPTIONS: PersonaFieldOptionGroup[] = [
 +  {
@@ -764,13 +1597,20 @@
 +      {label: 'US Pacific', value: 'America/Los_Angeles'},
 +      {label: 'US Eastern', value: 'America/New_York'},
 +      {label: 'Toronto', value: 'America/Toronto'},
++      {label: 'Mexico City', value: 'America/Mexico_City'},
 +      {label: 'Sao Paulo', value: 'America/Sao_Paulo'},
 +      {label: 'London', value: 'Europe/London'},
 +      {label: 'Berlin', value: 'Europe/Berlin'},
 +      {label: 'Paris', value: 'Europe/Paris'},
++      {label: 'Amsterdam', value: 'Europe/Amsterdam'},
++      {label: 'Madrid', value: 'Europe/Madrid'},
++      {label: 'Rome', value: 'Europe/Rome'},
++      {label: 'Moscow', value: 'Europe/Moscow'},
++      {label: 'Hong Kong', value: 'Asia/Hong_Kong'},
 +      {label: 'Tokyo', value: 'Asia/Tokyo'},
 +      {label: 'Singapore', value: 'Asia/Singapore'},
 +      {label: 'Seoul', value: 'Asia/Seoul'},
++      {label: 'Kolkata', value: 'Asia/Kolkata'},
 +      {label: 'Sydney', value: 'Australia/Sydney'},
 +    ],
 +  },
@@ -779,24 +1619,44 @@
 +    options: [
 +      {label: 'English (US)', value: 'en-US'},
 +      {label: 'English (UK)', value: 'en-GB'},
++      {label: 'English (Canada)', value: 'en-CA'},
++      {label: 'English (Australia)', value: 'en-AU'},
 +      {label: 'English (Singapore)', value: 'en-SG'},
++      {label: 'English (India)', value: 'en-IN'},
 +      {label: 'Portuguese (Brazil)', value: 'pt-BR'},
++      {label: 'Spanish (Spain)', value: 'es-ES'},
++      {label: 'Spanish (Mexico)', value: 'es-MX'},
 +      {label: 'French', value: 'fr-FR'},
 +      {label: 'German', value: 'de-DE'},
-+      {label: 'Spanish', value: 'es-ES'},
++      {label: 'Dutch', value: 'nl-NL'},
++      {label: 'Italian', value: 'it-IT'},
++      {label: 'Russian', value: 'ru-RU'},
 +      {label: 'Japanese', value: 'ja-JP'},
 +      {label: 'Korean', value: 'ko-KR'},
 +      {label: 'Chinese (Hong Kong)', value: 'zh-HK'},
++      {label: 'Chinese (Taiwan)', value: 'zh-TW'},
 +    ],
 +  },
 +  {
 +    id: 'platform',
++    options: PLATFORM_OPTIONS,
++  },
++  {
++    id: 'uaChPlatform',
++    options: PLATFORM_OPTIONS,
++  },
++  {
++    id: 'uaChArchitecture',
 +    options: [
-+      {label: 'macOS', value: 'macOS'},
-+      {label: 'Windows', value: 'Windows'},
-+      {label: 'Linux', value: 'Linux'},
-+      {label: 'Chrome OS', value: 'Chrome OS'},
-+      {label: 'Android', value: 'Android'},
++      {label: 'x86', value: 'x86'},
++      {label: 'ARM', value: 'arm'},
++    ],
++  },
++  {
++    id: 'uaChBitness',
++    options: [
++      {label: '32-bit', value: '32'},
++      {label: '64-bit', value: '64'},
 +    ],
 +  },
 +  {
@@ -814,16 +1674,32 @@
 +      {label: 'Apple M2', value: 'ANGLE (Apple, Apple M2, Metal)'},
 +      {label: 'Apple M3', value: 'ANGLE (Apple, Apple M3, Metal)'},
 +      {
-+        label: 'Intel Iris Xe',
++        label: 'Intel Iris Xe (D3D11)',
 +        value: 'ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)',
 +      },
 +      {
-+        label: 'AMD Radeon',
++        label: 'Intel Iris Xe (Vulkan)',
++        value: 'ANGLE (Intel, Intel Iris Xe Graphics Vulkan 1.3)',
++      },
++      {
++        label: 'Intel UHD (D3D11)',
++        value: 'ANGLE (Intel, Intel UHD Graphics Direct3D11)',
++      },
++      {
++        label: 'AMD Radeon (D3D11)',
 +        value: 'ANGLE (AMD, AMD Radeon Graphics Direct3D11)',
 +      },
 +      {
 +        label: 'NVIDIA RTX 3060',
 +        value: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11)',
++      },
++      {
++        label: 'NVIDIA RTX 4060',
++        value: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Direct3D11)',
++      },
++      {
++        label: 'NVIDIA GTX 1650',
++        value: 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11)',
 +      },
 +    ],
 +  },
@@ -849,13 +1725,51 @@
 +  {
 +    id: 'deviceMemory',
 +    options: [
++      {label: '1 GB', value: '1'},
++      {label: '2 GB', value: '2'},
 +      {label: '4 GB', value: '4'},
 +      {label: '8 GB', value: '8'},
 +      {label: '16 GB', value: '16'},
 +      {label: '32 GB', value: '32'},
 +    ],
 +  },
++  {
++    id: 'fingerprintRotationScope',
++    options: [
++      {label: 'Site and profile', value: 'site_profile'},
++      {label: 'Profile', value: 'profile'},
++      {label: 'Global', value: 'global'},
++    ],
++  },
 +];
++
++const PRESET_REGION_IDS: Record<string, string[]> = {
++  americas: [
++    'us-west-macos',
++    'us-east-windows',
++    'ca-windows',
++    'br-windows',
++    'mx-windows',
++  ],
++  europe: [
++    'uk-windows',
++    'de-linux',
++    'fr-macos',
++    'nl-windows',
++    'es-windows',
++    'it-windows',
++    'ru-windows',
++  ],
++  asia: [
++    'jp-macos',
++    'sg-macos',
++    'kr-windows',
++    'in-windows',
++    'hk-macos',
++    'hk-windows',
++  ],
++  oceania: ['au-windows'],
++};
 +
 +function getOptions(id: string): PersonaFieldOption[] {
 +  return FIELD_OPTIONS.find(group => group.id === id)?.options || [];
@@ -871,126 +1785,7 @@
 +}
 +
 +function createEmptyPersona(): PersonaRecord {
-+  return {
-+    id: '',
-+    displayName: '',
-+    icon: 'default',
-+    userAgent: '',
-+    platform: '',
-+    navigatorVendor: '',
-+    navigatorProductSub: '',
-+    uaCh: {platform: '', fullVersion: ''},
-+    region: {timezone: '', locale: '', acceptLanguage: ''},
-+    gpu: {
-+      vendor: '',
-+      renderer: '',
-+      webgpuAdapter: '',
-+      webglProfile: {maxCombinedTextureImageUnits: 0},
-+      webgl2Profile: {uniformBufferOffsetAlignment: 0},
-+      webgpuProfile: {maxComputeInvocationsPerWorkgroup: 0},
-+    },
-+    hardware: {
-+      hardwareConcurrency: 0,
-+      deviceMemory: 0,
-+      maxTouchPoints: 0,
-+      touchEnabled: false,
-+    },
-+    screen: {
-+      width: 0,
-+      height: 0,
-+      availLeft: 0,
-+      availTop: 0,
-+      availWidth: 0,
-+      availHeight: 0,
-+      outerWidth: 0,
-+      outerHeight: 0,
-+      deviceScaleFactor: 1,
-+      orientationType: '',
-+      reducedMotion: false,
-+      colorGamut: '',
-+      dynamicRange: '',
-+      monochromeDepth: 0,
-+    },
-+    fonts: {id: '', families: [] as string[], aliases: [] as string[]},
-+    fontRendering: {
-+      engine: '',
-+      useAutohinter: false,
-+    },
-+    mediaDevices: {
-+      audioBaseLatency: 0,
-+      voiceIsolation: false,
-+    },
-+    network: {type: '', downlinkMax: 0, saveData: false, online: true},
-+    advanced: {
-+      clientHintsEnabled: true,
-+      reduceSystemInfo: false,
-+      canvasNoise: true,
-+      audioNoise: true,
-+      hardwareNoise: true,
-+      fontMetricNoise: false,
-+      cookieEnabled: true,
-+      pdfViewerEnabled: true,
-+      doNotTrackEnabled: false,
-+      webdriverEnabled: false,
-+      storageQuotaGb: 8,
-+      virtualMediaDevices: false,
-+      allowDisplayCapture: true,
-+      allowMediaCapture: true,
-+      allowMediaSession: true,
-+      allowPictureInPicture: true,
-+      allowRemotePlayback: true,
-+      allowSpeechSynthesis: true,
-+      speechVoiceName: '',
-+      speechVoiceLang: '',
-+      speechVoiceUri: '',
-+      speechVoiceLocalService: true,
-+      speechVoiceDefault: true,
-+      allowDeviceApis: true,
-+      allowGamepads: true,
-+      allowGeolocation: false,
-+      allowKeyboardLayout: true,
-+      allowLocalFonts: false,
-+      allowLocalNetworkApis: false,
-+      allowManagedDevice: false,
-+      allowMidi: false,
-+      allowPlatformCredentials: true,
-+      allowRealBatteryStatus: false,
-+      allowSensorApis: false,
-+      allowWebNfc: false,
-+      allowWebXr: false,
-+      allowWindowManagement: false,
-+      allowBackgroundSync: false,
-+      allowClipboard: true,
-+      allowFileSystemAccess: true,
-+      allowFullscreen: true,
-+      allowIdleDetection: false,
-+      allowNotifications: false,
-+      allowPaymentHandler: false,
-+      allowPersistentStorage: true,
-+      allowProtectedMediaIdentifier: false,
-+      allowStorageAccess: true,
-+      allowWakeLock: true,
-+      allowWebAppInstallation: true,
-+      allowWebPrinting: true,
-+      allowBadging: true,
-+      allowContacts: false,
-+      allowEyeDropper: true,
-+      allowInstalledApps: false,
-+      allowPresentationApis: false,
-+      allowPointerLock: true,
-+      allowShapeDetection: false,
-+      allowWebLocks: true,
-+      allowWebOtp: false,
-+      allowWebShare: true,
-+      allowWebSockets: true,
-+      allowWebTransport: true,
-+      allowAiApis: false,
-+      allowHandwritingRecognition: false,
-+      allowPrivacySandboxApis: false,
-+      allowPrivateStateTokens: false,
-+      allowWebNn: false,
-+    },
-+  };
++  return createPersonaDraft();
 +}
 +
 +const Base = I18nMixin(PrefsMixin(PolymerElement));
@@ -1010,20 +1805,24 @@
 +      editablePersona_: {type: Object, value: () => createEmptyPersona()},
 +      lastUsedPersonaId_: {type: String, value: ''},
 +      launchSelectionMode_: {type: String, value: 'always_ask'},
++      persistedLaunchSelectionMode_: {type: String, value: 'always_ask'},
 +      presets_: {type: Array, value: () => []},
 +      profiles_: {type: Array, value: () => []},
 +      importStatus_: {type: String, value: ''},
++      importStatusIsError_: {type: Boolean, value: false},
++      saveStatus_: {type: String, value: ''},
++      saveStatusIsError_: {type: Boolean, value: false},
 +      routePath: String,
 +      selectedPresetId_: {type: String, value: ''},
 +      selectedProfileId_: {type: String, value: ''},
 +      customFieldSelections_: {type: Object, value: () => ({})},
++      advancedToggleItems_: {type: Array, value: () => []},
 +      uaChBrandsText_: String,
-+      uaChFullVersionListText_: String,
 +      uaChFormFactorsText_: String,
-+      navigatorLanguagesText_: String,
-+      webgpuFeaturesText_: String,
 +      fontFamiliesText_: String,
 +      fontAliasesText_: String,
++      hasUnsavedChanges_: {type: Boolean, value: false},
++      pending_: {type: Boolean, value: false},
 +    };
 +  }
 +
@@ -1031,39 +1830,50 @@
 +  declare private editablePersona_: PersonaRecord;
 +  declare private lastUsedPersonaId_: string;
 +  declare private launchSelectionMode_: string;
++  declare private persistedLaunchSelectionMode_: string;
 +  declare private presets_: PersonaRecord[];
 +  declare private profiles_: PersonaRecord[];
 +  declare private importStatus_: string;
++  declare private importStatusIsError_: boolean;
++  declare private saveStatus_: string;
++  declare private saveStatusIsError_: boolean;
 +  declare routePath: string;
 +  declare private selectedPresetId_: string;
 +  declare private selectedProfileId_: string;
 +  declare private customFieldSelections_: Record<string, string>;
++  declare private advancedToggleItems_: AdvancedToggleItem[];
 +  declare private uaChBrandsText_: string;
-+  declare private uaChFullVersionListText_: string;
 +  declare private uaChFormFactorsText_: string;
-+  declare private navigatorLanguagesText_: string;
-+  declare private webgpuFeaturesText_: string;
 +  declare private fontFamiliesText_: string;
 +  declare private fontAliasesText_: string;
++  declare private hasUnsavedChanges_: boolean;
++  declare private pending_: boolean;
 +
 +  override connectedCallback() {
 +    super.connectedCallback();
-+    this.loadPersonaData_();
++    void this.loadPersonaData_();
 +  }
 +
 +  private async loadPersonaData_() {
-+    const browserProxy = PersonaBrowserProxyImpl.getInstance();
-+    const [state, profilesResponse, launchSelectionMode] = await Promise.all([
-+      browserProxy.getPersonaState(),
-+      browserProxy.getPersonaProfiles(),
-+      browserProxy.getLaunchSelectionMode(),
-+    ]);
-+    this.launchSelectionMode_ = launchSelectionMode || 'always_ask';
-+    this.applyPersonaState_(state, profilesResponse);
++    const result = await this.runPendingRequest_(async () => {
++      const browserProxy = PersonaBrowserProxyImpl.getInstance();
++      const [state, profilesResponse, launchSelectionMode] = await Promise.all([
++        browserProxy.getPersonaState(),
++        browserProxy.getPersonaProfiles(),
++        browserProxy.getLaunchSelectionMode(),
++      ]);
++      return {state, profilesResponse, launchSelectionMode};
++    });
++    if (!result) {
++      this.showMutationError_();
++      return;
++    }
++    this.launchSelectionMode_ = result.launchSelectionMode || 'always_ask';
++    this.applyPersonaState_(result.state, result.profilesResponse);
 +  }
 +
 +  private applyPersonaState_(
-+      state: any, profilesResponse?: PersonaProfilesResponse) {
++      state: PersonaState, profilesResponse?: PersonaProfilesResponse) {
 +    this.presets_ = Array.isArray(state.presets) ? state.presets : [];
 +    const profiles = Array.isArray(profilesResponse?.profiles) ?
 +        profilesResponse.profiles :
@@ -1075,6 +1885,7 @@
 +    this.launchSelectionMode_ =
 +        state.launchSelectionMode || profilesResponse?.launchSelectionMode ||
 +        this.launchSelectionMode_;
++    this.persistedLaunchSelectionMode_ = this.launchSelectionMode_;
 +
 +    const targetProfileId =
 +        this.selectedProfileId_ || this.activePersonaId_ || this.lastUsedPersonaId_;
@@ -1091,6 +1902,8 @@
 +    this.editablePersona_ = this.mergePersona_(selectedProfile);
 +    this.syncTextFieldsFromPersona_();
 +    this.syncCustomSelections_();
++    this.syncAdvancedToggleItems_();
++    this.hasUnsavedChanges_ = false;
 +    const matchingPreset = this.presets_.find((preset: PersonaRecord) => {
 +      return preset && preset.name === selectedProfile.name;
 +    });
@@ -1098,100 +1911,74 @@
 +  }
 +
 +  private mergePersona_(persona: PersonaRecord): PersonaRecord {
-+    const basePersona = createEmptyPersona();
-+    return {
-+      ...basePersona,
-+      ...persona,
-+      advanced: {
-+        ...basePersona.advanced,
-+        ...(persona.advanced || {}),
-+      },
-+      region: {
-+        ...basePersona.region,
-+        ...(persona.region || {}),
-+      },
-+      uaCh: {
-+        ...basePersona.uaCh,
-+        ...(persona.uaCh || {}),
-+      },
-+      gpu: {
-+        ...basePersona.gpu,
-+        ...(persona.gpu || {}),
-+        webglProfile: {
-+          ...basePersona.gpu.webglProfile,
-+          ...(persona.gpu?.webglProfile || {}),
-+        },
-+        webgl2Profile: {
-+          ...basePersona.gpu.webgl2Profile,
-+          ...(persona.gpu?.webgl2Profile || {}),
-+        },
-+        webgpuProfile: {
-+          ...basePersona.gpu.webgpuProfile,
-+          ...(persona.gpu?.webgpuProfile || {}),
-+        },
-+      },
-+      hardware: {
-+        ...basePersona.hardware,
-+        ...(persona.hardware || {}),
-+      },
-+      screen: {
-+        ...basePersona.screen,
-+        ...(persona.screen || {}),
-+      },
-+      fonts: {
-+        ...basePersona.fonts,
-+        ...(persona.fonts || {}),
-+        families: Array.isArray(persona.fonts?.families) ?
-+            persona.fonts.families :
-+            (basePersona.fonts.families || []),
-+        aliases: Array.isArray(persona.fonts?.aliases) ?
-+            persona.fonts.aliases :
-+            (basePersona.fonts.aliases || []),
-+      },
-+      fontRendering: {
-+        ...basePersona.fontRendering,
-+        ...(persona.fontRendering || {}),
-+      },
-+      mediaDevices: {
-+        ...basePersona.mediaDevices,
-+        ...(persona.mediaDevices || {}),
-+      },
-+      network: {
-+        ...basePersona.network,
-+        ...(persona.network || {}),
-+      },
-+    };
++    return createPersonaDraft(persona);
 +  }
 +
-+  private async refreshProfiles_() {
-+    const browserProxy = PersonaBrowserProxyImpl.getInstance();
-+    const [state, profilesResponse] = await Promise.all([
-+      browserProxy.getPersonaState(),
-+      browserProxy.getPersonaProfiles(),
-+    ]);
-+    this.applyPersonaState_(state, profilesResponse);
++  private confirmDiscardChanges_(): boolean {
++    return !this.hasUnsavedChanges_ ||
++        window.confirm(this.i18n('personaDiscardChangesConfirm'));
 +  }
 +
-+  private applyPersonaResponse_(response: PersonaPageResponse) {
-+    if (response.ok) {
-+      this.applyPersonaState_(response.state);
++  private showMutationError_(fieldErrors?: Record<string, unknown>) {
++    this.importStatus_ = this.formatFieldErrors_(
++        fieldErrors, this.i18n('personaSaveFailed'));
++    this.importStatusIsError_ = true;
++  }
++
++  private async runPendingRequest_<T>(request: () => Promise<T>): Promise<T|null> {
++    if (this.pending_) {
++      return null;
 +    }
++    this.pending_ = true;
++    try {
++      return await request();
++    } catch (_error) {
++      return null;
++    } finally {
++      this.pending_ = false;
++    }
++  }
++
++  private async runPersonaMutation_(
++      request: () => Promise<PersonaPageResponse>,
++      onSuccess?: (response: PersonaPageResponse) => void,
++      onFailure?: (response?: PersonaPageResponse) => void):
++      Promise<PersonaPageResponse|null> {
++    const response = await this.runPendingRequest_(request);
++    if (!response || !response.ok) {
++      if (onFailure) {
++        onFailure(response || undefined);
++      } else {
++        this.showMutationError_(response?.fieldErrors);
++      }
++      return response;
++    }
++    this.importStatus_ = '';
++    this.importStatusIsError_ = false;
++    onSuccess?.(response);
++    this.applyPersonaState_(response.state);
++    return response;
 +  }
 +
 +  private async onCreateProfileClick_() {
-+    const response =
-+        await PersonaBrowserProxyImpl.getInstance().createPersonaProfile(
-+            'New Persona');
-+    if (response.ok) {
-+      this.selectedProfileId_ = response.state?.activePersonaId || '';
++    if (!this.confirmDiscardChanges_()) {
++      return;
 +    }
-+    this.applyPersonaResponse_(response);
++    await this.runPersonaMutation_(
++        () => PersonaBrowserProxyImpl.getInstance().createPersonaProfile(
++            this.i18n('personaNewProfileDefaultName')),
++        response => {
++          this.selectedProfileId_ = response.personaId || '';
++        });
 +  }
 +
 +  private onProfileCardClick_(event: Event) {
 +    const profileId =
 +        (event.currentTarget as HTMLElement).dataset['profileId'] || '';
 +    if (!profileId) {
++      return;
++    }
++    if (!this.confirmDiscardChanges_()) {
 +      return;
 +    }
 +    const profile = this.profiles_.find((item: PersonaRecord) => {
@@ -1202,21 +1989,28 @@
 +    }
 +    this.selectedProfileId_ = profileId;
 +    this.editablePersona_ = this.mergePersona_(profile);
++    this.syncTextFieldsFromPersona_();
++    this.syncCustomSelections_();
++    this.syncAdvancedToggleItems_();
++    this.hasUnsavedChanges_ = false;
++    this.saveStatus_ = '';
++    this.saveStatusIsError_ = false;
++    this.importStatus_ = '';
++    this.importStatusIsError_ = false;
 +  }
 +
 +  private async onActivateProfileClick_(event: Event) {
 +    event.stopPropagation();
 +    const profileId =
 +        (event.currentTarget as HTMLElement).dataset['profileId'] || '';
-+    if (!profileId) {
++    if (!profileId || !this.confirmDiscardChanges_()) {
 +      return;
 +    }
-+    const response =
-+        await PersonaBrowserProxyImpl.getInstance().setActivePersona(profileId);
-+    if (response.ok) {
-+      this.selectedProfileId_ = profileId;
-+    }
-+    this.applyPersonaResponse_(response);
++    await this.runPersonaMutation_(
++        () => PersonaBrowserProxyImpl.getInstance().setActivePersona(profileId),
++        () => {
++          this.selectedProfileId_ = profileId;
++        });
 +  }
 +
 +  private async onDeleteProfileClick_(event: Event) {
@@ -1226,26 +2020,70 @@
 +    if (!profileId || !this.canDeleteProfile_(profileId)) {
 +      return;
 +    }
-+    if (this.selectedProfileId_ === profileId) {
-+      this.selectedProfileId_ = this.activePersonaId_;
++    if (!window.confirm(this.i18n('personaDeleteConfirm'))) {
++      return;
 +    }
-+    this.applyPersonaResponse_(
-+        await PersonaBrowserProxyImpl.getInstance().deletePersona(profileId));
++    if (!this.confirmDiscardChanges_()) {
++      return;
++    }
++    await this.runPersonaMutation_(
++        () => PersonaBrowserProxyImpl.getInstance().deletePersona(profileId),
++        () => {
++          if (this.selectedProfileId_ === profileId) {
++            this.selectedProfileId_ = this.activePersonaId_;
++          }
++        });
++  }
++
++  private onCancelPersonaClick_() {
++    const profile = this.profiles_.find(item => {
++      return item.id === this.selectedProfileId_;
++    });
++    if (!profile) {
++      return;
++    }
++    this.editablePersona_ = this.mergePersona_(profile);
++    this.syncTextFieldsFromPersona_();
++    this.syncCustomSelections_();
++    this.syncAdvancedToggleItems_();
++    this.hasUnsavedChanges_ = false;
++    this.saveStatus_ = '';
++    this.saveStatusIsError_ = false;
 +  }
 +
 +  private async onSavePersonaClick_() {
++    if (this.pending_) {
++      return;
++    }
 +    const personaId = this.editablePersona_?.id || '';
 +    if (personaId) {
 +      this.selectedProfileId_ = personaId;
 +    }
-+    this.applyTextFieldsToPersona_();
-+    this.applyPersonaResponse_(
-+        await PersonaBrowserProxyImpl.getInstance().savePersona(
-+            this.editablePersona_));
++    const prepared = this.prepareCurrentPersona_();
++    if (!prepared) {
++      return;
++    }
++    this.editablePersona_ = prepared;
++    await this.runPersonaMutation_(
++        () => PersonaBrowserProxyImpl.getInstance().savePersona(prepared),
++        () => {
++          this.saveStatus_ = this.i18n('personaSaveSuccess');
++          this.saveStatusIsError_ = false;
++          this.hasUnsavedChanges_ = false;
++        },
++        response => {
++          if (response) {
++            this.saveStatus_ = this.formatFieldErrors_(
++                response.fieldErrors, this.i18n('personaSaveFailed'));
++          } else {
++            this.saveStatus_ = this.i18n('personaSaveFailed');
++          }
++          this.saveStatusIsError_ = true;
++        });
 +  }
 +
 +  private onExportCurrentProfileClick_() {
-+    const persona = this.editablePersona_;
++    const persona = this.prepareCurrentPersona_();
 +    if (!persona || persona.id === 'default') {
 +      return;
 +    }
@@ -1277,21 +2115,39 @@
 +
 +    try {
 +      const payload = JSON.parse(await file.text());
-+      const personas = Array.isArray(payload) ? payload :
-+          (Array.isArray(payload.personas) ? payload.personas : []);
++      const personas = parsePersonaImportPayload(payload);
 +      if (!personas.length) {
 +        this.importStatus_ = this.i18n('personaImportNoProfiles');
++        this.importStatusIsError_ = true;
++        return;
++      }
++      if (!this.confirmDiscardChanges_()) {
 +        return;
 +      }
 +
-+      const response =
-+          await PersonaBrowserProxyImpl.getInstance().importPersonas(personas);
-+      this.importStatus_ = this.i18n(
-+          'personaImportResult', String(response.importedCount || 0),
-+          String(response.skippedCount || 0));
-+      this.applyPersonaResponse_(response);
++      await this.runPersonaMutation_(
++          () => PersonaBrowserProxyImpl.getInstance().importPersonas({
++            schema: PERSONA_EXPORT_SCHEMA,
++            personas,
++          }),
++          response => {
++            this.importStatus_ = this.i18n(
++                'personaImportResult', String(response.importedCount || 0),
++                String(response.skippedCount || 0));
++            this.importStatusIsError_ = false;
++          },
++          response => {
++            this.importStatus_ = response ?
++                this.i18n(
++                    'personaImportResult',
++                    String(response.importedCount || 0),
++                    String(response.skippedCount || 0)) :
++                this.i18n('personaImportFailed');
++            this.importStatusIsError_ = true;
++          });
 +    } catch (error) {
 +      this.importStatus_ = this.i18n('personaImportFailed');
++      this.importStatusIsError_ = true;
 +    }
 +  }
 +
@@ -1300,32 +2156,64 @@
 +  }
 +
 +  private async onApplyPresetClick_() {
-+    if (!this.selectedPresetId_) {
++    if (!this.selectedPresetId_ || !this.confirmDiscardChanges_()) {
 +      return;
 +    }
 +
-+    const response =
-+        await PersonaBrowserProxyImpl.getInstance().clonePresetIntoProfile(
-+            this.selectedPresetId_);
-+    if (response.ok) {
-+      this.selectedProfileId_ = response.state?.activePersonaId || '';
-+    }
-+    this.applyPersonaResponse_(response);
++    await this.runPersonaMutation_(
++        () => PersonaBrowserProxyImpl.getInstance().clonePresetIntoProfile(
++            this.selectedPresetId_),
++        response => {
++          this.selectedProfileId_ = response.personaId || '';
++        });
 +  }
 +
 +  private async onLaunchSelectionModeChange_(event: Event) {
++    const target = event.target as HTMLSelectElement;
 +    const mode = (event.target as HTMLSelectElement).value;
-+    this.launchSelectionMode_ =
-+        await PersonaBrowserProxyImpl.getInstance().setLaunchSelectionMode(
-+            mode);
-+    await this.refreshProfiles_();
++    if (!this.confirmDiscardChanges_()) {
++      target.value = this.persistedLaunchSelectionMode_;
++      return;
++    }
++    const result = await this.runPendingRequest_(async () => {
++      const browserProxy = PersonaBrowserProxyImpl.getInstance();
++      const savedMode = await browserProxy.setLaunchSelectionMode(mode);
++      const [state, profilesResponse] = await Promise.all([
++        browserProxy.getPersonaState(),
++        browserProxy.getPersonaProfiles(),
++      ]);
++      return {savedMode, state, profilesResponse};
++    });
++    if (!result) {
++      this.launchSelectionMode_ = this.persistedLaunchSelectionMode_;
++      target.value = this.persistedLaunchSelectionMode_;
++      this.showMutationError_();
++      return;
++    }
++    this.launchSelectionMode_ = result.savedMode || 'always_ask';
++    this.applyPersonaState_(result.state, result.profilesResponse);
 +  }
 +
 +  private async onRefreshFingerprintsClick_() {
-+    await PersonaBrowserProxyImpl.getInstance().refreshFingerprints();
-+    await this.refreshProfiles_();
-+    this.importStatus_ =
-+        'Fingerprints refreshed. Reload open tabs for tokens to take effect.';
++    if (!this.confirmDiscardChanges_()) {
++      return;
++    }
++    const result = await this.runPendingRequest_(async () => {
++      const browserProxy = PersonaBrowserProxyImpl.getInstance();
++      await browserProxy.refreshFingerprints();
++      const [state, profilesResponse] = await Promise.all([
++        browserProxy.getPersonaState(),
++        browserProxy.getPersonaProfiles(),
++      ]);
++      return {state, profilesResponse};
++    });
++    if (!result) {
++      this.showMutationError_();
++      return;
++    }
++    this.applyPersonaState_(result.state, result.profilesResponse);
++    this.importStatus_ = this.i18n('personaFingerprintsRefreshed');
++    this.importStatusIsError_ = false;
 +  }
 +
 +  private syncTextFieldsFromPersona_() {
@@ -1342,42 +2230,39 @@
 +                                        `${item.brand || ''}/${item.version || ''}`)
 +                               .filter((item: string) => item !== '/')
 +                               .join(', ');
++    const formFactors =
++        Array.isArray(this.editablePersona_?.uaCh?.formFactors) ?
++        this.editablePersona_.uaCh.formFactors :
++        [];
++    this.uaChFormFactorsText_ = formFactors.join(', ');
 +  }
 +
-+  private applyTextFieldsToPersona_() {
-+    const splitCsv = (value: string) =>
-+        (value || '')
-+            .split(',')
-+            .map(part => part.trim())
-+            .filter(part => !!part);
-+    this.set('editablePersona_.fonts.families', splitCsv(this.fontFamiliesText_));
-+    this.set('editablePersona_.fonts.aliases', splitCsv(this.fontAliasesText_));
-+    const brands = splitCsv(this.uaChBrandsText_).map(entry => {
-+      const [brand, version] = entry.split('/');
-+      return {brand: (brand || '').trim(), version: (version || '').trim()};
-+    }).filter(item => item.brand && item.version);
-+    this.set('editablePersona_.uaCh.brands', brands);
-+  }
-+
-+  private onUaChPlatformChange_(event: Event) {
-+    this.set(
-+        'editablePersona_.uaCh.platform',
-+        (event.target as HTMLSelectElement).value);
-+  }
-+
-+  private onTimezoneChange_(event: Event) {
-+    this.set(
-+        'editablePersona_.region.timezone',
-+        (event.target as HTMLSelectElement).value);
-+  }
-+
-+  private onLocaleChange_(event: Event) {
-+    const locale = (event.target as HTMLSelectElement).value;
-+    this.set('editablePersona_.region.locale', locale);
-+    this.set('editablePersona_.region.acceptLanguage', `${locale},en;q=0.9`);
++  private prepareCurrentPersona_(): PersonaRecord|null {
++    if (this.editablePersona_.id === 'default') {
++      this.saveStatus_ = this.i18n('personaDefaultReadOnly');
++      this.saveStatusIsError_ = true;
++      return null;
++    }
++    const textFields: PersonaTextFields = {
++      fontFamilies: this.fontFamiliesText_,
++      fontAliases: this.fontAliasesText_,
++      uaChBrands: this.uaChBrandsText_,
++      uaChFormFactors: this.uaChFormFactorsText_,
++    };
++    const result = preparePersonaForSave(this.editablePersona_, textFields);
++    if (Object.keys(result.fieldErrors).length) {
++      this.saveStatus_ = this.formatFieldErrors_(
++          result.fieldErrors, this.i18n('personaSaveFailed'));
++      this.saveStatusIsError_ = true;
++      return null;
++    }
++    return result.persona;
 +  }
 +
 +  private onOptionFieldChange_(event: Event) {
++    if (this.isDefaultPersona_(this.editablePersona_.id)) {
++      return;
++    }
 +    const target = event.target as HTMLSelectElement;
 +    const path = target.dataset['path'] || '';
 +    const optionId = target.dataset['optionId'] || '';
@@ -1389,17 +2274,14 @@
 +      return;
 +    }
 +    this.set(path, this.coerceOptionValue_(path, target.value));
-+    if (optionId === 'locale') {
-+      this.set(
-+          'editablePersona_.region.acceptLanguage',
-+          `${target.value},en;q=0.9`);
-+    }
-+    if (optionId === 'platform') {
-+      this.set('editablePersona_.uaCh.platform', target.value);
-+    }
++    this.applyOptionSideEffects_(optionId, target.value);
++    this.hasUnsavedChanges_ = true;
 +  }
 +
 +  private onCustomOptionInput_(event: Event) {
++    if (this.isDefaultPersona_(this.editablePersona_.id)) {
++      return;
++    }
 +    const target = event.currentTarget as HTMLInputElement;
 +    const path = target.dataset['path'] || '';
 +    const optionId = target.dataset['optionId'] || '';
@@ -1407,6 +2289,22 @@
 +      return;
 +    }
 +    this.set(path, this.coerceOptionValue_(path, target.value));
++    this.applyOptionSideEffects_(optionId, target.value);
++    this.hasUnsavedChanges_ = true;
++  }
++
++  private applyOptionSideEffects_(optionId: string, value: string) {
++    if (optionId === 'locale') {
++      this.set(
++          'editablePersona_.region.acceptLanguage',
++          value ? `${value},en;q=0.9` : '');
++    }
++    if (optionId === 'platform') {
++      this.set('editablePersona_.uaCh.platform', value);
++      this.set(
++          'customFieldSelections_.uaChPlatform',
++          hasOption('uaChPlatform', value) ? value : CUSTOM_OPTION_VALUE);
++    }
 +  }
 +
 +  private getFieldOptions_(optionId: string) {
@@ -1418,8 +2316,8 @@
 +    return hasOption(optionId, value) ? String(value) : CUSTOM_OPTION_VALUE;
 +  }
 +
-+  private isCustomSelected_(optionId: string) {
-+    return this.customFieldSelections_[optionId] === CUSTOM_OPTION_VALUE;
++  private isCustomSelected_(selection: string) {
++    return selection === CUSTOM_OPTION_VALUE;
 +  }
 +
 +  private isSelectedProfile_(personaId: string, selectedProfileId: string) {
@@ -1434,25 +2332,52 @@
 +    return personaId !== 'default';
 +  }
 +
++  private canSavePersona_(personaId: string, pending: boolean) {
++    return !!personaId && personaId !== 'default' && !pending;
++  }
++
++  private isDefaultPersona_(personaId: string) {
++    return personaId === 'default';
++  }
++
++  private isEditorInert_(personaId: string, pending: boolean) {
++    return this.isDefaultPersona_(personaId) || pending;
++  }
++
++  private isDeleteDisabled_(personaId: string, pending: boolean) {
++    return !this.canDeleteProfile_(personaId) || pending;
++  }
++
++  private isPresetActionDisabled_(presetId: string, pending: boolean) {
++    return !presetId || pending;
++  }
++
++  private isCancelDisabled_(hasUnsavedChanges: boolean, pending: boolean) {
++    return !hasUnsavedChanges || pending;
++  }
++
 +  private computeProfileStatus_(personaId: string, activePersonaId: string) {
 +    if (personaId === 'default') {
-+      return personaId === activePersonaId ? 'Active system real' :
-+                                             'System real';
++      return personaId === activePersonaId ?
++          this.i18n('personaStatusActiveSystem') :
++          this.i18n('personaStatusSystem');
 +    }
-+    return personaId === activePersonaId ? 'Active' : 'Saved';
++    return personaId === activePersonaId ? this.i18n('personaStatusActive') :
++                                           this.i18n('personaStatusSaved');
 +  }
 +
 +  private computeProfileSummary_(persona: PersonaRecord) {
 +    if (persona?.id === 'default') {
-+      return 'No Persona | Real system fingerprint';
++      return this.i18n('personaSystemSummary');
 +    }
-+    const platform = persona?.platform || persona?.uaCh?.platform || 'Unknown';
++    const platform = persona?.platform || persona?.uaCh?.platform ||
++        this.i18n('personaUnknownValue');
 +    const locale = persona?.region?.locale || 'en-US';
 +    return `${platform} | ${locale}`;
 +  }
 +
 +  private computeLastUsedText_(lastUsedAt: string) {
-+    return lastUsedAt || 'Never';
++    return lastUsedAt || this.i18n('personaNeverUsed');
 +  }
 +
 +  private syncCustomSelections_() {
@@ -1461,16 +2386,49 @@
 +      timezone: 'editablePersona_.region.timezone',
 +      locale: 'editablePersona_.region.locale',
 +      platform: 'editablePersona_.platform',
++      uaChPlatform: 'editablePersona_.uaCh.platform',
++      uaChArchitecture: 'editablePersona_.uaCh.architecture',
++      uaChBitness: 'editablePersona_.uaCh.bitness',
 +      gpuVendor: 'editablePersona_.gpu.vendor',
 +      gpuRenderer: 'editablePersona_.gpu.renderer',
 +      networkType: 'editablePersona_.network.type',
 +      hardwareConcurrency: 'editablePersona_.hardware.hardwareConcurrency',
 +      deviceMemory: 'editablePersona_.hardware.deviceMemory',
++      fingerprintRotationScope:
++          'editablePersona_.advanced.fingerprintRotation.scope',
 +    };
 +    for (const [optionId, path] of Object.entries(fieldPaths)) {
 +      selections[optionId] = this.getSelectValue_(path, optionId);
 +    }
 +    this.customFieldSelections_ = selections;
++  }
++
++  private syncAdvancedToggleItems_() {
++    this.advancedToggleItems_ = ADVANCED_TOGGLE_DEFINITIONS.map(definition => {
++      return {...definition, value: Boolean(this.get(definition.path))};
++    });
++  }
++
++  private onAdvancedToggleChange_(event: Event) {
++    if (this.isDefaultPersona_(this.editablePersona_.id)) {
++      return;
++    }
++    const target = event.currentTarget as HTMLElement&{checked: boolean};
++    const path = target.dataset['path'] || '';
++    if (!path) {
++      return;
++    }
++    this.set(path, target.checked);
++    this.hasUnsavedChanges_ = true;
++  }
++
++  private onDraftChanged_() {
++    if (this.isDefaultPersona_(this.editablePersona_.id)) {
++      return;
++    }
++    this.hasUnsavedChanges_ = true;
++    this.saveStatus_ = '';
++    this.saveStatusIsError_ = false;
 +  }
 +
 +  private coerceOptionValue_(path: string, value: string) {
@@ -1479,6 +2437,33 @@
 +      return Number(value);
 +    }
 +    return value;
++  }
++
++  private getPresetsForRegion_(region: string, presets: PersonaRecord[]) {
++    const ids = PRESET_REGION_IDS[region] || [];
++    return presets.filter((preset: PersonaRecord) => {
++      return preset && ids.includes(preset.id);
++    });
++  }
++
++  private computeEditSectionDesc_(displayName: string) {
++    return this.i18n('personaSectionEditDesc', displayName || '');
++  }
++
++  private formatFieldErrors_(fieldErrors: any, fallback: string) {
++    if (!fieldErrors || typeof fieldErrors !== 'object') {
++      return fallback;
++    }
++    const messages = Object.keys(fieldErrors)
++                         .map(key => {
++                           const value = fieldErrors[key];
++                           if (value === undefined || value === null || value === '') {
++                             return '';
++                           }
++                           return `${key}: ${value}`;
++                         })
++                         .filter(message => !!message);
++    return messages.length ? `${fallback}: ${messages.join('; ')}` : fallback;
 +  }
 +
 +  private downloadPersonas_(personas: PersonaRecord[], filename: string) {
@@ -1495,7 +2480,6 @@
 +    anchor.click();
 +    URL.revokeObjectURL(url);
 +  }
-+
 +}
 +
 +declare global {
@@ -1677,12 +2661,12 @@
 +  AllowJavascript();
 +  CHECK_EQ(2U, args.size());
 +  const base::Value& callback_id = args[0];
-+  CHECK(args[1].is_list());
++  CHECK(args[1].is_dict());
 +
 +  helium_persona::PersonaService* service = GetPersonaService(profile_);
 +  CHECK(service);
 +  ResolveJavascriptCallback(callback_id,
-+                            service->ImportPersonas(args[1].GetList()));
++                            service->ImportPersonas(args[1].GetDict()));
 +}
 +
 +void PersonaHandler::HandleSetActivePersona(const base::ListValue& args) {
@@ -1759,3 +2743,660 @@
 +}
 +
 +}  // namespace settings
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
+@@ -0,0 +1,434 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++export const PERSONA_EXPORT_SCHEMA = 'helium.persona/v1';
++
++export interface PersonaUaChBrand {
++  brand: string;
++  version: string;
++}
++
++export interface PersonaAdvanced extends Record<string, unknown> {
++  clientHintsEnabled: boolean;
++  canvasNoise: boolean;
++  audioNoise: boolean;
++  hardwareNoise: boolean;
++  fontMetricNoise: boolean;
++  allowBackgroundSync: boolean;
++  allowContacts: boolean;
++  allowLocalFonts: boolean;
++  allowPrivacySandboxApis: boolean;
++  allowGamepads: boolean;
++  allowClipboard: boolean;
++  allowGeolocation: boolean;
++  allowNotifications: boolean;
++  allowMidi: boolean;
++  allowIdleDetection: boolean;
++  allowWindowManagement: boolean;
++  allowWebNfc: boolean;
++  allowWebXr: boolean;
++  allowSensorApis: boolean;
++  allowRealBatteryStatus: boolean;
++  allowPlatformCredentials: boolean;
++  allowPaymentHandler: boolean;
++  allowSpeechSynthesis: boolean;
++  allowWebPrinting: boolean;
++  allowShapeDetection: boolean;
++  allowWebOtp: boolean;
++  allowAiApis: boolean;
++  allowHandwritingRecognition: boolean;
++  allowWebNn: boolean;
++  allowPrivateStateTokens: boolean;
++  fingerprintRotation: Record<string, unknown>&{
++    scope: string;
++    rotationIntervalDays: number;
++  };
++}
++
++export interface PersonaRecord {
++  id: string;
++  name: string;
++  displayName: string;
++  icon: string;
++  enabled: boolean;
++  userAgent: string;
++  platform: string;
++  navigatorVendor: string;
++  navigatorProductSub: string;
++  uaCh: {
++    platform: string;
++    platformVersion: string;
++    architecture: string;
++    model: string;
++    bitness: string;
++    fullVersion: string;
++    mobile: boolean;
++    wow64: boolean;
++    brands: PersonaUaChBrand[];
++    formFactors: string[];
++  };
++  region: {
++    timezone: string;
++    locale: string;
++    acceptLanguage: string;
++  };
++  gpu: Record<string, unknown>&{
++    vendor: string;
++    renderer: string;
++    webgpuAdapter: string;
++  };
++  hardware: Record<string, unknown>&{
++    hardwareConcurrency: number;
++    deviceMemory: number;
++    maxTouchPoints: number;
++  };
++  screen: Record<string, unknown>&{
++    width: number;
++    height: number;
++    availLeft: number;
++    availTop: number;
++    availWidth: number;
++    availHeight: number;
++    outerWidth: number;
++    outerHeight: number;
++    deviceScaleFactor: number;
++  };
++  fonts: Record<string, unknown>&{
++    id: string;
++    families: string[];
++    aliases: string[];
++  };
++  fontRendering: Record<string, unknown>&{
++    engine: string;
++  };
++  mediaDevices: Record<string, unknown>&{
++    audioBaseLatency: number;
++    audioOutputLatency: number;
++  };
++  network: Record<string, unknown>&{
++    type: string;
++    downlinkMax: number;
++  };
++  advanced: PersonaAdvanced;
++  [key: string]: unknown;
++}
++
++export interface PersonaState {
++  activePersonaId: string;
++  personas: PersonaRecord[];
++  presets: PersonaRecord[];
++  lastUsedPersonaId?: string;
++  launchSelectionMode?: string;
++}
++
++export interface PersonaImportBundle {
++  schema: typeof PERSONA_EXPORT_SCHEMA;
++  personas: PersonaRecord[];
++}
++
++export interface PersonaTextFields {
++  fontFamilies: string;
++  fontAliases: string;
++  uaChBrands: string;
++  uaChFormFactors: string;
++}
++
++export interface PersonaSerializationResult {
++  persona: PersonaRecord;
++  fieldErrors: Record<string, string>;
++}
++
++interface NumericField {
++  path: string;
++  integer: boolean;
++  min: number;
++  max: number;
++  allowedValues?: number[];
++}
++
++const NUMERIC_FIELDS: NumericField[] = [
++  {path: 'hardware.hardwareConcurrency', integer: true, min: 1, max: 256},
++  {
++    path: 'hardware.deviceMemory',
++    integer: true,
++    min: 1,
++    max: 32,
++    allowedValues: [1, 2, 4, 8, 16, 32],
++  },
++  {path: 'hardware.maxTouchPoints', integer: true, min: 0, max: 32},
++  {path: 'screen.width', integer: true, min: 1, max: 32768},
++  {path: 'screen.height', integer: true, min: 1, max: 32768},
++  {path: 'screen.availLeft', integer: true, min: -32768, max: 32768},
++  {path: 'screen.availTop', integer: true, min: -32768, max: 32768},
++  {path: 'screen.availWidth', integer: true, min: 1, max: 32768},
++  {path: 'screen.availHeight', integer: true, min: 1, max: 32768},
++  {path: 'screen.outerWidth', integer: true, min: 1, max: 32768},
++  {path: 'screen.outerHeight', integer: true, min: 1, max: 32768},
++  {path: 'screen.deviceScaleFactor', integer: false, min: 0.25, max: 8},
++  {path: 'mediaDevices.audioBaseLatency', integer: false, min: 0, max: 10},
++  {path: 'mediaDevices.audioOutputLatency', integer: false, min: 0, max: 10},
++  {path: 'network.downlinkMax', integer: false, min: 0, max: 100000},
++  {
++    path: 'advanced.fingerprintRotation.rotationIntervalDays',
++    integer: true,
++    min: 1,
++    max: 3650,
++  },
++];
++
++const DEFAULT_ADVANCED = {
++  clientHintsEnabled: true,
++  canvasNoise: true,
++  audioNoise: true,
++  hardwareNoise: true,
++  fontMetricNoise: false,
++  allowBackgroundSync: false,
++  allowContacts: false,
++  allowLocalFonts: false,
++  allowPrivacySandboxApis: true,
++  allowGamepads: true,
++  allowClipboard: true,
++  allowGeolocation: false,
++  allowNotifications: false,
++  allowMidi: false,
++  allowIdleDetection: false,
++  allowWindowManagement: false,
++  allowWebNfc: false,
++  allowWebXr: false,
++  allowSensorApis: false,
++  allowRealBatteryStatus: false,
++  allowPlatformCredentials: true,
++  allowPaymentHandler: false,
++  allowSpeechSynthesis: true,
++  allowWebPrinting: true,
++  allowShapeDetection: false,
++  allowWebOtp: false,
++  allowAiApis: false,
++  allowHandwritingRecognition: false,
++  allowWebNn: false,
++  allowPrivateStateTokens: false,
++  fingerprintRotation: {
++    scope: 'site_profile',
++    rotationIntervalDays: 14,
++  },
++};
++
++function clone<T>(value: T): T {
++  return JSON.parse(JSON.stringify(value)) as T;
++}
++
++function asObject(value: unknown): Record<string, any> {
++  return value && typeof value === 'object' && !Array.isArray(value) ?
++      value as Record<string, any> :
++      {};
++}
++
++function splitCsv(value: string): string[] {
++  return (value || '')
++      .split(',')
++      .map(part => part.trim())
++      .filter(Boolean);
++}
++
++function parseUaChBrands(value: string): PersonaUaChBrand[] {
++  return splitCsv(value).map(entry => {
++    const separator = entry.lastIndexOf('/');
++    if (separator <= 0 || separator === entry.length - 1) {
++      return null;
++    }
++    return {
++      brand: entry.slice(0, separator).trim(),
++      version: entry.slice(separator + 1).trim(),
++    };
++  }).filter((entry): entry is PersonaUaChBrand =>
++      !!entry?.brand && !!entry.version);
++}
++
++function getPath(root: Record<string, any>, path: string): unknown {
++  return path.split('.').reduce<unknown>((value, key) => {
++    return asObject(value)[key];
++  }, root);
++}
++
++function setPath(root: Record<string, any>, path: string, value: unknown) {
++  const parts = path.split('.');
++  const finalKey = parts.pop()!;
++  const parent = parts.reduce<Record<string, any>>((current, key) => {
++    return current[key] = asObject(current[key]);
++  }, root);
++  parent[finalKey] = value;
++}
++
++export function createPersonaDraft(
++    inputValue: Record<string, any> = {}): PersonaRecord {
++  const input = asObject(inputValue);
++  const inputScreen = asObject(input['screen']);
++  const defaults = {
++    id: '',
++    name: '',
++    displayName: '',
++    icon: 'macos',
++    enabled: true,
++    userAgent: '',
++    platform: 'macOS',
++    navigatorVendor: 'Google Inc.',
++    navigatorProductSub: '20030107',
++    uaCh: {
++      platform: 'macOS',
++      platformVersion: '15.0.0',
++      architecture: 'arm',
++      model: '',
++      bitness: '64',
++      fullVersion: '149.0.7827.114',
++      mobile: false,
++      wow64: false,
++      brands: [
++        {brand: 'Chromium', version: '149'},
++        {brand: 'Not/A)Brand', version: '24'},
++      ],
++      formFactors: ['Desktop'],
++    },
++    region: {
++      timezone: 'UTC',
++      locale: 'en-US',
++      acceptLanguage: 'en-US,en;q=0.9',
++    },
++    gpu: {
++      vendor: 'Apple Inc.',
++      renderer: 'ANGLE (Apple, Apple M2, Metal)',
++      webgpuAdapter: 'Apple M2',
++    },
++    hardware: {
++      hardwareConcurrency: 8,
++      deviceMemory: 16,
++      maxTouchPoints: 0,
++    },
++    screen: {
++      width: 1512,
++      height: 982,
++      availLeft: 0,
++      availTop: 0,
++      availWidth: 1512,
++      availHeight: 982,
++      outerWidth: 1512,
++      outerHeight: 982,
++      deviceScaleFactor: 2,
++    },
++    fonts: {
++      id: 'sf-pro-default',
++      families: ['Arial', 'Helvetica', 'Times', 'Courier'],
++      aliases: [],
++    },
++    fontRendering: {
++      engine: 'coretext',
++    },
++    mediaDevices: {
++      audioBaseLatency: 0.01,
++      audioOutputLatency: 0.02,
++    },
++    network: {
++      type: 'wifi',
++      downlinkMax: 25,
++    },
++    advanced: DEFAULT_ADVANCED,
++  } satisfies PersonaRecord;
++
++  const screen = {...defaults.screen, ...inputScreen};
++  screen.availWidth = Object.hasOwn(inputScreen, 'availWidth') ?
++      screen.availWidth : screen.width;
++  screen.availHeight = Object.hasOwn(inputScreen, 'availHeight') ?
++      screen.availHeight : screen.height;
++  screen.outerWidth = Object.hasOwn(inputScreen, 'outerWidth') ?
++      screen.outerWidth : screen.width;
++  screen.outerHeight = Object.hasOwn(inputScreen, 'outerHeight') ?
++      screen.outerHeight : screen.height;
++
++  const advancedInput = asObject(input['advanced']);
++  return {
++    ...defaults,
++    ...input,
++    uaCh: {...defaults.uaCh, ...asObject(input['uaCh'])},
++    region: {...defaults.region, ...asObject(input['region'])},
++    gpu: {...defaults.gpu, ...asObject(input['gpu'])},
++    hardware: {...defaults.hardware, ...asObject(input['hardware'])},
++    screen,
++    fonts: {...defaults.fonts, ...asObject(input['fonts'])},
++    fontRendering: {
++      ...defaults.fontRendering,
++      ...asObject(input['fontRendering']),
++    },
++    mediaDevices: {
++      ...defaults.mediaDevices,
++      ...asObject(input['mediaDevices']),
++    },
++    network: {...defaults.network, ...asObject(input['network'])},
++    advanced: {
++      ...DEFAULT_ADVANCED,
++      ...advancedInput,
++      fingerprintRotation: {
++        ...DEFAULT_ADVANCED.fingerprintRotation,
++        ...asObject(advancedInput['fingerprintRotation']),
++      },
++    },
++  } as PersonaRecord;
++}
++
++export function preparePersonaForSave(
++    input: PersonaRecord, textFields: PersonaTextFields):
++    PersonaSerializationResult {
++  const persona = clone(input);
++  const fieldErrors: Record<string, string> = {};
++
++  persona.displayName = (persona.displayName || '').trim();
++  persona.name = persona.displayName;
++  if (!persona.id) {
++    fieldErrors['id'] = 'A saved persona must have an ID.';
++  }
++  if (!persona.displayName) {
++    fieldErrors['displayName'] = 'Enter a profile name.';
++  }
++
++  persona.fonts.families = splitCsv(textFields.fontFamilies);
++  persona.fonts.aliases = splitCsv(textFields.fontAliases);
++  persona.uaCh.brands = parseUaChBrands(textFields.uaChBrands);
++  persona.uaCh.formFactors = splitCsv(textFields.uaChFormFactors);
++  if (!persona.uaCh.brands.length) {
++    fieldErrors['uaCh.brands'] = 'Enter at least one brand/version pair.';
++  }
++  if (!persona.uaCh.formFactors.length) {
++    fieldErrors['uaCh.formFactors'] = 'Enter at least one form factor.';
++  }
++
++  for (const field of NUMERIC_FIELDS) {
++    const rawValue = getPath(persona, field.path);
++    const value = typeof rawValue === 'string' && !rawValue.trim() ?
++        Number.NaN :
++        Number(rawValue);
++    if (!Number.isFinite(value) || (field.integer && !Number.isInteger(value)) ||
++        value < field.min || value > field.max ||
++        (field.allowedValues && !field.allowedValues.includes(value))) {
++      fieldErrors[field.path] = field.allowedValues ?
++          `Choose a supported value: ${field.allowedValues.join(', ')}.` :
++          `Enter a value from ${field.min} to ${field.max}.`;
++      continue;
++    }
++    setPath(persona, field.path, value);
++  }
++
++  return {persona, fieldErrors};
++}
++
++export function parsePersonaImportPayload(payload: unknown): PersonaRecord[] {
++  if (Array.isArray(payload)) {
++    return payload as PersonaRecord[];
++  }
++  const bundle = asObject(payload);
++  if (bundle['schema'] !== PERSONA_EXPORT_SCHEMA) {
++    throw new Error('Unsupported persona schema.');
++  }
++  if (!Array.isArray(bundle['personas'])) {
++    throw new Error('Persona bundle does not contain a personas array.');
++  }
++  return bundle['personas'] as PersonaRecord[];
++}
+--- /dev/null
++++ b/chrome/test/data/webui/settings/persona_config_test.ts
+@@ -0,0 +1,178 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++import {
++  assertDeepEquals,
++  assertEquals,
++  assertNotEquals,
++  assertTrue,
++} from 'chrome://webui-test/chai_assert.js';
++
++import {
++  createPersonaDraft,
++  parsePersonaImportPayload,
++  preparePersonaForSave,
++} from 'chrome://settings/privacy_page/persona_config.js';
++
++suite('PersonaConfig', () => {
++  test('converts every editable numeric field', () => {
++    const draft = createPersonaDraft({
++      id: 'persona-test',
++      displayName: 'Numeric Persona',
++      hardware: {
++        hardwareConcurrency: '12',
++        deviceMemory: '32',
++        maxTouchPoints: '5',
++      },
++      screen: {
++        width: '1920',
++        height: '1080',
++        availLeft: '-1920',
++        availTop: '0',
++        availWidth: '1920',
++        availHeight: '1040',
++        outerWidth: '1920',
++        outerHeight: '1040',
++        deviceScaleFactor: '1.25',
++      },
++      mediaDevices: {
++        audioBaseLatency: '0.01',
++        audioOutputLatency: '0.02',
++      },
++      network: {downlinkMax: '25'},
++      advanced: {
++        fingerprintRotation: {rotationIntervalDays: '30'},
++      },
++    });
++
++    const result = preparePersonaForSave(draft, {
++      fontFamilies: 'Arial, Helvetica',
++      fontAliases: 'sans-serif',
++      uaChBrands: 'Chromium/149, Not/A)Brand/24',
++      uaChFormFactors: 'Desktop',
++    });
++
++    assertDeepEquals({}, result.fieldErrors);
++    assertEquals('Numeric Persona', result.persona.name);
++    assertEquals(12, result.persona.hardware.hardwareConcurrency);
++    assertEquals(32, result.persona.hardware.deviceMemory);
++    assertEquals(5, result.persona.hardware.maxTouchPoints);
++    assertEquals(1920, result.persona.screen.width);
++    assertEquals(-1920, result.persona.screen.availLeft);
++    assertEquals(1.25, result.persona.screen.deviceScaleFactor);
++    assertEquals(0.01, result.persona.mediaDevices.audioBaseLatency);
++    assertEquals(0.02, result.persona.mediaDevices.audioOutputLatency);
++    assertEquals(25, result.persona.network.downlinkMax);
++    assertEquals(
++        30,
++        result.persona.advanced.fingerprintRotation.rotationIntervalDays);
++    assertDeepEquals(['Arial', 'Helvetica'], result.persona.fonts.families);
++    assertDeepEquals(['sans-serif'], result.persona.fonts.aliases);
++    assertDeepEquals(['Desktop'], result.persona.uaCh.formFactors);
++  });
++
++  test('round trips UA-CH brand names containing slashes', () => {
++    const result = preparePersonaForSave(createPersonaDraft({
++      id: 'persona-test',
++      displayName: 'Brand Persona',
++    }), {
++      fontFamilies: '',
++      fontAliases: '',
++      uaChBrands: 'Chromium/149, Not/A)Brand/24',
++      uaChFormFactors: 'Desktop',
++    });
++
++    assertDeepEquals([
++      {brand: 'Chromium', version: '149'},
++      {brand: 'Not/A)Brand', version: '24'},
++    ], result.persona.uaCh.brands);
++  });
++
++  test('supplies effective screen fallbacks', () => {
++    const draft = createPersonaDraft({
++      id: 'persona-test',
++      displayName: 'Screen Persona',
++      screen: {width: 1536, height: 864},
++    });
++
++    assertEquals(1536, draft.screen.availWidth);
++    assertEquals(864, draft.screen.availHeight);
++    assertNotEquals(0, draft.screen.outerWidth);
++    assertNotEquals(0, draft.screen.outerHeight);
++  });
++
++  test('preserves nested defaults on partial overrides', () => {
++    const draft = createPersonaDraft({
++      gpu: {vendor: 'Intel Inc.'},
++      advanced: {allowGeolocation: true},
++    });
++
++    assertEquals('Intel Inc.', draft.gpu.vendor);
++    assertEquals('string', typeof draft.gpu.renderer);
++    assertNotEquals('', draft.gpu.renderer);
++    assertEquals(true, draft.advanced.allowGeolocation);
++    assertEquals(true, draft.advanced.clientHintsEnabled);
++    assertEquals(
++        'site_profile', draft.advanced.fingerprintRotation.scope);
++  });
++
++  test('accepts legacy arrays and v1 import bundles', () => {
++    const personas = [{id: 'persona-test'}];
++
++    assertDeepEquals(personas, parsePersonaImportPayload(personas));
++    assertDeepEquals(personas, parsePersonaImportPayload({
++      schema: 'helium.persona/v1',
++      personas,
++    }));
++  });
++
++  test('rejects unknown import schemas', () => {
++    let error: Error|null = null;
++    try {
++      parsePersonaImportPayload({
++        schema: 'helium.persona/v2',
++        personas: [{id: 'persona-test'}],
++      });
++    } catch (caught) {
++      error = caught as Error;
++    }
++    assertTrue(!!error);
++    assertTrue(/unsupported persona schema/i.test(error!.message));
++  });
++
++  test('reports invalid numeric fields', () => {
++    const draft = createPersonaDraft({
++      id: 'persona-test',
++      displayName: 'Invalid Persona',
++      screen: {width: 'not-a-number'},
++    });
++
++    const result = preparePersonaForSave(draft, {
++      fontFamilies: '',
++      fontAliases: '',
++      uaChBrands: 'Chromium/149',
++      uaChFormFactors: 'Desktop',
++    });
++
++    assertEquals('string', typeof result.fieldErrors['screen.width']);
++  });
++
++  test('rejects unsupported device memory buckets', () => {
++    const draft = createPersonaDraft({
++      id: 'persona-test',
++      displayName: 'Invalid Memory Persona',
++      hardware: {deviceMemory: '24'},
++    });
++
++    const result = preparePersonaForSave(draft, {
++      fontFamilies: '',
++      fontAliases: '',
++      uaChBrands: 'Chromium/149',
++      uaChFormFactors: 'Desktop',
++    });
++
++    assertEquals(
++        'string', typeof result.fieldErrors['hardware.deviceMemory']);
++  });
++});
+--- a/chrome/test/data/webui/settings/BUILD.gn
++++ b/chrome/test/data/webui/settings/BUILD.gn
+@@ -6,6 +6,7 @@ import("../build_webui_tests.gni")
+ 
+ build_webui_tests("build") {
+   cc_test_files = [
++    "persona_config_browsertest.cc",
+     "settings_browsertest.cc",
+     "settings_focus_test.cc",
+   ]
+@@ -101,6 +102,7 @@ build_webui_tests("build") {
+     "privacy_guide_safe_browsing_fragment_test.ts",
+     "privacy_guide_test_util.ts",
+     "privacy_guide_welcome_fragment_test.ts",
++    "persona_config_test.ts",
+     "privacy_page_index_test.ts",
+     "privacy_page_test.ts",
+     "privacy_sandbox_page_test.ts",
+--- /dev/null
++++ b/chrome/test/data/webui/settings/persona_config_browsertest.cc
+@@ -0,0 +1,18 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/common/webui_url_constants.h"
++#include "chrome/test/base/web_ui_mocha_browser_test.h"
++#include "content/public/test/browser_test.h"
++
++class PersonaConfigBrowserTest : public WebUIMochaBrowserTest {
++ protected:
++  PersonaConfigBrowserTest() {
++    set_test_loader_host(chrome::kChromeUISettingsHost);
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(PersonaConfigBrowserTest, PersonaConfig) {
++  RunTest("settings/persona_config_test.js", "mocha.run()");
++}

@@ -153,5 +153,995 @@
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
     "source": "Invalid origin",
     "message": "유효하지 않은 원본"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_TITLE",
+    "source": "Persona",
+    "message": "페르소나"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DESCRIPTION",
+    "source": "Configure browser persona and fingerprint surface overrides",
+    "message": "브라우저 페르소나 및 지문 노출 영역 재정의 구성"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT",
+    "source": "Import",
+    "message": "가져오기"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EXPORT_ALL",
+    "source": "Export all",
+    "message": "모두 내보내기"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EXPORT_CURRENT",
+    "source": "Export current",
+    "message": "현재 항목 내보내기"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_NO_PROFILES",
+    "source": "No persona profiles found",
+    "message": "페르소나 프로필을 찾을 수 없음"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_FAILED",
+    "source": "Import failed",
+    "message": "가져오지 못함"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_RESULT",
+    "source": "Imported <ph name=\"COUNT\">$1<ex>3</ex></ph> persona profiles (<ph name=\"SKIPPED\">$2<ex>1</ex></ph> skipped)",
+    "message": "페르소나 프로필 <ph name=\"COUNT\">$1<ex>3</ex></ph>개를 가져옴(<ph name=\"SKIPPED\">$2<ex>1</ex></ph>개 건너뜀)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_SUCCESS",
+    "source": "Profile saved",
+    "message": "프로필을 저장함"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_FAILED",
+    "source": "Could not complete this operation. Review the configuration and try again.",
+    "message": "이 작업을 완료할 수 없습니다. 설정을 검토한 후 다시 시도하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PROFILES",
+    "source": "Profiles",
+    "message": "프로필"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PROFILES_DESC",
+    "source": "Manage saved persona profiles for different browsing identities.",
+    "message": "서로 다른 탐색 ID에 사용할 저장된 페르소나 프로필을 관리합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEW_PROFILE",
+    "source": "New profile",
+    "message": "새 프로필"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_USE_PROFILE",
+    "source": "Use profile",
+    "message": "프로필 사용"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DELETE_PROFILE",
+    "source": "Delete",
+    "message": "삭제"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_STARTUP",
+    "source": "Startup selection",
+    "message": "시작 시 선택"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_STARTUP_DESC",
+    "source": "Choose whether Nitrous asks for a persona on launch or reuses the last selected profile.",
+    "message": "Nitrous를 시작할 때 페르소나를 묻거나 마지막으로 선택한 프로필을 다시 사용할지 선택합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_BEHAVIOR",
+    "source": "Launch behavior",
+    "message": "시작 동작"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_ALWAYS_ASK",
+    "source": "Always ask",
+    "message": "항상 묻기"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_USE_LAST",
+    "source": "Use last selected profile",
+    "message": "마지막으로 선택한 프로필 사용"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REFRESH_FINGERPRINTS",
+    "source": "Refresh fingerprints",
+    "message": "지문 새로고침"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED",
+    "source": "Fingerprints refreshed. Reload open tabs for tokens to take effect.",
+    "message": "지문을 새로고침했습니다. 토큰을 적용하려면 열려 있는 탭을 새로고침하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS",
+    "source": "Quick presets",
+    "message": "빠른 사전 설정"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS_DESC",
+    "source": "Clone a system preset into an editable saved profile.",
+    "message": "시스템 사전 설정을 복제하여 수정 가능한 저장 프로필을 만듭니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_LABEL",
+    "source": "Preset",
+    "message": "사전 설정"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_CHOOSE",
+    "source": "Choose a preset...",
+    "message": "사전 설정 선택..."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_CLONE_PRESET",
+    "source": "Clone preset",
+    "message": "사전 설정 복제"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_EDIT",
+    "source": "Edit profile",
+    "message": "프로필 수정"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_EDIT_DESC",
+    "source": "Selected profile: <ph name=\"NAME\">$1<ex>Work laptop</ex></ph>",
+    "message": "선택한 프로필: <ph name=\"NAME\">$1<ex>Work laptop</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE",
+    "source": "Save",
+    "message": "저장"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HELP",
+    "source": "Help",
+    "message": "도움말"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CUSTOM_OPTION",
+    "source": "Custom",
+    "message": "맞춤"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_LABEL",
+    "source": "Display name",
+    "message": "표시 이름"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_TOOLTIP",
+    "source": "Friendly name shown in the profile list and persona picker. Does not affect fingerprint surfaces.",
+    "message": "프로필 목록과 페르소나 선택기에 표시되는 이름입니다. 지문 노출 영역에는 영향을 주지 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ICON_LABEL",
+    "source": "Icon",
+    "message": "아이콘"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ICON_TOOLTIP",
+    "source": "Icon key used in the profile card and toolbar indicator. Prefer platform-matching keys such as macos or windows.",
+    "message": "프로필 카드와 툴바 표시기에 사용되는 아이콘 키입니다. macos 또는 windows처럼 플랫폼과 일치하는 키를 사용하는 것이 좋습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_LABEL",
+    "source": "User agent",
+    "message": "사용자 에이전트"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_TOOLTIP",
+    "source": "Overrides the HTTP User-Agent header and navigator.userAgent. Keep it aligned with platform, UA-CH, and Nitrous version.",
+    "message": "HTTP User-Agent 헤더와 navigator.userAgent를 재정의합니다. 플랫폼, UA-CH 및 Nitrous 버전과 일치하게 유지하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PLATFORM_LABEL",
+    "source": "Platform",
+    "message": "플랫폼"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PLATFORM_TOOLTIP",
+    "source": "Overrides navigator.platform and related OS identity. Choose a value consistent with the user agent and GPU strings.",
+    "message": "navigator.platform 및 관련 OS ID를 재정의합니다. 사용자 에이전트 및 GPU 문자열과 일치하는 값을 선택하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_LABEL",
+    "source": "Navigator vendor",
+    "message": "Navigator 공급업체"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_TOOLTIP",
+    "source": "Overrides navigator.vendor. Desktop Nitrous commonly reports Google Inc.",
+    "message": "navigator.vendor를 재정의합니다. 데스크톱 Nitrous에서는 일반적으로 Google Inc.로 표시됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_LABEL",
+    "source": "Product sub",
+    "message": "제품 하위 버전"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_TOOLTIP",
+    "source": "Overrides navigator.productSub. Most Nitrous builds expose 20030107.",
+    "message": "navigator.productSub를 재정의합니다. 대부분의 Nitrous 빌드에서는 20030107이 노출됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_LABEL",
+    "source": "User-Agent Client Hints platform",
+    "message": "User-Agent Client Hints 플랫폼"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_TOOLTIP",
+    "source": "Overrides the platform Client Hint (Sec-CH-UA-Platform). Keep it matched with navigator platform and the user agent.",
+    "message": "플랫폼 Client Hint(Sec-CH-UA-Platform)를 재정의합니다. Navigator 플랫폼 및 사용자 에이전트와 일치하게 유지하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_LABEL",
+    "source": "Full version",
+    "message": "전체 버전"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_TOOLTIP",
+    "source": "Overrides the full browser version used in UA-CH (Sec-CH-UA-Full-Version-List). Match the Nitrous version in the user agent.",
+    "message": "UA-CH(Sec-CH-UA-Full-Version-List)에 사용되는 전체 브라우저 버전을 재정의합니다. 사용자 에이전트의 Nitrous 버전과 일치시키세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_LABEL",
+    "source": "UA-CH brands",
+    "message": "UA-CH 브랜드"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_TOOLTIP",
+    "source": "Comma-separated Brand/Version pairs for Sec-CH-UA. Example: Nitrous/149, Not/A)Brand/24.",
+    "message": "Sec-CH-UA에 사용할 쉼표로 구분된 브랜드/버전 쌍입니다. 예: Nitrous/149, Not/A)Brand/24."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_LABEL",
+    "source": "Time zone",
+    "message": "시간대"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_TOOLTIP",
+    "source": "Overrides the IANA time zone used by Date and Intl APIs. Keep it consistent with locale and Accept-Language for a believable region.",
+    "message": "Date 및 Intl API에서 사용하는 IANA 시간대를 재정의합니다. 자연스러운 지역으로 보이도록 언어 및 Accept-Language와 일치하게 유지하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_LOCALE_LABEL",
+    "source": "Locale",
+    "message": "언어"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_LOCALE_TOOLTIP",
+    "source": "Overrides the primary locale exposed to websites. Selecting a preset locale also updates Accept-Language; you can still edit that field manually.",
+    "message": "웹사이트에 노출되는 기본 언어를 재정의합니다. 사전 설정 언어를 선택하면 Accept-Language도 업데이트되며, 해당 필드는 직접 수정할 수도 있습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_LABEL",
+    "source": "Accept-Language",
+    "message": "Accept-Language"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_TOOLTIP",
+    "source": "Stores the intended Accept-Language chain for this persona. Current runtime coverage is incomplete, so locale remains the primary language override.",
+    "message": "이 페르소나에 사용할 Accept-Language 체인을 저장합니다. 현재 런타임 적용 범위가 완전하지 않으므로 언어 설정이 기본 언어 재정의로 유지됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_LABEL",
+    "source": "GPU vendor",
+    "message": "GPU 공급업체"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_TOOLTIP",
+    "source": "Overrides the WebGL UNMASKED_VENDOR_WEBGL string. Pair it with a matching renderer for the selected platform.",
+    "message": "WebGL UNMASKED_VENDOR_WEBGL 문자열을 재정의합니다. 선택한 플랫폼에 맞는 렌더러와 함께 사용하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_LABEL",
+    "source": "GPU renderer",
+    "message": "GPU 렌더러"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_TOOLTIP",
+    "source": "Overrides the WebGL UNMASKED_RENDERER_WEBGL string (usually an ANGLE adapter description). Must look native to the chosen OS.",
+    "message": "WebGL UNMASKED_RENDERER_WEBGL 문자열(일반적으로 ANGLE 어댑터 설명)을 재정의합니다. 선택한 OS에 자연스러운 값이어야 합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_LABEL",
+    "source": "WebGPU adapter",
+    "message": "WebGPU 어댑터"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_TOOLTIP",
+    "source": "Overrides the adapter name reported by WebGPU. Use a short device name that matches the GPU renderer family.",
+    "message": "WebGPU에서 보고하는 어댑터 이름을 재정의합니다. GPU 렌더러 계열과 일치하는 짧은 기기 이름을 사용하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL",
+    "source": "Hardware concurrency",
+    "message": "하드웨어 동시 실행 수"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_TOOLTIP",
+    "source": "Overrides navigator.hardwareConcurrency (logical CPU cores). Common desktop values are 4, 8, 10, 12, or 16.",
+    "message": "navigator.hardwareConcurrency(논리 CPU 코어 수)를 재정의합니다. 일반적인 데스크톱 값은 4, 8, 10, 12 또는 16입니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_LABEL",
+    "source": "Device memory",
+    "message": "기기 메모리"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_TOOLTIP",
+    "source": "Overrides navigator.deviceMemory and matching Device-Memory Client Hint headers in gigabytes. Supported buckets are 1, 2, 4, 8, 16, and 32.",
+    "message": "navigator.deviceMemory와 이에 해당하는 Device-Memory 클라이언트 힌트 헤더를 GB 단위로 재정의합니다. 지원되는 값은 1, 2, 4, 8, 16, 32입니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_LABEL",
+    "source": "Max touch points",
+    "message": "최대 터치 지점 수"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_TOOLTIP",
+    "source": "Overrides navigator.maxTouchPoints. Use 0 for most desktop personas and a positive value for touch-capable devices.",
+    "message": "navigator.maxTouchPoints를 재정의합니다. 대부분의 데스크톱 페르소나에는 0을, 터치 지원 기기에는 양수를 사용하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_LABEL",
+    "source": "Screen width",
+    "message": "화면 너비"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_TOOLTIP",
+    "source": "Overrides screen.width in CSS pixels. Keep width, height, avail*, outer*, and DPR consistent with a real display.",
+    "message": "CSS 픽셀 단위의 screen.width를 재정의합니다. 너비, 높이, avail*, outer* 및 DPR이 실제 디스플레이와 일치하게 유지하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_LABEL",
+    "source": "Screen height",
+    "message": "화면 높이"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_TOOLTIP",
+    "source": "Overrides screen.height in CSS pixels. Pair with a realistic width and device pixel ratio for the target device.",
+    "message": "CSS 픽셀 단위의 screen.height를 재정의합니다. 대상 기기에 맞는 실제적인 너비 및 기기 픽셀 비율과 함께 사용하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_LABEL",
+    "source": "Available screen left",
+    "message": "사용 가능 화면 왼쪽 위치"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_TOOLTIP",
+    "source": "Overrides screen.availLeft. Usually 0 on single-display desktops; multi-monitor setups may use non-zero values.",
+    "message": "screen.availLeft를 재정의합니다. 단일 디스플레이 데스크톱에서는 일반적으로 0이며, 다중 모니터 구성에서는 0이 아닌 값일 수 있습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_LABEL",
+    "source": "Available screen top",
+    "message": "사용 가능 화면 위쪽 위치"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_TOOLTIP",
+    "source": "Overrides screen.availTop. Often 0, or slightly positive when a menu bar or dock reduces usable area.",
+    "message": "screen.availTop을 재정의합니다. 일반적으로 0이거나 메뉴 바 또는 Dock으로 사용 가능 영역이 줄어든 경우 작은 양수입니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_LABEL",
+    "source": "Available screen width",
+    "message": "사용 가능 화면 너비"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_TOOLTIP",
+    "source": "Overrides screen.availWidth. Typically equal to or slightly smaller than screen width.",
+    "message": "screen.availWidth를 재정의합니다. 일반적으로 화면 너비와 같거나 약간 작습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_LABEL",
+    "source": "Available screen height",
+    "message": "사용 가능 화면 높이"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_TOOLTIP",
+    "source": "Overrides screen.availHeight. Usually smaller than screen height because of taskbars or docks.",
+    "message": "screen.availHeight를 재정의합니다. 작업 표시줄이나 Dock으로 인해 일반적으로 화면 높이보다 작습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_LABEL",
+    "source": "Outer width",
+    "message": "창 외부 너비"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_TOOLTIP",
+    "source": "Overrides window.outerWidth. For maximized windows this is often close to the available screen width.",
+    "message": "window.outerWidth를 재정의합니다. 최대화된 창에서는 사용 가능한 화면 너비에 가까운 경우가 많습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_LABEL",
+    "source": "Outer height",
+    "message": "창 외부 높이"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_TOOLTIP",
+    "source": "Overrides window.outerHeight. Keep it consistent with available screen height for a maximized desktop window.",
+    "message": "window.outerHeight를 재정의합니다. 최대화된 데스크톱 창의 사용 가능한 화면 높이와 일치하게 유지하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DPR_LABEL",
+    "source": "Device pixel ratio",
+    "message": "기기 픽셀 비율"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DPR_TOOLTIP",
+    "source": "Overrides window.devicePixelRatio and matching DPR Client Hint headers. Common values are 1, 1.25, 1.5, and 2 for Retina-class displays.",
+    "message": "window.devicePixelRatio와 이에 해당하는 DPR 클라이언트 힌트 헤더를 재정의합니다. 일반적인 값은 1, 1.25, 1.5이며 Retina급 디스플레이에서는 2입니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_LABEL",
+    "source": "Fonts profile ID",
+    "message": "글꼴 프로필 ID"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_TOOLTIP",
+    "source": "Metadata identifier saved with this profile. It does not select or install fonts by itself.",
+    "message": "이 프로필과 함께 저장되는 메타데이터 식별자입니다. 이 값 자체로 글꼴이 선택되거나 설치되지는 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_LABEL",
+    "source": "Font families",
+    "message": "글꼴 모음"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "Comma-separated font family names exposed as the persona font set. Prefer fonts that exist on the target OS.",
+    "message": "페르소나 글꼴 집합으로 노출할 쉼표로 구분된 글꼴 모음 이름입니다. 대상 OS에 있는 글꼴을 사용하는 것이 좋습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_LABEL",
+    "source": "Font aliases",
+    "message": "글꼴 별칭"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_TOOLTIP",
+    "source": "Comma-separated alias names mapped onto the persona font set. Leave empty unless you need explicit aliases.",
+    "message": "페르소나 글꼴 집합에 매핑할 쉼표로 구분된 별칭입니다. 명시적인 별칭이 필요하지 않으면 비워 두세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_LABEL",
+    "source": "Font engine",
+    "message": "글꼴 엔진"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "Stores font engine metadata such as directwrite, coretext, or freetype. It is not currently applied to every font rendering path.",
+    "message": "directwrite, coretext 또는 freetype과 같은 글꼴 엔진 메타데이터를 저장합니다. 현재 모든 글꼴 렌더링 경로에 적용되지는 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_LABEL",
+    "source": "Audio base latency",
+    "message": "오디오 기본 지연 시간"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_TOOLTIP",
+    "source": "Overrides AudioContext base latency. Small values such as 0.01–0.02 are typical; large changes can look synthetic.",
+    "message": "AudioContext 기본 지연 시간을 재정의합니다. 일반적인 작은 값은 0.01~0.02이며, 크게 변경하면 인위적으로 보일 수 있습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_LABEL",
+    "source": "Canvas noise",
+    "message": "Canvas 노이즈"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_TOOLTIP",
+    "source": "Applies deterministic noise to supported canvas readback paths. Some formats and offscreen export paths are not covered yet.",
+    "message": "지원되는 Canvas 읽기 경로에 결정적 노이즈를 적용합니다. 일부 형식과 오프스크린 내보내기 경로는 아직 지원되지 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_LABEL",
+    "source": "Audio noise",
+    "message": "오디오 노이즈"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_TOOLTIP",
+    "source": "Applies persona-scoped deterministic noise to supported offline audio render results. Live audio analysis paths are not covered yet.",
+    "message": "지원되는 오프라인 오디오 렌더링 결과에 페르소나 범위의 결정적 노이즈를 적용합니다. 실시간 오디오 분석 경로는 아직 지원되지 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_LABEL",
+    "source": "Hardware noise",
+    "message": "하드웨어 노이즈"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "Applies deterministic noise to supported low-level hardware readback paths. CPU and memory values use their explicit fields instead.",
+    "message": "지원되는 하위 수준 하드웨어 읽기 경로에 결정적 노이즈를 적용합니다. CPU 및 메모리 값에는 각각의 명시적 필드가 사용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_LABEL",
+    "source": "Font metric noise",
+    "message": "글꼴 메트릭 노이즈"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_TOOLTIP",
+    "source": "When enabled, font measurement APIs receive small deterministic noise tied to this persona.",
+    "message": "사용 설정하면 글꼴 측정 API에 이 페르소나에 연결된 작은 결정적 노이즈가 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_LABEL",
+    "source": "Network type",
+    "message": "네트워크 유형"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_TOOLTIP",
+    "source": "Overrides the exposed connection type on supported Network Information API paths. RTT, effective type, and HTTP Client Hints are not fully covered.",
+    "message": "지원되는 Network Information API 경로에 노출되는 연결 유형을 재정의합니다. RTT, 유효 연결 유형 및 HTTP Client Hints는 완전히 지원되지 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_LABEL",
+    "source": "Downlink max",
+    "message": "최대 다운링크"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_TOOLTIP",
+    "source": "Overrides navigator.connection.downlinkMax in megabits per second. Use a value that fits the chosen network type.",
+    "message": "navigator.connection.downlinkMax를 초당 메가비트 단위로 재정의합니다. 선택한 네트워크 유형에 맞는 값을 사용하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEW_PROFILE_DEFAULT_NAME",
+    "source": "New Persona",
+    "message": "새 페르소나"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DISCARD_CHANGES_CONFIRM",
+    "source": "Discard unsaved changes?",
+    "message": "저장되지 않은 변경사항을 삭제하시겠습니까?"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DELETE_CONFIRM",
+    "source": "Delete this persona profile?",
+    "message": "이 페르소나 프로필을 삭제하시겠습니까?"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DEFAULT_READ_ONLY",
+    "source": "The system persona is read-only.",
+    "message": "시스템 페르소나는 읽기 전용입니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_CANCEL",
+    "source": "Cancel",
+    "message": "취소"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_ACTIVE_SYSTEM",
+    "source": "Active system",
+    "message": "사용 중인 시스템"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_SYSTEM",
+    "source": "System",
+    "message": "시스템"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_ACTIVE",
+    "source": "Active",
+    "message": "사용 중"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_SAVED",
+    "source": "Saved",
+    "message": "저장됨"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SYSTEM_SUMMARY",
+    "source": "Uses the browser's real system values",
+    "message": "브라우저의 실제 시스템 값 사용"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNKNOWN_VALUE",
+    "source": "Unknown",
+    "message": "알 수 없음"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEVER_USED",
+    "source": "Never used",
+    "message": "사용한 적 없음"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_AMERICAS",
+    "source": "Americas",
+    "message": "아메리카"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_EUROPE",
+    "source": "Europe",
+    "message": "유럽"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_ASIA",
+    "source": "Asia",
+    "message": "아시아"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_OCEANIA",
+    "source": "Oceania",
+    "message": "오세아니아"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_ROTATION",
+    "source": "Fingerprint rotation",
+    "message": "지문 순환"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PERMISSIONS",
+    "source": "Runtime API gates",
+    "message": "런타임 API 게이트"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_LABEL",
+    "source": "UA-CH platform version",
+    "message": "UA-CH 플랫폼 버전"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_TOOLTIP",
+    "source": "Overrides the operating system version in high-entropy UA-CH values. Keep it consistent with the selected platform and user agent.",
+    "message": "고엔트로피 UA-CH 값의 운영체제 버전을 재정의합니다. 선택한 플랫폼 및 사용자 에이전트와 일치하게 유지하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_LABEL",
+    "source": "UA-CH architecture",
+    "message": "UA-CH 아키텍처"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_TOOLTIP",
+    "source": "Overrides the CPU architecture in UA-CH metadata. Common desktop values are x86 and arm.",
+    "message": "UA-CH 메타데이터의 CPU 아키텍처를 재정의합니다. 일반적인 데스크톱 값은 x86 및 arm입니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_LABEL",
+    "source": "UA-CH model",
+    "message": "UA-CH 모델"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_TOOLTIP",
+    "source": "Overrides the device model in high-entropy UA-CH values. Desktop personas normally leave this empty.",
+    "message": "고엔트로피 UA-CH 값의 기기 모델을 재정의합니다. 데스크톱 페르소나에서는 일반적으로 비워 둡니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_LABEL",
+    "source": "UA-CH bitness",
+    "message": "UA-CH 비트 수"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_TOOLTIP",
+    "source": "Overrides the CPU bitness in UA-CH metadata. Match this with the user agent and architecture.",
+    "message": "UA-CH 메타데이터의 CPU 비트 수를 재정의합니다. 사용자 에이전트 및 아키텍처와 일치시키세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_LABEL",
+    "source": "UA-CH form factors",
+    "message": "UA-CH 폼 팩터"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_TOOLTIP",
+    "source": "Comma-separated UA-CH form factors, such as Desktop or Mobile. Use values that match the device identity.",
+    "message": "Desktop 또는 Mobile과 같은 쉼표로 구분된 UA-CH 폼 팩터입니다. 기기 ID와 일치하는 값을 사용하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_LABEL",
+    "source": "UA-CH mobile",
+    "message": "UA-CH 모바일"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_TOOLTIP",
+    "source": "Controls the mobile flag in UA-CH metadata. Leave it disabled for desktop personas.",
+    "message": "UA-CH 메타데이터의 모바일 플래그를 제어합니다. 데스크톱 페르소나에서는 사용 중지 상태로 두세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_LABEL",
+    "source": "UA-CH WoW64",
+    "message": "UA-CH WoW64"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_TOOLTIP",
+    "source": "Reports a 32-bit browser running on 64-bit Windows. Leave it disabled for native 64-bit Windows and non-Windows personas.",
+    "message": "64비트 Windows에서 실행되는 32비트 브라우저로 보고합니다. 네이티브 64비트 Windows 및 Windows가 아닌 페르소나에서는 사용 중지 상태로 두세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_LABEL",
+    "source": "Audio output latency",
+    "message": "오디오 출력 지연 시간"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_TOOLTIP",
+    "source": "Overrides AudioContext output latency in seconds. Keep it close to the base latency and within a realistic device range.",
+    "message": "AudioContext 출력 지연 시간을 초 단위로 재정의합니다. 기본 지연 시간과 비슷하고 실제 기기 범위 안에 있는 값으로 유지하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_LABEL",
+    "source": "Rotation scope",
+    "message": "순환 범위"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_TOOLTIP",
+    "source": "Selects whether deterministic noise tokens are isolated by site and profile, by profile, or globally.",
+    "message": "결정적 노이즈 토큰을 사이트 및 프로필별, 프로필별 또는 전역으로 격리할지 선택합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_LABEL",
+    "source": "Rotation interval (days)",
+    "message": "순환 간격(일)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_TOOLTIP",
+    "source": "Sets how many days a deterministic fingerprint epoch remains active before rotating automatically.",
+    "message": "결정적 지문 에포크가 자동으로 순환되기 전까지 유지되는 일수를 설정합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_LABEL",
+    "source": "Persona Client Hints",
+    "message": "페르소나 Client Hints"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_TOOLTIP",
+    "source": "Applies this persona's UA-CH metadata to navigation, renderer, and worker surfaces. Disabling it falls back to browser defaults.",
+    "message": "이 페르소나의 UA-CH 메타데이터를 탐색, 렌더러 및 워커 영역에 적용합니다. 비활성화하면 브라우저 기본값으로 돌아갑니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_LABEL",
+    "source": "Background fetch and sync",
+    "message": "백그라운드 가져오기 및 동기화"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_TOOLTIP",
+    "source": "Controls Persona-gated background activity entry points. Current coverage is limited to the implemented browser-side paths.",
+    "message": "페르소나로 제어되는 백그라운드 활동 진입점을 제어합니다. 현재 적용 범위는 구현된 브라우저 측 경로로 제한됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_LABEL",
+    "source": "Contacts API",
+    "message": "연락처 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_TOOLTIP",
+    "source": "Controls Persona-gated access to contact selection. Site permissions, platform support, and browser policy still apply.",
+    "message": "페르소나로 제어되는 연락처 선택 액세스를 제어합니다. 사이트 권한, 플랫폼 지원 및 브라우저 정책은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_LABEL",
+    "source": "Local Fonts API",
+    "message": "로컬 글꼴 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_TOOLTIP",
+    "source": "Controls queryLocalFonts access. CSS local font lookup and other font rendering paths are not covered by this gate.",
+    "message": "queryLocalFonts 액세스를 제어합니다. CSS 로컬 글꼴 조회 및 기타 글꼴 렌더링 경로는 이 게이트의 적용 대상이 아닙니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_LABEL",
+    "source": "Privacy Sandbox APIs",
+    "message": "Privacy Sandbox API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_TOOLTIP",
+    "source": "Controls supported Persona-gated Privacy Sandbox services. Topics and Protected Audience coverage is not complete yet.",
+    "message": "지원되는 페르소나 제어 Privacy Sandbox 서비스를 제어합니다. Topics 및 Protected Audience 적용 범위는 아직 완전하지 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_LABEL",
+    "source": "Gamepad API",
+    "message": "Gamepad API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_TOOLTIP",
+    "source": "Controls Persona-gated access to gamepad data. Platform support and browser policy still apply.",
+    "message": "페르소나로 제어되는 게임패드 데이터 액세스를 제어합니다. 플랫폼 지원 및 브라우저 정책은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_LABEL",
+    "source": "Clipboard API",
+    "message": "클립보드 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_TOOLTIP",
+    "source": "Controls Persona-gated clipboard access. Secure-context, user-gesture, and site permission checks still apply.",
+    "message": "페르소나로 제어되는 클립보드 액세스를 제어합니다. 보안 컨텍스트, 사용자 동작 및 사이트 권한 검사는 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_LABEL",
+    "source": "Geolocation API",
+    "message": "위치정보 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_TOOLTIP",
+    "source": "Controls Persona-gated geolocation access. It does not provide a synthetic location; site permission checks still apply.",
+    "message": "페르소나로 제어되는 위치정보 액세스를 제어합니다. 합성 위치를 제공하지 않으며 사이트 권한 검사는 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_LABEL",
+    "source": "Notifications API",
+    "message": "알림 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_TOOLTIP",
+    "source": "Controls Persona-gated notification access. Site permissions and operating system notification settings still apply.",
+    "message": "페르소나로 제어되는 알림 액세스를 제어합니다. 사이트 권한 및 운영체제 알림 설정은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_LABEL",
+    "source": "Web MIDI API",
+    "message": "Web MIDI API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_TOOLTIP",
+    "source": "Controls Persona-gated MIDI access. Device availability, permissions, and browser policy still apply.",
+    "message": "페르소나로 제어되는 MIDI 액세스를 제어합니다. 기기 사용 가능 여부, 권한 및 브라우저 정책은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_LABEL",
+    "source": "Idle Detection API",
+    "message": "유휴 상태 감지 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_TOOLTIP",
+    "source": "Controls Persona-gated idle detection access. Site permissions and feature policy still apply.",
+    "message": "페르소나로 제어되는 유휴 상태 감지 액세스를 제어합니다. 사이트 권한 및 기능 정책은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_LABEL",
+    "source": "Window Management API",
+    "message": "창 관리 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_TOOLTIP",
+    "source": "Controls Persona-gated multi-screen window management access. Site permissions and platform support still apply.",
+    "message": "페르소나로 제어되는 다중 화면 창 관리 액세스를 제어합니다. 사이트 권한 및 플랫폼 지원은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_LABEL",
+    "source": "Web NFC API",
+    "message": "Web NFC API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_TOOLTIP",
+    "source": "Controls Persona-gated Web NFC access. Hardware support, secure-context, and permission checks still apply.",
+    "message": "페르소나로 제어되는 Web NFC 액세스를 제어합니다. 하드웨어 지원, 보안 컨텍스트 및 권한 검사는 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_LABEL",
+    "source": "WebXR API",
+    "message": "WebXR API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_TOOLTIP",
+    "source": "Controls Persona-gated immersive XR sessions. Device availability and browser permissions still apply.",
+    "message": "페르소나로 제어되는 몰입형 XR 세션을 제어합니다. 기기 사용 가능 여부 및 브라우저 권한은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_LABEL",
+    "source": "Sensor APIs",
+    "message": "센서 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_TOOLTIP",
+    "source": "Controls Persona-gated generic sensor access. Individual sensor support and permission policy still apply.",
+    "message": "페르소나로 제어되는 일반 센서 액세스를 제어합니다. 개별 센서 지원 및 권한 정책은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_LABEL",
+    "source": "Real battery status",
+    "message": "실제 배터리 상태"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_TOOLTIP",
+    "source": "Allows supported paths to expose the host battery state. Disable it to avoid intentionally revealing real battery values.",
+    "message": "지원되는 경로에서 호스트 배터리 상태를 노출하도록 허용합니다. 실제 배터리 값을 의도적으로 노출하지 않으려면 사용 중지하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_LABEL",
+    "source": "Platform credentials",
+    "message": "플랫폼 사용자 인증 정보"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_TOOLTIP",
+    "source": "Controls supported WebAuthn platform-credential flows. Some credential operations remain governed by WebAuthn policy and prompts.",
+    "message": "지원되는 WebAuthn 플랫폼 사용자 인증 정보 흐름을 제어합니다. 일부 사용자 인증 정보 작업에는 WebAuthn 정책 및 메시지가 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_LABEL",
+    "source": "Payment handlers",
+    "message": "결제 핸들러"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_TOOLTIP",
+    "source": "Controls Persona-gated payment handler access. Merchant, browser, and operating system payment policy still apply.",
+    "message": "페르소나로 제어되는 결제 핸들러 액세스를 제어합니다. 판매자, 브라우저 및 운영체제 결제 정책은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_LABEL",
+    "source": "Speech synthesis",
+    "message": "음성 합성"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "Controls supported speech synthesis discovery paths. Blocking is not yet complete for every speech operation.",
+    "message": "지원되는 음성 합성 검색 경로를 제어합니다. 모든 음성 작업이 아직 완전히 차단되지는 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_LABEL",
+    "source": "Web Printing API",
+    "message": "Web Printing API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_TOOLTIP",
+    "source": "Controls Persona-gated Web Printing access. Printer availability, user confirmation, and browser policy still apply.",
+    "message": "페르소나로 제어되는 Web Printing 액세스를 제어합니다. 프린터 사용 가능 여부, 사용자 확인 및 브라우저 정책은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_LABEL",
+    "source": "Shape Detection APIs",
+    "message": "형태 감지 API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_TOOLTIP",
+    "source": "Controls Persona-gated barcode, face, and text detection access on supported platforms.",
+    "message": "지원되는 플랫폼에서 페르소나로 제어되는 바코드, 얼굴 및 텍스트 감지 액세스를 제어합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_LABEL",
+    "source": "WebOTP API",
+    "message": "WebOTP API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_TOOLTIP",
+    "source": "Controls Persona-gated WebOTP access. Secure-context, user consent, and platform support still apply.",
+    "message": "페르소나로 제어되는 WebOTP 액세스를 제어합니다. 보안 컨텍스트, 사용자 동의 및 플랫폼 지원은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_LABEL",
+    "source": "Built-in AI APIs",
+    "message": "내장 AI API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_TOOLTIP",
+    "source": "Controls Persona-gated access to supported built-in AI APIs. Feature availability and enterprise policy still apply.",
+    "message": "페르소나로 제어되는 지원 내장 AI API 액세스를 제어합니다. 기능 사용 가능 여부 및 엔터프라이즈 정책은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_LABEL",
+    "source": "Handwriting recognition",
+    "message": "필기 인식"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_TOOLTIP",
+    "source": "Controls Persona-gated handwriting recognition access. Platform support and language models still apply.",
+    "message": "페르소나로 제어되는 필기 인식 액세스를 제어합니다. 플랫폼 지원 및 언어 모델은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_LABEL",
+    "source": "WebNN API",
+    "message": "WebNN API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_TOOLTIP",
+    "source": "Controls Persona-gated WebNN access. Hardware acceleration, feature availability, and browser policy still apply.",
+    "message": "페르소나로 제어되는 WebNN 액세스를 제어합니다. 하드웨어 가속, 기능 사용 가능 여부 및 브라우저 정책은 계속 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_LABEL",
+    "source": "Private State Tokens",
+    "message": "Private State Token"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP",
+    "source": "Controls supported Persona-gated Private State Token operations. Other Privacy Sandbox controls may also apply.",
+    "message": "지원되는 페르소나 제어 Private State Token 작업을 제어합니다. 다른 Privacy Sandbox 제어 기능도 적용될 수 있습니다."
   }
 ]

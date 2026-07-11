@@ -153,5 +153,995 @@
     "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
     "source": "Invalid origin",
     "message": "無効なオリジン"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_TITLE",
+    "source": "Persona",
+    "message": "ペルソナ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DESCRIPTION",
+    "source": "Configure browser persona and fingerprint surface overrides",
+    "message": "ブラウザのペルソナとフィンガープリント サーフェスのオーバーライドを設定します"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT",
+    "source": "Import",
+    "message": "インポート"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EXPORT_ALL",
+    "source": "Export all",
+    "message": "すべてエクスポート"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EXPORT_CURRENT",
+    "source": "Export current",
+    "message": "現在のプロファイルをエクスポート"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_NO_PROFILES",
+    "source": "No persona profiles found",
+    "message": "ペルソナ プロファイルが見つかりません"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_FAILED",
+    "source": "Import failed",
+    "message": "インポートできませんでした"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IMPORT_RESULT",
+    "source": "Imported <ph name=\"COUNT\">$1<ex>3</ex></ph> persona profiles (<ph name=\"SKIPPED\">$2<ex>1</ex></ph> skipped)",
+    "message": "ペルソナ プロファイルを <ph name=\"COUNT\">$1<ex>3</ex></ph> 件インポートしました（<ph name=\"SKIPPED\">$2<ex>1</ex></ph> 件をスキップ）"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_SUCCESS",
+    "source": "Profile saved",
+    "message": "プロファイルを保存しました"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_FAILED",
+    "source": "Could not complete this operation. Review the configuration and try again.",
+    "message": "この操作を完了できませんでした。設定を確認して、もう一度お試しください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PROFILES",
+    "source": "Profiles",
+    "message": "プロファイル"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PROFILES_DESC",
+    "source": "Manage saved persona profiles for different browsing identities.",
+    "message": "閲覧時の識別情報ごとに保存したペルソナ プロファイルを管理します。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEW_PROFILE",
+    "source": "New profile",
+    "message": "新しいプロファイル"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_USE_PROFILE",
+    "source": "Use profile",
+    "message": "このプロファイルを使用"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DELETE_PROFILE",
+    "source": "Delete",
+    "message": "削除"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_STARTUP",
+    "source": "Startup selection",
+    "message": "起動時の選択"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_STARTUP_DESC",
+    "source": "Choose whether Nitrous asks for a persona on launch or reuses the last selected profile.",
+    "message": "Nitrous の起動時にペルソナを選択するか、最後に選択したプロファイルを再利用するかを指定します。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_BEHAVIOR",
+    "source": "Launch behavior",
+    "message": "起動時の動作"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_ALWAYS_ASK",
+    "source": "Always ask",
+    "message": "常に確認する"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_LAUNCH_USE_LAST",
+    "source": "Use last selected profile",
+    "message": "最後に選択したプロファイルを使用"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REFRESH_FINGERPRINTS",
+    "source": "Refresh fingerprints",
+    "message": "フィンガープリントを更新"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED",
+    "source": "Fingerprints refreshed. Reload open tabs for tokens to take effect.",
+    "message": "フィンガープリントを更新しました。トークンを反映するには、開いているタブを再読み込みしてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS",
+    "source": "Quick presets",
+    "message": "クイック プリセット"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS_DESC",
+    "source": "Clone a system preset into an editable saved profile.",
+    "message": "システム プリセットを複製して、編集可能な保存済みプロファイルを作成します。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_LABEL",
+    "source": "Preset",
+    "message": "プリセット"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_CHOOSE",
+    "source": "Choose a preset...",
+    "message": "プリセットを選択..."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_CLONE_PRESET",
+    "source": "Clone preset",
+    "message": "プリセットを複製"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_EDIT",
+    "source": "Edit profile",
+    "message": "プロファイルを編集"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_EDIT_DESC",
+    "source": "Selected profile: <ph name=\"NAME\">$1<ex>Work laptop</ex></ph>",
+    "message": "選択中のプロファイル: <ph name=\"NAME\">$1<ex>Work laptop</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE",
+    "source": "Save",
+    "message": "保存"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HELP",
+    "source": "Help",
+    "message": "ヘルプ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CUSTOM_OPTION",
+    "source": "Custom",
+    "message": "カスタム"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_LABEL",
+    "source": "Display name",
+    "message": "表示名"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DISPLAY_NAME_TOOLTIP",
+    "source": "Friendly name shown in the profile list and persona picker. Does not affect fingerprint surfaces.",
+    "message": "プロファイル一覧とペルソナ選択画面に表示する名前です。フィンガープリント サーフェスには影響しません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ICON_LABEL",
+    "source": "Icon",
+    "message": "アイコン"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ICON_TOOLTIP",
+    "source": "Icon key used in the profile card and toolbar indicator. Prefer platform-matching keys such as macos or windows.",
+    "message": "プロファイル カードとツールバーのインジケーターで使用するアイコン キーです。macos や windows など、プラットフォームに合うキーを推奨します。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_LABEL",
+    "source": "User agent",
+    "message": "ユーザー エージェント"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_USER_AGENT_TOOLTIP",
+    "source": "Overrides the HTTP User-Agent header and navigator.userAgent. Keep it aligned with platform, UA-CH, and Nitrous version.",
+    "message": "HTTP User-Agent ヘッダーと navigator.userAgent をオーバーライドします。プラットフォーム、UA-CH、Nitrous のバージョンと一致させてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PLATFORM_LABEL",
+    "source": "Platform",
+    "message": "プラットフォーム"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PLATFORM_TOOLTIP",
+    "source": "Overrides navigator.platform and related OS identity. Choose a value consistent with the user agent and GPU strings.",
+    "message": "navigator.platform と関連する OS 識別情報をオーバーライドします。ユーザー エージェントと GPU 文字列に整合する値を選択してください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_LABEL",
+    "source": "Navigator vendor",
+    "message": "Navigator ベンダー"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NAVIGATOR_VENDOR_TOOLTIP",
+    "source": "Overrides navigator.vendor. Desktop Nitrous commonly reports Google Inc.",
+    "message": "navigator.vendor をオーバーライドします。デスクトップ版 Nitrous では通常 Google Inc. と報告されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_LABEL",
+    "source": "Product sub",
+    "message": "ProductSub"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_PRODUCT_SUB_TOOLTIP",
+    "source": "Overrides navigator.productSub. Most Nitrous builds expose 20030107.",
+    "message": "navigator.productSub をオーバーライドします。ほとんどの Nitrous ビルドでは 20030107 が公開されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_LABEL",
+    "source": "User-Agent Client Hints platform",
+    "message": "User-Agent Client Hints のプラットフォーム"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_TOOLTIP",
+    "source": "Overrides the platform Client Hint (Sec-CH-UA-Platform). Keep it matched with navigator platform and the user agent.",
+    "message": "プラットフォームの Client Hint（Sec-CH-UA-Platform）をオーバーライドします。navigator のプラットフォームとユーザー エージェントに一致させてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_LABEL",
+    "source": "Full version",
+    "message": "完全なバージョン"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FULL_VERSION_TOOLTIP",
+    "source": "Overrides the full browser version used in UA-CH (Sec-CH-UA-Full-Version-List). Match the Nitrous version in the user agent.",
+    "message": "UA-CH（Sec-CH-UA-Full-Version-List）で使用するブラウザの完全なバージョンをオーバーライドします。ユーザー エージェント内の Nitrous バージョンと一致させてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_LABEL",
+    "source": "UA-CH brands",
+    "message": "UA-CH ブランド"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BRANDS_TOOLTIP",
+    "source": "Comma-separated Brand/Version pairs for Sec-CH-UA. Example: Nitrous/149, Not/A)Brand/24.",
+    "message": "Sec-CH-UA 用の Brand/Version ペアをカンマ区切りで指定します。例: Nitrous/149, Not/A)Brand/24。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_LABEL",
+    "source": "Time zone",
+    "message": "タイムゾーン"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_TIMEZONE_TOOLTIP",
+    "source": "Overrides the IANA time zone used by Date and Intl APIs. Keep it consistent with locale and Accept-Language for a believable region.",
+    "message": "Date API と Intl API が使用する IANA タイムゾーンをオーバーライドします。自然な地域設定になるよう、ロケールと Accept-Language に一致させてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_LOCALE_LABEL",
+    "source": "Locale",
+    "message": "ロケール"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_LOCALE_TOOLTIP",
+    "source": "Overrides the primary locale exposed to websites. Selecting a preset locale also updates Accept-Language; you can still edit that field manually.",
+    "message": "ウェブサイトに公開するプライマリ ロケールをオーバーライドします。プリセットのロケールを選択すると Accept-Language も更新されますが、そのフィールドは手動で編集できます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_LABEL",
+    "source": "Accept-Language",
+    "message": "Accept-Language"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ACCEPT_LANGUAGE_TOOLTIP",
+    "source": "Stores the intended Accept-Language chain for this persona. Current runtime coverage is incomplete, so locale remains the primary language override.",
+    "message": "このペルソナで使用する Accept-Language の優先順を保存します。現在のランタイム対応は不完全なため、言語の主なオーバーライドには引き続きロケールが使用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_LABEL",
+    "source": "GPU vendor",
+    "message": "GPU ベンダー"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_VENDOR_TOOLTIP",
+    "source": "Overrides the WebGL UNMASKED_VENDOR_WEBGL string. Pair it with a matching renderer for the selected platform.",
+    "message": "WebGL の UNMASKED_VENDOR_WEBGL 文字列をオーバーライドします。選択したプラットフォームに適したレンダラーと組み合わせてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_LABEL",
+    "source": "GPU renderer",
+    "message": "GPU レンダラー"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_TOOLTIP",
+    "source": "Overrides the WebGL UNMASKED_RENDERER_WEBGL string (usually an ANGLE adapter description). Must look native to the chosen OS.",
+    "message": "WebGL の UNMASKED_RENDERER_WEBGL 文字列（通常は ANGLE アダプターの説明）をオーバーライドします。選択した OS で自然に見える値にしてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_LABEL",
+    "source": "WebGPU adapter",
+    "message": "WebGPU アダプター"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_TOOLTIP",
+    "source": "Overrides the adapter name reported by WebGPU. Use a short device name that matches the GPU renderer family.",
+    "message": "WebGPU が報告するアダプター名をオーバーライドします。GPU レンダラーのファミリーに合う短いデバイス名を使用してください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL",
+    "source": "Hardware concurrency",
+    "message": "ハードウェア同時実行数"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_TOOLTIP",
+    "source": "Overrides navigator.hardwareConcurrency (logical CPU cores). Common desktop values are 4, 8, 10, 12, or 16.",
+    "message": "navigator.hardwareConcurrency（論理 CPU コア数）をオーバーライドします。デスクトップでは 4、8、10、12、16 が一般的です。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_LABEL",
+    "source": "Device memory",
+    "message": "デバイス メモリ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DEVICE_MEMORY_TOOLTIP",
+    "source": "Overrides navigator.deviceMemory and matching Device-Memory Client Hint headers in gigabytes. Supported buckets are 1, 2, 4, 8, 16, and 32.",
+    "message": "navigator.deviceMemory と対応する Device-Memory Client Hint ヘッダーを、GB 単位で上書きします。サポートされる値は 1、2、4、8、16、32 です。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_LABEL",
+    "source": "Max touch points",
+    "message": "最大タッチ ポイント数"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MAX_TOUCH_POINTS_TOOLTIP",
+    "source": "Overrides navigator.maxTouchPoints. Use 0 for most desktop personas and a positive value for touch-capable devices.",
+    "message": "navigator.maxTouchPoints をオーバーライドします。通常のデスクトップ ペルソナでは 0、タッチ対応デバイスでは正の値を使用してください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_LABEL",
+    "source": "Screen width",
+    "message": "画面の幅"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_WIDTH_TOOLTIP",
+    "source": "Overrides screen.width in CSS pixels. Keep width, height, avail*, outer*, and DPR consistent with a real display.",
+    "message": "screen.width を CSS ピクセル単位でオーバーライドします。幅、高さ、avail*、outer*、DPR を実際のディスプレイと整合させてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_LABEL",
+    "source": "Screen height",
+    "message": "画面の高さ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SCREEN_HEIGHT_TOOLTIP",
+    "source": "Overrides screen.height in CSS pixels. Pair with a realistic width and device pixel ratio for the target device.",
+    "message": "screen.height を CSS ピクセル単位でオーバーライドします。対象デバイスに現実的な幅とデバイス ピクセル比を組み合わせてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_LABEL",
+    "source": "Available screen left",
+    "message": "使用可能画面の左端"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_LEFT_TOOLTIP",
+    "source": "Overrides screen.availLeft. Usually 0 on single-display desktops; multi-monitor setups may use non-zero values.",
+    "message": "screen.availLeft をオーバーライドします。単一ディスプレイのデスクトップでは通常 0 ですが、マルチモニター構成では 0 以外の場合があります。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_LABEL",
+    "source": "Available screen top",
+    "message": "使用可能画面の上端"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_TOP_TOOLTIP",
+    "source": "Overrides screen.availTop. Often 0, or slightly positive when a menu bar or dock reduces usable area.",
+    "message": "screen.availTop をオーバーライドします。通常は 0 ですが、メニューバーやドックで使用可能領域が減る場合は小さい正の値になります。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_LABEL",
+    "source": "Available screen width",
+    "message": "使用可能画面の幅"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_WIDTH_TOOLTIP",
+    "source": "Overrides screen.availWidth. Typically equal to or slightly smaller than screen width.",
+    "message": "screen.availWidth をオーバーライドします。通常は画面の幅と同じか、わずかに小さい値です。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_LABEL",
+    "source": "Available screen height",
+    "message": "使用可能画面の高さ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AVAIL_HEIGHT_TOOLTIP",
+    "source": "Overrides screen.availHeight. Usually smaller than screen height because of taskbars or docks.",
+    "message": "screen.availHeight をオーバーライドします。タスクバーやドックがあるため、通常は画面の高さより小さくなります。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_LABEL",
+    "source": "Outer width",
+    "message": "外側の幅"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_WIDTH_TOOLTIP",
+    "source": "Overrides window.outerWidth. For maximized windows this is often close to the available screen width.",
+    "message": "window.outerWidth をオーバーライドします。最大化したウィンドウでは、多くの場合、使用可能画面の幅に近い値です。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_LABEL",
+    "source": "Outer height",
+    "message": "外側の高さ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_OUTER_HEIGHT_TOOLTIP",
+    "source": "Overrides window.outerHeight. Keep it consistent with available screen height for a maximized desktop window.",
+    "message": "window.outerHeight をオーバーライドします。最大化したデスクトップ ウィンドウでは、使用可能画面の高さと整合させてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DPR_LABEL",
+    "source": "Device pixel ratio",
+    "message": "デバイス ピクセル比"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DPR_TOOLTIP",
+    "source": "Overrides window.devicePixelRatio and matching DPR Client Hint headers. Common values are 1, 1.25, 1.5, and 2 for Retina-class displays.",
+    "message": "window.devicePixelRatio と対応する DPR Client Hint ヘッダーを上書きします。一般的な値は 1、1.25、1.5 で、Retina クラスのディスプレイでは 2 です。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_LABEL",
+    "source": "Fonts profile ID",
+    "message": "フォント プロファイル ID"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONTS_ID_TOOLTIP",
+    "source": "Metadata identifier saved with this profile. It does not select or install fonts by itself.",
+    "message": "このプロファイルとともに保存されるメタデータ識別子です。これ自体がフォントを選択またはインストールすることはありません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_LABEL",
+    "source": "Font families",
+    "message": "フォント ファミリー"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "Comma-separated font family names exposed as the persona font set. Prefer fonts that exist on the target OS.",
+    "message": "ペルソナのフォント セットとして公開するフォント ファミリー名をカンマ区切りで指定します。対象 OS に存在するフォントを推奨します。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_LABEL",
+    "source": "Font aliases",
+    "message": "フォント エイリアス"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ALIASES_TOOLTIP",
+    "source": "Comma-separated alias names mapped onto the persona font set. Leave empty unless you need explicit aliases.",
+    "message": "ペルソナのフォント セットに割り当てるエイリアス名をカンマ区切りで指定します。明示的なエイリアスが不要な場合は空欄にしてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_LABEL",
+    "source": "Font engine",
+    "message": "フォント エンジン"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "Stores font engine metadata such as directwrite, coretext, or freetype. It is not currently applied to every font rendering path.",
+    "message": "directwrite、coretext、freetype などのフォント エンジン メタデータを保存します。現在、すべてのフォント レンダリング経路には適用されません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_LABEL",
+    "source": "Audio base latency",
+    "message": "オーディオの基本レイテンシ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_TOOLTIP",
+    "source": "Overrides AudioContext base latency. Small values such as 0.01–0.02 are typical; large changes can look synthetic.",
+    "message": "AudioContext の基本レイテンシをオーバーライドします。0.01～0.02 程度の小さい値が一般的で、大きく変えると不自然に見える場合があります。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_LABEL",
+    "source": "Canvas noise",
+    "message": "Canvas ノイズ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CANVAS_NOISE_TOOLTIP",
+    "source": "Applies deterministic noise to supported canvas readback paths. Some formats and offscreen export paths are not covered yet.",
+    "message": "対応している Canvas 読み戻し経路に決定論的ノイズを適用します。一部の形式と Offscreen Canvas のエクスポート経路にはまだ対応していません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_LABEL",
+    "source": "Audio noise",
+    "message": "オーディオ ノイズ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_TOOLTIP",
+    "source": "Applies persona-scoped deterministic noise to supported offline audio render results. Live audio analysis paths are not covered yet.",
+    "message": "対応しているオフライン オーディオのレンダリング結果に、ペルソナ単位の決定論的ノイズを適用します。ライブ オーディオ解析経路にはまだ対応していません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_LABEL",
+    "source": "Hardware noise",
+    "message": "ハードウェア ノイズ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "Applies deterministic noise to supported low-level hardware readback paths. CPU and memory values use their explicit fields instead.",
+    "message": "対応している低レベルのハードウェア読み戻し経路に決定論的ノイズを適用します。CPU とメモリの値にはそれぞれの明示的なフィールドが使用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_LABEL",
+    "source": "Font metric noise",
+    "message": "フォント メトリック ノイズ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_TOOLTIP",
+    "source": "When enabled, font measurement APIs receive small deterministic noise tied to this persona.",
+    "message": "有効にすると、フォント測定 API にこのペルソナ固有の小さな決定論的ノイズを加えます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_LABEL",
+    "source": "Network type",
+    "message": "ネットワークの種類"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_TOOLTIP",
+    "source": "Overrides the exposed connection type on supported Network Information API paths. RTT, effective type, and HTTP Client Hints are not fully covered.",
+    "message": "対応している Network Information API 経路で公開する接続の種類をオーバーライドします。RTT、effectiveType、HTTP Client Hints には完全には対応していません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_LABEL",
+    "source": "Downlink max",
+    "message": "最大ダウンリンク"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_TOOLTIP",
+    "source": "Overrides navigator.connection.downlinkMax in megabits per second. Use a value that fits the chosen network type.",
+    "message": "navigator.connection.downlinkMax を Mbps 単位でオーバーライドします。選択したネットワークの種類に適した値を使用してください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEW_PROFILE_DEFAULT_NAME",
+    "source": "New Persona",
+    "message": "新しいペルソナ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DISCARD_CHANGES_CONFIRM",
+    "source": "Discard unsaved changes?",
+    "message": "未保存の変更を破棄しますか？"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DELETE_CONFIRM",
+    "source": "Delete this persona profile?",
+    "message": "このペルソナ プロファイルを削除しますか？"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DEFAULT_READ_ONLY",
+    "source": "The system persona is read-only.",
+    "message": "システム ペルソナは読み取り専用です。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_CANCEL",
+    "source": "Cancel",
+    "message": "キャンセル"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_ACTIVE_SYSTEM",
+    "source": "Active system",
+    "message": "使用中のシステム"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_SYSTEM",
+    "source": "System",
+    "message": "システム"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_ACTIVE",
+    "source": "Active",
+    "message": "使用中"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STATUS_SAVED",
+    "source": "Saved",
+    "message": "保存済み"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SYSTEM_SUMMARY",
+    "source": "Uses the browser's real system values",
+    "message": "ブラウザの実際のシステム値を使用します"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNKNOWN_VALUE",
+    "source": "Unknown",
+    "message": "不明"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_NEVER_USED",
+    "source": "Never used",
+    "message": "未使用"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_AMERICAS",
+    "source": "Americas",
+    "message": "南北アメリカ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_EUROPE",
+    "source": "Europe",
+    "message": "ヨーロッパ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_ASIA",
+    "source": "Asia",
+    "message": "アジア"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PRESET_GROUP_OCEANIA",
+    "source": "Oceania",
+    "message": "オセアニア"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_ROTATION",
+    "source": "Fingerprint rotation",
+    "message": "フィンガープリントのローテーション"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SECTION_PERMISSIONS",
+    "source": "Runtime API gates",
+    "message": "ランタイム API ゲート"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_LABEL",
+    "source": "UA-CH platform version",
+    "message": "UA-CH プラットフォーム バージョン"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_PLATFORM_VERSION_TOOLTIP",
+    "source": "Overrides the operating system version in high-entropy UA-CH values. Keep it consistent with the selected platform and user agent.",
+    "message": "高エントロピー UA-CH 値の OS バージョンをオーバーライドします。選択したプラットフォームとユーザー エージェントに一致させてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_LABEL",
+    "source": "UA-CH architecture",
+    "message": "UA-CH アーキテクチャ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_ARCHITECTURE_TOOLTIP",
+    "source": "Overrides the CPU architecture in UA-CH metadata. Common desktop values are x86 and arm.",
+    "message": "UA-CH メタデータの CPU アーキテクチャをオーバーライドします。デスクトップでは x86 と arm が一般的です。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_LABEL",
+    "source": "UA-CH model",
+    "message": "UA-CH モデル"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MODEL_TOOLTIP",
+    "source": "Overrides the device model in high-entropy UA-CH values. Desktop personas normally leave this empty.",
+    "message": "高エントロピー UA-CH 値のデバイス モデルをオーバーライドします。デスクトップ ペルソナでは通常、空欄にします。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_LABEL",
+    "source": "UA-CH bitness",
+    "message": "UA-CH ビット数"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_BITNESS_TOOLTIP",
+    "source": "Overrides the CPU bitness in UA-CH metadata. Match this with the user agent and architecture.",
+    "message": "UA-CH メタデータの CPU ビット数をオーバーライドします。ユーザー エージェントとアーキテクチャに一致させてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_LABEL",
+    "source": "UA-CH form factors",
+    "message": "UA-CH フォーム ファクタ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_FORM_FACTORS_TOOLTIP",
+    "source": "Comma-separated UA-CH form factors, such as Desktop or Mobile. Use values that match the device identity.",
+    "message": "Desktop や Mobile などの UA-CH フォーム ファクタをカンマ区切りで指定します。デバイスの識別情報に合う値を使用してください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_LABEL",
+    "source": "UA-CH mobile",
+    "message": "UA-CH モバイル"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_MOBILE_TOOLTIP",
+    "source": "Controls the mobile flag in UA-CH metadata. Leave it disabled for desktop personas.",
+    "message": "UA-CH メタデータのモバイル フラグを制御します。デスクトップ ペルソナでは無効にしてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_LABEL",
+    "source": "UA-CH WoW64",
+    "message": "UA-CH WoW64"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_UACH_WOW64_TOOLTIP",
+    "source": "Reports a 32-bit browser running on 64-bit Windows. Leave it disabled for native 64-bit Windows and non-Windows personas.",
+    "message": "64 ビット版 Windows 上で動作する 32 ビット ブラウザとして報告します。ネイティブ 64 ビット版 Windows と Windows 以外のペルソナでは無効にしてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_LABEL",
+    "source": "Audio output latency",
+    "message": "オーディオ出力レイテンシ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_LATENCY_TOOLTIP",
+    "source": "Overrides AudioContext output latency in seconds. Keep it close to the base latency and within a realistic device range.",
+    "message": "AudioContext の出力レイテンシを秒単位でオーバーライドします。基本レイテンシに近く、実際のデバイスで妥当な範囲の値にしてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_LABEL",
+    "source": "Rotation scope",
+    "message": "ローテーション範囲"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_SCOPE_TOOLTIP",
+    "source": "Selects whether deterministic noise tokens are isolated by site and profile, by profile, or globally.",
+    "message": "決定論的ノイズ トークンをサイトとプロファイルごと、プロファイルごと、またはグローバルに分離するかを選択します。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_LABEL",
+    "source": "Rotation interval (days)",
+    "message": "ローテーション間隔（日）"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ROTATION_INTERVAL_TOOLTIP",
+    "source": "Sets how many days a deterministic fingerprint epoch remains active before rotating automatically.",
+    "message": "決定論的フィンガープリントのエポックを自動的にローテーションするまで維持する日数を設定します。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_LABEL",
+    "source": "Persona Client Hints",
+    "message": "ペルソナ Client Hints"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_HINTS_ENABLED_TOOLTIP",
+    "source": "Applies this persona's UA-CH metadata to navigation, renderer, and worker surfaces. Disabling it falls back to browser defaults.",
+    "message": "このペルソナの UA-CH メタデータを、ナビゲーション、レンダラー、ワーカーの各サーフェスに適用します。無効にするとブラウザの既定値に戻ります。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_LABEL",
+    "source": "Background fetch and sync",
+    "message": "バックグラウンド取得と同期"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_BACKGROUND_SYNC_TOOLTIP",
+    "source": "Controls Persona-gated background activity entry points. Current coverage is limited to the implemented browser-side paths.",
+    "message": "ペルソナで制御されるバックグラウンド処理のエントリ ポイントを制御します。現在の対応範囲は、実装済みのブラウザ側経路に限られます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_LABEL",
+    "source": "Contacts API",
+    "message": "Contacts API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CONTACTS_TOOLTIP",
+    "source": "Controls Persona-gated access to contact selection. Site permissions, platform support, and browser policy still apply.",
+    "message": "ペルソナで制御される連絡先選択へのアクセスを制御します。サイトの権限、プラットフォーム対応、ブラウザ ポリシーは引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_LABEL",
+    "source": "Local Fonts API",
+    "message": "Local Fonts API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_LOCAL_FONTS_TOOLTIP",
+    "source": "Controls queryLocalFonts access. CSS local font lookup and other font rendering paths are not covered by this gate.",
+    "message": "queryLocalFonts へのアクセスを制御します。CSS のローカル フォント検索やその他のフォント レンダリング経路は、このゲートの対象外です。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_LABEL",
+    "source": "Privacy Sandbox APIs",
+    "message": "Privacy Sandbox API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVACY_SANDBOX_APIS_TOOLTIP",
+    "source": "Controls supported Persona-gated Privacy Sandbox services. Topics and Protected Audience coverage is not complete yet.",
+    "message": "対応している、ペルソナで制御される Privacy Sandbox サービスを制御します。Topics と Protected Audience への対応はまだ完全ではありません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_LABEL",
+    "source": "Gamepad API",
+    "message": "Gamepad API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GAMEPADS_TOOLTIP",
+    "source": "Controls Persona-gated access to gamepad data. Platform support and browser policy still apply.",
+    "message": "ペルソナで制御されるゲームパッド データへのアクセスを制御します。プラットフォーム対応とブラウザ ポリシーは引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_LABEL",
+    "source": "Clipboard API",
+    "message": "Clipboard API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_CLIPBOARD_TOOLTIP",
+    "source": "Controls Persona-gated clipboard access. Secure-context, user-gesture, and site permission checks still apply.",
+    "message": "ペルソナで制御されるクリップボードへのアクセスを制御します。セキュア コンテキスト、ユーザー操作、サイト権限のチェックは引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_LABEL",
+    "source": "Geolocation API",
+    "message": "Geolocation API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_GEOLOCATION_TOOLTIP",
+    "source": "Controls Persona-gated geolocation access. It does not provide a synthetic location; site permission checks still apply.",
+    "message": "ペルソナで制御される位置情報へのアクセスを制御します。仮想的な位置情報は提供されず、サイト権限のチェックも引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_LABEL",
+    "source": "Notifications API",
+    "message": "Notifications API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_NOTIFICATIONS_TOOLTIP",
+    "source": "Controls Persona-gated notification access. Site permissions and operating system notification settings still apply.",
+    "message": "ペルソナで制御される通知へのアクセスを制御します。サイト権限と OS の通知設定は引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_LABEL",
+    "source": "Web MIDI API",
+    "message": "Web MIDI API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_MIDI_TOOLTIP",
+    "source": "Controls Persona-gated MIDI access. Device availability, permissions, and browser policy still apply.",
+    "message": "ペルソナで制御される MIDI へのアクセスを制御します。デバイスの可用性、権限、ブラウザ ポリシーは引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_LABEL",
+    "source": "Idle Detection API",
+    "message": "Idle Detection API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_IDLE_DETECTION_TOOLTIP",
+    "source": "Controls Persona-gated idle detection access. Site permissions and feature policy still apply.",
+    "message": "ペルソナで制御されるアイドル検出へのアクセスを制御します。サイト権限と Feature Policy は引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_LABEL",
+    "source": "Window Management API",
+    "message": "Window Management API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WINDOW_MANAGEMENT_TOOLTIP",
+    "source": "Controls Persona-gated multi-screen window management access. Site permissions and platform support still apply.",
+    "message": "ペルソナで制御されるマルチスクリーンのウィンドウ管理へのアクセスを制御します。サイト権限とプラットフォーム対応は引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_LABEL",
+    "source": "Web NFC API",
+    "message": "Web NFC API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NFC_TOOLTIP",
+    "source": "Controls Persona-gated Web NFC access. Hardware support, secure-context, and permission checks still apply.",
+    "message": "ペルソナで制御される Web NFC へのアクセスを制御します。ハードウェア対応、セキュア コンテキスト、権限チェックは引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_LABEL",
+    "source": "WebXR API",
+    "message": "WebXR API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_XR_TOOLTIP",
+    "source": "Controls Persona-gated immersive XR sessions. Device availability and browser permissions still apply.",
+    "message": "ペルソナで制御される没入型 XR セッションを制御します。デバイスの可用性とブラウザ権限は引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_LABEL",
+    "source": "Sensor APIs",
+    "message": "Sensor API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SENSOR_APIS_TOOLTIP",
+    "source": "Controls Persona-gated generic sensor access. Individual sensor support and permission policy still apply.",
+    "message": "ペルソナで制御される汎用センサーへのアクセスを制御します。個々のセンサー対応と権限ポリシーは引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_LABEL",
+    "source": "Real battery status",
+    "message": "実際のバッテリー状態"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_REAL_BATTERY_STATUS_TOOLTIP",
+    "source": "Allows supported paths to expose the host battery state. Disable it to avoid intentionally revealing real battery values.",
+    "message": "対応している経路でホストのバッテリー状態を公開できるようにします。実際のバッテリー値を意図的に公開しない場合は無効にしてください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_LABEL",
+    "source": "Platform credentials",
+    "message": "プラットフォーム認証情報"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PLATFORM_CREDENTIALS_TOOLTIP",
+    "source": "Controls supported WebAuthn platform-credential flows. Some credential operations remain governed by WebAuthn policy and prompts.",
+    "message": "対応している WebAuthn プラットフォーム認証情報フローを制御します。一部の認証情報操作には、引き続き WebAuthn ポリシーと確認画面が適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_LABEL",
+    "source": "Payment handlers",
+    "message": "決済ハンドラ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PAYMENT_HANDLER_TOOLTIP",
+    "source": "Controls Persona-gated payment handler access. Merchant, browser, and operating system payment policy still apply.",
+    "message": "ペルソナで制御される決済ハンドラへのアクセスを制御します。加盟店、ブラウザ、OS の決済ポリシーは引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_LABEL",
+    "source": "Speech synthesis",
+    "message": "音声合成"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "Controls supported speech synthesis discovery paths. Blocking is not yet complete for every speech operation.",
+    "message": "対応している音声合成の検出経路を制御します。すべての音声操作のブロックにはまだ完全には対応していません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_LABEL",
+    "source": "Web Printing API",
+    "message": "Web Printing API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_PRINTING_TOOLTIP",
+    "source": "Controls Persona-gated Web Printing access. Printer availability, user confirmation, and browser policy still apply.",
+    "message": "ペルソナで制御される Web Printing へのアクセスを制御します。プリンターの可用性、ユーザー確認、ブラウザ ポリシーは引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_LABEL",
+    "source": "Shape Detection APIs",
+    "message": "Shape Detection API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SHAPE_DETECTION_TOOLTIP",
+    "source": "Controls Persona-gated barcode, face, and text detection access on supported platforms.",
+    "message": "対応しているプラットフォームで、ペルソナで制御されるバーコード、顔、テキスト検出へのアクセスを制御します。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_LABEL",
+    "source": "WebOTP API",
+    "message": "WebOTP API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_OTP_TOOLTIP",
+    "source": "Controls Persona-gated WebOTP access. Secure-context, user consent, and platform support still apply.",
+    "message": "ペルソナで制御される WebOTP へのアクセスを制御します。セキュア コンテキスト、ユーザーの同意、プラットフォーム対応は引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_LABEL",
+    "source": "Built-in AI APIs",
+    "message": "組み込み AI API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_AI_APIS_TOOLTIP",
+    "source": "Controls Persona-gated access to supported built-in AI APIs. Feature availability and enterprise policy still apply.",
+    "message": "対応している組み込み AI API への、ペルソナで制御されるアクセスを制御します。機能の可用性と企業ポリシーは引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_LABEL",
+    "source": "Handwriting recognition",
+    "message": "手書き認識"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_HANDWRITING_RECOGNITION_TOOLTIP",
+    "source": "Controls Persona-gated handwriting recognition access. Platform support and language models still apply.",
+    "message": "ペルソナで制御される手書き認識へのアクセスを制御します。プラットフォーム対応と言語モデルは引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_LABEL",
+    "source": "WebNN API",
+    "message": "WebNN API"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_NN_TOOLTIP",
+    "source": "Controls Persona-gated WebNN access. Hardware acceleration, feature availability, and browser policy still apply.",
+    "message": "ペルソナで制御される WebNN へのアクセスを制御します。ハードウェア アクセラレーション、機能の可用性、ブラウザ ポリシーは引き続き適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_LABEL",
+    "source": "Private State Tokens",
+    "message": "Private State Token"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP",
+    "source": "Controls supported Persona-gated Private State Token operations. Other Privacy Sandbox controls may also apply.",
+    "message": "対応している、ペルソナで制御される Private State Token 操作を制御します。他の Privacy Sandbox の制御も適用される場合があります。"
   }
 ]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Incremental single-target build against the warm helium-macos build tree.
+"""Incremental single-target build against the warm macOS build tree.
 
 `he build` runs `autoninja -k 0 chrome chromedriver` -- the full product. When
 you are iterating on a compile/link/TS failure, you rarely need the whole
@@ -23,7 +23,7 @@ Targets are ninja target names or output paths, e.g.:
     gen/chrome/browser/resources/persona_picker/tsc/...
 
 Environment (autodetected, override with flags/env):
-    HELIUM_MACOS_ROOT  default: /Users/youtonghy/github/Project/Nitrous/helium-macos
+    NITROUS_BUILD_ROOT (fallback HELIUM_BUILD_ROOT)  default: repository root
 """
 
 import argparse
@@ -33,13 +33,14 @@ import re
 import subprocess
 import sys
 
-_DEFAULT_MACOS_ROOT = os.environ.get("HELIUM_MACOS_ROOT",
-                                     "/Users/youtonghy/github/Project/Nitrous/helium-macos")
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DEFAULT_BUILD_ROOT = (os.environ.get("NITROUS_BUILD_ROOT") or os.environ.get("HELIUM_BUILD_ROOT")
+                       or _REPO_ROOT)
 
 
-def resolve_paths(macos_root):
-    """Return key paths inside a helium-macos warm build tree."""
-    src_dir = os.path.join(macos_root, "build", "src")
+def resolve_paths(build_root):
+    """Return key paths inside a warm macOS build tree."""
+    src_dir = os.path.join(build_root, "build", "src")
     out_dir = os.path.join(src_dir, "out", "Default")
     depot = os.path.join(src_dir, "third_party", "depot_tools")
     siso = os.path.join(src_dir, "third_party", "siso", "cipd", "siso")
@@ -48,8 +49,8 @@ def resolve_paths(macos_root):
                                                                           "autoninja.py")):
         if not os.path.exists(path):
             sys.exit(f"error: {what} not found at {path}\n"
-                     "Is the helium-macos build tree present? "
-                     "Set HELIUM_MACOS_ROOT.")
+                     "Is the platform/macos build tree present? "
+                     "Set NITROUS_BUILD_ROOT (or HELIUM_BUILD_ROOT).")
     return src_dir, out_dir, siso, autoninja
 
 
@@ -81,7 +82,8 @@ def main():
     """Parse args, resolve targets, and invoke autoninja incrementally."""
     parser = argparse.ArgumentParser(description="Incremental single-target build via autoninja")
     parser.add_argument("targets", nargs="*", help="ninja targets / output paths")
-    parser.add_argument("--macos-root", default=_DEFAULT_MACOS_ROOT)
+    parser.add_argument("--build-root", default=_DEFAULT_BUILD_ROOT)
+    parser.add_argument("--macos-root", dest="build_root", help=argparse.SUPPRESS)
     parser.add_argument("--from-failed",
                         action="store_true",
                         help="Derive targets from siso_failed_commands*.sh")
@@ -96,7 +98,7 @@ def main():
                         help="Print the autoninja command without running it")
     args = parser.parse_args()
 
-    src_dir, out_dir, siso, autoninja = resolve_paths(args.macos_root)
+    src_dir, out_dir, siso, autoninja = resolve_paths(args.build_root)
 
     targets = list(args.targets)
     if args.from_failed:

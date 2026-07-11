@@ -297,7 +297,25 @@
          &BindWebNNContextProviderForWorker<ServiceWorkerHost>,
 --- a/content/browser/renderer_host/render_frame_host_impl.cc
 +++ b/content/browser/renderer_host/render_frame_host_impl.cc
-@@ -14785,6 +14785,13 @@ void RenderFrameHostImpl::BindInputInjec
+@@ -658,6 +658,8 @@ void OnDataURLRetrieved(
+ // Analyzes trusted sources of a frame's private-state-token-redemption
+ // Permissions Policy feature to see if the feature is definitely disabled or
+ // potentially enabled.
++bool HeliumPersonaAllowsPrivateStateTokens(const RenderFrameHostImpl* host);
++
+ //
+ // This information will be bound to a URLLoaderFactory; if the answer is
+ // "definitely disabled," the network service will report a bad message if it
+@@ -962,7 +964,7 @@ bool HeliumPersonaAllowsPrivacySandboxAp
+ bool HeliumPersonaAllowsPrivateStateTokens(const RenderFrameHostImpl* host) {
+   blink::HeliumPersonaSnapshot snapshot =
+       GetContentClient()->browser()->GetHeliumPersonaSnapshot(
+-          host ? host->GetBrowserContext() : nullptr);
++          host ? host->GetProcess()->GetBrowserContext() : nullptr);
+   return !snapshot.IsEnabled() || snapshot.allow_private_state_tokens;
+ }
+ 
+@@ -14785,6 +14787,13 @@ void RenderFrameHostImpl::BindInputInjec
  
  void RenderFrameHostImpl::BindWebOTPServiceReceiver(
      mojo::PendingReceiver<blink::mojom::WebOTPService> receiver) {
@@ -341,7 +359,7 @@
 +  if (!HeliumPersonaAllowsPlatformCredentials(GetBrowserContext()) &&
 +      options->authenticator_selection &&
 +      options->authenticator_selection->authenticator_attachment ==
-+          blink::mojom::AuthenticatorAttachment::PLATFORM) {
++          device::AuthenticatorAttachment::kPlatform) {
 +    std::move(callback).Run(
 +        blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr, nullptr);
 +    return;
@@ -424,7 +442,7 @@
    GetWebAuthenticationDelegate()
 --- a/third_party/blink/renderer/modules/battery/battery_manager.cc
 +++ b/third_party/blink/renderer/modules/battery/battery_manager.cc
-@@ -5,6 +5,9 @@
+@@ -5,17 +5,42 @@
  #include "third_party/blink/renderer/modules/battery/battery_manager.h"
  
  #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink.h"
@@ -434,7 +452,12 @@
  #include "third_party/blink/renderer/core/dom/dom_exception.h"
  #include "third_party/blink/renderer/core/dom/events/event.h"
  #include "third_party/blink/renderer/core/execution_context/execution_context.h"
-@@ -16,6 +19,27 @@
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/frame/local_frame_client.h"
+ #include "third_party/blink/renderer/core/frame/navigator.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
+ #include "third_party/blink/renderer/modules/battery/battery_dispatcher.h"
  
  namespace blink {
  
@@ -462,7 +485,7 @@
  const char BatteryManager::kSupplementName[] = "BatteryManager";
  
  // static
-@@ -67,6 +91,11 @@ ScriptPromise<BatteryManager> BatteryMan
+@@ -67,6 +92,11 @@ ScriptPromise<BatteryManager> BatteryMan
      battery_property_ = MakeGarbageCollected<BatteryProperty>(
          ExecutionContext::From(script_state));
  
@@ -474,7 +497,7 @@
      // If the context is in a stopped state already, do not start updating.
      if (!GetExecutionContext() || GetExecutionContext()->IsContextDestroyed()) {
        battery_property_->Resolve(this);
-@@ -123,6 +152,9 @@ void BatteryManager::DidUpdateData() {
+@@ -123,6 +153,9 @@ void BatteryManager::DidUpdateData() {
  }
  
  void BatteryManager::RegisterWithDispatcher() {
@@ -484,7 +507,7 @@
    battery_dispatcher_->AddController(this, DomWindow());
  }
  
-@@ -136,7 +168,8 @@ bool BatteryManager::HasLastData() {
+@@ -136,7 +169,8 @@ bool BatteryManager::HasLastData() {
  
  void BatteryManager::ContextLifecycleStateChanged(
      mojom::FrameLifecycleState state) {
@@ -496,7 +519,7 @@
    } else {
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -2130,6 +2131,10 @@ blink::WebFrameWidget* RenderFrameImpl::
+@@ -2131,6 +2131,10 @@ blink::WebFrameWidget* RenderFrameImpl::
  }
  
  void RenderFrameImpl::ScriptedPrint() {
