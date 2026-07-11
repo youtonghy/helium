@@ -11,7 +11,7 @@
      "gpu/browser_gpu_client_delegate.cc",
 --- /dev/null
 +++ b/content/browser/helium_noise/noise_token_data.cc
-@@ -0,0 +1,144 @@
+@@ -0,0 +1,179 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -155,10 +155,45 @@
 +  return tokens;
 +}
 +
++// static
++std::optional<blink::NoiseToken> HeliumNoiseTokenData::GetFeatureToken(
++    BrowserContext* browser_context,
++    const url::Origin& origin,
++    const blink::HeliumPersonaSnapshot& persona_snapshot,
++    blink::HeliumNoiseFeature feature) {
++  if (!browser_context || !persona_snapshot.IsEnabled()) {
++    return std::nullopt;
++  }
++  if (feature == blink::HeliumNoiseFeature::kCanvas &&
++      !persona_snapshot.canvas_noise) {
++    return std::nullopt;
++  }
++  if (feature == blink::HeliumNoiseFeature::kAudio &&
++      !persona_snapshot.audio_noise) {
++    return std::nullopt;
++  }
++  if (feature == blink::HeliumNoiseFeature::kHardware &&
++      !persona_snapshot.hardware_noise) {
++    return std::nullopt;
++  }
++  if (feature == blink::HeliumNoiseFeature::kFontMetric &&
++      !persona_snapshot.font_metric_noise) {
++    return std::nullopt;
++  }
++
++  blink::HeliumNoiseTokenMap tokens =
++      GetTokens(browser_context, origin, persona_snapshot);
++  auto token = tokens.find(feature);
++  if (token == tokens.end()) {
++    return std::nullopt;
++  }
++  return blink::NoiseToken(token->second.Value());
++}
++
 +}  // namespace content
 --- /dev/null
 +++ b/content/browser/helium_noise/noise_token_data.h
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,38 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -166,6 +201,9 @@
 +#ifndef CONTENT_BROWSER_HELIUM_NOISE_NOISE_TOKEN_DATA_H_
 +#define CONTENT_BROWSER_HELIUM_NOISE_NOISE_TOKEN_DATA_H_
 +
++#include <optional>
++
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
 +#include "third_party/blink/public/common/helium_noise/noise_token.h"
 +#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
 +#include "url/origin.h"
@@ -180,6 +218,15 @@
 +      BrowserContext* browser_context,
 +      const url::Origin& origin,
 +      const blink::HeliumPersonaSnapshot& persona);
++
++  // Returns a feature token when persona is enabled and the corresponding
++  // noise flag is on. Shared by navigation, shared workers, and service
++  // workers.
++  static std::optional<blink::NoiseToken> GetFeatureToken(
++      BrowserContext* browser_context,
++      const url::Origin& origin,
++      const blink::HeliumPersonaSnapshot& persona,
++      blink::HeliumNoiseFeature feature);
 +};
 +
 +}  // namespace content

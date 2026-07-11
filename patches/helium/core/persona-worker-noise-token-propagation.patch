@@ -17,7 +17,7 @@
  #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
  #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
  #include "third_party/blink/public/common/service_worker/service_worker_type_converters.h"
-@@ -325,6 +328,38 @@ void ApplyPersonaUserAgentMetadata(
+@@ -316,6 +319,15 @@ void ApplyPersonaUserAgentMetadata(
    }
  }
  
@@ -26,37 +26,14 @@
 +    const url::Origin& origin,
 +    const blink::HeliumPersonaSnapshot& persona_snapshot,
 +    blink::HeliumNoiseFeature feature) {
-+  if (!browser_context || !persona_snapshot.IsEnabled())
-+    return std::nullopt;
-+  if (feature == blink::HeliumNoiseFeature::kCanvas &&
-+      !persona_snapshot.canvas_noise) {
-+    return std::nullopt;
-+  }
-+  if (feature == blink::HeliumNoiseFeature::kAudio &&
-+      !persona_snapshot.audio_noise) {
-+    return std::nullopt;
-+  }
-+  if (feature == blink::HeliumNoiseFeature::kHardware &&
-+      !persona_snapshot.hardware_noise) {
-+    return std::nullopt;
-+  }
-+  if (feature == blink::HeliumNoiseFeature::kFontMetric &&
-+      !persona_snapshot.font_metric_noise) {
-+    return std::nullopt;
-+  }
-+
-+  blink::HeliumNoiseTokenMap tokens = HeliumNoiseTokenData::GetTokens(
-+      browser_context, origin, persona_snapshot);
-+  auto token = tokens.find(feature);
-+  if (token == tokens.end())
-+    return std::nullopt;
-+  return blink::NoiseToken(token->second.Value());
++  return HeliumNoiseTokenData::GetFeatureToken(browser_context, origin,
++                                               persona_snapshot, feature);
 +}
 +
  }  // namespace
  
  constexpr base::TimeDelta ServiceWorkerVersion::kTimeoutTimerDelay;
-@@ -2674,10 +2709,11 @@ void ServiceWorkerVersion::StartWorkerIn
+@@ -2665,10 +2677,11 @@ void ServiceWorkerVersion::StartWorkerIn
        outside_fetch_client_settings_object_.Clone();
  
    ContentBrowserClient* browser_client = GetContentClient()->browser();
@@ -69,7 +46,7 @@
    if (params->persona_snapshot.IsEnabled()) {
      if (!params->persona_snapshot.user_agent.empty()) {
        params->user_agent = params->persona_snapshot.user_agent;
-@@ -2685,6 +2721,19 @@ void ServiceWorkerVersion::StartWorkerIn
+@@ -2676,6 +2689,19 @@ void ServiceWorkerVersion::StartWorkerIn
      ApplyPersonaUserAgentMetadata(params->persona_snapshot,
                                    &params->ua_metadata);
    }
@@ -158,7 +135,7 @@
  #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
  #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
  #include "third_party/blink/public/common/messaging/message_port_channel.h"
-@@ -166,6 +170,38 @@ void ApplyPersonaUserAgentMetadata(
+@@ -157,6 +161,15 @@ void ApplyPersonaUserAgentMetadata(
    }
  }
  
@@ -167,37 +144,14 @@
 +    const url::Origin& origin,
 +    const blink::HeliumPersonaSnapshot& persona_snapshot,
 +    blink::HeliumNoiseFeature feature) {
-+  if (!browser_context || !persona_snapshot.IsEnabled())
-+    return std::nullopt;
-+  if (feature == blink::HeliumNoiseFeature::kCanvas &&
-+      !persona_snapshot.canvas_noise) {
-+    return std::nullopt;
-+  }
-+  if (feature == blink::HeliumNoiseFeature::kAudio &&
-+      !persona_snapshot.audio_noise) {
-+    return std::nullopt;
-+  }
-+  if (feature == blink::HeliumNoiseFeature::kHardware &&
-+      !persona_snapshot.hardware_noise) {
-+    return std::nullopt;
-+  }
-+  if (feature == blink::HeliumNoiseFeature::kFontMetric &&
-+      !persona_snapshot.font_metric_noise) {
-+    return std::nullopt;
-+  }
-+
-+  blink::HeliumNoiseTokenMap tokens = content::HeliumNoiseTokenData::GetTokens(
-+      browser_context, origin, persona_snapshot);
-+  auto token = tokens.find(feature);
-+  if (token == tokens.end())
-+    return std::nullopt;
-+  return blink::NoiseToken(token->second.Value());
++  return content::HeliumNoiseTokenData::GetFeatureToken(
++      browser_context, origin, persona_snapshot, feature);
 +}
 +
  }  // namespace
  
  namespace content {
-@@ -545,15 +581,35 @@ void SharedWorkerHost::Start(
+@@ -536,15 +549,35 @@ void SharedWorkerHost::Start(
      ApplyPersonaUserAgentMetadata(persona_snapshot, &ua_metadata);
    }
  

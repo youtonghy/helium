@@ -1,0 +1,20 @@
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -1248,15 +1248,11 @@ std::vector<ContentsContainerView*> Brow
+ 
+ #if BUILDFLAG(IS_MAC)
+ bool BrowserView::UsesImmersiveFullscreenMode() const {
+-  const bool is_pwa = GetIsWebAppType();
+-  const bool is_tabbed_window = GetSupportsTabStrip();
+-  return is_pwa || is_tabbed_window;
++  return false;
+ }
+ 
+ bool BrowserView::UsesImmersiveFullscreenTabbedMode() const {
+-  const bool is_pwa = GetIsWebAppType();
+-  const bool is_tabbed_window = GetSupportsTabStrip();
+-  return is_tabbed_window && !is_pwa;
++  return false;
+ }
+ #endif
+ 

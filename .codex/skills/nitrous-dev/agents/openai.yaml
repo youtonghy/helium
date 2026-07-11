@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nitrous Dev"
+  short_description: "Hot-tree edit, compile loop, patch export"
+  default_prompt: "Use $nitrous-dev before editing Chromium source or patches: pick a mode, edit only allowed trees, compile with syntax_check/build_targets, export via agent_patch_guard."

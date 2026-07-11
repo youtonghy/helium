@@ -47,7 +47,25 @@ development environment for community contributions.
 Linux packaging includes a similar development script, so the same guide
 can be applied there too.
 
-[> See development docs in macOS repo](https://github.com/imputnet/helium-macos/blob/main/docs/building.md#development-build-and-environment)
+For macOS, the build and packaging workflow lives **in this repository**
+(`platform/macos/`). There is no separate `helium-macos` checkout required.
+
+```bash
+source platform/macos/build.sh
+he auto-package
+```
+
+`platform/macos/build.sh` downloads and prepares Chromium under `build/src`,
+merges the root and macOS patch queues into `build/platform_macos_patches`,
+configures GN, builds `chrome` and `chromedriver`, and can package the app with
+`he auto-package`. Lower-level commands such as `he setup`, `he check`,
+`he build`, and `he package` remain available for focused debugging.
+
+Agent / contributor workflow:
+
+- Unique instructions: [AGENTS.md](AGENTS.md) (`CLAUDE.md` links to it)
+- Edit/compile/export: project skill `$nitrous-dev`
+- Validation: project skill `$nitrous-validate`
 
 ## Contributing
 Before contributing to Nitrous, please read the guidelines in

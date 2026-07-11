@@ -58,7 +58,7 @@ I18N_TOOL_PATHS = {
     'devutils/i18n_lint.py',
 }
 
-SKILL_PATH = '.codex/skills/helium-validate'
+SKILL_PATH = '.codex/skills/nitrous-validate'
 PYTHON_SCAN_EXCLUDES = {
     'devutils/i18n-data',
 }
@@ -243,7 +243,7 @@ def run_skill_self_checks():
     required = {'name': False, 'description': False}
     for line in frontmatter.splitlines():
         if line.startswith('name:'):
-            required['name'] = line.split(':', 1)[1].strip() == 'helium-validate'
+            required['name'] = line.split(':', 1)[1].strip() == 'nitrous-validate'
         if line.startswith('description:'):
             required['description'] = bool(line.split(':', 1)[1].strip())
     missing = [key for key, ok in required.items() if not ok]

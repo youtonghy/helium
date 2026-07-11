@@ -17,7 +17,10 @@ Exit codes:
 """
 
 import argparse
+import re
+import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 from third_party import unidiff
@@ -28,7 +31,7 @@ from _common import ENCODING, get_logger, parse_series # pylint: disable=wrong-i
 sys.path.pop(0)
 
 # File suffixes to ignore for checking unused patches
-_PATCHES_IGNORE_SUFFIXES = {'.md'}
+_PATCHES_IGNORE_SUFFIXES = {'.md', '.patch~'}
 
 _PERSONA_PATCH_CODE_SUFFIXES = {
     '.cc',
@@ -49,24 +52,28 @@ _PERSONA_RUNTIME_HOOK_GROUPS = {
         'ApplyPersonaUserAgentMetadata',
         'GetPersonaAwareUserAgentValue',
         'GetPersonaUserAgentMetadata',
-        'NavigatorLanguage::EnsureUpdatedLanguage',
-        'persona_ua_metadata',
+        'snapshot->navigator_languages',
+        'const blink::HeliumPersonaSnapshot* persona_snapshot',
     ),
     'region and request language': (
         'WebTimeZoneOverride::SetOrChange',
-        'NavigatorLanguage::EnsureUpdatedLanguage',
-        'ReduceAcceptLanguageUtils::Create',
+        'snapshot->navigator_languages',
+        '->GetHeliumPersonaSnapshot(browser_context)',
     ),
     'hardware and input devices': (
-        'NavigatorBase::hardwareConcurrency',
-        'NavigatorBase::deviceMemory',
-        'NavigatorEvents::maxTouchPoints',
+        'snapshot->hardware_concurrency',
+        'snapshot->device_memory',
+        'snapshot.max_touch_points',
     ),
     'screen, viewport, DPR, and CSS media': (
-        'Screen::width() const',
-        'LocalDOMWindow::outerWidth() const',
+        'snapshot->screen_width',
+        'snapshot->outer_width',
+        'snapshot->device_scale_factor',
     ),
-    'network, storage, plugins, and speech': ('NetworkInformation::type() const', ),
+    'network, storage, plugins, and speech': (
+        'ParsePersonaConnectionType(snapshot->network_type)',
+        'snapshot->network_downlink_max',
+    ),
     'privacy sandbox gates': ('HeliumPersonaAllowsPrivacySandboxApis', ),
     'permission type gates': (
         'HeliumPersonaAllowsPermissionType',
@@ -84,6 +91,7 @@ _PERSONA_RUNTIME_HOOK_GROUPS = {
     ),
     'noise token infra': (
         'HeliumNoiseTokenData::GetTokens',
+        'HeliumNoiseTokenData::GetFeatureToken',
         'HeliumNoiseFeature::kCanvas',
         'HeliumNoiseFeature::kAudio',
         'HeliumNoiseFeature::kHardware',
@@ -110,13 +118,14 @@ _PERSONA_RUNTIME_HOOK_GROUPS = {
         'CanvasNoiseToken',
         'noise_helper.h',
         'NoisePixels',
-        '!IsWebGL2()',
+        # WebGL1 and WebGL2 ArrayBufferView readPixels (not PIXEL_PACK GPU path).
+        'format == GL_RGBA && type == GL_UNSIGNED_BYTE && width > 0',
     ),
     'hardware webgl noise': (
         'HardwareNoiseToken',
         'GetHardwareNoiseHash',
         'ApplyHardwareFloatNoise',
-        'GetShaderPrecisionFormat',
+        'ApplyHardwareIntNoise(precision',
         'GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT',
     ),
     'audio render noise': (
@@ -154,6 +163,31 @@ _PERSONA_CONTRACT_GROUPS = {
         'PersonaRuntimeOverride::ClearGlobal',
         'persona_snapshot = browser_client->GetHeliumPersonaSnapshot',
         'ApplyPersonaUserAgentMetadata',
+    ),
+}
+
+_PERSONA_BUILD_INTEGRITY_FILE_GROUPS = {
+    'component ownership and linkage': (
+        ('components/helium_persona/BUILD.gn', 'source_set("helium_persona")'),
+        ('chrome/browser/BUILD.gn', '"//components/helium_persona"'),
+    ),
+    'generated contract closures': (
+        ('third_party/blink/public/common/helium_persona/persona_snapshot.h',
+         '#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_'),
+        ('third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h',
+         '}  // namespace mojo'),
+        ('third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h',
+         '#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_'
+         'PERSONA_SNAPSHOT_MOJOM_TRAITS_H_'),
+        ('third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom',
+         'array<HeliumPersonaFingerprintRotationEpoch> '
+         'fingerprint_rotation_site_epochs;\n};'),
+    ),
+    'renderer declarations': (
+        ('third_party/blink/renderer/core/execution_context/navigator_base.h',
+         'float deviceMemory() const;'),
+        ('third_party/blink/renderer/core/workers/worker_global_scope.h',
+         'const HeliumPersonaSnapshot helium_persona_snapshot_;'),
     ),
 }
 
@@ -209,22 +243,25 @@ _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS = {
         'editablePersona_.navigatorVendor',
         'editablePersona_.navigatorProductSub',
         'editablePersona_.uaCh.platform',
+        'editablePersona_.uaCh.platformVersion',
+        'editablePersona_.uaCh.architecture',
+        'editablePersona_.uaCh.model',
+        'editablePersona_.uaCh.bitness',
         'editablePersona_.uaCh.fullVersion',
+        'editablePersona_.uaCh.mobile',
+        'editablePersona_.uaCh.wow64',
         'uaChBrandsText_',
-        'uaChFullVersionListText_',
         'uaChFormFactorsText_',
     ),
     'manual region and language fields': (
         'editablePersona_.region.timezone',
         'editablePersona_.region.locale',
         'editablePersona_.region.acceptLanguage',
-        'navigatorLanguagesText_',
     ),
     'manual GPU and capability fields': (
         'editablePersona_.gpu.vendor',
         'editablePersona_.gpu.renderer',
         'editablePersona_.gpu.webgpuAdapter',
-        'webgpuFeaturesText_',
     ),
     'manual hardware and touch fields': (
         'editablePersona_.hardware.hardwareConcurrency',
@@ -233,8 +270,13 @@ _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS = {
     ),
     'manual display and media preference fields': (
         'editablePersona_.screen.width',
+        'editablePersona_.screen.height',
         'editablePersona_.screen.availLeft',
+        'editablePersona_.screen.availTop',
+        'editablePersona_.screen.availWidth',
+        'editablePersona_.screen.availHeight',
         'editablePersona_.screen.outerWidth',
+        'editablePersona_.screen.outerHeight',
         'editablePersona_.screen.deviceScaleFactor',
     ),
     'manual font and font rendering fields': (
@@ -243,10 +285,56 @@ _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS = {
         'fontAliasesText_',
         'editablePersona_.fontRendering.engine',
     ),
-    'manual media device fields': ('editablePersona_.mediaDevices.audioBaseLatency', ),
+    'manual noise toggles': (
+        'editablePersona_.advanced.canvasNoise',
+        'editablePersona_.advanced.audioNoise',
+        'editablePersona_.advanced.hardwareNoise',
+        'editablePersona_.advanced.fontMetricNoise',
+    ),
+    'manual media device fields': (
+        'editablePersona_.mediaDevices.audioBaseLatency',
+        'editablePersona_.mediaDevices.audioOutputLatency',
+    ),
     'manual network fields': (
         'editablePersona_.network.type',
         'editablePersona_.network.downlinkMax',
+    ),
+    'manual client hints and permission gates': (
+        'editablePersona_.advanced.clientHintsEnabled',
+        'editablePersona_.advanced.allowBackgroundSync',
+        'editablePersona_.advanced.allowContacts',
+        'editablePersona_.advanced.allowLocalFonts',
+        'editablePersona_.advanced.allowPrivacySandboxApis',
+        'editablePersona_.advanced.allowGamepads',
+        'editablePersona_.advanced.allowClipboard',
+        'editablePersona_.advanced.allowGeolocation',
+        'editablePersona_.advanced.allowNotifications',
+        'editablePersona_.advanced.allowMidi',
+        'editablePersona_.advanced.allowIdleDetection',
+        'editablePersona_.advanced.allowWindowManagement',
+        'editablePersona_.advanced.allowWebNfc',
+        'editablePersona_.advanced.allowWebXr',
+        'editablePersona_.advanced.allowSensorApis',
+        'editablePersona_.advanced.allowRealBatteryStatus',
+        'editablePersona_.advanced.allowPlatformCredentials',
+        'editablePersona_.advanced.allowPaymentHandler',
+        'editablePersona_.advanced.allowSpeechSynthesis',
+        'editablePersona_.advanced.allowWebPrinting',
+        'editablePersona_.advanced.allowShapeDetection',
+        'editablePersona_.advanced.allowWebOtp',
+        'editablePersona_.advanced.allowAiApis',
+        'editablePersona_.advanced.allowHandwritingRecognition',
+        'editablePersona_.advanced.allowWebNn',
+        'editablePersona_.advanced.allowPrivateStateTokens',
+    ),
+    'manual fingerprint rotation': (
+        'editablePersona_.advanced.fingerprintRotation.scope',
+        'editablePersona_.advanced.fingerprintRotation.rotationIntervalDays',
+    ),
+    'typed settings serialization': (
+        'preparePersonaForSave',
+        'parsePersonaImportPayload',
+        'PERSONA_EXPORT_SCHEMA',
     ),
 }
 
@@ -323,6 +411,27 @@ def check_unused_patches(patches_dir, series_path=Path('series')):
     return bool(unused_patches)
 
 
+def check_tracked_patch_backups(patches_dir):
+    """Reject editor backup patches if they have entered the Git index."""
+    repo_root = patches_dir.parent
+    try:
+        relative_patches_dir = patches_dir.relative_to(repo_root)
+        result = subprocess.run(
+            ['git', '-C', str(repo_root), 'ls-files', '--',
+             str(relative_patches_dir)],
+            check=False,
+            capture_output=True,
+            encoding=ENCODING)
+    except (OSError, ValueError):
+        return False
+    if result.returncode:
+        return False
+    backups = sorted(path for path in result.stdout.splitlines() if Path(path).suffix == '.patch~')
+    for path in backups:
+        get_logger().warning('Tracked patch editor backup: %s', path)
+    return bool(backups)
+
+
 def check_series_duplicates(patches_dir, series_path=Path('series')):
     """
     Checks if there are duplicate entries in the series file
@@ -340,34 +449,76 @@ def check_series_duplicates(patches_dir, series_path=Path('series')):
     return False
 
 
-def _collect_persona_patch_text(patches_dir, series_path=Path('series'), include_patch=None):
-    """Return added code text from persona patches referenced by series."""
-    patch_text_parts = []
+def _normalize_patched_path(path):
+    """Return a repository-relative path from a unified diff path."""
+    if not path or path == '/dev/null':
+        return None
+    if path.startswith(('a/', 'b/')):
+        return path[2:]
+    return path
+
+
+def _should_include_persona_patch(relative_path, include_patch=None):
+    """Return True when a series entry should be scanned for persona tokens."""
+    if include_patch:
+        return include_patch(relative_path)
+    return str(relative_path).startswith('helium/core/persona-')
+
+
+def _apply_persona_patch_line(lines_by_path, line, source_path, target_path):
+    """Apply one added/removed code line to the final persona patch snapshot."""
+    if not (line.is_added or line.is_removed):
+        return
+    value = line.value.strip()
+    if not value or value.startswith(('//', '/*', '*')):
+        return
+    line_path = target_path if line.is_added else source_path
+    if not line_path:
+        return
+    final_lines = lines_by_path.setdefault(line_path, [])
+    if line.is_added:
+        final_lines.append(value)
+        return
+    try:
+        final_lines.remove(value)
+    except ValueError:
+        pass
+
+
+def _apply_persona_patched_file(lines_by_path, patched_file):
+    """Merge one unified-diff file into the final persona patch snapshot."""
+    source_path = _normalize_patched_path(patched_file.source_file)
+    target_path = _normalize_patched_path(patched_file.target_file)
+    effective_path = target_path or source_path
+    if not effective_path or Path(effective_path).suffix not in _PERSONA_PATCH_CODE_SUFFIXES:
+        return
+    for hunk in patched_file:
+        for line in hunk:
+            _apply_persona_patch_line(lines_by_path, line, source_path, target_path)
+
+
+def _collect_persona_patch_lines(patches_dir, series_path=Path('series'), include_patch=None):
+    """Return final added code lines by target path after the patch queue."""
+    lines_by_path = {}
     for patch_path in _read_series_file(patches_dir, series_path, join_dir=True):
         try:
             relative_path = patch_path.relative_to(patches_dir)
         except ValueError:
             relative_path = patch_path
-        if not str(relative_path).startswith('helium/core/persona-'):
-            continue
-        if include_patch and not include_patch(relative_path):
+        if not _should_include_persona_patch(relative_path, include_patch):
             continue
         if not patch_path.exists():
             continue
         patch_set = unidiff.PatchSet(patch_path.read_text(encoding=ENCODING))
         for patched_file in patch_set:
-            target_path = Path(patched_file.target_file)
-            if target_path.suffix not in _PERSONA_PATCH_CODE_SUFFIXES:
-                continue
-            for hunk in patched_file:
-                for line in hunk:
-                    if not (line.is_added or line.is_context):
-                        continue
-                    value = line.value.strip()
-                    if not value or value.startswith(('//', '/*', '*')):
-                        continue
-                    patch_text_parts.append(value)
-    return '\n'.join(patch_text_parts)
+            _apply_persona_patched_file(lines_by_path, patched_file)
+    return lines_by_path
+
+
+def _collect_persona_patch_text(patches_dir, series_path=Path('series'), include_patch=None):
+    """Return final added code text from persona patches referenced by series."""
+    lines_by_path = _collect_persona_patch_lines(patches_dir, series_path, include_patch)
+    return '\n'.join(line for lines in lines_by_path.values() for line in lines)
 
 
 def _check_persona_token_groups(patches_dir,
@@ -378,7 +529,8 @@ def _check_persona_token_groups(patches_dir,
     """Check that persona patches contain each token group."""
     patch_text = _collect_persona_patch_text(patches_dir, series_path, include_patch)
     if not patch_text:
-        return False
+        get_logger().warning('Persona %s guard found no final patch additions', group_label)
+        return True
 
     warnings = False
     for group_name, required_tokens in groups.items():
@@ -386,6 +538,26 @@ def _check_persona_token_groups(patches_dir,
         if missing_tokens:
             get_logger().warning('Persona %s group missing %s token(s): %s', group_label,
                                  group_name, ', '.join(missing_tokens))
+            warnings = True
+    return warnings
+
+
+def _check_persona_file_token_groups(patches_dir, group_label, groups, series_path=Path('series')):
+    """Check tokens against final additions in their owning files."""
+    lines_by_path = _collect_persona_patch_lines(patches_dir, series_path)
+    if not lines_by_path:
+        get_logger().warning('Persona %s guard found no final patch additions', group_label)
+        return True
+
+    warnings = False
+    for group_name, requirements in groups.items():
+        missing = []
+        for path, token in requirements:
+            if token not in '\n'.join(lines_by_path.get(path, [])):
+                missing.append(f'{path}: {token}')
+        if missing:
+            get_logger().warning('Persona %s group missing %s requirement(s): %s', group_label,
+                                 group_name, ', '.join(missing))
             warnings = True
     return warnings
 
@@ -409,6 +581,40 @@ def check_persona_contract_coverage(patches_dir, series_path=Path('series')):
     """Check that persona snapshot/schema/propagation still share one contract."""
     return _check_persona_token_groups(patches_dir, 'contract', _PERSONA_CONTRACT_GROUPS,
                                        series_path)
+
+
+def check_persona_build_integrity(patches_dir, series_path=Path('series')):
+    """Check declarations, generated closures, and component linkage."""
+    return _check_persona_file_token_groups(patches_dir, 'build integrity',
+                                            _PERSONA_BUILD_INTEGRITY_FILE_GROUPS, series_path)
+
+
+def check_persona_settings_i18n_key_coverage(patches_dir, series_path=Path('series')):
+    """Check that every Persona settings key has one provider mapping."""
+    ui_lines = _collect_persona_patch_lines(patches_dir, series_path)
+    ui_text = '\n'.join(line for path, lines in ui_lines.items()
+                        if path.startswith('chrome/browser/resources/settings/') for line in lines)
+    ui_keys = set(re.findall(r'\$i18n\{(persona[A-Za-z0-9]+)\}', ui_text))
+    ui_keys.update(re.findall(r"\bi18n\(\s*['\"](persona[A-Za-z0-9]+)['\"]", ui_text))
+    ui_keys.update(
+        re.findall(r"(?:labelKey|tooltipKey)\s*:\s*['\"](persona[A-Za-z0-9]+)['\"]", ui_text))
+
+    provider_lines = _collect_persona_patch_lines(
+        patches_dir, series_path, lambda path: str(path) == 'helium/core/services-prefs.patch')
+    provider_text = '\n'.join(
+        provider_lines.get(
+            'chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc', []))
+    provider_keys = re.findall(
+        r'\{\s*"(persona[A-Za-z0-9]+)"\s*,\s*IDS_SETTINGS_PERSONA_[A-Z0-9_]+\s*\}', provider_text)
+    missing = sorted(ui_keys - set(provider_keys))
+    duplicates = sorted(key for key, count in Counter(provider_keys).items() if count > 1)
+    if missing:
+        get_logger().warning('Persona settings i18n keys missing provider mappings: %s',
+                             ', '.join(missing))
+    if duplicates:
+        get_logger().warning('Persona settings i18n provider keys are duplicated: %s',
+                             ', '.join(duplicates))
+    return bool(missing or duplicates)
 
 
 def check_persona_profile_management_coverage(patches_dir, series_path=Path('series')):
@@ -470,11 +676,14 @@ def main():
     warnings |= check_patch_readability(args.patches)
     warnings |= check_series_duplicates(args.patches)
     warnings |= check_unused_patches(args.patches)
+    warnings |= check_tracked_patch_backups(args.patches)
     warnings |= check_persona_contract_coverage(args.patches)
+    warnings |= check_persona_build_integrity(args.patches)
     warnings |= check_persona_profile_management_coverage(args.patches)
     warnings |= check_persona_runtime_hook_coverage(args.patches)
     warnings |= check_persona_randomization_coverage(args.patches)
     warnings |= check_persona_settings_manual_field_coverage(args.patches)
+    warnings |= check_persona_settings_i18n_key_coverage(args.patches)
 
     if warnings:
         sys.exit(1)

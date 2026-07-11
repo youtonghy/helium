@@ -4,13 +4,14 @@
 # Usage: bash quilt-fix.sh <patch-name>
 #   patch-name = relative path in patches/ (e.g. inox-patchset/modify-default-prefs.patch)
 # Environment:
-#   HELIUM_QUILT_SRC = source tree to operate on (default: codex_tmp/patchwork_src)
+#   NITROUS_QUILT_SRC (fallback HELIUM_QUILT_SRC) = source tree
+#   (default: codex_tmp/patchwork_src)
 
 set -e
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$SCRIPT_DIR/.." && pwd)
-SRC="${HELIUM_QUILT_SRC:-$REPO/codex_tmp/patchwork_src}"
+SRC="${NITROUS_QUILT_SRC:-${HELIUM_QUILT_SRC:-$REPO/codex_tmp/patchwork_src}}"
 TARGET_PATCH="${1:-}"
 
 if [ -z "$TARGET_PATCH" ]; then
@@ -20,7 +21,7 @@ fi
 
 if [ ! -d "$SRC" ]; then
     echo "Source tree not found: $SRC" >&2
-    echo "Set HELIUM_QUILT_SRC or create codex_tmp/patchwork_src first." >&2
+    echo "Set NITROUS_QUILT_SRC (or HELIUM_QUILT_SRC) or create codex_tmp/patchwork_src first." >&2
     exit 1
 fi
 

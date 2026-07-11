@@ -169,8 +169,10 @@ helium/core/persona-privacy-sandbox-runtime-gates.patch
 helium/core/persona-web-api-runtime-gates.patch
 helium/core/persona-noise-token-propagation.patch
 helium/core/persona-worker-noise-token-propagation.patch
+helium/core/persona-worker-snapshot-inherit.patch
 helium/core/persona-canvas-noise.patch
 helium/core/persona-webgl-readpixels-noise.patch
+helium/core/persona-webgpu-adapter-override.patch
 helium/core/persona-permission-type-gating.patch
 helium/core/persona-audio-noise.patch
 helium/core/persona-font-metric-noise.patch

@@ -1,0 +1,78 @@
+--- a/third_party/blink/renderer/core/workers/worker_global_scope.h
++++ b/third_party/blink/renderer/core/workers/worker_global_scope.h
+@@ -32,6 +32,7 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/time/time.h"
+ #include "services/network/public/mojom/fetch_api.mojom-blink-forward.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/permissions_policy/document_policy.h"
+ #include "third_party/blink/public/common/tokens/tokens.h"
+ #include "third_party/blink/public/mojom/loader/code_cache.mojom-blink-forward.h"
+@@ -142,6 +143,10 @@ class CORE_EXPORT WorkerGlobalScope
+   const KURL& BaseURL() const final;
+   String UserAgent() const final { return user_agent_; }
+   UserAgentMetadata GetUserAgentMetadata() const override;
++  // Helium persona snapshot applied when this worker was started.
++  const HeliumPersonaSnapshot& GetHeliumPersonaSnapshot() const {
++    return helium_persona_snapshot_;
++  }
+   HttpsState GetHttpsState() const override { return https_state_; }
+   scheduler::WorkerScheduler* GetScheduler() final;
+   ukm::UkmRecorder* UkmRecorder() final;
+@@ -326,6 +331,7 @@ class CORE_EXPORT WorkerGlobalScope
+   const mojom::blink::ScriptType script_type_;
+   const String user_agent_;
+   const UserAgentMetadata ua_metadata_;
++  const HeliumPersonaSnapshot helium_persona_snapshot_;
+   std::unique_ptr<WorkerSettings> worker_settings_;
+ 
+   mutable Member<WorkerLocation> location_;
+--- a/third_party/blink/renderer/core/workers/worker_global_scope.cc
++++ b/third_party/blink/renderer/core/workers/worker_global_scope.cc
+@@ -712,6 +712,7 @@ WorkerGlobalScope::WorkerGlobalScope(
+       script_type_(creation_params->script_type),
+       user_agent_(creation_params->user_agent),
+       ua_metadata_(creation_params->ua_metadata),
++      helium_persona_snapshot_(creation_params->persona_snapshot),
+       thread_(thread),
+       agent_group_scheduler_compositor_task_runner_(std::move(
+           creation_params->agent_group_scheduler_compositor_task_runner)),
+--- a/third_party/blink/renderer/core/workers/dedicated_worker.cc
++++ b/third_party/blink/renderer/core/workers/dedicated_worker.cc
+@@ -23,6 +23,8 @@
+ #include "third_party/blink/public/mojom/worker/dedicated_worker_host_factory.mojom-blink.h"
+ #include "third_party/blink/public/platform/web_content_settings_client.h"
+ #include "third_party/blink/public/platform/web_fetch_client_settings_object.h"
++#include "third_party/blink/public/web/web_local_frame.h"
++#include "third_party/blink/public/web/web_local_frame_client.h"
+ #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_post_message_options.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_structured_serialize_options.h"
+@@ -632,6 +634,27 @@ DedicatedWorker::CreateGlobalScopeCreati
+       origin_ ? origin_->IsolatedCopy() : nullptr,
+       std::move(coep_reporting_observer), std::move(dip_reporting_observer));
+   params->dedicated_worker_start_time = start_time_;
++  // Inherit Helium persona snapshot and noise tokens from the parent context
++  // so Dedicated Workers match the document's fingerprint surface.
++  if (auto* window = DynamicTo<LocalDOMWindow>(execution_context)) {
++    if (window->GetFrame() && window->GetFrame()->Client() &&
++        window->GetFrame()->Client()->GetWebFrame() &&
++        window->GetFrame()->Client()->GetWebFrame()->Client()) {
++      params->persona_snapshot = window->GetFrame()
++                                     ->Client()
++                                     ->GetWebFrame()
++                                     ->Client()
++                                     ->GetHeliumPersonaSnapshot();
++    }
++  } else if (auto* worker = DynamicTo<WorkerGlobalScope>(execution_context)) {
++    params->persona_snapshot = worker->GetHeliumPersonaSnapshot();
++  }
++  params->helium_canvas_noise_token = execution_context->CanvasNoiseToken();
++  params->helium_audio_noise_token = execution_context->AudioNoiseToken();
++  params->helium_hardware_noise_token =
++      execution_context->HardwareNoiseToken();
++  params->helium_font_metric_noise_token =
++      execution_context->FontMetricNoiseToken();
+   return params;
+ }
+ 

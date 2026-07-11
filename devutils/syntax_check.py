@@ -24,9 +24,8 @@ Options:
     --list-unmatched    List files with no compile entry and exit non-zero.
 
 Autodetected out dirs (first existing wins):
-    $HELIUM_OUT_DIR
-    ../helium-macos/build/src/out/Default   (relative to repo root)
-    /Users/youtonghy/github/Project/Nitrous/helium-macos/build/src/out/Default
+    $NITROUS_OUT_DIR (fallback $HELIUM_OUT_DIR)
+    build/src/out/Default   (relative to repo root)
 """
 
 import argparse
@@ -38,10 +37,9 @@ import subprocess
 import sys
 
 _DEFAULT_OUT_DIRS = [
-    os.environ.get("HELIUM_OUT_DIR", ""),
-    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                 "helium-macos", "build", "src", "out", "Default"),
-    "/Users/youtonghy/github/Project/Nitrous/helium-macos/build/src/out/Default",
+    os.environ.get("NITROUS_OUT_DIR") or os.environ.get("HELIUM_OUT_DIR") or "",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "src", "out",
+                 "Default"),
 ]
 
 
@@ -53,7 +51,7 @@ def find_out_dir(explicit):
             return os.path.abspath(candidate)
     tried = [candidate for candidate in candidates if candidate]
     sys.exit("error: no compile_commands.json found. Tried:\n  " + "\n  ".join(tried) +
-             "\nPass --out-dir or set HELIUM_OUT_DIR.")
+             "\nPass --out-dir or set NITROUS_OUT_DIR (or HELIUM_OUT_DIR).")
 
 
 def iter_entries(cc_path):

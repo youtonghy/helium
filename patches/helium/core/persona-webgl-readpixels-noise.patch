@@ -23,7 +23,7 @@
  #include "third_party/blink/public/web/web_local_frame_client.h"
  #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
  #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_elementimage.h"
-@@ -77,6 +81,8 @@
+@@ -78,6 +82,8 @@
  #include "third_party/blink/renderer/core/frame/settings.h"
  #include "third_party/blink/renderer/core/frame/web_feature.h"
  #include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
@@ -32,8 +32,8 @@
  #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.h"
  #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
  #include "third_party/blink/renderer/core/html/canvas/image_data.h"
-@@ -221,6 +227,32 @@ const HeliumPersonaSnapshot* GetPersonaS
-   return snapshot.IsEnabled() ? &snapshot : nullptr;
+@@ -229,6 +235,33 @@ const HeliumPersonaSnapshot* GetPersonaS
+   return nullptr;
  }
  
 +std::optional<uint64_t> GetHardwareNoiseHash(ExecutionContext* context,
@@ -41,8 +41,9 @@
 +  if (!context || !context->HardwareNoiseToken()) {
 +    return std::nullopt;
 +  }
-+  return NoiseHash(*context->HardwareNoiseToken()) ^
-+         (field * 0x9e3779b97f4a7c15ULL);
++  NoiseHash hash(*context->HardwareNoiseToken());
++  hash.Update(field);
++  return hash.GetTokenHashForTesting();
 +}
 +
 +GLfloat ApplyHardwareFloatNoise(GLfloat value, uint64_t hash) {
@@ -65,7 +66,7 @@
  enum class WebGLANGLEImplementation {
    // These values are persisted to logs. Entries should not be renumbered and
    // numeric values should never be reused.
-@@ -3915,8 +3947,16 @@ ScriptValue WebGLRenderingContextBase::g
+@@ -3923,8 +3956,16 @@ ScriptValue WebGLRenderingContextBase::g
      case GL_ACTIVE_TEXTURE:
        return GetUnsignedIntParameter(script_state, pname);
      case GL_ALIASED_LINE_WIDTH_RANGE:
@@ -83,7 +84,7 @@
        return GetWebGLFloatArrayParameter(script_state, pname);
      case GL_ALPHA_BITS:
        if (drawing_buffer_->RequiresAlphaChannelToBePreserved())
-@@ -4122,7 +4162,9 @@ ScriptValue WebGLRenderingContextBase::g
+@@ -4130,7 +4171,9 @@ ScriptValue WebGLRenderingContextBase::g
          if (const HeliumPersonaSnapshot* snapshot =
                  GetPersonaSnapshot(Host()->GetTopExecutionContext());
              snapshot && !snapshot->gpu_renderer.empty()) {
@@ -94,7 +95,7 @@
          }
          return WebGLAny(script_state,
                          String(ContextGL()->GetString(GL_RENDERER)));
-@@ -4136,7 +4178,9 @@ ScriptValue WebGLRenderingContextBase::g
+@@ -4144,7 +4187,9 @@ ScriptValue WebGLRenderingContextBase::g
          if (const HeliumPersonaSnapshot* snapshot =
                  GetPersonaSnapshot(Host()->GetTopExecutionContext());
              snapshot && !snapshot->gpu_vendor.empty()) {
@@ -105,7 +106,7 @@
          }
          return WebGLAny(script_state,
                          String(ContextGL()->GetString(GL_VENDOR)));
-@@ -4157,6 +4201,12 @@ ScriptValue WebGLRenderingContextBase::g
+@@ -4165,6 +4210,12 @@ ScriptValue WebGLRenderingContextBase::g
        return ScriptValue::CreateNull(script_state->GetIsolate());
      case GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT:  // EXT_texture_filter_anisotropic
        if (ExtensionEnabled(kEXTTextureFilterAnisotropicName)) {
@@ -118,7 +119,7 @@
          return GetFloatParameter(script_state,
                                   GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT);
        }
-@@ -4439,6 +4489,12 @@ WebGLShaderPrecisionFormat* WebGLRenderi
+@@ -4447,6 +4498,12 @@ WebGLShaderPrecisionFormat* WebGLRenderi
    GLint precision = 0;
    ContextGL()->GetShaderPrecisionFormat(shader_type, precision_type, range,
                                          &precision);
@@ -131,13 +132,16 @@
    return MakeGarbageCollected<WebGLShaderPrecisionFormat>(range[0], range[1],
                                                            precision);
  }
-@@ -5285,6 +5341,14 @@ void WebGLRenderingContextBase::ReadPixe
+@@ -5293,6 +5350,17 @@ void WebGLRenderingContextBase::ReadPixe
      }
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
    }
 +  ExecutionContext* execution_context = Host()->GetTopExecutionContext();
-+  if (!IsWebGL2() && format == GL_RGBA && type == GL_UNSIGNED_BYTE &&
-+      execution_context && execution_context->CanvasNoiseToken()) {
++  // Apply to WebGL1 and WebGL2 ArrayBufferView readbacks used by fingerprint
++  // scripts. PIXEL_PACK buffer paths write to GPU memory and are skipped here.
++  if (format == GL_RGBA && type == GL_UNSIGNED_BYTE && width > 0 &&
++      height > 0 && execution_context &&
++      execution_context->CanvasNoiseToken()) {
 +    NoisePixels(NoiseHash(*execution_context->CanvasNoiseToken()),
 +                base::span(data, static_cast<size_t>(width) *
 +                                     static_cast<size_t>(height) * 4u),

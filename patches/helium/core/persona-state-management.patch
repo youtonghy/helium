@@ -106,6 +106,14 @@
      "icon_loader.cc",
      "icon_loader.h",
      "icon_manager.cc",
+@@ -1069,6 +1076,7 @@ static_library("browser") {
+     "//components/browser_apis/tab_strip:mojom",
+     "//components/browser_apis/ui_controllers/toolbar:mojom",
+     "//components/content_settings/browser/ui",
++    "//components/helium_persona",
+     "//components/page_content_annotations/content",
+     "//components/page_content_annotations/core",
+     "//components/supervised_user/core/browser:device_parental_controls",
 --- a/third_party/blink/public/common/BUILD.gn
 +++ b/third_party/blink/public/common/BUILD.gn
 @@ -162,6 +162,8 @@ source_set("headers") {
@@ -151,7 +159,7 @@
            move_only = true
 --- /dev/null
 +++ b/components/helium_persona/persona_snapshot.h
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,18 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -165,19 +173,30 @@
 +// Runtime consumers should read this single normalized snapshot.
 +bool PersonaHasRequiredFields(const base::DictValue& value);
 +base::DictValue ValidatePersona(const base::DictValue& value);
++base::DictValue GetPersonaFieldErrors(const base::DictValue& value);
 +
 +}  // namespace helium_persona
 +
 +#endif
 --- /dev/null
 +++ b/components/helium_persona/persona_snapshot.cc
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,436 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#include "components/helium_persona/persona_snapshot.h"
 +
++#include <array>
++#include <cstdint>
++#include <memory>
++#include <optional>
++#include <span>
++#include <string>
 +#include <string_view>
++#include <tuple>
++
++#include "third_party/icu/source/common/unicode/unistr.h"
++#include "third_party/icu/source/i18n/unicode/timezone.h"
 +
 +namespace helium_persona {
 +
@@ -186,6 +205,26 @@
 +bool HasNonEmptyString(const base::DictValue& value, std::string_view key) {
 +  const std::string* string_value = value.FindString(key);
 +  return string_value && !string_value->empty();
++}
++
++bool IsValidTimeZoneId(std::string_view timezone_id) {
++  std::unique_ptr<icu::TimeZone> timezone(icu::TimeZone::createTimeZone(
++      icu::UnicodeString::fromUTF8(timezone_id)));
++  return timezone && *timezone != icu::TimeZone::getUnknown();
++}
++
++bool IsSupportedDeviceMemory(int device_memory) {
++  switch (device_memory) {
++    case 1:
++    case 2:
++    case 4:
++    case 8:
++    case 16:
++    case 32:
++      return true;
++    default:
++      return false;
++  }
 +}
 +
 +bool HasRequiredRegionFields(const base::DictValue& value) {
@@ -202,6 +241,163 @@
 +         HasNonEmptyString(*ua_ch, "bitness");
 +}
 +
++void RequireNonEmptyString(const base::DictValue& value,
++                           std::string_view key,
++                           std::string_view path,
++                           base::DictValue* errors) {
++  if (!HasNonEmptyString(value, key)) {
++    errors->Set(path, "required");
++  }
++}
++
++void ValidateBooleanFields(const base::DictValue& value,
++                           std::span<const std::string_view> keys,
++                           std::string_view prefix,
++                           base::DictValue* errors) {
++  for (std::string_view key : keys) {
++    if (const base::Value* field = value.Find(key);
++        field && !field->is_bool()) {
++      errors->Set(std::string(prefix) + std::string(key), "invalid_type");
++    }
++  }
++}
++
++void ValidateStringFields(const base::DictValue& value,
++                          std::span<const std::string_view> keys,
++                          std::string_view prefix,
++                          base::DictValue* errors) {
++  for (std::string_view key : keys) {
++    if (const base::Value* field = value.Find(key);
++        field && !field->is_string()) {
++      errors->Set(std::string(prefix) + std::string(key), "invalid_type");
++    }
++  }
++}
++
++const base::DictValue* ValidateDictField(const base::DictValue& value,
++                                        std::string_view key,
++                                        std::string_view path,
++                                        bool required,
++                                        base::DictValue* errors) {
++  const base::Value* field = value.Find(key);
++  if (!field) {
++    if (required) {
++      errors->Set(path, "required");
++    }
++    return nullptr;
++  }
++  if (!field->is_dict()) {
++    errors->Set(path, "invalid_type");
++    return nullptr;
++  }
++  return &field->GetDict();
++}
++
++void ValidateStringList(const base::DictValue& value,
++                        std::string_view key,
++                        std::string_view path,
++                        bool require_non_empty,
++                        base::DictValue* errors) {
++  const base::Value* field = value.Find(key);
++  if (!field) {
++    return;
++  }
++  if (!field->is_list()) {
++    errors->Set(path, "invalid_type");
++    return;
++  }
++  const base::ListValue& list = field->GetList();
++  if (require_non_empty && list.empty()) {
++    errors->Set(path, "required");
++    return;
++  }
++  for (const auto& item : list) {
++    if (!item.is_string() || item.GetString().empty()) {
++      errors->Set(path, "invalid_element");
++      return;
++    }
++  }
++}
++
++void ValidateUaChBrands(const base::DictValue& ua_ch,
++                        base::DictValue* errors) {
++  const base::Value* field = ua_ch.Find("brands");
++  if (!field) {
++    return;
++  }
++  if (!field->is_list()) {
++    errors->Set("uaCh.brands", "invalid_type");
++    return;
++  }
++  const base::ListValue& brands = field->GetList();
++  if (brands.empty()) {
++    errors->Set("uaCh.brands", "required");
++    return;
++  }
++  for (const auto& item : brands) {
++    if (!item.is_dict() || !HasNonEmptyString(item.GetDict(), "brand") ||
++        !HasNonEmptyString(item.GetDict(), "version")) {
++      errors->Set("uaCh.brands", "invalid_element");
++      return;
++    }
++  }
++}
++
++std::optional<double> GetNumber(const base::Value* value) {
++  if (!value) {
++    return std::nullopt;
++  }
++  if (value->is_int()) {
++    return value->GetInt();
++  }
++  if (value->is_double()) {
++    return value->GetDouble();
++  }
++  return std::nullopt;
++}
++
++void ValidateNumber(const base::DictValue& parent,
++                    std::string_view key,
++                    std::string_view path,
++                    double minimum,
++                    double maximum,
++                    bool require_integer,
++                    base::DictValue* errors) {
++  const base::Value* field = parent.Find(key);
++  if (!field) {
++    return;
++  }
++  if (require_integer && !field->is_int()) {
++    errors->Set(path, "invalid_type");
++    return;
++  }
++  const std::optional<double> number = GetNumber(field);
++  if (!number) {
++    errors->Set(path, "invalid_type");
++    return;
++  }
++  if (*number < minimum || *number > maximum) {
++    errors->Set(path, "out_of_range");
++  }
++}
++
++void ValidateNumericGroup(const base::DictValue& value,
++                          std::string_view group,
++                          std::span<const std::tuple<std::string_view,
++                                                     double,
++                                                     double,
++                                                     bool>> fields,
++                          base::DictValue* errors) {
++  const base::DictValue* dict = value.FindDict(group);
++  if (!dict) {
++    return;
++  }
++  for (const auto& [key, minimum, maximum, require_integer] : fields) {
++    ValidateNumber(*dict, key, std::string(group) + "." + std::string(key),
++                   minimum, maximum, require_integer, errors);
++  }
++}
++
 +}  // namespace
 +
 +bool PersonaHasRequiredFields(const base::DictValue& value) {
@@ -215,10 +411,215 @@
 +  return value.Clone();
 +}
 +
++base::DictValue GetPersonaFieldErrors(const base::DictValue& value) {
++  base::DictValue errors;
++  RequireNonEmptyString(value, "id", "id", &errors);
++  RequireNonEmptyString(value, "name", "name", &errors);
++  RequireNonEmptyString(value, "displayName", "displayName", &errors);
++  if (!value.FindBool("enabled").has_value()) {
++    errors.Set("enabled", "invalid_type");
++  }
++  constexpr std::array<std::string_view, 11> kTopLevelStringFields = {
++      "id",          "name",              "displayName", "icon",
++      "userAgent",   "platform",          "navigatorVendor",
++      "navigatorProductSub", "createdAt", "modifiedAt",  "lastUsedAt",
++  };
++  ValidateStringFields(value, kTopLevelStringFields, "", &errors);
++
++  const base::DictValue* region =
++      ValidateDictField(value, "region", "region", true, &errors);
++  if (region) {
++    RequireNonEmptyString(*region, "timezone", "region.timezone", &errors);
++    RequireNonEmptyString(*region, "locale", "region.locale", &errors);
++    RequireNonEmptyString(*region, "acceptLanguage", "region.acceptLanguage",
++                          &errors);
++    constexpr std::array<std::string_view, 3> kRegionStringFields = {
++        "timezone", "locale", "acceptLanguage"};
++    ValidateStringFields(*region, kRegionStringFields, "region.", &errors);
++    if (const std::string* timezone = region->FindString("timezone");
++        timezone && !timezone->empty() && !IsValidTimeZoneId(*timezone)) {
++      errors.Set("region.timezone", "invalid_value");
++    }
++  }
++  const base::DictValue* ua_ch =
++      ValidateDictField(value, "uaCh", "uaCh", true, &errors);
++  if (ua_ch) {
++    RequireNonEmptyString(*ua_ch, "platform", "uaCh.platform", &errors);
++    RequireNonEmptyString(*ua_ch, "architecture", "uaCh.architecture",
++                          &errors);
++    RequireNonEmptyString(*ua_ch, "bitness", "uaCh.bitness", &errors);
++    constexpr std::array<std::string_view, 2> kUaChBooleanFields = {
++        "mobile", "wow64"};
++    ValidateBooleanFields(*ua_ch, kUaChBooleanFields, "uaCh.", &errors);
++    constexpr std::array<std::string_view, 6> kUaChStringFields = {
++        "platform", "platformVersion", "architecture",
++        "model",    "bitness",         "fullVersion"};
++    ValidateStringFields(*ua_ch, kUaChStringFields, "uaCh.", &errors);
++    ValidateUaChBrands(*ua_ch, &errors);
++    ValidateStringList(*ua_ch, "formFactors", "uaCh.formFactors", true,
++                       &errors);
++  }
++
++  const base::DictValue* advanced =
++      ValidateDictField(value, "advanced", "advanced", true, &errors);
++  if (advanced) {
++    constexpr std::array<std::string_view, 30> kAdvancedBooleanFields = {
++        "clientHintsEnabled",
++        "canvasNoise",
++        "audioNoise",
++        "hardwareNoise",
++        "fontMetricNoise",
++        "allowBackgroundSync",
++        "allowContacts",
++        "allowLocalFonts",
++        "allowPrivacySandboxApis",
++        "allowGamepads",
++        "allowClipboard",
++        "allowGeolocation",
++        "allowNotifications",
++        "allowMidi",
++        "allowIdleDetection",
++        "allowWindowManagement",
++        "allowWebNfc",
++        "allowWebXr",
++        "allowSensorApis",
++        "allowRealBatteryStatus",
++        "allowPlatformCredentials",
++        "allowPaymentHandler",
++        "allowSpeechSynthesis",
++        "allowWebPrinting",
++        "allowShapeDetection",
++        "allowWebOtp",
++        "allowAiApis",
++        "allowHandwritingRecognition",
++        "allowWebNn",
++        "allowPrivateStateTokens",
++    };
++    ValidateBooleanFields(*advanced, kAdvancedBooleanFields, "advanced.",
++                          &errors);
++    const base::DictValue* rotation = ValidateDictField(
++        *advanced, "fingerprintRotation", "advanced.fingerprintRotation",
++        false, &errors);
++    if (rotation) {
++      constexpr std::array<std::string_view, 1> kRotationStringFields = {
++          "scope"};
++      constexpr std::array<std::string_view, 3> kRotationBooleanFields = {
++          "rotateOnManualRefresh", "rotateOnBrowserRestart",
++          "rotateOnProfileReset"};
++      ValidateStringFields(*rotation, kRotationStringFields,
++                           "advanced.fingerprintRotation.", &errors);
++      ValidateBooleanFields(*rotation, kRotationBooleanFields,
++                            "advanced.fingerprintRotation.", &errors);
++      ValidateNumber(*rotation, "rotationIntervalDays",
++                     "advanced.fingerprintRotation.rotationIntervalDays", 1,
++                     3650, true, &errors);
++    }
++  }
++
++  constexpr std::array<std::string_view, 7> kOptionalDictFields = {
++      "gpu", "hardware", "screen", "fonts", "fontRendering",
++      "mediaDevices", "network"};
++  for (std::string_view key : kOptionalDictFields) {
++    ValidateDictField(value, key, key, false, &errors);
++  }
++
++  if (const base::DictValue* gpu = value.FindDict("gpu")) {
++    constexpr std::array<std::string_view, 4> kGpuStringFields = {
++        "vendor", "renderer", "webgpuAdapter", "driver"};
++    ValidateStringFields(*gpu, kGpuStringFields, "gpu.", &errors);
++  }
++  if (const base::DictValue* hardware = value.FindDict("hardware")) {
++    constexpr std::array<std::string_view, 1> kHardwareBooleanFields = {
++        "touchEnabled"};
++    ValidateBooleanFields(*hardware, kHardwareBooleanFields, "hardware.",
++                          &errors);
++  }
++  if (const base::DictValue* screen = value.FindDict("screen")) {
++    constexpr std::array<std::string_view, 3> kScreenStringFields = {
++        "orientationType", "colorGamut", "dynamicRange"};
++    constexpr std::array<std::string_view, 1> kScreenBooleanFields = {
++        "reducedMotion"};
++    ValidateStringFields(*screen, kScreenStringFields, "screen.", &errors);
++    ValidateBooleanFields(*screen, kScreenBooleanFields, "screen.", &errors);
++  }
++  if (const base::DictValue* fonts = value.FindDict("fonts")) {
++    constexpr std::array<std::string_view, 2> kFontStringFields = {"id",
++                                                                   "name"};
++    ValidateStringFields(*fonts, kFontStringFields, "fonts.", &errors);
++    ValidateStringList(*fonts, "families", "fonts.families", false, &errors);
++    ValidateStringList(*fonts, "aliases", "fonts.aliases", false, &errors);
++  }
++  if (const base::DictValue* font_rendering =
++          value.FindDict("fontRendering")) {
++    constexpr std::array<std::string_view, 2> kFontRenderingStringFields = {
++        "engine", "id"};
++    constexpr std::array<std::string_view, 4> kFontRenderingBooleanFields = {
++        "useAutohinter", "antialiasing", "subpixelRendering", "lcdText"};
++    ValidateStringFields(*font_rendering, kFontRenderingStringFields,
++                         "fontRendering.", &errors);
++    ValidateBooleanFields(*font_rendering, kFontRenderingBooleanFields,
++                          "fontRendering.", &errors);
++  }
++  if (const base::DictValue* media_devices =
++          value.FindDict("mediaDevices")) {
++    constexpr std::array<std::string_view, 1> kMediaBooleanFields = {
++        "voiceIsolation"};
++    ValidateBooleanFields(*media_devices, kMediaBooleanFields, "mediaDevices.",
++                          &errors);
++  }
++  if (const base::DictValue* network = value.FindDict("network")) {
++    constexpr std::array<std::string_view, 1> kNetworkStringFields = {"type"};
++    constexpr std::array<std::string_view, 2> kNetworkBooleanFields = {
++        "saveData", "online"};
++    ValidateStringFields(*network, kNetworkStringFields, "network.", &errors);
++    ValidateBooleanFields(*network, kNetworkBooleanFields, "network.",
++                          &errors);
++  }
++
++  constexpr std::array<std::tuple<std::string_view, double, double, bool>, 3>
++      kHardwareFields = {
++      std::tuple{"hardwareConcurrency", 1.0, 256.0, true},
++      std::tuple{"deviceMemory", 1.0, 32.0, true},
++      std::tuple{"maxTouchPoints", 0.0, 32.0, true},
++  };
++  ValidateNumericGroup(value, "hardware", kHardwareFields, &errors);
++  if (const base::DictValue* hardware = value.FindDict("hardware")) {
++    if (std::optional<int> device_memory = hardware->FindInt("deviceMemory");
++        device_memory && !IsSupportedDeviceMemory(*device_memory)) {
++      errors.Set("hardware.deviceMemory", "unsupported_value");
++    }
++  }
++  constexpr std::array<std::tuple<std::string_view, double, double, bool>, 9>
++      kScreenFields = {
++      std::tuple{"width", 1.0, 32768.0, true},
++      std::tuple{"height", 1.0, 32768.0, true},
++      std::tuple{"availLeft", -32768.0, 32768.0, true},
++      std::tuple{"availTop", -32768.0, 32768.0, true},
++      std::tuple{"availWidth", 1.0, 32768.0, true},
++      std::tuple{"availHeight", 1.0, 32768.0, true},
++      std::tuple{"outerWidth", 1.0, 32768.0, true},
++      std::tuple{"outerHeight", 1.0, 32768.0, true},
++      std::tuple{"deviceScaleFactor", 0.25, 8.0, false},
++  };
++  ValidateNumericGroup(value, "screen", kScreenFields, &errors);
++  constexpr std::array<std::tuple<std::string_view, double, double, bool>, 2>
++      kMediaFields = {
++      std::tuple{"audioBaseLatency", 0.0, 10.0, false},
++      std::tuple{"audioOutputLatency", 0.0, 10.0, false},
++  };
++  ValidateNumericGroup(value, "mediaDevices", kMediaFields, &errors);
++  constexpr std::array<std::tuple<std::string_view, double, double, bool>, 1>
++      kNetworkFields = {
++      std::tuple{"downlinkMax", 0.0, 100000.0, false},
++  };
++  ValidateNumericGroup(value, "network", kNetworkFields, &errors);
++  return errors;
++}
++
 +}  // namespace helium_persona
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,139 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -226,6 +627,7 @@
 +#define THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
 +
 +#include <string>
++#include <string_view>
 +#include <vector>
 +
 +namespace blink {
@@ -239,6 +641,22 @@
 +  std::string scope_key;
 +  std::string epoch;
 +};
++
++inline std::string ResolveHeliumPersonaBrandFullVersion(
++    std::string_view brand_version,
++    std::string_view browser_full_version) {
++  const std::string_view brand_major =
++      brand_version.substr(0, brand_version.find('.'));
++  const std::string_view browser_major =
++      browser_full_version.substr(0, browser_full_version.find('.'));
++  if (!browser_full_version.empty() && brand_major == browser_major) {
++    return std::string(browser_full_version);
++  }
++  if (brand_version.find('.') != std::string_view::npos) {
++    return std::string(brand_version);
++  }
++  return std::string(brand_version) + ".0.0.0";
++}
 +
 +struct HeliumPersonaSnapshot {
 +  bool enabled = false;
@@ -339,9 +757,11 @@
 +};
 +
 +}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
-@@ -0,0 +1,574 @@
+@@ -0,0 +1,579 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -916,9 +1336,14 @@
 +           data.ReadFingerprintRotationSiteEpochs(
 +               &out->fingerprint_rotation_site_epochs);
 +  }
++};
++
++}  // namespace mojo
++
++#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_MOJOM_TRAITS_H_
 --- /dev/null
 +++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,109 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -1027,9 +1452,10 @@
 +  array<string> font_aliases;
 +  array<HeliumPersonaUaChBrand> ua_ch_brands;
 +  array<HeliumPersonaFingerprintRotationEpoch> fingerprint_rotation_site_epochs;
++};
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.h
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,60 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -1066,6 +1492,7 @@
 +  base::DictValue GetPersonaProfiles() const;
 +  base::DictValue CreatePersonaProfile(const std::string& display_name);
 +  base::DictValue SavePersona(const base::DictValue& payload);
++  base::DictValue ImportPersonas(const base::DictValue& bundle);
 +  base::DictValue ClonePresetIntoProfile(const std::string& preset_id);
 +  base::DictValue SetActivePersona(const std::string& persona_id);
 +  base::DictValue DeletePersona(const std::string& persona_id);
@@ -1091,12 +1518,13 @@
 +#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -0,0 +1,1329 @@
+@@ -0,0 +1,1736 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
 +#include "chrome/browser/helium_persona/persona_service.h"
 +
++#include <algorithm>
 +#include <array>
 +#include <optional>
 +#include <string>
@@ -1105,6 +1533,7 @@
 +
 +#include "base/i18n/time_formatting.h"
 +#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
 +#include "base/time/time.h"
 +#include "base/uuid.h"
 +#include "components/helium_persona/persona_snapshot.h"
@@ -1125,12 +1554,15 @@
 +constexpr char kPersonaFingerprintRotationEpochPref[] =
 +    "helium.persona.fingerprint_rotation_epoch";
 +constexpr char kDefaultPersonaId[] = "default";
++constexpr char kPersonaImportSchema[] = "helium.persona/v1";
 +constexpr char kLaunchSelectionModeAlwaysAsk[] = "always_ask";
 +constexpr char kLaunchSelectionModeUseLast[] = "use_last";
 +constexpr char kFingerprintRotationScopeSiteProfile[] = "site_profile";
 +constexpr char kFingerprintRotationScopeProfile[] = "profile";
 +constexpr char kFingerprintRotationScopeGlobal[] = "global";
 +constexpr int kDefaultFingerprintRotationIntervalDays = 14;
++constexpr char kPersonaChromeMajorVersion[] = "149";
++constexpr char kPersonaChromeFullVersion[] = "149.0.7827.114";
 +
 +std::string MakeIsoTimestamp(base::Time time = base::Time::Now()) {
 +  return base::TimeFormatAsIso8601(time);
@@ -1164,6 +1596,22 @@
 +  return "default";
 +}
 +
++std::string GetNavigatorPlatformForOs(std::string_view platform) {
++  if (platform == "macOS") {
++    return "MacIntel";
++  }
++  if (platform == "Windows") {
++    return "Win32";
++  }
++  if (platform == "Linux" || platform == "Chrome OS") {
++    return "Linux x86_64";
++  }
++  if (platform == "Android") {
++    return "Linux armv81";
++  }
++  return std::string(platform);
++}
++
 +base::DictValue MakeRegionDefaults() {
 +  return base::DictValue()
 +      .Set("timezone", "UTC")
@@ -1173,7 +1621,9 @@
 +
 +base::DictValue MakeUaChDefaults() {
 +  base::ListValue brands;
-+  brands.Append(base::DictValue().Set("brand", "Chromium").Set("version", "137"));
++  brands.Append(base::DictValue()
++                    .Set("brand", "Chromium")
++                    .Set("version", kPersonaChromeMajorVersion));
 +  brands.Append(base::DictValue().Set("brand", "Not/A)Brand").Set("version", "24"));
 +
 +  base::ListValue form_factors;
@@ -1185,7 +1635,7 @@
 +      .Set("architecture", "arm")
 +      .Set("model", "")
 +      .Set("bitness", "64")
-+      .Set("fullVersion", "")
++      .Set("fullVersion", kPersonaChromeFullVersion)
 +      .Set("mobile", false)
 +      .Set("wow64", false)
 +      .Set("brands", std::move(brands))
@@ -1271,7 +1721,7 @@
 +  ua_ch.Set("bitness", bitness);
 +  ua_ch.Set("fullVersion", full_version);
 +  ua_ch.Set("mobile", false);
-+  ua_ch.Set("wow64", platform == "Windows");
++  ua_ch.Set("wow64", false);
 +
 +  base::DictValue gpu;
 +  gpu.Set("vendor", gpu_vendor);
@@ -1295,6 +1745,8 @@
 +  screen.Set("height", screen_height);
 +  screen.Set("availLeft", 0);
 +  screen.Set("availTop", 0);
++  screen.Set("availWidth", outer_width);
++  screen.Set("availHeight", outer_height);
 +  screen.Set("outerWidth", outer_width);
 +  screen.Set("outerHeight", outer_height);
 +  screen.Set("windowScreenY", 0);
@@ -1307,10 +1759,30 @@
 +
 +  base::DictValue fonts;
 +  fonts.Set("id", fonts_id);
++  base::ListValue font_families;
++  if (platform == "Windows") {
++    font_families.Append("Arial");
++    font_families.Append("Segoe UI");
++    font_families.Append("Times New Roman");
++    font_families.Append("Courier New");
++  } else if (platform == "Linux") {
++    font_families.Append("Noto Sans");
++    font_families.Append("Liberation Sans");
++    font_families.Append("Liberation Serif");
++    font_families.Append("DejaVu Sans Mono");
++  } else {
++    font_families.Append("Arial");
++    font_families.Append("Helvetica");
++    font_families.Append("Times");
++    font_families.Append("Courier");
++  }
++  fonts.Set("families", std::move(font_families));
++  fonts.Set("aliases", base::ListValue());
 +
 +  base::DictValue font_rendering;
-+  font_rendering.Set("engine", platform == "Windows" ? "directwrite"
-+                                                      : "coretext");
++  font_rendering.Set("engine", platform == "Windows"   ? "directwrite"
++                               : platform == "Linux" ? "freetype"
++                                                     : "coretext");
 +  font_rendering.Set("useAutohinter", platform == "Linux");
 +
 +  base::DictValue media_devices;
@@ -1355,55 +1827,170 @@
 +  presets.Append(MakePreset(
 +      "us-west-macos", "US West Coast (macOS)",
 +      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
 +      "America/Los_Angeles", "en-US", "en-US,en;q=0.9", "macOS", "14.5.0",
-+      "arm", "64", "137.0.0.0", "Apple Inc.",
++      "arm", "64", "149.0.7827.114", "Apple Inc.",
 +      "ANGLE (Apple, Apple M2, Metal)", "Apple M2", 8, 16, 0, 1512, 982, 1512,
 +      982, 2.0, "sf-pro-us-west", 0.01, "wifi", 30.0));
 +  presets.Append(MakePreset(
 +      "us-east-windows", "US East Coast (Windows)",
 +      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
 +      "America/New_York", "en-US", "en-US,en;q=0.9", "Windows", "15.0.0",
-+      "x86", "64", "137.0.0.0", "Intel Inc.",
++      "x86", "64", "149.0.7827.114", "Intel Inc.",
 +      "ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)",
-+      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 864, 1536, 911, 1.25,
++      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 864, 1536, 824, 1.25,
 +      "segoe-us-east", 0.02, "ethernet", 10.0));
 +  presets.Append(MakePreset(
 +      "sg-macos", "Singapore (macOS)",
 +      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
 +      "Asia/Singapore", "en-SG", "en-SG,en;q=0.9", "macOS", "14.5.0", "arm",
-+      "64", "137.0.0.0", "Apple Inc.",
++      "64", "149.0.7827.114", "Apple Inc.",
 +      "ANGLE (Apple, Apple M2, Metal)", "Apple M2", 8, 8, 0, 1440, 900, 1440,
 +      900, 2.0, "sf-pro-sg", 0.02, "wifi", 20.0));
 +  presets.Append(MakePreset(
 +      "uk-windows", "United Kingdom (Windows)",
 +      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
 +      "Europe/London", "en-GB", "en-GB,en;q=0.9", "Windows", "15.0.0", "x86",
-+      "64", "137.0.0.0", "ATI Technologies Inc.",
++      "64", "149.0.7827.114", "ATI Technologies Inc.",
 +      "ANGLE (AMD, AMD Radeon Graphics Direct3D11)", "AMD Radeon Graphics", 12,
-+      32, 0, 1728, 1117, 1728, 1170, 1.5, "segoe-uk", 0.02, "ethernet",
++      32, 0, 1728, 1117, 1728, 1077, 1.5, "segoe-uk", 0.02, "ethernet",
 +      10.0));
 +  presets.Append(MakePreset(
 +      "de-linux", "Germany (Linux)",
 +      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
 +      "Europe/Berlin", "de-DE", "de-DE,de;q=0.9,en;q=0.7", "Linux", "6.8.0",
-+      "x86", "64", "137.0.0.0", "Intel Inc.",
++      "x86", "64", "149.0.7827.114", "Intel Inc.",
 +      "ANGLE (Intel, Intel Iris Xe Graphics Vulkan 1.3)",
-+      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 960, 1536, 1007, 1.25,
++      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 960, 1536, 920, 1.25,
 +      "noto-de", 0.02, "wifi",
 +      15.0));
 +  presets.Append(MakePreset(
 +      "jp-macos", "Japan (macOS)",
 +      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-+      "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
 +      "Asia/Tokyo", "ja-JP", "ja-JP,ja;q=0.9,en-US;q=0.7", "macOS", "15.0.0",
-+      "arm", "64", "137.0.0.0", "Apple Inc.",
-+      "ANGLE (Apple, Apple M3, Metal)", "Apple M3", 10, 24, 0, 1512, 982,
++      "arm", "64", "149.0.7827.114", "Apple Inc.",
++      "ANGLE (Apple, Apple M3, Metal)", "Apple M3", 10, 16, 0, 1512, 982,
 +      1512, 982, 2.0, "sf-pro-jp", 0.01, "wifi", 25.0));
++  presets.Append(MakePreset(
++      "ca-windows", "Canada (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "America/Toronto", "en-CA", "en-CA,en;q=0.9,fr-CA;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "149.0.7827.114", "Intel Inc.",
++      "ANGLE (Intel, Intel UHD Graphics Direct3D11)",
++      "Intel UHD Graphics", 8, 16, 0, 1920, 1080, 1920, 1040, 1.0,
++      "segoe-ca", 0.02, "wifi", 20.0));
++  presets.Append(MakePreset(
++      "br-windows", "Brazil (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "America/Sao_Paulo", "pt-BR", "pt-BR,pt;q=0.9,en-US;q=0.7",
++      "Windows", "15.0.0", "x86", "64", "149.0.7827.114", "NVIDIA Corporation",
++      "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11)",
++      "NVIDIA GeForce RTX 3060", 12, 16, 0, 1920, 1080, 1920, 1040, 1.0,
++      "segoe-br", 0.02, "ethernet", 10.0));
++  presets.Append(MakePreset(
++      "mx-windows", "Mexico (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "America/Mexico_City", "es-MX", "es-MX,es;q=0.9,en-US;q=0.7",
++      "Windows", "15.0.0", "x86", "64", "149.0.7827.114",
++      "ATI Technologies Inc.",
++      "ANGLE (AMD, AMD Radeon Graphics Direct3D11)", "AMD Radeon Graphics", 8,
++      16, 0, 1366, 768, 1366, 728, 1.0, "segoe-mx", 0.02, "wifi", 15.0));
++  presets.Append(MakePreset(
++      "fr-macos", "France (macOS)",
++      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Europe/Paris", "fr-FR", "fr-FR,fr;q=0.9,en;q=0.7", "macOS", "15.0.0",
++      "arm", "64", "149.0.7827.114", "Apple Inc.",
++      "ANGLE (Apple, Apple M3, Metal)", "Apple M3", 10, 16, 0, 1470, 956,
++      1470, 956, 2.0, "sf-pro-fr", 0.01, "wifi", 25.0));
++  presets.Append(MakePreset(
++      "nl-windows", "Netherlands (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Europe/Amsterdam", "nl-NL", "nl-NL,nl;q=0.9,en;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "149.0.7827.114", "Intel Inc.",
++      "ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)",
++      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 864, 1536, 824, 1.25,
++      "segoe-nl", 0.02, "wifi", 20.0));
++  presets.Append(MakePreset(
++      "es-windows", "Spain (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Europe/Madrid", "es-ES", "es-ES,es;q=0.9,en;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "149.0.7827.114", "Intel Inc.",
++      "ANGLE (Intel, Intel UHD Graphics Direct3D11)",
++      "Intel UHD Graphics", 8, 8, 0, 1366, 768, 1366, 728, 1.0, "segoe-es",
++      0.02, "wifi", 15.0));
++  presets.Append(MakePreset(
++      "it-windows", "Italy (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Europe/Rome", "it-IT", "it-IT,it;q=0.9,en;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "149.0.7827.114", "NVIDIA Corporation",
++      "ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11)",
++      "NVIDIA GeForce GTX 1650", 8, 16, 0, 1920, 1080, 1920, 1040, 1.0,
++      "segoe-it", 0.02, "ethernet", 10.0));
++  presets.Append(MakePreset(
++      "ru-windows", "Russia (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Europe/Moscow", "ru-RU", "ru-RU,ru;q=0.9,en;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "149.0.7827.114",
++      "ATI Technologies Inc.",
++      "ANGLE (AMD, AMD Radeon Graphics Direct3D11)", "AMD Radeon Graphics", 8,
++      16, 0, 1920, 1080, 1920, 1040, 1.0, "segoe-ru", 0.02, "wifi", 15.0));
++  presets.Append(MakePreset(
++      "kr-windows", "South Korea (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Asia/Seoul", "ko-KR", "ko-KR,ko;q=0.9,en-US;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "149.0.7827.114", "NVIDIA Corporation",
++      "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Direct3D11)",
++      "NVIDIA GeForce RTX 4060", 16, 32, 0, 2560, 1440, 2560, 1390, 1.0,
++      "malgun-kr", 0.02, "ethernet", 10.0));
++  presets.Append(MakePreset(
++      "in-windows", "India (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Asia/Kolkata", "en-IN", "en-IN,en;q=0.9,hi;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "149.0.7827.114", "Intel Inc.",
++      "ANGLE (Intel, Intel UHD Graphics Direct3D11)",
++      "Intel UHD Graphics", 8, 8, 0, 1366, 768, 1366, 728, 1.0, "segoe-in",
++      0.02, "wifi", 15.0));
++  presets.Append(MakePreset(
++      "hk-macos", "Hong Kong (macOS)",
++      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Asia/Hong_Kong", "zh-HK", "zh-HK,zh-TW;q=0.9,en-US;q=0.7", "macOS",
++      "15.0.0", "arm", "64", "149.0.7827.114", "Apple Inc.",
++      "ANGLE (Apple, Apple M2, Metal)", "Apple M2", 8, 16, 0, 1512, 982,
++      1512, 982, 2.0, "sf-pro-hk", 0.01, "wifi", 25.0));
++  presets.Append(MakePreset(
++      "hk-windows", "Hong Kong (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Asia/Hong_Kong", "zh-HK", "zh-HK,zh-TW;q=0.9,en-US;q=0.7", "Windows",
++      "15.0.0", "x86", "64", "149.0.7827.114", "Intel Inc.",
++      "ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)",
++      "Intel Iris Xe Graphics", 8, 16, 0, 1920, 1080, 1920, 1040, 1.0,
++      "segoe-hk", 0.02, "wifi", 25.0));
++  presets.Append(MakePreset(
++      "au-windows", "Australia (Windows)",
++      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++      "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++      "Australia/Sydney", "en-AU", "en-AU,en;q=0.9", "Windows", "15.0.0",
++      "x86", "64", "149.0.7827.114", "Intel Inc.",
++      "ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)",
++      "Intel Iris Xe Graphics", 8, 16, 0, 1536, 864, 1536, 824, 1.25,
++      "segoe-au", 0.02, "wifi", 20.0));
 +  return presets;
 +}
 +
@@ -1478,6 +2065,29 @@
 +  return "Custom Persona";
 +}
 +
++std::string MakeImportNameSuffix() {
++  std::string suffix;
++  base::ReplaceChars(MakeIsoTimestamp(), "-:TZ", "", &suffix);
++  if (suffix.size() > 8) {
++    suffix.insert(8, "-");
++  }
++  return suffix;
++}
++
++bool PersonaNameExists(const base::ListValue* personas,
++                       std::string_view display_name) {
++  if (!personas || display_name.empty()) {
++    return false;
++  }
++  return std::any_of(personas->begin(), personas->end(),
++                     [display_name](const base::Value& value) {
++    if (!value.is_dict()) {
++      return false;
++    }
++    return GetPersonaDisplayName(value.GetDict()) == display_name;
++  });
++}
++
 +base::DictValue NormalizePersona(const base::DictValue& payload,
 +                                 const std::string& fallback_id) {
 +  base::DictValue persona = payload.Clone();
@@ -1508,7 +2118,10 @@
 +  if (!created_at || created_at->empty()) {
 +    persona.Set("createdAt", timestamp);
 +  }
-+  persona.Set("modifiedAt", timestamp);
++  const std::string* modified_at = persona.FindString("modifiedAt");
++  if (!modified_at || modified_at->empty()) {
++    persona.Set("modifiedAt", timestamp);
++  }
 +  if (!persona.FindString("lastUsedAt")) {
 +    persona.Set("lastUsedAt", "");
 +  }
@@ -1519,6 +2132,12 @@
 +
 +  if (!persona.FindString("userAgent")) {
 +    persona.Set("userAgent", "");
++  }
++  if (!persona.FindString("navigatorVendor")) {
++    persona.Set("navigatorVendor", "Google Inc.");
++  }
++  if (!persona.FindString("navigatorProductSub")) {
++    persona.Set("navigatorProductSub", "20030107");
 +  }
 +
 +  base::DictValue* region = persona.EnsureDict("region");
@@ -1556,6 +2175,125 @@
 +  }
 +  if (!ua_ch->FindBool("wow64").has_value()) {
 +    ua_ch->Set("wow64", false);
++  }
++  if (!ua_ch->FindList("brands") || !ua_ch->FindList("formFactors")) {
++    const base::DictValue defaults = MakeUaChDefaults();
++    if (!ua_ch->FindList("brands")) {
++      ua_ch->Set("brands", defaults.FindList("brands")->Clone());
++    }
++    if (!ua_ch->FindList("formFactors")) {
++      ua_ch->Set("formFactors", defaults.FindList("formFactors")->Clone());
++    }
++  }
++
++  base::DictValue* gpu = persona.EnsureDict("gpu");
++  if (!gpu->FindString("vendor")) {
++    gpu->Set("vendor", platform == "macOS" ? "Apple Inc." : "Intel Inc.");
++  }
++  if (!gpu->FindString("renderer")) {
++    gpu->Set("renderer", platform == "macOS"
++                             ? "ANGLE (Apple, Apple M2, Metal)"
++                             : "ANGLE (Intel, Intel Iris Xe Graphics Direct3D11)");
++  }
++  if (!gpu->FindString("webgpuAdapter")) {
++    gpu->Set("webgpuAdapter",
++             platform == "macOS" ? "Apple M2" : "Intel Iris Xe Graphics");
++  }
++
++  base::DictValue* hardware = persona.EnsureDict("hardware");
++  if (!hardware->FindInt("hardwareConcurrency")) {
++    hardware->Set("hardwareConcurrency", 8);
++  }
++  if (!hardware->FindInt("deviceMemory")) {
++    hardware->Set("deviceMemory", 16);
++  }
++  if (!hardware->FindInt("maxTouchPoints")) {
++    hardware->Set("maxTouchPoints", 0);
++  }
++
++  base::DictValue* screen = persona.EnsureDict("screen");
++  if (!screen->FindInt("width")) {
++    screen->Set("width", platform == "macOS" ? 1512 : 1920);
++  }
++  if (!screen->FindInt("height")) {
++    screen->Set("height", platform == "macOS" ? 982 : 1080);
++  }
++  const int screen_width = screen->FindInt("width").value_or(1512);
++  const int screen_height = screen->FindInt("height").value_or(982);
++  if (!screen->FindInt("availLeft")) {
++    screen->Set("availLeft", 0);
++  }
++  if (!screen->FindInt("availTop")) {
++    screen->Set("availTop", 0);
++  }
++  if (!screen->FindInt("availWidth")) {
++    screen->Set("availWidth", screen_width);
++  }
++  if (!screen->FindInt("availHeight")) {
++    screen->Set("availHeight", screen_height);
++  }
++  if (!screen->FindInt("outerWidth")) {
++    screen->Set("outerWidth", screen_width);
++  }
++  if (!screen->FindInt("outerHeight")) {
++    screen->Set("outerHeight", screen_height);
++  }
++  if (!screen->FindDouble("deviceScaleFactor")) {
++    screen->Set("deviceScaleFactor", platform == "macOS" ? 2.0 : 1.0);
++  }
++
++  base::DictValue* fonts = persona.EnsureDict("fonts");
++  if (!fonts->FindString("id")) {
++    fonts->Set("id", platform == "Windows"   ? "segoe-default"
++                     : platform == "Linux" ? "noto-default"
++                                           : "sf-pro-default");
++  }
++  if (!fonts->FindList("families")) {
++    base::ListValue families;
++    if (platform == "Windows") {
++      families.Append("Arial");
++      families.Append("Segoe UI");
++      families.Append("Times New Roman");
++      families.Append("Courier New");
++    } else if (platform == "Linux") {
++      families.Append("Noto Sans");
++      families.Append("Liberation Sans");
++      families.Append("Liberation Serif");
++      families.Append("DejaVu Sans Mono");
++    } else {
++      families.Append("Arial");
++      families.Append("Helvetica");
++      families.Append("Times");
++      families.Append("Courier");
++    }
++    fonts->Set("families", std::move(families));
++  }
++  if (!fonts->FindList("aliases")) {
++    fonts->Set("aliases", base::ListValue());
++  }
++
++  base::DictValue* font_rendering = persona.EnsureDict("fontRendering");
++  if (!font_rendering->FindString("engine")) {
++    font_rendering->Set("engine", platform == "Windows"   ? "directwrite"
++                                  : platform == "Linux" ? "freetype"
++                                                        : "coretext");
++  }
++
++  base::DictValue* media_devices = persona.EnsureDict("mediaDevices");
++  if (!media_devices->FindDouble("audioBaseLatency")) {
++    media_devices->Set("audioBaseLatency", platform == "macOS" ? 0.01 : 0.02);
++  }
++  if (!media_devices->FindDouble("audioOutputLatency")) {
++    media_devices->Set("audioOutputLatency",
++                       platform == "macOS" ? 0.02 : 0.04);
++  }
++
++  base::DictValue* network = persona.EnsureDict("network");
++  if (!network->FindString("type")) {
++    network->Set("type", "wifi");
++  }
++  if (!network->FindDouble("downlinkMax")) {
++    network->Set("downlinkMax", 25.0);
 +  }
 +
 +  base::DictValue* advanced = persona.EnsureDict("advanced");
@@ -1733,7 +2471,13 @@
 +      base::DictValue normalized =
 +          NormalizePersona(value.GetDict(), MakePersonaId());
 +      const std::string* id = normalized.FindString("id");
-+      has_default |= id && *id == kDefaultPersonaId;
++      if (id && *id == kDefaultPersonaId) {
++        if (!has_default) {
++          personas.Append(MakeDefaultPersona());
++          has_default = true;
++        }
++        continue;
++      }
 +      personas.Append(std::move(normalized));
 +    }
 +  }
@@ -1748,22 +2492,15 @@
 +  const std::string timestamp = MakeIsoTimestamp();
 +  const std::string resolved_display_name =
 +      display_name.empty() ? "New Persona" : std::string(display_name);
-+  return base::DictValue()
-+      .Set("id", MakePersonaId())
-+      .Set("name", resolved_display_name)
-+      .Set("displayName", resolved_display_name)
-+      .Set("icon", "default")
-+      .Set("createdAt", timestamp)
-+      .Set("modifiedAt", timestamp)
-+      .Set("lastUsedAt", "")
-+      .Set("enabled", true)
-+      .Set("userAgent", "")
-+      .Set("platform", "macOS")
-+      .Set("navigatorVendor", "Google Inc.")
-+      .Set("navigatorProductSub", "20030107")
-+      .Set("region", MakeRegionDefaults())
-+      .Set("uaCh", MakeUaChDefaults())
-+      .Set("advanced", MakeAdvancedDefaults());
++  base::ListValue presets = MakePresetList();
++  base::DictValue persona = presets.front().GetDict().Clone();
++  persona.Set("id", MakePersonaId());
++  persona.Set("name", resolved_display_name);
++  persona.Set("displayName", resolved_display_name);
++  persona.Set("createdAt", timestamp);
++  persona.Set("modifiedAt", timestamp);
++  persona.Set("lastUsedAt", "");
++  return persona;
 +}
 +
 +const std::string* FindNestedString(const base::DictValue& persona,
@@ -1865,41 +2602,129 @@
 +base::DictValue PersonaService::CreatePersonaProfile(
 +    const std::string& display_name) {
 +  base::DictValue state = ReadState();
-+  base::DictValue persona = NormalizePersona(
-+      MakeNewProfile(display_name), MakePersonaId());
-+  persona.Set("lastUsedAt", MakeIsoTimestamp());
++  base::DictValue persona =
++      NormalizePersona(MakeNewProfile(display_name), MakePersonaId());
 +  const std::string* persona_id = persona.FindString("id");
 +  state.Set("personas", UpsertPersona(state.FindList("personas"), persona));
-+  if (persona_id) {
-+    state.Set("activePersonaId", *persona_id);
-+    state.Set("lastUsedPersonaId", *persona_id);
-+    SetLastUsedPersonaId(*persona_id);
-+  }
 +  WriteState(state.Clone());
-+  return MakeResponse(true, std::move(state));
++  base::DictValue response = MakeResponse(true, std::move(state));
++  if (persona_id) {
++    response.Set("personaId", *persona_id);
++  }
++  return response;
 +}
 +
 +base::DictValue PersonaService::SavePersona(const base::DictValue& payload) {
 +  base::DictValue state = ReadState();
-+  base::DictValue persona =
-+      NormalizePersona(ValidatePersona(payload), GetActivePersonaId(state));
-+  if (!PersonaHasRequiredFields(persona)) {
++  const std::string* payload_id = payload.FindString("id");
++  if (!payload_id || payload_id->empty()) {
 +    base::DictValue errors;
-+    errors.Set("persona", "Persona is missing required fields");
++    errors.Set("id", "required");
 +    return MakeResponse(false, std::move(state), std::move(errors));
 +  }
-+  const std::string* persona_id = persona.FindString("id");
-+  if (persona_id && !persona_id->empty()) {
-+    persona.Set("lastUsedAt", MakeIsoTimestamp());
++  if (*payload_id == kDefaultPersonaId) {
++    base::DictValue errors;
++    errors.Set("id", "reserved");
++    return MakeResponse(false, std::move(state), std::move(errors));
 +  }
++  const base::DictValue* existing =
++      FindPersonaInList(state.FindList("personas"), *payload_id);
++  if (!existing) {
++    base::DictValue errors;
++    errors.Set("id", "unknown_persona");
++    return MakeResponse(false, std::move(state), std::move(errors));
++  }
++
++  base::DictValue validated = ValidatePersona(payload);
++  base::DictValue errors = GetPersonaFieldErrors(validated);
++  if (!PersonaHasRequiredFields(validated) || !errors.empty()) {
++    if (errors.empty()) {
++      errors.Set("persona", "missing_required_fields");
++    }
++    return MakeResponse(false, std::move(state), std::move(errors));
++  }
++
++  base::DictValue persona = NormalizePersona(validated, *payload_id);
++  const std::string* display_name = persona.FindString("displayName");
++  persona.Set("name", display_name ? *display_name : "Custom Persona");
++  if (const std::string* created_at = existing->FindString("createdAt")) {
++    persona.Set("createdAt", *created_at);
++  }
++  if (const std::string* last_used_at = existing->FindString("lastUsedAt")) {
++    persona.Set("lastUsedAt", *last_used_at);
++  }
++  persona.Set("modifiedAt", MakeIsoTimestamp());
++  persona.Set("enabled", true);
 +  state.Set("personas", UpsertPersona(state.FindList("personas"), persona));
-+  const std::string active_persona_id =
-+      persona_id ? *persona_id : kDefaultPersonaId;
-+  state.Set("activePersonaId", active_persona_id);
-+  state.Set("lastUsedPersonaId", active_persona_id);
-+  SetLastUsedPersonaId(active_persona_id);
 +  WriteState(state.Clone());
 +  return MakeResponse(true, std::move(state));
++}
++
++base::DictValue PersonaService::ImportPersonas(const base::DictValue& bundle) {
++  base::DictValue state = ReadState();
++  const std::string* schema = bundle.FindString("schema");
++  const base::ListValue* payload = bundle.FindList("personas");
++  if (!schema || *schema != kPersonaImportSchema || !payload) {
++    base::DictValue errors;
++    errors.Set(!schema || *schema != kPersonaImportSchema ? "schema" : "personas",
++               !schema || *schema != kPersonaImportSchema ? "unsupported"
++                                                          : "invalid_type");
++    return MakeResponse(false, std::move(state), std::move(errors));
++  }
++  base::ListValue personas = state.FindList("personas")
++                                ? state.FindList("personas")->Clone()
++                                : base::ListValue();
++  int imported_count = 0;
++  int skipped_count = 0;
++  const std::string name_suffix = MakeImportNameSuffix();
++  base::DictValue field_errors;
++
++  for (size_t index = 0; index < payload->size(); ++index) {
++    const auto& value = (*payload)[index];
++    if (!value.is_dict()) {
++      field_errors.Set(base::NumberToString(index), "invalid_type");
++      ++skipped_count;
++      continue;
++    }
++
++    base::DictValue validated = ValidatePersona(value.GetDict());
++    validated.Set("id", MakePersonaId());
++    base::DictValue errors = GetPersonaFieldErrors(validated);
++    if (!PersonaHasRequiredFields(validated) || !errors.empty()) {
++      field_errors.Set(base::NumberToString(index), std::move(errors));
++      ++skipped_count;
++      continue;
++    }
++
++    base::DictValue persona =
++        NormalizePersona(validated, *validated.FindString("id"));
++    persona.Set("enabled", true);
++    persona.Set("modifiedAt", MakeIsoTimestamp());
++
++    std::string display_name = GetPersonaDisplayName(persona);
++    int duplicate_index = 2;
++    if (PersonaNameExists(&personas, display_name)) {
++      display_name += " " + name_suffix;
++      const std::string base_name = display_name;
++      while (PersonaNameExists(&personas, display_name)) {
++        display_name = base_name + " " + base::NumberToString(duplicate_index++);
++      }
++      persona.Set("name", display_name);
++      persona.Set("displayName", display_name);
++    }
++    personas.Append(std::move(persona));
++    ++imported_count;
++  }
++
++  if (imported_count > 0) {
++    state.Set("personas", std::move(personas));
++    WriteState(state.Clone());
++  }
++  base::DictValue response = MakeResponse(imported_count > 0, std::move(state),
++                                          std::move(field_errors));
++  response.Set("importedCount", imported_count);
++  response.Set("skippedCount", skipped_count);
++  return response;
 +}
 +
 +base::DictValue PersonaService::ClonePresetIntoProfile(const std::string& preset_id) {
@@ -1920,15 +2745,13 @@
 +    persona.Set("displayName", *preset_name + " Copy");
 +  }
 +  const std::string* persona_id = persona.FindString("id");
-+  persona.Set("lastUsedAt", MakeIsoTimestamp());
 +  state.Set("personas", UpsertPersona(state.FindList("personas"), persona));
-+  if (persona_id) {
-+    state.Set("activePersonaId", *persona_id);
-+    state.Set("lastUsedPersonaId", *persona_id);
-+    SetLastUsedPersonaId(*persona_id);
-+  }
 +  WriteState(state.Clone());
-+  return MakeResponse(true, std::move(state));
++  base::DictValue response = MakeResponse(true, std::move(state));
++  if (persona_id) {
++    response.Set("personaId", *persona_id);
++  }
++  return response;
 +}
 +
 +base::DictValue PersonaService::SetActivePersona(const std::string& persona_id) {
@@ -1960,6 +2783,7 @@
 +  }
 +
 +  base::ListValue personas;
++  bool found = false;
 +  const base::ListValue* existing = state.FindList("personas");
 +  if (existing) {
 +    for (const auto& value : *existing) {
@@ -1969,10 +2793,18 @@
 +
 +      const base::DictValue& persona = value.GetDict();
 +      const std::string* id = persona.FindString("id");
-+      if (!id || *id != persona_id) {
++      if (id && *id == persona_id) {
++        found = true;
++      } else {
 +        personas.Append(persona.Clone());
 +      }
 +    }
++  }
++
++  if (!found) {
++    base::DictValue errors;
++    errors.Set("personaId", "unknown_persona");
++    return MakeResponse(false, std::move(state), std::move(errors));
 +  }
 +
 +  if (personas.empty()) {
@@ -1990,6 +2822,7 @@
 +  state.Set("activePersonaId", active_id);
 +  if (GetLastUsedPersonaId() == persona_id) {
 +    SetLastUsedPersonaId(active_id);
++    state.Set("lastUsedPersonaId", active_id);
 +  }
 +  WriteState(state.Clone());
 +  return MakeResponse(true, std::move(state));
@@ -2106,7 +2939,7 @@
 +  }
 +  if (const std::string* value = persona->FindString("platform")) {
 +    snapshot.os = *value;
-+    snapshot.platform = *value;
++    snapshot.platform = GetNavigatorPlatformForOs(*value);
 +  }
 +  snapshot.device = "Desktop";
 +  snapshot.passthrough = false;
@@ -2369,15 +3202,16 @@
 +    state.Set("personas",
 +              NormalizePersonaList(state.FindList("personas"), true));
 +  }
-+  if (!state.FindList("presets")) {
-+    state.Set("presets", MakePresetList());
-+  } else {
-+    state.Set("presets", NormalizePersonaList(state.FindList("presets"), false));
-+  }
-+  if (!state.FindString("activePersonaId")) {
++  state.Set("presets", MakePresetList());
++  const base::ListValue* personas = state.FindList("personas");
++  const std::string active_id = GetActivePersonaId(state);
++  if (!FindPersonaInList(personas, active_id)) {
 +    state.Set("activePersonaId", kDefaultPersonaId);
 +  }
-+  state.Set("lastUsedPersonaId", GetLastUsedPersonaId());
++  const std::string last_used_id = GetLastUsedPersonaId();
++  state.Set("lastUsedPersonaId",
++            FindPersonaInList(personas, last_used_id) ? last_used_id
++                                                     : kDefaultPersonaId);
 +  state.Set("launchSelectionMode", GetLaunchSelectionMode());
 +  return state;
 +}
@@ -2698,11 +3532,503 @@
 +}  // namespace helium_persona
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -6655,6 +6655,7 @@ test("unit_tests") {
+@@ -6655,6 +6655,8 @@ test("unit_tests") {
      "../browser/download/download_target_determiner_unittest.cc",
      "../browser/download/download_ui_controller_unittest.cc",
      "../browser/download/offline_item_utils_unittest.cc",
 +    "../browser/helium_persona/persona_runtime_override_unittest.cc",
++    "../browser/helium_persona/persona_service_unittest.cc",
      "../browser/enterprise/connectors/interstitials/enterprise_page_unittest.cc",
      "../browser/enterprise/encryption/cache_encryption_provider_impl_unittest.cc",
      "../browser/enterprise/identifiers/profile_id_service_factory_unittest.cc",
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -0,0 +1,470 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/helium_persona/persona_service.h"
++
++#include <array>
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "base/values.h"
++#include "components/sync_preferences/testing_pref_service_syncable.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace helium_persona {
++
++namespace {
++
++constexpr char kPersonaStatePref[] = "helium.persona.state";
++constexpr char kPersonaLastUsedIdPref[] = "helium.persona.last_used_id";
++constexpr char kDefaultPersonaId[] = "default";
++
++const base::DictValue* FindPersona(const base::ListValue* personas,
++                                   const std::string& id) {
++  if (!personas) {
++    return nullptr;
++  }
++  for (const auto& value : *personas) {
++    if (!value.is_dict()) {
++      continue;
++    }
++    const base::DictValue& persona = value.GetDict();
++    const std::string* candidate_id = persona.FindString("id");
++    if (candidate_id && *candidate_id == id) {
++      return &persona;
++    }
++  }
++  return nullptr;
++}
++
++const base::DictValue* FindFirstCustomPersona(
++    const base::ListValue* personas) {
++  if (!personas) {
++    return nullptr;
++  }
++  for (const auto& value : *personas) {
++    if (!value.is_dict()) {
++      continue;
++    }
++    const base::DictValue& persona = value.GetDict();
++    const std::string* id = persona.FindString("id");
++    if (id && *id != kDefaultPersonaId) {
++      return &persona;
++    }
++  }
++  return nullptr;
++}
++
++class PersonaServiceTest : public testing::Test {
++ protected:
++  void SetUp() override {
++    PersonaService::RegisterProfilePrefs(prefs_.registry());
++    service_ = std::make_unique<PersonaService>(&prefs_);
++  }
++
++  sync_preferences::TestingPrefServiceSyncable prefs_;
++  std::unique_ptr<PersonaService> service_;
++};
++
++TEST_F(PersonaServiceTest, CreateDoesNotActivateAndHasCompleteDefaults) {
++  base::DictValue response = service_->CreatePersonaProfile("Work");
++
++  EXPECT_TRUE(response.FindBool("ok").value_or(false));
++  const base::DictValue* state = response.FindDict("state");
++  ASSERT_TRUE(state);
++  EXPECT_EQ(kDefaultPersonaId, *state->FindString("activePersonaId"));
++  const std::string* created_id = response.FindString("personaId");
++  ASSERT_TRUE(created_id);
++  const base::DictValue* persona =
++      FindPersona(state->FindList("personas"), *created_id);
++  ASSERT_TRUE(persona);
++  EXPECT_TRUE(persona->FindDict("gpu"));
++  EXPECT_TRUE(persona->FindDict("hardware"));
++  EXPECT_TRUE(persona->FindDict("screen"));
++  EXPECT_TRUE(persona->FindDict("fonts"));
++  EXPECT_TRUE(persona->FindDict("mediaDevices"));
++  EXPECT_TRUE(persona->FindDict("network"));
++}
++
++TEST_F(PersonaServiceTest, ResolvesPersonaBrandFullVersionsByMajorVersion) {
++  EXPECT_EQ("149.0.7827.114", blink::ResolveHeliumPersonaBrandFullVersion(
++                                    "149", "149.0.7827.114"));
++  EXPECT_EQ("24.0.0.0", blink::ResolveHeliumPersonaBrandFullVersion(
++                            "24", "149.0.7827.114"));
++  EXPECT_EQ("24.1.2.3", blink::ResolveHeliumPersonaBrandFullVersion(
++                            "24.1.2.3", "149.0.7827.114"));
++}
++
++TEST_F(PersonaServiceTest, SaveRejectsEmptyAndDefaultPayloads) {
++  base::DictValue empty_response = service_->SavePersona(base::DictValue());
++  EXPECT_FALSE(empty_response.FindBool("ok").value_or(true));
++
++  base::DictValue default_payload;
++  default_payload.Set("id", kDefaultPersonaId);
++  default_payload.Set("name", "Overwritten");
++  default_payload.Set("displayName", "Overwritten");
++  default_payload.Set("enabled", true);
++  default_payload.Set("region",
++                      base::DictValue()
++                          .Set("timezone", "UTC")
++                          .Set("locale", "en-US")
++                          .Set("acceptLanguage", "en-US"));
++  default_payload.Set("uaCh", base::DictValue()
++                                   .Set("platform", "macOS")
++                                   .Set("architecture", "arm")
++                                   .Set("bitness", "64"));
++  default_payload.Set("advanced", base::DictValue());
++  base::DictValue default_response = service_->SavePersona(default_payload);
++  EXPECT_FALSE(default_response.FindBool("ok").value_or(true));
++
++  const base::DictValue state = service_->GetPersonaState();
++  const base::DictValue* system_persona =
++      FindPersona(state.FindList("personas"), kDefaultPersonaId);
++  ASSERT_TRUE(system_persona);
++  EXPECT_FALSE(system_persona->FindBool("enabled").value_or(true));
++  EXPECT_NE("Overwritten", *system_persona->FindString("displayName"));
++}
++
++TEST_F(PersonaServiceTest, SaveDoesNotActivateEditedPersona) {
++  base::DictValue create_response = service_->CreatePersonaProfile("Work");
++  const base::DictValue* created_state = create_response.FindDict("state");
++  ASSERT_TRUE(created_state);
++  const base::DictValue* created_persona =
++      FindFirstCustomPersona(created_state->FindList("personas"));
++  ASSERT_TRUE(created_persona);
++
++  base::DictValue state = created_state->Clone();
++  state.Set("activePersonaId", kDefaultPersonaId);
++  state.Set("lastUsedPersonaId", kDefaultPersonaId);
++  prefs_.SetDict(kPersonaStatePref, state.Clone());
++  prefs_.SetString(kPersonaLastUsedIdPref, kDefaultPersonaId);
++
++  base::DictValue payload = created_persona->Clone();
++  payload.Set("displayName", "Updated Work");
++  base::DictValue save_response = service_->SavePersona(payload);
++
++  EXPECT_TRUE(save_response.FindBool("ok").value_or(false));
++  const base::DictValue* saved_state = save_response.FindDict("state");
++  ASSERT_TRUE(saved_state);
++  EXPECT_EQ(kDefaultPersonaId, *saved_state->FindString("activePersonaId"));
++  const std::string* id = payload.FindString("id");
++  ASSERT_TRUE(id);
++  const base::DictValue* saved_persona =
++      FindPersona(saved_state->FindList("personas"), *id);
++  ASSERT_TRUE(saved_persona);
++  EXPECT_EQ("Updated Work", *saved_persona->FindString("name"));
++}
++
++TEST_F(PersonaServiceTest, SaveRejectsInvalidNumericTypes) {
++  base::DictValue create_response = service_->CreatePersonaProfile("Work");
++  const base::DictValue* created_state = create_response.FindDict("state");
++  ASSERT_TRUE(created_state);
++  const base::DictValue* created_persona =
++      FindFirstCustomPersona(created_state->FindList("personas"));
++  ASSERT_TRUE(created_persona);
++
++  base::DictValue payload = created_persona->Clone();
++  payload.EnsureDict("screen")->Set("width", "not-a-number");
++  base::DictValue response = service_->SavePersona(payload);
++
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  const base::DictValue* errors = response.FindDict("fieldErrors");
++  ASSERT_TRUE(errors);
++  EXPECT_TRUE(errors->FindString("screen.width"));
++}
++
++TEST_F(PersonaServiceTest, SaveRejectsUnsupportedMemoryAndInvalidTimezone) {
++  base::DictValue create_response = service_->CreatePersonaProfile("Work");
++  const base::DictValue* created_state = create_response.FindDict("state");
++  ASSERT_TRUE(created_state);
++  const base::DictValue* created_persona =
++      FindFirstCustomPersona(created_state->FindList("personas"));
++  ASSERT_TRUE(created_persona);
++
++  base::DictValue payload = created_persona->Clone();
++  payload.EnsureDict("hardware")->Set("deviceMemory", 24);
++  base::DictValue response = service_->SavePersona(payload);
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  ASSERT_TRUE(response.FindDict("fieldErrors"));
++  EXPECT_TRUE(response.FindDict("fieldErrors")
++                  ->FindString("hardware.deviceMemory"));
++
++  payload = created_persona->Clone();
++  payload.EnsureDict("screen")->Set("width", 1920.0);
++  response = service_->SavePersona(payload);
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  ASSERT_TRUE(response.FindDict("fieldErrors"));
++  EXPECT_TRUE(response.FindDict("fieldErrors")->FindString("screen.width"));
++
++  payload = created_persona->Clone();
++  payload.EnsureDict("region")->Set("timezone", "Not/A_Timezone");
++  response = service_->SavePersona(payload);
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  ASSERT_TRUE(response.FindDict("fieldErrors"));
++  EXPECT_TRUE(
++      response.FindDict("fieldErrors")->FindString("region.timezone"));
++}
++
++TEST_F(PersonaServiceTest, ReadStateRefreshesPresetCatalog) {
++  base::DictValue state = service_->GetPersonaState();
++  base::ListValue stale_presets;
++  stale_presets.Append(base::DictValue()
++                           .Set("id", "stale-preset")
++                           .Set("name", "Stale")
++                           .Set("enabled", true));
++  state.Set("presets", std::move(stale_presets));
++  prefs_.SetDict(kPersonaStatePref, std::move(state));
++
++  const base::DictValue refreshed = service_->GetPersonaState();
++  EXPECT_TRUE(FindPersona(refreshed.FindList("presets"), "hk-windows"));
++  EXPECT_FALSE(FindPersona(refreshed.FindList("presets"), "stale-preset"));
++}
++
++TEST_F(PersonaServiceTest, ImportRejectsUnknownSchema) {
++  base::DictValue bundle;
++  bundle.Set("schema", "helium.persona/v2");
++  bundle.Set("personas", base::ListValue());
++
++  base::DictValue response = service_->ImportPersonas(bundle);
++
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  const base::DictValue* errors = response.FindDict("fieldErrors");
++  ASSERT_TRUE(errors);
++  EXPECT_EQ("unsupported", *errors->FindString("schema"));
++}
++
++TEST_F(PersonaServiceTest, ImportRejectsMalformedNestedFields) {
++  base::DictValue state = service_->GetPersonaState();
++  const base::ListValue* presets = state.FindList("presets");
++  ASSERT_TRUE(presets);
++  ASSERT_FALSE(presets->empty());
++
++  base::DictValue invalid_group = presets->front().GetDict().Clone();
++  invalid_group.Set("gpu", "not-a-dictionary");
++  base::DictValue invalid_list = presets->front().GetDict().Clone();
++  base::ListValue invalid_families;
++  invalid_families.Append(42);
++  invalid_list.EnsureDict("fonts")->Set("families",
++                                        std::move(invalid_families));
++  base::DictValue invalid_timezone = presets->front().GetDict().Clone();
++  invalid_timezone.EnsureDict("region")->Set("timezone", "Not/A_Timezone");
++  base::DictValue invalid_memory = presets->front().GetDict().Clone();
++  invalid_memory.EnsureDict("hardware")->Set("deviceMemory", 24);
++  base::DictValue invalid_integer = presets->front().GetDict().Clone();
++  invalid_integer.EnsureDict("screen")->Set("width", 1920.0);
++
++  base::ListValue personas;
++  personas.Append(std::move(invalid_group));
++  personas.Append(std::move(invalid_list));
++  personas.Append(std::move(invalid_timezone));
++  personas.Append(std::move(invalid_memory));
++  personas.Append(std::move(invalid_integer));
++  base::DictValue bundle;
++  bundle.Set("schema", "helium.persona/v1");
++  bundle.Set("personas", std::move(personas));
++
++  base::DictValue response = service_->ImportPersonas(bundle);
++
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  EXPECT_EQ(0, response.FindInt("importedCount").value_or(-1));
++  EXPECT_EQ(5, response.FindInt("skippedCount").value_or(-1));
++  const base::DictValue* errors = response.FindDict("fieldErrors");
++  ASSERT_TRUE(errors);
++  EXPECT_TRUE(errors->FindDict("0"));
++  EXPECT_TRUE(errors->FindDict("1"));
++  EXPECT_TRUE(errors->FindDict("2"));
++  EXPECT_TRUE(errors->FindDict("3"));
++  EXPECT_TRUE(errors->FindDict("4"));
++}
++
++TEST_F(PersonaServiceTest, ImportNormalizesMissingNavigatorDefaults) {
++  base::DictValue state = service_->GetPersonaState();
++  const base::ListValue* presets = state.FindList("presets");
++  ASSERT_TRUE(presets);
++  ASSERT_FALSE(presets->empty());
++  base::DictValue payload = presets->front().GetDict().Clone();
++  payload.Remove("navigatorVendor");
++  payload.Remove("navigatorProductSub");
++
++  base::ListValue personas;
++  personas.Append(std::move(payload));
++  base::DictValue bundle;
++  bundle.Set("schema", "helium.persona/v1");
++  bundle.Set("personas", std::move(personas));
++
++  base::DictValue response = service_->ImportPersonas(bundle);
++
++  ASSERT_TRUE(response.FindBool("ok").value_or(false));
++  const base::DictValue* response_state = response.FindDict("state");
++  ASSERT_TRUE(response_state);
++  const base::DictValue* imported =
++      FindFirstCustomPersona(response_state->FindList("personas"));
++  ASSERT_TRUE(imported);
++  EXPECT_EQ("Google Inc.", *imported->FindString("navigatorVendor"));
++  EXPECT_EQ("20030107", *imported->FindString("navigatorProductSub"));
++}
++
++TEST_F(PersonaServiceTest, PresetsMatchRuntimeVersionAndPlatformInvariants) {
++  const base::DictValue state = service_->GetPersonaState();
++  const base::ListValue* presets = state.FindList("presets");
++  ASSERT_TRUE(presets);
++  ASSERT_EQ(19u, presets->size());
++
++  for (const auto& value : *presets) {
++    ASSERT_TRUE(value.is_dict());
++    const base::DictValue& preset = value.GetDict();
++    const std::string* id = preset.FindString("id");
++    ASSERT_TRUE(id);
++    SCOPED_TRACE(*id);
++    const std::string* platform = preset.FindString("platform");
++    const base::DictValue* ua_ch = preset.FindDict("uaCh");
++    ASSERT_TRUE(platform);
++    ASSERT_TRUE(ua_ch);
++    const base::DictValue* hardware = preset.FindDict("hardware");
++    const base::DictValue* screen = preset.FindDict("screen");
++    ASSERT_TRUE(hardware);
++    ASSERT_TRUE(screen);
++    const std::optional<int> device_memory =
++        hardware->FindInt("deviceMemory");
++    const std::optional<int> width = screen->FindInt("width");
++    const std::optional<int> height = screen->FindInt("height");
++    const std::optional<int> avail_width = screen->FindInt("availWidth");
++    const std::optional<int> avail_height = screen->FindInt("availHeight");
++    const std::optional<int> outer_width = screen->FindInt("outerWidth");
++    const std::optional<int> outer_height = screen->FindInt("outerHeight");
++    ASSERT_TRUE(device_memory);
++    ASSERT_TRUE(width);
++    ASSERT_TRUE(height);
++    ASSERT_TRUE(avail_width);
++    ASSERT_TRUE(avail_height);
++    ASSERT_TRUE(outer_width);
++    ASSERT_TRUE(outer_height);
++    EXPECT_TRUE(*device_memory == 1 || *device_memory == 2 ||
++                *device_memory == 4 || *device_memory == 8 ||
++                *device_memory == 16 || *device_memory == 32);
++    EXPECT_LE(*avail_width, *width);
++    EXPECT_LE(*avail_height, *height);
++    EXPECT_LE(*outer_width, *width);
++    EXPECT_LE(*outer_height, *height);
++    EXPECT_EQ(*outer_width, *avail_width);
++    EXPECT_EQ(*outer_height, *avail_height);
++    const std::string* full_version = ua_ch->FindString("fullVersion");
++    ASSERT_TRUE(full_version);
++    EXPECT_TRUE(full_version->starts_with("149."));
++    if (*platform == "Windows") {
++      EXPECT_FALSE(ua_ch->FindBool("wow64").value_or(true));
++    }
++    if (*platform == "Linux") {
++      const base::DictValue* font_rendering = preset.FindDict("fontRendering");
++      ASSERT_TRUE(font_rendering);
++      EXPECT_EQ("freetype", *font_rendering->FindString("engine"));
++    }
++  }
++}
++
++TEST_F(PersonaServiceTest, ReadStateCanonicalizesPersistedDefaultPersona) {
++  base::DictValue state = service_->GetPersonaState();
++  base::ListValue personas;
++  personas.Append(base::DictValue()
++                      .Set("id", kDefaultPersonaId)
++                      .Set("name", "Legacy override")
++                      .Set("displayName", "Legacy override")
++                      .Set("enabled", true));
++  personas.Append(base::DictValue()
++                      .Set("id", kDefaultPersonaId)
++                      .Set("name", "Duplicate override")
++                      .Set("displayName", "Duplicate override")
++                      .Set("enabled", true));
++  state.Set("personas", std::move(personas));
++  state.Set("activePersonaId", kDefaultPersonaId);
++  prefs_.SetDict(kPersonaStatePref, std::move(state));
++
++  const base::DictValue normalized = service_->GetPersonaState();
++  const base::ListValue* normalized_personas =
++      normalized.FindList("personas");
++  ASSERT_TRUE(normalized_personas);
++  ASSERT_EQ(1u, normalized_personas->size());
++  const base::DictValue* system_persona =
++      FindPersona(normalized_personas, kDefaultPersonaId);
++  ASSERT_TRUE(system_persona);
++  EXPECT_FALSE(system_persona->FindBool("enabled").value_or(true));
++  EXPECT_EQ("No Persona (System Real)",
++            *system_persona->FindString("displayName"));
++  EXPECT_FALSE(service_->GetActiveSnapshot().enabled);
++}
++
++TEST_F(PersonaServiceTest, SnapshotUsesRealisticNavigatorPlatformValues) {
++  base::DictValue create_response = service_->CreatePersonaProfile("Platform");
++  const base::DictValue* created_state = create_response.FindDict("state");
++  ASSERT_TRUE(created_state);
++  const base::DictValue* created_persona =
++      FindFirstCustomPersona(created_state->FindList("personas"));
++  ASSERT_TRUE(created_persona);
++
++  struct PlatformExpectation {
++    const char* os;
++    const char* navigator_platform;
++  };
++  constexpr std::array<PlatformExpectation, 5> kExpectations = {{
++      {"macOS", "MacIntel"},
++      {"Windows", "Win32"},
++      {"Linux", "Linux x86_64"},
++      {"Chrome OS", "Linux x86_64"},
++      {"Android", "Linux armv81"},
++  }};
++
++  for (const auto& expectation : kExpectations) {
++    base::DictValue payload = created_persona->Clone();
++    payload.Set("platform", expectation.os);
++    payload.EnsureDict("uaCh")->Set("platform", expectation.os);
++    base::DictValue save_response = service_->SavePersona(payload);
++    ASSERT_TRUE(save_response.FindBool("ok").value_or(false));
++    const std::string* id = payload.FindString("id");
++    ASSERT_TRUE(id);
++    ASSERT_TRUE(
++        service_->SetActivePersona(*id).FindBool("ok").value_or(false));
++
++    const blink::HeliumPersonaSnapshot snapshot = service_->GetActiveSnapshot();
++    EXPECT_EQ(expectation.os, snapshot.os);
++    EXPECT_EQ(expectation.navigator_platform, snapshot.platform);
++    EXPECT_EQ(expectation.os, snapshot.ua_ch_platform);
++  }
++}
++
++TEST_F(PersonaServiceTest, ReadStatePreservesModifiedTimestamp) {
++  base::DictValue create_response = service_->CreatePersonaProfile("Work");
++  const base::DictValue* response_state = create_response.FindDict("state");
++  ASSERT_TRUE(response_state);
++  base::DictValue state = response_state->Clone();
++  base::ListValue* personas = state.FindList("personas");
++  ASSERT_TRUE(personas);
++  for (auto& value : *personas) {
++    if (!value.is_dict()) {
++      continue;
++    }
++    const std::string* id = value.GetDict().FindString("id");
++    if (id && *id != kDefaultPersonaId) {
++      value.GetDict().Set("modifiedAt", "2026-01-02T03:04:05.000Z");
++    }
++  }
++  prefs_.SetDict(kPersonaStatePref, std::move(state));
++
++  const base::DictValue read_state = service_->GetPersonaState();
++  const base::DictValue* persona =
++      FindFirstCustomPersona(read_state.FindList("personas"));
++  ASSERT_TRUE(persona);
++  EXPECT_EQ("2026-01-02T03:04:05.000Z",
++            *persona->FindString("modifiedAt"));
++}
++
++TEST_F(PersonaServiceTest, DeleteUnknownPersonaReturnsError) {
++  base::DictValue response = service_->DeletePersona("missing-persona");
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  EXPECT_TRUE(response.FindDict("fieldErrors"));
++}
++
++}  // namespace
++
++}  // namespace helium_persona
+--- /dev/null
++++ b/components/helium_persona/BUILD.gn
+@@ -0,0 +1,15 @@
++# Copyright 2026 The Helium Authors
++# You can use, redistribute, and/or modify this source code under
++# the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++source_set("helium_persona") {
++  sources = [
++    "persona_snapshot.cc",
++    "persona_snapshot.h",
++  ]
++
++  deps = [
++    "//base",
++    "//third_party/icu",
++  ]
++}

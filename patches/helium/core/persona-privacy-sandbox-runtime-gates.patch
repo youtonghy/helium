@@ -153,7 +153,7 @@
 // editablePersona_.advanced.allowWebNn
 --- a/content/browser/renderer_host/navigation_request.cc
 +++ b/content/browser/renderer_host/navigation_request.cc
-@@ -1058,6 +1058,15 @@ network::mojom::WebSandboxFlags GetSandb
+@@ -1019,6 +1019,15 @@ network::mojom::WebSandboxFlags GetSandb
  bool IsSharedStorageWritableEligibleForNavigationRequest(
      FrameTreeNode* frame_tree_node,
      const GURL& url) {

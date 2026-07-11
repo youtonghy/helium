@@ -1,6 +1,6 @@
---- a/third_party/blink/public/mojom/worker/shared_worker_factory.mojom	2026-06-14 19:35:14
-+++ b/third_party/blink/public/mojom/worker/shared_worker_factory.mojom	2026-06-15 13:28:20
-@@ -12,6 +12,7 @@
+--- a/third_party/blink/public/mojom/worker/shared_worker_factory.mojom
++++ b/third_party/blink/public/mojom/worker/shared_worker_factory.mojom
+@@ -12,6 +12,7 @@ import "third_party/blink/public/mojom/r
  import "third_party/blink/public/mojom/frame/policy_container.mojom";
  import "third_party/blink/public/mojom/frame/reporting_observer.mojom";
  import "third_party/blink/public/mojom/fingerprinting_protection/noise_token.mojom";
@@ -8,7 +8,7 @@
  import "third_party/blink/public/mojom/renderer_preferences.mojom";
  import "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom";
  import "third_party/blink/public/mojom/service_worker/service_worker_container.mojom";
-@@ -65,6 +66,7 @@
+@@ -65,6 +66,7 @@ interface SharedWorkerFactory {
  
        string user_agent,
        UserAgentMetadata ua_metadata,
@@ -16,8 +16,8 @@
        bool pause_on_start,
        mojo_base.mojom.UnguessableToken devtools_worker_token,
        RendererPreferences renderer_preferences,
---- a/content/browser/worker_host/shared_worker_host.cc	2026-06-14 19:35:09
-+++ b/content/browser/worker_host/shared_worker_host.cc	2026-06-15 13:33:53
+--- a/content/browser/worker_host/shared_worker_host.cc
++++ b/content/browser/worker_host/shared_worker_host.cc
 @@ -5,7 +5,9 @@
  #include "content/browser/worker_host/shared_worker_host.h"
  
@@ -40,7 +40,7 @@
  #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
  #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
  #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
-@@ -91,6 +95,77 @@
+@@ -91,6 +95,68 @@ void RecordDestructionSource(SharedWorke
                                  source);
  }
  
@@ -53,11 +53,11 @@
 +    if (brand.brand.empty()) {
 +      continue;
 +    }
-+    std::string version = brand.version;
-+    if (use_full_version && brand.brand != "Not_A Brand" &&
-+        !full_version.empty()) {
-+      version = full_version;
-+    }
++    const std::string version =
++        use_full_version
++            ? blink::ResolveHeliumPersonaBrandFullVersion(brand.version,
++                                                          full_version)
++            : brand.version;
 +    list.emplace_back(brand.brand, version);
 +  }
 +  return list;
@@ -86,25 +86,16 @@
 +  if (!persona_snapshot.ua_ch_bitness.empty()) {
 +    ua_metadata->bitness = persona_snapshot.ua_ch_bitness;
 +  }
++  if (!persona_snapshot.ua_ch_full_version.empty()) {
++    ua_metadata->full_version = persona_snapshot.ua_ch_full_version;
++  }
 +  if (!persona_snapshot.ua_ch_brands.empty()) {
 +    ua_metadata->brand_version_list = ToUserAgentBrandList(
 +        persona_snapshot.ua_ch_brands, /*use_full_version=*/false,
-+        persona_snapshot.ua_ch_full_version);
-+  }
-+  if (!persona_snapshot.ua_ch_full_version.empty()) {
-+    ua_metadata->full_version = persona_snapshot.ua_ch_full_version;
-+    ua_metadata->brand_full_version_list =
-+        !persona_snapshot.ua_ch_brands.empty()
-+            ? ToUserAgentBrandList(persona_snapshot.ua_ch_brands,
-+                                   /*use_full_version=*/true,
-+                                   persona_snapshot.ua_ch_full_version)
-+            : ua_metadata->brand_version_list;
-+    for (blink::UserAgentBrandVersion& brand_version :
-+         ua_metadata->brand_full_version_list) {
-+      if (brand_version.brand != "Not_A Brand") {
-+        brand_version.version = persona_snapshot.ua_ch_full_version;
-+      }
-+    }
++        ua_metadata->full_version);
++    ua_metadata->brand_full_version_list = ToUserAgentBrandList(
++        persona_snapshot.ua_ch_brands, /*use_full_version=*/true,
++        ua_metadata->full_version);
 +  }
 +  ua_metadata->wow64 = persona_snapshot.ua_ch_wow64;
 +  if (!persona_snapshot.ua_ch_form_factors.empty()) {
@@ -118,11 +109,10 @@
  }  // namespace
  
  namespace content {
-@@ -456,6 +531,19 @@
-                                    ->GetProcessLock()
+@@ -457,6 +523,19 @@ void SharedWorkerHost::Start(
                                     .GetWebExposedIsolationInfo()
                                     .is_isolated();
-+
+ 
 +  BrowserContext* browser_context = GetProcessHost()->GetBrowserContext();
 +  blink::HeliumPersonaSnapshot persona_snapshot =
 +      GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
@@ -135,10 +125,11 @@
 +    }
 +    ApplyPersonaUserAgentMetadata(persona_snapshot, &ua_metadata);
 +  }
- 
++
    // Send the CreateSharedWorker message.
    factory_.Bind(std::move(factory));
-@@ -464,8 +552,7 @@
+   factory_->CreateSharedWorker(
+@@ -464,8 +543,7 @@ void SharedWorkerHost::Start(
        instance_.worker_storage_key().origin(),
        creator_policy_container_host_ &&
            creator_policy_container_host_->policies().is_web_secure_context,
@@ -148,8 +139,8 @@
        devtools_handle_->pause_on_start(), devtools_handle_->dev_tools_token(),
        std::move(renderer_preferences), std::move(preference_watcher_receiver),
        std::move(content_settings), std::move(container_info),
---- a/content/renderer/worker/shared_worker_factory_impl.h	2026-06-14 19:35:09
-+++ b/content/renderer/worker/shared_worker_factory_impl.h	2026-06-15 13:29:03
+--- a/content/renderer/worker/shared_worker_factory_impl.h
++++ b/content/renderer/worker/shared_worker_factory_impl.h
 @@ -8,6 +8,7 @@
  #include "mojo/public/cpp/bindings/pending_receiver.h"
  #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -158,7 +149,7 @@
  #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
  #include "third_party/blink/public/common/storage_key/storage_key.h"
  #include "third_party/blink/public/mojom/frame/reporting_observer.mojom.h"
-@@ -40,6 +41,7 @@
+@@ -40,6 +41,7 @@ class SharedWorkerFactoryImpl : public b
        bool is_constructor_secure_context,
        const std::string& user_agent,
        const blink::UserAgentMetadata& ua_metadata,
@@ -166,9 +157,9 @@
        bool pause_on_start,
        const base::UnguessableToken& devtools_worker_token,
        const blink::RendererPreferences& renderer_preferences,
---- a/content/renderer/worker/shared_worker_factory_impl.cc	2026-06-14 19:35:09
-+++ b/content/renderer/worker/shared_worker_factory_impl.cc	2026-06-15 13:30:13
-@@ -30,6 +30,7 @@
+--- a/content/renderer/worker/shared_worker_factory_impl.cc
++++ b/content/renderer/worker/shared_worker_factory_impl.cc
+@@ -30,6 +30,7 @@ void SharedWorkerFactoryImpl::CreateShar
      bool is_constructor_secure_context,
      const std::string& user_agent,
      const blink::UserAgentMetadata& ua_metadata,
@@ -176,7 +167,7 @@
      bool pause_on_start,
      const base::UnguessableToken& devtools_worker_token,
      const blink::RendererPreferences& renderer_preferences,
-@@ -58,8 +59,8 @@
+@@ -58,8 +59,8 @@ void SharedWorkerFactoryImpl::CreateShar
    // Bound to the lifetime of the underlying blink::WebSharedWorker instance.
    new EmbeddedSharedWorkerStub(
        std::move(info), token, constructor_key, origin,
@@ -187,8 +178,8 @@
        std::move(preference_watcher_receiver), std::move(content_settings),
        std::move(service_worker_container_info),
        std::move(main_script_load_params),
---- a/content/renderer/worker/embedded_shared_worker_stub.h	2026-06-14 19:35:09
-+++ b/content/renderer/worker/embedded_shared_worker_stub.h	2026-06-15 13:29:03
+--- a/content/renderer/worker/embedded_shared_worker_stub.h
++++ b/content/renderer/worker/embedded_shared_worker_stub.h
 @@ -16,6 +16,7 @@
  #include "mojo/public/cpp/bindings/remote.h"
  #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -197,7 +188,7 @@
  #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
  #include "third_party/blink/public/common/storage_key/storage_key.h"
  #include "third_party/blink/public/common/tokens/tokens.h"
-@@ -64,6 +65,7 @@
+@@ -64,6 +65,7 @@ class EmbeddedSharedWorkerStub : public
        bool is_constructor_secure_context,
        const std::string& user_agent,
        const blink::UserAgentMetadata& ua_metadata,
@@ -205,9 +196,9 @@
        bool pause_on_start,
        const base::UnguessableToken& devtools_worker_token,
        const blink::RendererPreferences& renderer_preferences,
---- a/content/renderer/worker/embedded_shared_worker_stub.cc	2026-06-14 19:35:09
-+++ b/content/renderer/worker/embedded_shared_worker_stub.cc	2026-06-15 13:29:03
-@@ -42,6 +42,7 @@
+--- a/content/renderer/worker/embedded_shared_worker_stub.cc
++++ b/content/renderer/worker/embedded_shared_worker_stub.cc
+@@ -42,6 +42,7 @@ EmbeddedSharedWorkerStub::EmbeddedShared
      bool is_constructor_secure_context,
      const std::string& user_agent,
      const blink::UserAgentMetadata& ua_metadata,
@@ -215,7 +206,7 @@
      bool pause_on_start,
      const base::UnguessableToken& devtools_worker_token,
      const blink::RendererPreferences& renderer_preferences,
-@@ -131,6 +132,7 @@
+@@ -131,6 +132,7 @@ EmbeddedSharedWorkerStub::EmbeddedShared
        blink::WebSecurityOrigin(constructor_key.origin()),
        blink::WebSecurityOrigin(origin), is_constructor_secure_context,
        blink::WebString::FromUtf8(user_agent), ua_metadata,
@@ -223,8 +214,8 @@
        ToWebContentSecurityPolicies(info->content_security_policies),
        FetchClientSettingsObjectFromMojomToWeb(
            info->outside_fetch_client_settings_object),
---- a/third_party/blink/public/web/web_shared_worker.h	2026-06-14 19:35:14
-+++ b/third_party/blink/public/web/web_shared_worker.h	2026-06-15 13:29:04
+--- a/third_party/blink/public/web/web_shared_worker.h
++++ b/third_party/blink/public/web/web_shared_worker.h
 @@ -38,6 +38,7 @@
  #include "services/metrics/public/cpp/ukm_source_id.h"
  #include "services/network/public/mojom/content_security_policy.mojom-shared.h"
@@ -233,7 +224,7 @@
  #include "third_party/blink/public/common/tokens/tokens.h"
  #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
  #include "third_party/blink/public/mojom/browser_interface_broker.mojom-shared.h"
-@@ -82,6 +83,7 @@
+@@ -82,6 +83,7 @@ class BLINK_EXPORT WebSharedWorker {
        bool is_constructor_secure_context,
        const WebString& user_agent,
        const UserAgentMetadata& ua_metadata,
@@ -241,8 +232,8 @@
        const std::vector<WebContentSecurityPolicy>& content_security_policies,
        const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
        const base::UnguessableToken& devtools_worker_token,
---- a/third_party/blink/renderer/core/exported/web_shared_worker_impl.h	2026-06-14 19:35:14
-+++ b/third_party/blink/renderer/core/exported/web_shared_worker_impl.h	2026-06-15 13:29:04
+--- a/third_party/blink/renderer/core/exported/web_shared_worker_impl.h
++++ b/third_party/blink/renderer/core/exported/web_shared_worker_impl.h
 @@ -41,6 +41,7 @@
  #include "services/network/public/mojom/content_security_policy.mojom-blink-forward.h"
  #include "services/network/public/mojom/fetch_api.mojom-shared.h"
@@ -251,7 +242,7 @@
  #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
  #include "third_party/blink/public/mojom/frame/reporting_observer.mojom-blink-forward.h"
  #include "third_party/blink/public/mojom/script/script_type.mojom-blink.h"
-@@ -115,6 +116,7 @@
+@@ -115,6 +116,7 @@ class CORE_EXPORT WebSharedWorkerImpl fi
        bool is_constructor_secure_context,
        const WebString& user_agent,
        const blink::UserAgentMetadata& ua_metadata,
@@ -259,9 +250,9 @@
        const std::vector<WebContentSecurityPolicy>& content_security_policies,
        const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
        const base::UnguessableToken& devtools_worker_token,
---- a/third_party/blink/renderer/core/exported/web_shared_worker_impl.cc	2026-06-14 19:35:14
-+++ b/third_party/blink/renderer/core/exported/web_shared_worker_impl.cc	2026-06-15 13:29:04
-@@ -218,6 +218,7 @@
+--- a/third_party/blink/renderer/core/exported/web_shared_worker_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_shared_worker_impl.cc
+@@ -218,6 +218,7 @@ void WebSharedWorkerImpl::StartWorkerCon
      bool is_constructor_secure_context,
      const WebString& user_agent,
      const UserAgentMetadata& ua_metadata,
@@ -269,7 +260,7 @@
      const std::vector<WebContentSecurityPolicy>& content_security_policies,
      const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
      const base::UnguessableToken& devtools_worker_token,
-@@ -305,6 +306,7 @@
+@@ -305,6 +306,7 @@ void WebSharedWorkerImpl::StartWorkerCon
        blink::SecurityOrigin::CreateFromUrlOrigin(
            url::Origin(origin_from_browser)),
        std::move(coep_reporting_observer), std::move(dip_reporting_observer));
@@ -277,7 +268,7 @@
  
    auto thread_startup_data = WorkerBackingThreadStartupData::CreateDefault();
    thread_startup_data.atomics_wait_mode =
-@@ -371,6 +373,7 @@
+@@ -371,6 +373,7 @@ std::unique_ptr<WebSharedWorker> WebShar
      bool is_constructor_secure_context,
      const WebString& user_agent,
      const UserAgentMetadata& ua_metadata,
@@ -285,7 +276,7 @@
      const std::vector<WebContentSecurityPolicy>& content_security_policies,
      const WebFetchClientSettingsObject& outside_fetch_client_settings_object,
      const base::UnguessableToken& devtools_worker_token,
-@@ -397,7 +400,7 @@
+@@ -397,7 +400,7 @@ std::unique_ptr<WebSharedWorker> WebShar
    worker->StartWorkerContext(
        script_request_url, script_type, credentials_mode, name,
        constructor_origin, origin_from_browser, is_constructor_secure_context,
@@ -294,8 +285,8 @@
        outside_fetch_client_settings_object, devtools_worker_token,
        std::move(content_settings), std::move(browser_interface_broker),
        pause_worker_context_on_start, std::move(worker_main_script_load_params),
---- a/content/browser/worker_host/mock_shared_worker.h	2026-06-14 19:35:09
-+++ b/content/browser/worker_host/mock_shared_worker.h	2026-06-15 13:32:39
+--- a/content/browser/worker_host/mock_shared_worker.h
++++ b/content/browser/worker_host/mock_shared_worker.h
 @@ -19,6 +19,7 @@
  #include "mojo/public/cpp/bindings/remote.h"
  #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -304,7 +295,7 @@
  #include "third_party/blink/public/common/messaging/message_port_channel.h"
  #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
  #include "third_party/blink/public/common/storage_key/storage_key.h"
-@@ -104,6 +105,7 @@
+@@ -104,6 +105,7 @@ class MockSharedWorkerFactory : public b
        bool is_constructor_secure_context,
        const std::string& user_agent,
        const blink::UserAgentMetadata& ua_metadata,
@@ -312,9 +303,9 @@
        bool pause_on_start,
        const base::UnguessableToken& devtools_worker_token,
        const blink::RendererPreferences& renderer_preferences,
---- a/content/browser/worker_host/mock_shared_worker.cc	2026-06-14 19:35:09
-+++ b/content/browser/worker_host/mock_shared_worker.cc	2026-06-15 13:32:39
-@@ -138,6 +138,7 @@
+--- a/content/browser/worker_host/mock_shared_worker.cc
++++ b/content/browser/worker_host/mock_shared_worker.cc
+@@ -138,6 +138,7 @@ void MockSharedWorkerFactory::CreateShar
      bool is_constructor_secure_context,
      const std::string& user_agent,
      const blink::UserAgentMetadata& ua_metadata,
@@ -322,9 +313,9 @@
      bool pause_on_start,
      const base::UnguessableToken& devtools_worker_token,
      const blink::RendererPreferences& renderer_preferences,
---- a/third_party/blink/public/mojom/service_worker/embedded_worker.mojom	2026-06-14 19:35:14
-+++ b/third_party/blink/public/mojom/service_worker/embedded_worker.mojom	2026-06-15 13:28:20
-@@ -13,6 +13,7 @@
+--- a/third_party/blink/public/mojom/service_worker/embedded_worker.mojom
++++ b/third_party/blink/public/mojom/service_worker/embedded_worker.mojom
+@@ -13,6 +13,7 @@ import "third_party/blink/public/mojom/d
  import "third_party/blink/public/mojom/devtools/devtools_agent.mojom";
  import "third_party/blink/public/mojom/frame/policy_container.mojom";
  import "third_party/blink/public/mojom/frame/reporting_observer.mojom";
@@ -332,18 +323,18 @@
  import "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom";
  import "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom";
  import "third_party/blink/public/mojom/renderer_preference_watcher.mojom";
-@@ -63,6 +64,9 @@
-   // The metadata for userAgentData and the UA-CH headers.
+@@ -64,6 +65,9 @@ struct EmbeddedWorkerStartParams {
    // See https://wicg.github.io/ua-client-hints/ for more details.
    UserAgentMetadata ua_metadata;
-+
+ 
 +  // Full web-visible persona snapshot for this service worker.
 +  blink.mojom.HeliumPersonaSnapshot persona_snapshot;
- 
++
    // The id this service worker uses as render_frame_id in
    // network::ResourceRequests it makes.
---- a/content/browser/service_worker/service_worker_version.cc	2026-06-14 19:35:09
-+++ b/content/browser/service_worker/service_worker_version.cc	2026-06-15 13:33:54
+   int32 service_worker_route_id;
+--- a/content/browser/service_worker/service_worker_version.cc
++++ b/content/browser/service_worker/service_worker_version.cc
 @@ -10,6 +10,7 @@
  #include <map>
  #include <optional>
@@ -364,7 +355,7 @@
  #include "third_party/blink/public/mojom/service_worker/service_worker.mojom.h"
  
  namespace content {
-@@ -251,6 +254,77 @@
+@@ -251,6 +254,68 @@ storage::mojom::CacheStorageControl* Get
    return control;
  }
  
@@ -377,11 +368,11 @@
 +    if (brand.brand.empty()) {
 +      continue;
 +    }
-+    std::string version = brand.version;
-+    if (use_full_version && brand.brand != "Not_A Brand" &&
-+        !full_version.empty()) {
-+      version = full_version;
-+    }
++    const std::string version =
++        use_full_version
++            ? blink::ResolveHeliumPersonaBrandFullVersion(brand.version,
++                                                          full_version)
++            : brand.version;
 +    list.emplace_back(brand.brand, version);
 +  }
 +  return list;
@@ -410,25 +401,16 @@
 +  if (!persona_snapshot.ua_ch_bitness.empty()) {
 +    ua_metadata->bitness = persona_snapshot.ua_ch_bitness;
 +  }
++  if (!persona_snapshot.ua_ch_full_version.empty()) {
++    ua_metadata->full_version = persona_snapshot.ua_ch_full_version;
++  }
 +  if (!persona_snapshot.ua_ch_brands.empty()) {
 +    ua_metadata->brand_version_list = ToUserAgentBrandList(
 +        persona_snapshot.ua_ch_brands, /*use_full_version=*/false,
-+        persona_snapshot.ua_ch_full_version);
-+  }
-+  if (!persona_snapshot.ua_ch_full_version.empty()) {
-+    ua_metadata->full_version = persona_snapshot.ua_ch_full_version;
-+    ua_metadata->brand_full_version_list =
-+        !persona_snapshot.ua_ch_brands.empty()
-+            ? ToUserAgentBrandList(persona_snapshot.ua_ch_brands,
-+                                   /*use_full_version=*/true,
-+                                   persona_snapshot.ua_ch_full_version)
-+            : ua_metadata->brand_version_list;
-+    for (blink::UserAgentBrandVersion& brand_version :
-+         ua_metadata->brand_full_version_list) {
-+      if (brand_version.brand != "Not_A Brand") {
-+        brand_version.version = persona_snapshot.ua_ch_full_version;
-+      }
-+    }
++        ua_metadata->full_version);
++    ua_metadata->brand_full_version_list = ToUserAgentBrandList(
++        persona_snapshot.ua_ch_brands, /*use_full_version=*/true,
++        ua_metadata->full_version);
 +  }
 +  ua_metadata->wow64 = persona_snapshot.ua_ch_wow64;
 +  if (!persona_snapshot.ua_ch_form_factors.empty()) {
@@ -442,7 +424,7 @@
  }  // namespace
  
  constexpr base::TimeDelta ServiceWorkerVersion::kTimeoutTimerDelay;
-@@ -2602,6 +2676,15 @@
+@@ -2602,6 +2667,15 @@ void ServiceWorkerVersion::StartWorkerIn
    ContentBrowserClient* browser_client = GetContentClient()->browser();
    params->user_agent = browser_client->GetUserAgent();
    params->ua_metadata = browser_client->GetUserAgentMetadata();
@@ -458,9 +440,9 @@
    params->is_installed = IsInstalled(status_);
    params->script_url_to_skip_throttling = updated_script_url_;
    params->main_script_load_params = std::move(main_script_load_params_);
---- a/content/renderer/service_worker/embedded_worker_instance_client_impl.cc	2026-06-14 19:35:09
-+++ b/content/renderer/service_worker/embedded_worker_instance_client_impl.cc	2026-06-15 13:28:21
-@@ -196,6 +196,7 @@
+--- a/content/renderer/service_worker/embedded_worker_instance_client_impl.cc
++++ b/content/renderer/service_worker/embedded_worker_instance_client_impl.cc
+@@ -196,6 +196,7 @@ EmbeddedWorkerInstanceClientImpl::BuildS
    start_data->script_url = params.script_url;
    start_data->user_agent = blink::WebString::FromUtf8(params.user_agent);
    start_data->ua_metadata = params.ua_metadata;
@@ -478,7 +460,7 @@
  #include "third_party/blink/public/common/permissions_policy/document_policy.h"
  #include "third_party/blink/public/common/tokens/tokens.h"
  #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
-@@ -122,6 +123,7 @@
+@@ -122,6 +123,7 @@ struct CORE_EXPORT GlobalScopeCreationPa
    String global_scope_name;
    String user_agent;
    UserAgentMetadata ua_metadata;
@@ -486,8 +468,8 @@
  
    scoped_refptr<WebWorkerFetchContext> web_worker_fetch_context;
  
---- a/third_party/blink/public/web/web_embedded_worker_start_data.h	2026-06-14 19:35:14
-+++ b/third_party/blink/public/web/web_embedded_worker_start_data.h	2026-06-15 13:28:20
+--- a/third_party/blink/public/web/web_embedded_worker_start_data.h
++++ b/third_party/blink/public/web/web_embedded_worker_start_data.h
 @@ -34,6 +34,7 @@
  #include "base/unguessable_token.h"
  #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -496,7 +478,7 @@
  #include "third_party/blink/public/common/loader/worker_main_script_load_parameters.h"
  #include "third_party/blink/public/common/tokens/tokens.h"
  #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
-@@ -51,6 +52,7 @@
+@@ -51,6 +52,7 @@ struct WebEmbeddedWorkerStartData {
    WebURL script_url;
    WebString user_agent;
    UserAgentMetadata ua_metadata;
@@ -504,9 +486,9 @@
    mojom::ScriptType script_type;
    // Whether to pause the initialization and wait for debugger to attach
    // before proceeding. This technique allows debugging worker startup.
---- a/third_party/blink/renderer/modules/exported/web_embedded_worker_impl.cc	2026-06-14 19:35:15
-+++ b/third_party/blink/renderer/modules/exported/web_embedded_worker_impl.cc	2026-06-15 13:28:21
-@@ -244,6 +244,8 @@
+--- a/third_party/blink/renderer/modules/exported/web_embedded_worker_impl.cc
++++ b/third_party/blink/renderer/modules/exported/web_embedded_worker_impl.cc
+@@ -244,6 +244,8 @@ void WebEmbeddedWorkerImpl::StartWorkerT
        /*require_cross_site_request_for_cookies=*/false,
        /*origin_to_use=*/nullptr, std::move(coep_reporting_observer),
        std::move(dip_reporting_observer));

@@ -1,0 +1,78 @@
+--- a/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
++++ b/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
+@@ -5,7 +5,14 @@
+ #include "third_party/blink/renderer/modules/webgpu/gpu_adapter.h"
+ 
+ #include "services/metrics/public/cpp/ukm_builders.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/web/web_local_frame.h"
++#include "third_party/blink/public/web/web_local_frame_client.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/frame/local_frame_client.h"
++#include "third_party/blink/renderer/core/workers/worker_global_scope.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_device_descriptor.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_queue_descriptor.h"
+@@ -125,13 +132,49 @@
+ GPUAdapterInfo* GPUAdapter::CreateAdapterInfoForAdapter() {
+   bool is_fallback_adapter = adapter_type_ == wgpu::AdapterType::CPU;
+ 
++  String vendor = vendor_;
++  String device = device_;
++  String description = description_;
++  if (gpu_) {
++    if (ExecutionContext* context = gpu_->GetExecutionContext()) {
++      const HeliumPersonaSnapshot* snapshot = nullptr;
++      if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
++        if (window->GetFrame() && window->GetFrame()->Client() &&
++            window->GetFrame()->Client()->GetWebFrame() &&
++            window->GetFrame()->Client()->GetWebFrame()->Client()) {
++          const HeliumPersonaSnapshot& frame_snapshot =
++              window->GetFrame()->Client()->GetWebFrame()->Client()
++                  ->GetHeliumPersonaSnapshot();
++          if (frame_snapshot.IsEnabled()) {
++            snapshot = &frame_snapshot;
++          }
++        }
++      } else if (auto* worker = DynamicTo<WorkerGlobalScope>(context)) {
++        const HeliumPersonaSnapshot& worker_snapshot =
++            worker->GetHeliumPersonaSnapshot();
++        if (worker_snapshot.IsEnabled()) {
++          snapshot = &worker_snapshot;
++        }
++      }
++      if (snapshot) {
++        if (!snapshot->gpu_vendor.empty()) {
++          vendor = String::FromUtf8(snapshot->gpu_vendor);
++        }
++        if (!snapshot->webgpu_adapter.empty()) {
++          device = String::FromUtf8(snapshot->webgpu_adapter);
++          description = device;
++        }
++      }
++    }
++  }
++
+   GPUAdapterInfo* info;
+   if (RuntimeEnabledFeatures::WebGPUDeveloperFeaturesEnabled()) {
+     // If WebGPU developer features have been enabled then provide all available
+     // adapter info values.
+     info = MakeGarbageCollected<GPUAdapterInfo>(
+-        vendor_, architecture_, subgroup_min_size_, subgroup_max_size_,
+-        is_fallback_adapter, device_, description_, driver_,
++        vendor, architecture_, subgroup_min_size_, subgroup_max_size_,
++        is_fallback_adapter, device, description, driver_,
+         FromDawnEnum(backend_type_), FromDawnEnum(adapter_type_),
+         d3d_shader_model_, vk_driver_version_, FromDawnEnum(power_preference_));
+ 
+@@ -144,7 +187,7 @@
+     }
+   } else {
+     info = MakeGarbageCollected<GPUAdapterInfo>(
+-        vendor_, architecture_, subgroup_min_size_, subgroup_max_size_,
++        vendor, architecture_, subgroup_min_size_, subgroup_max_size_,
+         is_fallback_adapter);
+   }
+ 

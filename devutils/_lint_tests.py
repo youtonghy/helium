@@ -6,6 +6,7 @@
 from third_party import unidiff
 
 LICENSE_HEADER_IGNORES = ["html", "license", "readme", "deps"]
+PATCH_TREE_IGNORE_SUFFIXES = {'.md', '.patch~'}
 
 patches_dir = None
 series = None
@@ -48,7 +49,8 @@ def a_all_patches_in_series_exist():
 
 def a_all_patches_in_tree_are_in_series():
     for patch in patches_dir.rglob('*'):
-        if not patch.is_file() or patch == patches_dir / "series":
+        if (not patch.is_file() or patch == patches_dir / "series"
+                or patch.suffix in PATCH_TREE_IGNORE_SUFFIXES):
             continue
 
         assert str(patch.relative_to(patches_dir)) in series, \

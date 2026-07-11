@@ -13,12 +13,14 @@ __pycache__/
 
 # Ignore optional build / cache directory
 /build
+/platform/macos/resources/generated
 
 # Ignore generated resources
 /resources/generated
 /devutils/i18n-data
 
 # Ignore local design / validation artifacts
+*.patch~
 /plans/
 /codex_tmp/
 /tmp_persona_*/
@@ -38,3 +40,14 @@ __pycache__/
 /chromium_download_cache/
 /pruning.list.gen
 /domain_substitution.list.gen
+
+# Workspace / agent session metadata (not part of the browser repo)
+/sessions/
+/events.jsonl
+/config.json
+/views.json
+/labels/
+/sources/
+/statuses/
+/_lift_backup/
+/_workspace_meta_lift/

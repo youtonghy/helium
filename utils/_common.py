@@ -120,6 +120,16 @@ def get_chromium_version():
     return (Path(__file__).parent.parent / 'chromium_version.txt').read_text().strip()
 
 
+def iter_resource_list_entries(resource_list):
+    """Yield (line_number, line_parts) for non-empty, non-comment resource list lines."""
+    with open(resource_list, 'r', encoding='utf-8') as file:
+        for line_number, line in enumerate(file, start=1):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            yield line_number, line.split()
+
+
 def parse_series(series_path):
     """
     Returns an iterator of paths over the series file
