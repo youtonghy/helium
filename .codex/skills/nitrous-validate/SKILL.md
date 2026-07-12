@@ -28,6 +28,26 @@ intermediate feedback but do not replace this gate. This runs the checks needed
 before `he auto-package`; it does not build or package unless the user requested
 that separately. Read-only investigations are exempt.
 
+## Compilation boundary
+
+`pre-build` does not compile Chromium C++. Its success must be reported as
+validation success, not compile or build success. GN output does not guarantee
+that generated files under `out/Default/gen` exist, and `syntax_check.py` does
+not ask Ninja to generate them.
+
+Missing generated headers on a cold or rebuilt tree must not be reported as source compile failures. Prepare the smallest relevant target and rerun the
+file check:
+
+```bash
+python3 devutils/build_targets.py path/to:target
+python3 devutils/syntax_check.py path/to/file.cc
+```
+
+For Chromium source changes, handoff reports must list guard validation and
+compile evidence separately. Without a targeted or actual build, say that
+compilation was not verified. A full cold build is required only when requested
+or when the task must prove the complete artifact builds.
+
 ## Default
 
 From repository root:

@@ -41,3 +41,19 @@ def test_all_agent_guidance_requires_pre_build_before_mutating_task_handoff():
     assert 'Every task that changes repository files MUST run' in dev_skill
     assert 'Every task that changes repository files MUST run' in validate_skill
     assert all(command in content for content in (agents, dev_skill, validate_skill))
+
+
+def test_guidance_distinguishes_validation_from_cold_tree_compilation():
+    """Generated-header misses cannot be reported as source failures."""
+    agents = AGENTS.read_text(encoding='utf-8')
+    dev_skill = SKILL.read_text(encoding='utf-8')
+    validate_skill = VALIDATE_SKILL.read_text(encoding='utf-8')
+
+    assert '`pre-build` 不包含 Chromium C++ 编译' in agents
+    assert '不得直接判定为源码编译失败' in agents
+    assert 'does not compile Chromium C++' in dev_skill
+    assert 'Generated-header failures on a cold tree are inconclusive' in dev_skill
+    assert 'does not compile Chromium C++' in validate_skill
+    assert 'must not be reported as source compile failures' in validate_skill
+    assert all('devutils/build_targets.py' in content
+               for content in (agents, dev_skill, validate_skill))

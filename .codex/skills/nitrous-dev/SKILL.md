@@ -63,6 +63,28 @@ python3 devutils/syntax_check.py [-o build/src/out/Default] FILE...
 python3 devutils/build_targets.py [--from-failed] [target...]
 ```
 
+### Compile-check boundary
+
+`pre-build` does not compile Chromium C++. A successful guard proves patch and
+repository validation, not buildability. GN configuration also does not create
+generated mojom, GRIT, protobuf, or other headers under `out/Default/gen`.
+
+`syntax_check.py` invokes clang directly and does not prepare Ninja dependencies.
+Generated-header failures on a cold tree are inconclusive and must not be
+reported as source failures. Build the smallest owning target, then rerun the
+file check:
+
+```bash
+python3 devutils/build_targets.py path/to:target
+python3 devutils/syntax_check.py path/to/file.cc
+```
+
+Only classify the result as a source compile failure after generated dependencies
+exist and the file still fails. If the Ninja target fails, report its earliest
+real error. Do not require an unconditional full cold build, but run a relevant
+target or actual build whenever the task claims buildability or requests a
+build/package. Report `pre-build` and compile evidence separately.
+
 After compile checks pass, export through isolated staging:
 
 ```bash

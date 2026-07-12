@@ -82,6 +82,21 @@ he auto-package
 
 最终门禁失败时必须先修复并重跑，不得把任务报告为完成。该要求只执行与 `he auto-package` 相同的前置检查，不要求实际执行 `he auto-package`；只有用户要求构建或出包时才运行打包命令。纯只读调查不需要运行。
 
+## 验证边界（必须区分）
+
+- `pre-build` 不包含 Chromium C++ 编译；它通过只代表仓库检查、patch fresh-apply 和 source-backed validation 通过，不得据此声称源码可编译。
+- `GN output ready` 只代表构建图和 `compile_commands.json` 已生成，不代表 `out/Default/gen` 下的 mojom、GRIT、protobuf 等生成文件存在。
+- `syntax_check.py` 直接调用编译命令，不会像 Ninja 一样先构建生成依赖。仅在热树已具备相关生成文件时使用它作为快速反馈。
+- 冷树或重建后的树中，如果 `syntax_check.py` 因缺少 `out/Default/gen/...`、`*.mojom-forward.h` 等生成头失败，不得直接判定为源码编译失败。先运行最小相关 Ninja target：
+
+  ```bash
+  python3 devutils/build_targets.py path/to:target
+  python3 devutils/syntax_check.py path/to/file.cc
+  ```
+
+- 准备生成依赖后仍失败，才按源码编译错误处理。若 Ninja target 自身失败，报告最早的真实构建错误；不要用后续缺文件错误覆盖它。
+- Chromium 源码任务的交付说明必须分开列出 `pre-build` 与编译证据。没有运行定向 target/build 时，只能声明 validation 通过，不能声明编译通过。冷树不要求无条件全量构建，但用户要求构建、打包或证明可编译时，必须运行相关 target 或实际构建。
+
 环境变量优先 `NITROUS_*`，回退 `HELIUM_*`（`NITROUS_SRC_DIR` / `NITROUS_OUT_DIR` / `NITROUS_BUILD_ROOT` / `NITROUS_MERGED_PATCHES_DIR` / `NITROUS_QUILT_SRC` 等）。
 
 ## 污染处理
