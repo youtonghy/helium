@@ -1,0 +1,64 @@
+--- a/chrome/browser/extensions/component_loader.cc
++++ b/chrome/browser/extensions/component_loader.cc
+@@ -463,7 +463,8 @@
+   std::string error;
+   bool localized = LocalizeExtension(
+       info.root_directory, &info.manifest,
+-      GzippedMessagesPermission::kAllowForTrustedSource, &error);
++      GzippedMessagesPermission::kAllowForTrustedSource, &error,
++      /*is_component=*/true);
+ 
+   if (!localized) {
+     LOG(ERROR) << "Failed to localize uBlock: " << error;
+--- a/chrome/browser/extensions/component_loader.h
++++ b/chrome/browser/extensions/component_loader.h
+@@ -160,6 +160,8 @@
+   friend class TtsApiTest;
+   FRIEND_TEST_ALL_PREFIXES(ComponentLoaderTest, ParseManifest);
+   FRIEND_TEST_ALL_PREFIXES(ComponentLoaderTest, AddGlicExtension);
++  FRIEND_TEST_ALL_PREFIXES(ComponentLoaderTest,
++                           AddUBlockUsesComponentResourcesForLocalization);
+ 
+   // Information about a registered component extension.
+   struct ComponentExtensionInfo {
+--- a/chrome/browser/extensions/component_loader_unittest.cc
++++ b/chrome/browser/extensions/component_loader_unittest.cc
+@@ -20,6 +20,7 @@
+ #include "base/run_loop.h"
+ #include "base/scoped_observation.h"
+ #include "base/strings/stringprintf.h"
++#include "base/threading/scoped_blocking_call.h"
+ #include "base/test/metrics/histogram_tester.h"
+ #include "base/values.h"
+ #include "build/build_config.h"
+@@ -214,6 +215,20 @@
+   EXPECT_EQ("backgroundpage.html", *string_value);
+ }
+ 
++TEST_F(ComponentLoaderTest, AddUBlockUsesComponentResourcesForLocalization) {
++  base::ScopedDisallowBlocking disallow_blocking;
++
++  component_loader_->AddUBlock();
++
++  ASSERT_FALSE(component_loader_->component_extensions_.empty());
++  const ComponentLoader::ComponentExtensionInfo& info =
++      component_loader_->component_extensions_.back();
++  const std::string* localized_description =
++      info.manifest.FindString("description");
++  ASSERT_TRUE(localized_description);
++  EXPECT_FALSE(localized_description->starts_with("__MSG_"));
++}
++
+ // Test that the extension isn't loaded if the extension service isn't ready.
+ TEST_F(ComponentLoaderTest, AddWhenNotReady) {
+   std::string extension_id =
+--- a/chrome/browser/resources/component_extension_resources.grd
++++ b/chrome/browser/resources/component_extension_resources.grd
+@@ -23,6 +23,7 @@
+       <include name="IDR_READING_MODE_GDOC_HELPER_GDOCS_SCRIPT_JS" file="reading_mode_gdocs_helper/gdocs_script.js" type="BINDATA" />
+ 
+       <include name="IDR_UBLOCK_MANIFEST_JSON" file="../../../third_party/ublock/manifest.json" resource_path="ublock/manifest.json" type="BINDATA" />
++      <include name="IDR_UBLOCK_MESSAGES_EN_JSON" file="../../../third_party/ublock/_locales/en/messages.json" resource_path="ublock/_locales/en/messages.json" type="BINDATA" />
+ 
+       <if expr="_google_chrome">
+         <then>

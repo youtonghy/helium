@@ -57,3 +57,20 @@ def test_quilt_fix_rejects_wrong_top_patch(tmp_path):
     assert result.returncode != 0
     assert 'other.patch' in result.stdout
     assert not marker.exists()
+
+
+def test_quilt_fix_refreshes_when_target_is_already_top(tmp_path):
+    """An already-applied target can be refreshed without a failing second push."""
+    marker = tmp_path / 'refresh-called'
+    push_marker = tmp_path / 'push-called'
+    _write_fake_quilt(
+        tmp_path / 'bin',
+        f'if [[ "$*" == *" top"* ]]; then echo helium/core/test.patch; exit 0; fi\n'
+        f'if [[ "$*" == *" push "* ]]; then touch "{push_marker}"; exit 17; fi\n'
+        f'if [[ "$*" == *" refresh"* ]]; then touch "{marker}"; fi\n'
+        'exit 0')
+
+    _run_script(tmp_path)
+
+    assert marker.exists()
+    assert not push_marker.exists()

@@ -171,16 +171,42 @@ def test_stage_session_creates_replayable_patch_without_writing_live_queue(tmp_p
     assert (patchwork_tree / 'new.txt').read_text(encoding='utf-8') == 'new\n'
 
 
-def test_stage_session_rejects_patchwork_that_does_not_match_hot_baseline(tmp_path):
-    """Later-layer or preprocessing differences cannot be folded into a root patch."""
+def test_stage_session_applies_hot_delta_over_non_overlapping_platform_change(tmp_path):
+    """A platform-only change does not prevent exporting an independent root edit."""
     root, hot_tree, merged_queue, patchwork_tree = _make_export_repo(tmp_path)
     session_dir = root / 'codex_tmp' / 'hot-export'
     context = _context(root, hot_tree, merged_queue, session_dir)
+    root_lines = ['before\n', *[f'common-{index}\n' for index in range(8)]]
+    base_patch = ''.join([
+        '--- a/source.txt\n', '+++ b/source.txt\n', '@@ -1 +1,9 @@\n', '-raw\n',
+        *[f'+{line}' for line in root_lines]
+    ])
+    _write(root / 'patches' / 'base.patch', base_patch)
+    _write(merged_queue / 'base.patch', base_patch)
+    _write(hot_tree / 'source.txt', ''.join([*root_lines, 'platform-layer\n']))
     hot_patch_export.start_session(context, 'hot-fix.patch', ('source.txt', ))
-    _write(hot_tree / 'source.txt', 'after\n')
-    _write(patchwork_tree / 'source.txt', 'raw\nplatform-layer\n')
+    _write(hot_tree / 'source.txt', ''.join(['after\n', *root_lines[1:], 'platform-layer\n']))
+    _write(patchwork_tree / 'source.txt', 'raw\n')
 
-    with pytest.raises(hot_patch_export.ExportError, match='baseline does not match'):
+    staged_queue = hot_patch_export.stage_session(context, patchwork_tree)
+
+    assert (patchwork_tree / 'source.txt').read_text(encoding='utf-8') == ''.join(
+        ['after\n', *root_lines[1:]])
+    patch = (staged_queue / 'hot-fix.patch').read_text(encoding='utf-8')
+    assert 'platform-layer' not in patch
+
+
+def test_stage_session_rejects_hot_delta_that_conflicts_with_root_baseline(tmp_path):
+    """A platform edit to the same lines still fails closed during root export."""
+    root, hot_tree, merged_queue, patchwork_tree = _make_export_repo(tmp_path)
+    session_dir = root / 'codex_tmp' / 'hot-export'
+    context = _context(root, hot_tree, merged_queue, session_dir)
+    _write(hot_tree / 'source.txt', 'platform-before\n')
+    hot_patch_export.start_session(context, 'hot-fix.patch', ('source.txt', ))
+    _write(hot_tree / 'source.txt', 'platform-after\n')
+    _write(patchwork_tree / 'source.txt', 'raw\n')
+
+    with pytest.raises(hot_patch_export.ExportError, match='does not apply cleanly'):
         hot_patch_export.stage_session(context, patchwork_tree)
 
 

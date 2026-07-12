@@ -1,0 +1,577 @@
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -212,6 +212,23 @@
+   EXPECT_FALSE(response.FindBool("ok").value_or(true));
+   ASSERT_TRUE(response.FindDict("fieldErrors"));
+   EXPECT_TRUE(response.FindDict("fieldErrors")->FindString("region.locale"));
++
++  payload = created_persona->Clone();
++  payload.EnsureDict("fonts")->EnsureList("families")->Append("Arial");
++  payload.EnsureDict("fonts")->EnsureList("aliases")->Append("broken");
++  response = service_->SavePersona(payload);
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  ASSERT_TRUE(response.FindDict("fieldErrors"));
++  EXPECT_TRUE(response.FindDict("fieldErrors")->FindString("fonts.aliases"));
++
++  payload = created_persona->Clone();
++  payload.EnsureDict("fonts")->EnsureList("families")->Append("Arial");
++  payload.EnsureDict("fonts")->EnsureList("aliases")->Append(
++      "sans-serif=Menlo");
++  response = service_->SavePersona(payload);
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  ASSERT_TRUE(response.FindDict("fieldErrors"));
++  EXPECT_TRUE(response.FindDict("fieldErrors")->FindString("fonts.aliases"));
+ }
+ 
+ TEST_F(PersonaServiceTest, ReadStateRefreshesPresetCatalog) {
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -12,6 +12,7 @@
+ #include <string_view>
+ #include <tuple>
+ 
++#include "base/strings/string_util.h"
+ #include "third_party/icu/source/common/unicode/unistr.h"
+ #include "third_party/icu/source/common/unicode/uloc.h"
+ #include "third_party/icu/source/i18n/unicode/timezone.h"
+@@ -150,6 +151,46 @@
+   }
+ }
+ 
++void ValidateFontAliases(const base::DictValue& fonts,
++                         base::DictValue* errors) {
++  const base::ListValue* families = fonts.FindList("families");
++  const base::ListValue* aliases = fonts.FindList("aliases");
++  if (!aliases || aliases->empty()) {
++    return;
++  }
++  if (!families) {
++    errors->Set("fonts.aliases", "invalid_value");
++    return;
++  }
++  for (const base::Value& alias_value : *aliases) {
++    if (!alias_value.is_string()) {
++      continue;
++    }
++    const std::string& value = alias_value.GetString();
++    const size_t separator = value.find('=');
++    if (separator == std::string::npos) {
++      errors->Set("fonts.aliases", "invalid_value");
++      return;
++    }
++    std::string alias = value.substr(0, separator);
++    std::string target = value.substr(separator + 1);
++    base::TrimWhitespaceASCII(alias, base::TRIM_ALL, &alias);
++    base::TrimWhitespaceASCII(target, base::TRIM_ALL, &target);
++    bool target_is_configured = false;
++    for (const base::Value& family : *families) {
++      if (family.is_string() && base::EqualsCaseInsensitiveASCII(
++                                    family.GetString(), target)) {
++        target_is_configured = true;
++        break;
++      }
++    }
++    if (alias.empty() || target.empty() || !target_is_configured) {
++      errors->Set("fonts.aliases", "invalid_value");
++      return;
++    }
++  }
++}
++
+ void ValidateUaChBrands(const base::DictValue& ua_ch,
+                         base::DictValue* errors) {
+   const base::Value* field = ua_ch.Find("brands");
+@@ -383,6 +424,7 @@
+     ValidateStringFields(*fonts, kFontStringFields, "fonts.", &errors);
+     ValidateStringList(*fonts, "families", "fonts.families", false, &errors);
+     ValidateStringList(*fonts, "aliases", "fonts.aliases", false, &errors);
++    ValidateFontAliases(*fonts, &errors);
+   }
+   if (const base::DictValue* font_rendering =
+           value.FindDict("fontRendering")) {
+--- a/content/browser/font_access/font_access_manager.cc
++++ b/content/browser/font_access/font_access_manager.cc
+@@ -7,7 +7,6 @@
+ #include <limits>
+ #include <memory>
+ #include <optional>
+-#include <set>
+ #include <utility>
+ #include <vector>
+ 
+@@ -34,6 +33,7 @@
+ #include "content/public/common/content_client.h"
+ #include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/common/font_access/font_enumeration_table.pb.h"
++#include "third_party/blink/public/common/helium_persona/persona_font_policy.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/permissions/permission_utils.h"
+ #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
+@@ -62,11 +62,6 @@
+     base::ReadOnlySharedMemoryRegion region,
+     const blink::HeliumPersonaSnapshot& snapshot,
+     bool* has_filtered_fonts) {
+-  std::set<std::string> allowed_families(snapshot.font_families.begin(),
+-                                        snapshot.font_families.end());
+-  allowed_families.insert(snapshot.font_aliases.begin(),
+-                          snapshot.font_aliases.end());
+-
+   blink::FontEnumerationTable table;
+   base::ReadOnlySharedMemoryMapping mapping = region.Map();
+   if (!mapping.IsValid() || mapping.size() > INT_MAX ||
+@@ -77,7 +72,7 @@
+ 
+   blink::FontEnumerationTable filtered_table;
+   for (const auto& font : table.fonts()) {
+-    if (allowed_families.contains(font.family())) {
++    if (blink::PersonaFontFamilyAllowed(snapshot, font.family())) {
+       *filtered_table.add_fonts() = font;
+     }
+   }
+--- a/third_party/blink/public/common/BUILD.gn
++++ b/third_party/blink/public/common/BUILD.gn
+@@ -163,6 +163,7 @@
+     "frame/user_activation_update_source.h",
+     "frame/view_transition_state.h",
+     "helium_noise/noise_token.h",
++    "helium_persona/persona_font_policy.h",
+     "helium_persona/persona_snapshot.h",
+     "helium_persona/persona_snapshot_mojom_traits.h",
+     "history/session_history_constants.h",
+--- /dev/null
++++ b/third_party/blink/public/common/helium_persona/persona_font_policy.h
+@@ -0,0 +1,66 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_FONT_POLICY_H_
++#define THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_FONT_POLICY_H_
++
++#include <optional>
++#include <string>
++#include <string_view>
++#include <utility>
++
++#include "base/strings/string_util.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++
++namespace blink {
++
++inline std::optional<std::pair<std::string, std::string>>
++ParsePersonaFontAlias(std::string_view value) {
++  const size_t separator = value.find('=');
++  if (separator == std::string_view::npos) {
++    return std::nullopt;
++  }
++  std::string alias(value.substr(0, separator));
++  std::string family(value.substr(separator + 1));
++  base::TrimWhitespaceASCII(alias, base::TRIM_ALL, &alias);
++  base::TrimWhitespaceASCII(family, base::TRIM_ALL, &family);
++  if (alias.empty() || family.empty()) {
++    return std::nullopt;
++  }
++  return std::make_pair(std::move(alias), std::move(family));
++}
++
++inline bool PersonaFontFamilyAllowed(const HeliumPersonaSnapshot& snapshot,
++                                     std::string_view family_name) {
++  if (!snapshot.IsEnabled() || family_name.empty()) {
++    return false;
++  }
++  for (const std::string& family : snapshot.font_families) {
++    if (base::EqualsCaseInsensitiveASCII(family, family_name)) {
++      return true;
++    }
++  }
++  return false;
++}
++
++inline std::optional<std::string> ResolvePersonaFontAlias(
++    const HeliumPersonaSnapshot& snapshot,
++    std::string_view alias_name) {
++  if (!snapshot.IsEnabled() || alias_name.empty()) {
++    return std::nullopt;
++  }
++  for (const std::string& alias : snapshot.font_aliases) {
++    const auto parsed = ParsePersonaFontAlias(alias);
++    if (parsed &&
++        base::EqualsCaseInsensitiveASCII(parsed->first, alias_name) &&
++        PersonaFontFamilyAllowed(snapshot, parsed->second)) {
++      return parsed->second;
++    }
++  }
++  return std::nullopt;
++}
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_FONT_POLICY_H_
+--- a/third_party/blink/renderer/core/css/build.gni
++++ b/third_party/blink/renderer/core/css/build.gni
+@@ -659,6 +659,8 @@
+   "part_names.h",
+   "pending_sheet_type.cc",
+   "pending_sheet_type.h",
++  "persona_font_policy.cc",
++  "persona_font_policy.h",
+   "post_style_update_scope.cc",
+   "post_style_update_scope.h",
+   "properties/computed_style_utils.cc",
+@@ -958,6 +960,7 @@
+   "parser/media_query_parser_test.cc",
+   "parser/sizes_attribute_parser_test.cc",
+   "parser/sizes_math_function_parser_test.cc",
++  "persona_font_policy_test.cc",
+   "properties/computed_style_utils_test.cc",
+   "properties/css_bitset_test.cc",
+   "properties/css_color_function_parser_test.cc",
+--- a/third_party/blink/renderer/core/css/css_font_selector.cc
++++ b/third_party/blink/renderer/core/css/css_font_selector.cc
+@@ -32,6 +32,7 @@
+ #include "third_party/blink/renderer/core/css/css_value_list.h"
+ #include "third_party/blink/renderer/core/css/font_face_set_document.h"
+ #include "third_party/blink/renderer/core/css/font_size_functions.h"
++#include "third_party/blink/renderer/core/css/persona_font_policy.h"
+ #include "third_party/blink/renderer/core/css/resolver/scoped_style_resolver.h"
+ #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
+ #include "third_party/blink/renderer/core/css/style_engine.h"
+@@ -241,6 +242,11 @@
+             font_face_cache_->Get(request_description, family_name)) {
+       return face->GetFontData(request_description);
+     }
++    if (PersonaFontPolicy::IsActive(GetExecutionContext()) &&
++        !PersonaFontPolicy::IsFamilyAllowed(GetExecutionContext(),
++                                            family_name)) {
++      return nullptr;
++    }
+   }
+ 
+   // Try to return the correct font based off our settings, in case we were
+@@ -250,6 +256,11 @@
+   if (settings_family_name.empty()) {
+     return nullptr;
+   }
++  if (PersonaFontPolicy::IsActive(GetExecutionContext()) &&
++      !PersonaFontPolicy::IsFamilyAllowed(GetExecutionContext(),
++                                          settings_family_name)) {
++    return nullptr;
++  }
+ 
+   const SimpleFontData* font_data =
+       FontCache::Get().GetFontData(request_description, settings_family_name);
+--- a/third_party/blink/renderer/core/css/css_font_selector_base.cc
++++ b/third_party/blink/renderer/core/css/css_font_selector_base.cc
+@@ -6,6 +6,7 @@
+ 
+ #include "build/build_config.h"
+ #include "third_party/blink/renderer/core/css/css_segmented_font_face.h"
++#include "third_party/blink/renderer/core/css/persona_font_policy.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
+ #include "third_party/blink/renderer/platform/fonts/font_cache.h"
+ #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+@@ -18,6 +19,18 @@
+ AtomicString CSSFontSelectorBase::FamilyNameFromSettings(
+     const FontDescription& font_description,
+     const FontFamily& generic_family_name) {
++  if (generic_family_name.FamilyIsGeneric() &&
++      PersonaFontPolicy::IsActive(GetExecutionContext())) {
++    if (const auto alias = PersonaFontPolicy::ResolveAlias(
++            GetExecutionContext(), generic_family_name.FamilyName())) {
++      return AtomicString(*alias);
++    }
++    if (const auto family = PersonaFontPolicy::FirstAvailableFamily(
++            GetExecutionContext(), font_description)) {
++      return AtomicString(*family);
++    }
++    return AtomicString();
++  }
+   return FontSelector::FamilyNameFromSettings(
+       generic_font_family_settings_, font_description, generic_family_name,
+       GetUseCounter());
+@@ -30,6 +43,10 @@
+   if (family.empty()) {
+     family = passed_family.FamilyName();
+   }
++  if (PersonaFontPolicy::IsActive(GetExecutionContext()) &&
++      !PersonaFontPolicy::IsFamilyAllowed(GetExecutionContext(), family)) {
++    return false;
++  }
+   return FontCache::Get().IsPlatformFamilyMatchAvailable(font_description,
+                                                          family);
+ }
+@@ -83,6 +100,11 @@
+   if (family.FamilyName().empty()) [[unlikely]] {
+     return;
+   }
++  if (PersonaFontPolicy::IsActive(GetExecutionContext()) &&
++      !PersonaFontPolicy::IsFamilyAllowed(GetExecutionContext(),
++                                          family.FamilyName())) {
++    return;
++  }
+   family.SetIsPrewarmed();
+   FontCache::PrewarmFamily(family.FamilyName());
+ }
+--- a/third_party/blink/renderer/core/css/font_face_set.cc
++++ b/third_party/blink/renderer/core/css/font_face_set.cc
+@@ -9,6 +9,7 @@
+ #include "third_party/blink/renderer/bindings/core/v8/v8_font_face_set_load_status.h"
+ #include "third_party/blink/renderer/core/css/font_face_cache.h"
+ #include "third_party/blink/renderer/core/css/font_face_set_load_event.h"
++#include "third_party/blink/renderer/core/css/persona_font_policy.h"
+ #include "third_party/blink/renderer/platform/font_family_names.h"
+ #include "third_party/blink/renderer/platform/fonts/font.h"
+ #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+@@ -261,6 +262,12 @@
+ 
+       CSSSegmentedFontFace* face =
+           font_face_cache->Get(font->GetFontDescription(), f->FamilyName());
++      if (PersonaFontPolicy::IsActive(GetExecutionContext()) &&
++          !PersonaFontPolicy::IsFamilyAllowed(GetExecutionContext(),
++                                              f->FamilyName()) &&
++          !face) {
++        return false;
++      }
+       if (face && !face->CheckFont(c)) {
+         return false;
+       }
+--- a/third_party/blink/renderer/core/css/local_font_face_source.cc
++++ b/third_party/blink/renderer/core/css/local_font_face_source.cc
+@@ -8,6 +8,7 @@
+ #include "build/build_config.h"
+ #include "third_party/blink/renderer/core/css/css_custom_font_data.h"
+ #include "third_party/blink/renderer/core/css/css_font_face.h"
++#include "third_party/blink/renderer/core/css/persona_font_policy.h"
+ #include "third_party/blink/renderer/core/probe/core_probes.h"
+ #include "third_party/blink/renderer/platform/fonts/bitmap_glyphs_block_list.h"
+ #include "third_party/blink/renderer/platform/fonts/font_cache.h"
+@@ -42,6 +43,11 @@
+ 
+ bool LocalFontFaceSource::IsLocalFontAvailable(
+     const FontDescription& font_description) const {
++  if (PersonaFontPolicy::IsActive(font_selector_->GetExecutionContext()) &&
++      !PersonaFontPolicy::IsFamilyAllowed(
++          font_selector_->GetExecutionContext(), font_name_)) {
++    return false;
++  }
+   // TODO(crbug.com/1025945): Properly handle Windows prior to 10 and Android.
+   bool font_available = FontCache::Get().IsPlatformFontUniqueNameMatchAvailable(
+       font_description, font_name_);
+@@ -77,6 +83,12 @@
+     return nullptr;
+   }
+ 
++  if (PersonaFontPolicy::IsActive(font_selector_->GetExecutionContext()) &&
++      !PersonaFontPolicy::IsFamilyAllowed(
++          font_selector_->GetExecutionContext(), font_name_)) {
++    return nullptr;
++  }
++
+   if (IsValid() && IsLoading()) {
+     const SimpleFontData* fallback_font_data =
+         CreateLoadingFallbackFontData(font_description);
+--- a/third_party/blink/renderer/core/css/offscreen_font_selector.cc
++++ b/third_party/blink/renderer/core/css/offscreen_font_selector.cc
+@@ -5,6 +5,7 @@
+ #include "third_party/blink/renderer/core/css/offscreen_font_selector.h"
+ 
+ #include "build/build_config.h"
++#include "third_party/blink/renderer/core/css/persona_font_policy.h"
+ #include "third_party/blink/renderer/core/frame/settings.h"
+ #include "third_party/blink/renderer/platform/fonts/font_cache.h"
+ #include "third_party/blink/renderer/platform/fonts/font_selector_client.h"
+@@ -43,6 +44,11 @@
+           font_face_cache_->Get(font_description, family_name)) {
+     return face->GetFontData(font_description);
+   }
++  if (!font_family.FamilyIsGeneric() &&
++      PersonaFontPolicy::IsActive(GetExecutionContext()) &&
++      !PersonaFontPolicy::IsFamilyAllowed(GetExecutionContext(), family_name)) {
++    return nullptr;
++  }
+ 
+   // Try to return the correct font based off our settings, in case we were
+   // handed the generic font family name.
+@@ -51,6 +57,11 @@
+   if (settings_family_name.empty()) {
+     return nullptr;
+   }
++  if (PersonaFontPolicy::IsActive(GetExecutionContext()) &&
++      !PersonaFontPolicy::IsFamilyAllowed(GetExecutionContext(),
++                                          settings_family_name)) {
++    return nullptr;
++  }
+ 
+   return FontCache::Get().GetFontData(font_description, settings_family_name);
+ }
+--- /dev/null
++++ b/third_party/blink/renderer/core/css/persona_font_policy.cc
+@@ -0,0 +1,89 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/css/persona_font_policy.h"
++
++#include "third_party/blink/public/common/helium_persona/persona_font_policy.h"
++#include "third_party/blink/public/web/web_local_frame.h"
++#include "third_party/blink/public/web/web_local_frame_client.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/frame/local_frame_client.h"
++#include "third_party/blink/renderer/core/workers/worker_global_scope.h"
++#include "third_party/blink/renderer/platform/fonts/font_cache.h"
++#include "third_party/blink/renderer/platform/fonts/font_description.h"
++
++namespace blink {
++
++const HeliumPersonaSnapshot* PersonaFontPolicy::Snapshot(
++    const ExecutionContext* context) {
++  if (const auto* window = DynamicTo<LocalDOMWindow>(context)) {
++    if (!window->GetFrame() || !window->GetFrame()->Client() ||
++        !window->GetFrame()->Client()->GetWebFrame() ||
++        !window->GetFrame()->Client()->GetWebFrame()->Client()) {
++      return nullptr;
++    }
++    const HeliumPersonaSnapshot& snapshot =
++        window->GetFrame()->Client()->GetWebFrame()->Client()
++            ->GetHeliumPersonaSnapshot();
++    return snapshot.IsEnabled() ? &snapshot : nullptr;
++  }
++  if (const auto* worker = DynamicTo<WorkerGlobalScope>(context)) {
++    const HeliumPersonaSnapshot& snapshot = worker->GetHeliumPersonaSnapshot();
++    return snapshot.IsEnabled() ? &snapshot : nullptr;
++  }
++  return nullptr;
++}
++
++bool PersonaFontPolicy::IsActive(const ExecutionContext* context) {
++  return Snapshot(context) != nullptr;
++}
++
++bool PersonaFontPolicy::IsFamilyAllowed(const ExecutionContext* context,
++                                        const String& family) {
++  const HeliumPersonaSnapshot* snapshot = Snapshot(context);
++  return snapshot && IsFamilyAllowed(*snapshot, family);
++}
++
++bool PersonaFontPolicy::IsFamilyAllowed(
++    const HeliumPersonaSnapshot& snapshot,
++    const String& family) {
++  return PersonaFontFamilyAllowed(snapshot, family.Utf8());
++}
++
++std::optional<String> PersonaFontPolicy::ResolveAlias(
++    const ExecutionContext* context,
++    const String& alias) {
++  const HeliumPersonaSnapshot* snapshot = Snapshot(context);
++  return snapshot ? ResolveAlias(*snapshot, alias) : std::nullopt;
++}
++
++std::optional<String> PersonaFontPolicy::ResolveAlias(
++    const HeliumPersonaSnapshot& snapshot,
++    const String& alias) {
++  const std::optional<std::string> family =
++      ResolvePersonaFontAlias(snapshot, alias.Utf8());
++  return family ? std::optional<String>(String::FromUtf8(*family))
++                : std::nullopt;
++}
++
++std::optional<String> PersonaFontPolicy::FirstAvailableFamily(
++    const ExecutionContext* context,
++    const FontDescription& description) {
++  const HeliumPersonaSnapshot* snapshot = Snapshot(context);
++  if (!snapshot) {
++    return std::nullopt;
++  }
++  for (const std::string& family : snapshot->font_families) {
++    const AtomicString candidate = AtomicString::FromUtf8(family);
++    if (!candidate.empty() &&
++        FontCache::Get().IsPlatformFamilyMatchAvailable(description,
++                                                        candidate)) {
++      return candidate.GetString();
++    }
++  }
++  return std::nullopt;
++}
++
++}  // namespace blink
+--- /dev/null
++++ b/third_party/blink/renderer/core/css/persona_font_policy.h
+@@ -0,0 +1,36 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_PERSONA_FONT_POLICY_H_
++#define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_PERSONA_FONT_POLICY_H_
++
++#include <optional>
++
++#include "third_party/blink/renderer/core/core_export.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++
++namespace blink {
++
++class ExecutionContext;
++class FontDescription;
++struct HeliumPersonaSnapshot;
++
++class CORE_EXPORT PersonaFontPolicy {
++ public:
++  static const HeliumPersonaSnapshot* Snapshot(const ExecutionContext*);
++  static bool IsActive(const ExecutionContext*);
++  static bool IsFamilyAllowed(const ExecutionContext*, const String& family);
++  static bool IsFamilyAllowed(const HeliumPersonaSnapshot&,
++                              const String& family);
++  static std::optional<String> ResolveAlias(const ExecutionContext*,
++                                            const String& alias);
++  static std::optional<String> ResolveAlias(const HeliumPersonaSnapshot&,
++                                            const String& alias);
++  static std::optional<String> FirstAvailableFamily(const ExecutionContext*,
++                                                    const FontDescription&);
++};
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_CSS_PERSONA_FONT_POLICY_H_
+--- /dev/null
++++ b/third_party/blink/renderer/core/css/persona_font_policy_test.cc
+@@ -0,0 +1,37 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/css/persona_font_policy.h"
++
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++
++namespace blink {
++
++TEST(PersonaFontPolicyTest, AllowsConfiguredFamiliesCaseInsensitively) {
++  HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  snapshot.font_families = {"Arial", "Helvetica Neue"};
++
++  EXPECT_TRUE(PersonaFontPolicy::IsFamilyAllowed(snapshot, "arial"));
++  EXPECT_TRUE(
++      PersonaFontPolicy::IsFamilyAllowed(snapshot, "HELVETICA NEUE"));
++  EXPECT_FALSE(PersonaFontPolicy::IsFamilyAllowed(snapshot, "Menlo"));
++}
++
++TEST(PersonaFontPolicyTest, ParsesAliasWithoutExposingRawAliasString) {
++  HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  snapshot.font_families = {"Arial"};
++  snapshot.font_aliases = {" sans-serif = Arial ", "broken"};
++
++  EXPECT_TRUE(PersonaFontPolicy::IsFamilyAllowed(snapshot, "Arial"));
++  EXPECT_FALSE(
++      PersonaFontPolicy::IsFamilyAllowed(snapshot, "sans-serif=Arial"));
++  EXPECT_EQ(PersonaFontPolicy::ResolveAlias(snapshot, "SANS-SERIF"),
++            std::optional<String>("Arial"));
++  EXPECT_FALSE(PersonaFontPolicy::ResolveAlias(snapshot, "serif"));
++}
++
++}  // namespace blink

@@ -1,0 +1,165 @@
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -8909,6 +8909,12 @@ void ChromeContentBrowserClient::BindAIM
+     base::SupportsUserData* context_user_data,
+     content::RenderFrameHost* rfh,
+     mojo::PendingReceiver<blink::mojom::AIManager> receiver) {
++  const blink::HeliumPersonaSnapshot snapshot =
++      GetHeliumPersonaSnapshot(browser_context);
++  if (snapshot.IsEnabled() && !snapshot.allow_ai_apis) {
++    return;
++  }
++
+   if (!context_user_data->GetUserData(kAIManagerUserDataKey)) {
+     context_user_data->SetUserData(
+         kAIManagerUserDataKey,
+--- a/chrome/browser/chrome_content_browser_client_unittest.cc
++++ b/chrome/browser/chrome_content_browser_client_unittest.cc
+@@ -37,6 +37,8 @@
+ #include "chrome/browser/devtools/features.h"
+ #include "chrome/browser/enterprise/reporting/prefs.h"
+ #include "chrome/browser/global_features.h"
++#include "chrome/browser/helium_persona/persona_service.h"
++#include "chrome/browser/helium_persona/persona_service_factory.h"
+ #include "chrome/browser/media/prefs/capture_device_ranking.h"
+ #include "chrome/browser/search/search.h"
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
+@@ -95,6 +97,7 @@
+ #include "extensions/buildflags/buildflags.h"
+ #include "google_apis/gaia/gaia_id.h"
+ #include "media/media_buildflags.h"
++#include "mojo/public/cpp/bindings/remote.h"
+ #include "net/base/url_util.h"
+ #include "net/ssl/ssl_info.h"
+ #include "net/test/cert_test_util.h"
+@@ -106,6 +109,7 @@
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+ #include "third_party/blink/public/common/switches.h"
+ #include "third_party/blink/public/common/web_preferences/web_preferences.h"
++#include "third_party/blink/public/mojom/ai/ai_manager.mojom.h"
+ #include "url/gurl.h"
+ #include "url/origin.h"
+ 
+@@ -234,6 +238,29 @@ class ChromeContentBrowserClientTest : p
+   TestingProfile profile_;
+ };
+ 
++TEST_F(ChromeContentBrowserClientTest,
++       DisabledPersonaClosesAIManagerReceiver) {
++  auto* persona_service =
++      helium_persona::PersonaServiceFactory::GetForProfile(&profile_);
++  ASSERT_TRUE(persona_service);
++  base::DictValue create_response =
++      persona_service->CreatePersonaProfile("No AI");
++  const std::string* persona_id = create_response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(persona_service->SetActivePersona(*persona_id)
++                  .FindBool("ok")
++                  .value_or(false));
++  ASSERT_FALSE(persona_service->GetActiveSnapshot().allow_ai_apis);
++
++  ChromeContentBrowserClient browser_client;
++  mojo::Remote<blink::mojom::AIManager> remote;
++  browser_client.BindAIManager(&profile_, &profile_, /*rfh=*/nullptr,
++                               remote.BindNewPipeAndPassReceiver());
++  remote.FlushForTesting();
++
++  EXPECT_FALSE(remote.is_connected());
++}
++
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+ using ChromeContentBrowserClientIsPopupBypassAllowedTest =
+     ChromeRenderViewHostTestHarness;
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -794,12 +794,6 @@ BrowserContext* GetHeliumPersonaBrowserC
+   return host->version()->context()->wrapper()->browser_context();
+ }
+ 
+-bool HeliumPersonaAllowsAiApis(BrowserContext* browser_context) {
+-  blink::HeliumPersonaSnapshot snapshot =
+-      GetHeliumPersonaSnapshot(browser_context);
+-  return !snapshot.IsEnabled() || snapshot.allow_ai_apis;
+-}
+-
+ bool HeliumPersonaAllowsShapeDetection(BrowserContext* browser_context) {
+   blink::HeliumPersonaSnapshot snapshot =
+       GetHeliumPersonaSnapshot(browser_context);
+@@ -1263,17 +1257,15 @@ void PopulateBinderMapWithContext(
+       &BindRenderFrameHostImpl<
+           &RenderFrameHostImpl::BindNonAssociatedLocalFrameHost>);
+ 
+-  if (HeliumPersonaAllowsAiApis(host->GetBrowserContext())) {
+-    map->Add<blink::mojom::AIManager>(base::BindRepeating(
+-        [](ContentBrowserClient* browser_client, RenderFrameHost* host,
+-           mojo::PendingReceiver<blink::mojom::AIManager> receiver) {
+-          browser_client->BindAIManager(
+-              host->GetBrowserContext(),
+-              &RenderFrameHostImpl::From(host)->document_associated_data(), host,
+-              std::move(receiver));
+-        },
+-        base::Unretained(GetContentClient()->browser())));
+-  }
++  map->Add<blink::mojom::AIManager>(base::BindRepeating(
++      [](ContentBrowserClient* browser_client, RenderFrameHost* host,
++         mojo::PendingReceiver<blink::mojom::AIManager> receiver) {
++        browser_client->BindAIManager(
++            host->GetBrowserContext(),
++            &RenderFrameHostImpl::From(host)->document_associated_data(), host,
++            std::move(receiver));
++      },
++      base::Unretained(GetContentClient()->browser())));
+ 
+ #if BUILDFLAG(IS_FUCHSIA)
+   map->Add<media::mojom::FuchsiaMediaCodecProvider>(base::BindRepeating(
+@@ -1562,13 +1554,11 @@ void PopulateDedicatedWorkerBinders(Dedi
+       host->GetAncestorRenderFrameHostId(),
+       RenderProcessHost::NotificationServiceCreatorType::kDedicatedWorker,
+       host));
+-  if (HeliumPersonaAllowsAiApis(host->GetProcessHost()->GetBrowserContext())) {
+-    map->Add<blink::mojom::AIManager>(
+-        base::BindRepeating(&ContentBrowserClient::BindAIManager,
+-                            base::Unretained(GetContentClient()->browser()),
+-                            host->GetProcessHost()->GetBrowserContext(),
+-                            base::Unretained(host), /*rfh=*/nullptr));
+-  }
++  map->Add<blink::mojom::AIManager>(
++      base::BindRepeating(&ContentBrowserClient::BindAIManager,
++                          base::Unretained(GetContentClient()->browser()),
++                          host->GetProcessHost()->GetBrowserContext(),
++                          base::Unretained(host), /*rfh=*/nullptr));
+   map->Add<blink::mojom::TranslationManager>(base::BindRepeating(
+       [](DedicatedWorkerHost* host,
+          mojo::PendingReceiver<blink::mojom::TranslationManager> receiver) {
+@@ -1672,13 +1662,11 @@ void PopulateSharedWorkerBinders(SharedW
+       &CreateReportingServiceProxyForSharedWorker, base::Unretained(host)));
+   map->Add<blink::mojom::BucketManagerHost>(base::BindRepeating(
+       &SharedWorkerHost::CreateBucketManagerHost, base::Unretained(host)));
+-  if (HeliumPersonaAllowsAiApis(host->GetProcessHost()->GetBrowserContext())) {
+-    map->Add<blink::mojom::AIManager>(
+-        base::BindRepeating(&ContentBrowserClient::BindAIManager,
+-                            base::Unretained(GetContentClient()->browser()),
+-                            host->GetProcessHost()->GetBrowserContext(),
+-                            base::Unretained(host), /*rfh=*/nullptr));
+-  }
++  map->Add<blink::mojom::AIManager>(
++      base::BindRepeating(&ContentBrowserClient::BindAIManager,
++                          base::Unretained(GetContentClient()->browser()),
++                          host->GetProcessHost()->GetBrowserContext(),
++                          base::Unretained(host), /*rfh=*/nullptr));
+   map->Add<blink::mojom::LockManager>(base::BindRepeating(
+       &SharedWorkerHost::CreateLockManager, base::Unretained(host)));
+ 
+@@ -1862,10 +1850,8 @@ void PopulateServiceWorkerBinders(Servic
+       &ServiceWorkerHost::CreateBucketManagerHost, base::Unretained(host)));
+   map->Add<blink::mojom::WebUsbService>(base::BindRepeating(
+       &ServiceWorkerHost::BindUsbService, base::Unretained(host)));
+-  if (HeliumPersonaAllowsAiApis(GetHeliumPersonaBrowserContext(host))) {
+-    map->Add<blink::mojom::AIManager>(base::BindRepeating(
+-        &ServiceWorkerHost::BindAIManager, base::Unretained(host)));
+-  }
++  map->Add<blink::mojom::AIManager>(base::BindRepeating(
++      &ServiceWorkerHost::BindAIManager, base::Unretained(host)));
+ 
+   if (HeliumPersonaAllowsWebNn(GetHeliumPersonaBrowserContext(host)) &&
+       base::FeatureList::IsEnabled(

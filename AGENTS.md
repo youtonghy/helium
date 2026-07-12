@@ -3,7 +3,7 @@
 `CLAUDE.md` 符号链接到本文件。其它路径下的 AGENTS 副本一律无效。
 
 **涉及改源码 / 改 patch / 修编译 / export 时：必须先按 `$nitrous-dev` 执行。**  
-**交付前校验：必须按 `$nitrous-validate`（或 `agent_patch_guard`）执行。**
+**任何产生仓库修改的任务在交付前：必须通过 `agent_patch_guard --mode pre-build`。**
 
 ## 总原则
 
@@ -12,6 +12,7 @@
 3. 长期有效修改必须落在 `patches/**`、`patches/series` 或本仓库源文件。
 4. 跟上游时 `patches/helium/**` 是 **vendor 路径名**，不要为品牌全局改名。
 5. `he` 是平台构建命令前缀，与产品名无关。
+6. `quick`、`patch-source`、`run_validation.py`、定向编译和测试都是中间反馈；不能替代最终 `pre-build` 交付门禁。
 
 ## 任务模式（动手前必须选一）
 
@@ -64,17 +65,22 @@ python3 devutils/build_targets.py [--from-failed] [target...]
 # staging / replay / root+macOS 验证后自动发布新栈顶 patch
 python3 devutils/agent_patch_guard.py --mode export-hotfix
 
-# 改了 patches 或交付前
+# 修改过程中的定向反馈
 python3 devutils/agent_patch_guard.py --mode patch-source
 # 或
 python3 .codex/skills/nitrous-validate/scripts/run_validation.py
 python3 .codex/skills/nitrous-validate/scripts/run_validation.py --full
 python3 .codex/skills/nitrous-validate/scripts/run_validation.py --with-source --source-tree chromium_src
 
+# 任何产生仓库修改的任务：交付前必须成功执行
+python3 devutils/agent_patch_guard.py --mode pre-build
+
 # 打包（仅 pre-build 通过后）
 source platform/macos/build.sh
 he auto-package
 ```
+
+最终门禁失败时必须先修复并重跑，不得把任务报告为完成。该要求只执行与 `he auto-package` 相同的前置检查，不要求实际执行 `he auto-package`；只有用户要求构建或出包时才运行打包命令。纯只读调查不需要运行。
 
 环境变量优先 `NITROUS_*`，回退 `HELIUM_*`（`NITROUS_SRC_DIR` / `NITROUS_OUT_DIR` / `NITROUS_BUILD_ROOT` / `NITROUS_MERGED_PATCHES_DIR` / `NITROUS_QUILT_SRC` 等）。
 

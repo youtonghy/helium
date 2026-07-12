@@ -177,3 +177,8 @@ helium/core/persona-permission-type-gating.patch
 helium/core/persona-audio-noise.patch
 helium/core/persona-font-metric-noise.patch
 helium/core/persona-local-fonts-access.patch
+helium/core/ublock-component-l10n-nonblocking.patch
+helium/core/persona-ai-binder-stability.patch
+helium/core/persona-fail-closed-runtime.patch
+helium/core/persona-intl-locale-override.patch
+helium/core/persona-font-probing-virtualization.patch

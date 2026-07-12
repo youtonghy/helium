@@ -14,6 +14,18 @@ description: >
 must begin before the edit, prove the pre-edit baseline, generate a new top
 patch in staging, replay it, validate the root and macOS queues, then publish.
 
+Every task that changes repository files MUST run the packaging-equivalent
+preflight before handoff:
+
+```bash
+python3 devutils/agent_patch_guard.py --mode pre-build
+```
+
+Fix failures and rerun the command before reporting completion. Targeted tests,
+syntax checks, `quick`, `patch-source`, and `export-hotfix` are intermediate
+feedback and do not replace this final gate. The gate does not require running
+`he auto-package`; package only when the user requests a build or artifact.
+
 Do not hand-edit patch hunks or `.pc` metadata.
 
 ## Choose a mode

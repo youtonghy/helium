@@ -1,0 +1,343 @@
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -1689,7 +1689,8 @@
+       FindPersonaInList(raw_state.FindList("personas"), *active_id);
+   const std::string* persona_id = persona ? persona->FindString("id") : nullptr;
+   if (!persona_id || *persona_id != *active_id ||
+-      !persona->FindBool("enabled").value_or(false)) {
++      !persona->FindBool("enabled").value_or(false) ||
++      !GetPersonaFieldErrors(*persona).empty()) {
+     return resolution;
+   }
+ 
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -205,6 +205,13 @@
+   ASSERT_TRUE(response.FindDict("fieldErrors"));
+   EXPECT_TRUE(
+       response.FindDict("fieldErrors")->FindString("region.timezone"));
++
++  payload = created_persona->Clone();
++  payload.EnsureDict("region")->Set("locale", "not_a_locale");
++  response = service_->SavePersona(payload);
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  ASSERT_TRUE(response.FindDict("fieldErrors"));
++  EXPECT_TRUE(response.FindDict("fieldErrors")->FindString("region.locale"));
+ }
+ 
+ TEST_F(PersonaServiceTest, ReadStateRefreshesPresetCatalog) {
+@@ -432,6 +439,32 @@
+   EXPECT_FALSE(resolution.snapshot.enabled);
+ }
+ 
++TEST_F(PersonaServiceTest, PersistedInvalidLocaleFailsClosed) {
++  base::DictValue response = service_->CreatePersonaProfile("Invalid locale");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  const base::DictValue* response_state = response.FindDict("state");
++  ASSERT_TRUE(response_state);
++  base::DictValue state = response_state->Clone();
++  base::DictValue* persona = nullptr;
++  for (auto& value : *state.FindList("personas")) {
++    if (value.is_dict() && value.GetDict().FindString("id") &&
++        *value.GetDict().FindString("id") == *persona_id) {
++      persona = &value.GetDict();
++      break;
++    }
++  }
++  ASSERT_TRUE(persona);
++  persona->EnsureDict("region")->Set("locale", "not_a_locale");
++  state.Set("activePersonaId", *persona_id);
++  prefs_.SetDict(kPersonaStatePref, std::move(state));
++
++  PersonaResolution resolution = service_->ResolveActivePersona();
++
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaUnavailable, resolution.status);
++  EXPECT_EQ(*persona_id, resolution.expected_persona_id);
++}
++
+ TEST_F(PersonaServiceTest, SnapshotUsesRealisticNavigatorPlatformValues) {
+   base::DictValue create_response = service_->CreatePersonaProfile("Platform");
+   const base::DictValue* created_state = create_response.FindDict("state");
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -13,6 +13,7 @@
+ #include <tuple>
+ 
+ #include "third_party/icu/source/common/unicode/unistr.h"
++#include "third_party/icu/source/common/unicode/uloc.h"
+ #include "third_party/icu/source/i18n/unicode/timezone.h"
+ 
+ namespace helium_persona {
+@@ -30,6 +31,19 @@
+   return timezone && *timezone != icu::TimeZone::getUnknown();
+ }
+ 
++bool IsValidLanguageTag(std::string_view language_tag) {
++  if (language_tag.empty()) {
++    return false;
++  }
++  char locale_id[ULOC_FULLNAME_CAPACITY];
++  int32_t parsed_length = 0;
++  UErrorCode status = U_ZERO_ERROR;
++  uloc_forLanguageTag(std::string(language_tag).c_str(), locale_id,
++                      std::size(locale_id), &parsed_length, &status);
++  return U_SUCCESS(status) && parsed_length == language_tag.size() &&
++         locale_id[0] != '\0';
++}
++
+ bool IsSupportedDeviceMemory(int device_memory) {
+   switch (device_memory) {
+     case 1:
+@@ -257,6 +271,10 @@
+         timezone && !timezone->empty() && !IsValidTimeZoneId(*timezone)) {
+       errors.Set("region.timezone", "invalid_value");
+     }
++    if (const std::string* locale = region->FindString("locale");
++        locale && !locale->empty() && !IsValidLanguageTag(*locale)) {
++      errors.Set("region.locale", "invalid_value");
++    }
+   }
+   const base::DictValue* ua_ch =
+       ValidateDictField(value, "uaCh", "uaCh", true, &errors);
+--- a/content/renderer/render_frame_impl.cc
++++ b/content/renderer/render_frame_impl.cc
+@@ -229,6 +229,7 @@
+ #include "third_party/blink/public/web/web_navigation_policy.h"
+ #include "third_party/blink/public/web/web_navigation_timings.h"
+ #include "third_party/blink/public/web/web_navigation_type.h"
++#include "third_party/blink/public/web/web_persona_locale.h"
+ #include "third_party/blink/public/web/web_performance_metrics_for_nested_contexts.h"
+ #include "third_party/blink/public/web/web_picture_in_picture_window_options.h"
+ #include "third_party/blink/public/web/web_plugin.h"
+@@ -3828,6 +3829,7 @@
+ 
+ void RenderFrameImpl::WillDetach(blink::DetachReason detach_reason) {
+   PersonaTimezoneCoordinator::GetInstance().Clear(this);
++  blink::ClearPersonaLocale(this);
+   if (detach_reason == blink::DetachReason::kNavigation) {
+     if (navigation_client_impl_) {
+       navigation_client_impl_->ResetWithoutCancelling();
+@@ -5363,6 +5365,9 @@
+   PersonaTimezoneCoordinator::GetInstance().Update(
+       this, persona_snapshot_.IsEnabled() ? persona_snapshot_.timezone
+                                           : std::string());
++  blink::UpdatePersonaLocale(
++      this, IsMainFrame(),
++      persona_snapshot_.IsEnabled() ? persona_snapshot_.locale : std::string());
+   GetContentClient()->SetActiveURL(
+       url, frame_->Top()->GetSecurityOrigin().ToString().Utf8());
+ 
+--- /dev/null
++++ b/third_party/blink/public/web/web_persona_locale.h
+@@ -0,0 +1,21 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_PERSONA_LOCALE_H_
++#define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_PERSONA_LOCALE_H_
++
++#include <string>
++
++#include "third_party/blink/public/platform/web_common.h"
++
++namespace blink {
++
++BLINK_EXPORT void UpdatePersonaLocale(const void* client,
++                                      bool is_main_frame,
++                                      const std::string& locale);
++BLINK_EXPORT void ClearPersonaLocale(const void* client);
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_PERSONA_LOCALE_H_
+--- a/third_party/blink/renderer/core/inspector/build.gni
++++ b/third_party/blink/renderer/core/inspector/build.gni
+@@ -126,6 +126,8 @@
+   "legacy_dom_snapshot_agent.h",
+   "locale_controller.cc",
+   "locale_controller.h",
++  "persona_locale_coordinator.cc",
++  "persona_locale_coordinator.h",
+   "main_thread_debugger.cc",
+   "main_thread_debugger.h",
+   "network_resources_data.cc",
+--- /dev/null
++++ b/third_party/blink/renderer/core/inspector/persona_locale_coordinator.cc
+@@ -0,0 +1,93 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/inspector/persona_locale_coordinator.h"
++
++#include <algorithm>
++
++#include "third_party/blink/public/web/web_persona_locale.h"
++#include "third_party/blink/renderer/core/inspector/locale_controller.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++
++namespace blink {
++
++PersonaLocaleCoordinator& PersonaLocaleCoordinator::GetInstance() {
++  static base::NoDestructor<PersonaLocaleCoordinator> instance;
++  return *instance;
++}
++
++void PersonaLocaleCoordinator::Update(const void* client,
++                                      bool is_main_frame,
++                                      const std::string& locale) {
++  CHECK(client);
++  base::AutoLock lock(lock_);
++  auto it = std::find_if(requests_.begin(), requests_.end(),
++                         [client](const Request& request) {
++                           return request.client == client;
++                         });
++  if (locale.empty()) {
++    if (it != requests_.end()) {
++      requests_.erase(it);
++    }
++  } else if (it != requests_.end()) {
++    it->is_main_frame = is_main_frame;
++    it->locale = locale;
++  } else {
++    requests_.push_back({client, is_main_frame, locale});
++  }
++  RecomputeLocked();
++}
++
++void PersonaLocaleCoordinator::Clear(const void* client) {
++  base::AutoLock lock(lock_);
++  std::erase_if(requests_, [client](const Request& request) {
++    return request.client == client;
++  });
++  RecomputeLocked();
++}
++
++std::string PersonaLocaleCoordinator::PickEffectiveLocked() const {
++  std::string latest;
++  for (const Request& request : requests_) {
++    if (request.is_main_frame) {
++      return request.locale;
++    }
++    latest = request.locale;
++  }
++  return latest;
++}
++
++void PersonaLocaleCoordinator::RecomputeLocked() {
++  const std::string effective = PickEffectiveLocked();
++  if (effective.empty()) {
++    if (owns_override_) {
++      LocaleController::instance().SetLocaleOverride(String(), false);
++      owns_override_ = false;
++      active_locale_.clear();
++    }
++    return;
++  }
++  if (owns_override_ && effective == active_locale_) {
++    return;
++  }
++
++  const String error = LocaleController::instance().SetLocaleOverride(
++      String::FromUtf8(base::as_byte_span(effective)), !owns_override_);
++  if (error.empty()) {
++    owns_override_ = true;
++    active_locale_ = effective;
++  }
++}
++
++void UpdatePersonaLocale(const void* client,
++                         bool is_main_frame,
++                         const std::string& locale) {
++  PersonaLocaleCoordinator::GetInstance().Update(client, is_main_frame, locale);
++}
++
++void ClearPersonaLocale(const void* client) {
++  PersonaLocaleCoordinator::GetInstance().Clear(client);
++}
++
++}  // namespace blink
+--- /dev/null
++++ b/third_party/blink/renderer/core/inspector/persona_locale_coordinator.h
+@@ -0,0 +1,50 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_INSPECTOR_PERSONA_LOCALE_COORDINATOR_H_
++#define THIRD_PARTY_BLINK_RENDERER_CORE_INSPECTOR_PERSONA_LOCALE_COORDINATOR_H_
++
++#include <string>
++#include <vector>
++
++#include "base/no_destructor.h"
++#include "base/synchronization/lock.h"
++
++namespace blink {
++
++class PersonaLocaleCoordinator {
++ public:
++  PersonaLocaleCoordinator(const PersonaLocaleCoordinator&) = delete;
++  PersonaLocaleCoordinator& operator=(const PersonaLocaleCoordinator&) = delete;
++
++  static PersonaLocaleCoordinator& GetInstance();
++  void Update(const void* client,
++              bool is_main_frame,
++              const std::string& locale);
++  void Clear(const void* client);
++
++ private:
++  friend class base::NoDestructor<PersonaLocaleCoordinator>;
++
++  struct Request {
++    const void* client;
++    bool is_main_frame;
++    std::string locale;
++  };
++
++  PersonaLocaleCoordinator() = default;
++  ~PersonaLocaleCoordinator() = default;
++
++  std::string PickEffectiveLocked() const EXCLUSIVE_LOCKS_REQUIRED(lock_);
++  void RecomputeLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_);
++
++  base::Lock lock_;
++  std::vector<Request> requests_ GUARDED_BY(lock_);
++  bool owns_override_ GUARDED_BY(lock_) = false;
++  std::string active_locale_ GUARDED_BY(lock_);
++};
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_INSPECTOR_PERSONA_LOCALE_COORDINATOR_H_
+--- a/third_party/blink/renderer/core/workers/worker_global_scope.cc
++++ b/third_party/blink/renderer/core/workers/worker_global_scope.cc
+@@ -39,6 +39,7 @@
+ #include "third_party/blink/public/mojom/loader/code_cache.mojom-blink.h"
+ #include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/public/platform/web_url_request.h"
++#include "third_party/blink/public/web/web_persona_locale.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_union_trustedscripturl_usvstring.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_void_function.h"
+ #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
+@@ -175,6 +176,7 @@
+ }
+ 
+ WorkerGlobalScope::~WorkerGlobalScope() {
++  ClearPersonaLocale(this);
+   DCHECK(!ScriptController());
+   InstanceCounters::DecrementCounter(
+       InstanceCounters::kWorkerGlobalScopeCounter);
+@@ -727,6 +729,10 @@
+   SetAudioNoiseToken(creation_params->helium_audio_noise_token);
+   SetHardwareNoiseToken(creation_params->helium_hardware_noise_token);
+   SetFontMetricNoiseToken(creation_params->helium_font_metric_noise_token);
++  UpdatePersonaLocale(
++      this, false,
++      helium_persona_snapshot_.IsEnabled() ? helium_persona_snapshot_.locale
++                                           : std::string());
+   // Workers should always maintain the default world of an isolate.
+   CHECK(creation_params->is_default_world_of_isolate);
+   TRACE_EVENT("blink.worker", "WorkerGlobalScope::WorkerGlobalScope");

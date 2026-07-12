@@ -14,6 +14,20 @@ Use **after** edits are done (or as handoff). Maps touched files to non-mutating
 CI checks. For **how to edit / compile / export patches**, use `$nitrous-dev`
 first — this skill does not replace the dev workflow.
 
+## Mandatory handoff gate
+
+Every task that changes repository files MUST run this command successfully
+before reporting completion:
+
+```bash
+python3 devutils/agent_patch_guard.py --mode pre-build
+```
+
+Fix failures and rerun until it passes. The other modes below provide faster
+intermediate feedback but do not replace this gate. This runs the checks needed
+before `he auto-package`; it does not build or package unless the user requested
+that separately. Read-only investigations are exempt.
+
 ## Default
 
 From repository root:

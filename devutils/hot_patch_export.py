@@ -2,6 +2,7 @@
 """Capture and verify hot-tree state before exporting a new top patch."""
 
 import hashlib
+import difflib
 import json
 import os
 import shutil
@@ -252,6 +253,39 @@ def _assert_state(path, expected, message):
         raise ExportError(f'{message}: {path}')
 
 
+def _apply_hot_delta(root_path, baseline_path, hot_path):
+    """Apply only the captured hot-tree edit to a root-stack source file."""
+    baseline = baseline_path.read_bytes()
+    current = hot_path.read_bytes()
+    delta = b''.join(
+        difflib.diff_bytes(difflib.unified_diff,
+                           baseline.splitlines(keepends=True),
+                           current.splitlines(keepends=True),
+                           fromfile=b'baseline',
+                           tofile=b'hot-tree',
+                           n=3))
+    if not delta:
+        return
+
+    command = [
+        'patch', '--batch', '--forward', '--silent', '--fuzz=0', '--no-backup-if-mismatch',
+        str(root_path)
+    ]
+    dry_run = subprocess.run([*command, '--dry-run'],
+                             input=delta,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT,
+                             check=False)
+    if dry_run.returncode != 0:
+        raise ExportError('hot-tree delta does not apply cleanly to root baseline: '
+                          f'{root_path}\n{dry_run.stdout.decode(errors="replace").rstrip()}')
+    subprocess.run(command,
+                   input=delta,
+                   check=True,
+                   stdout=subprocess.PIPE,
+                   stderr=subprocess.STDOUT)
+
+
 def _validate_generated_patch(patch_path):
     content = patch_path.read_text(encoding='utf-8')
     if not content.strip():
@@ -274,23 +308,32 @@ def stage_session(context, patchwork_tree):
     shutil.copytree(context.root / 'patches', staged_queue)
 
     _run_quilt(patchwork_tree, staged_queue, 'push', '-a')
-    for entry in manifest['files']:
-        _assert_state(patchwork_tree / entry['path'], _manifest_state(entry),
-                      'patchwork baseline does not match the hot-start baseline')
 
     patch = manifest['patch']
     (staged_queue / patch).parent.mkdir(parents=True, exist_ok=True)
     _run_quilt(patchwork_tree, staged_queue, 'new', patch)
+    replay_states = {}
     for relative in changed:
         _run_quilt(patchwork_tree, staged_queue, 'add', relative)
         hot_path = context.hot_tree / relative
         patchwork_path = patchwork_tree / relative
+        baseline_path = context.session_dir / 'baseline' / relative
+        baseline_entry = next(entry for entry in manifest['files'] if entry['path'] == relative)
         current = _file_state(hot_path)
         if current['kind'] == 'missing':
+            _assert_state(patchwork_path, _manifest_state(baseline_entry),
+                          'cannot delete a file changed by a later platform layer')
             patchwork_path.unlink()
-        else:
+        elif baseline_entry['kind'] == 'missing':
+            _assert_state(patchwork_path, {'kind': 'missing'},
+                          'new hot-tree file already exists in root baseline')
             patchwork_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(hot_path, patchwork_path)
+        else:
+            _apply_hot_delta(patchwork_path, baseline_path, hot_path)
+            if current['mode'] != baseline_entry['mode']:
+                patchwork_path.chmod(current['mode'])
+        replay_states[relative] = _file_state(patchwork_path)
 
     top = _run_quilt(patchwork_tree, staged_queue, 'top')
     if top != patch:
@@ -301,7 +344,7 @@ def stage_session(context, patchwork_tree):
     _run_quilt(patchwork_tree, staged_queue, 'pop')
     _run_quilt(patchwork_tree, staged_queue, 'push', patch)
     for relative in changed:
-        _assert_state(patchwork_tree / relative, _file_state(context.hot_tree / relative),
+        _assert_state(patchwork_tree / relative, replay_states[relative],
                       'replayed patch does not reproduce the hot-tree file')
     return staged_queue
 

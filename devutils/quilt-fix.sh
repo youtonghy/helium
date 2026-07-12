@@ -28,14 +28,19 @@ fi
 cd "$SRC"
 source "$REPO/devutils/set_quilt_vars.sh"
 
-echo "→ Pushing to $TARGET_PATCH ..."
-set +e
-PUSH_OUTPUT=$(command quilt --quiltrc - push "$TARGET_PATCH" 2>&1)
-PUSH_STATUS=$?
-set -e
-printf '%s\n' "$PUSH_OUTPUT" | tail -5
-if [ "$PUSH_STATUS" -ne 0 ]; then
-    exit "$PUSH_STATUS"
+CURRENT_TOP=$(command quilt --quiltrc - top 2>/dev/null || true)
+if [ "$CURRENT_TOP" != "$TARGET_PATCH" ]; then
+    echo "→ Pushing to $TARGET_PATCH ..."
+    set +e
+    PUSH_OUTPUT=$(command quilt --quiltrc - push "$TARGET_PATCH" 2>&1)
+    PUSH_STATUS=$?
+    set -e
+    printf '%s\n' "$PUSH_OUTPUT" | tail -5
+    if [ "$PUSH_STATUS" -ne 0 ]; then
+        exit "$PUSH_STATUS"
+    fi
+else
+    echo "→ Target patch is already on top."
 fi
 
 TOP_PATCH=$(command quilt --quiltrc - top)

@@ -1,0 +1,529 @@
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -3205,23 +3205,21 @@
+ 
+ blink::HeliumPersonaSnapshot ChromeContentBrowserClient::GetHeliumPersonaSnapshot(
+     content::BrowserContext* browser_context) {
+-  if (!browser_context) {
+-    if (auto cached = helium_persona::PersonaRuntimeOverride::GetGlobal()) {
+-      return *cached;
+-    }
+-    return blink::HeliumPersonaSnapshot();
+-  }
+-  Profile* profile = Profile::FromBrowserContext(browser_context);
+-  auto* service = helium_persona::PersonaServiceFactory::GetForProfile(profile);
+-  if (!service) {
+-    if (auto cached = helium_persona::PersonaRuntimeOverride::GetGlobal()) {
+-      return *cached;
+-    }
+-    return blink::HeliumPersonaSnapshot();
++  helium_persona::PersonaRuntimeState state =
++      helium_persona::PersonaRuntimeOverride::ResolveForBrowserContext(
++          browser_context);
++  if (state.snapshot) {
++    return *state.snapshot;
+   }
+-  blink::HeliumPersonaSnapshot snapshot = service->GetActiveSnapshot();
+-  helium_persona::PersonaRuntimeOverride::ApplyGlobal(snapshot);
+-  return snapshot;
++
++  blink::HeliumPersonaSnapshot locked;
++  locked.enabled = true;
++  locked.id = "persona-unavailable";
++  locked.locale = "en-US";
++  locked.timezone = "UTC";
++  locked.accept_language = "en-US";
++  locked.navigator_languages = {"en-US"};
++  return locked;
+ }
+ 
+ gfx::ImageSkia ChromeContentBrowserClient::GetDefaultFavicon() {
+@@ -6653,6 +6651,8 @@
+     bool* disable_secure_dns,
+     network::mojom::URLLoaderFactoryOverridePtr* factory_override,
+     scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner) {
++  helium_persona::MaybeProxyPersonaURLLoaderFactory(browser_context,
++                                                    factory_builder);
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+   auto* web_request_api =
+       extensions::BrowserContextKeyedAPIFactory<extensions::WebRequestAPI>::Get(
+--- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
++++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+@@ -19,6 +19,7 @@
+ #include "chrome/browser/first_party_sets/first_party_sets_navigation_throttle.h"
+ #include "chrome/browser/glic/glic_navigation_throttle.h"
+ #include "chrome/browser/history/history_service_factory.h"
++#include "chrome/browser/helium_persona/persona_runtime_override.h"
+ #include "chrome/browser/interstitials/enterprise_util.h"
+ #include "chrome/browser/lookalikes/lookalike_url_navigation_throttle.h"
+ #include "chrome/browser/omnibox/geolocation_navigation_throttle.h"
+@@ -70,6 +71,7 @@
+ #include "components/tabs/public/tab_interface.h"
+ #include "components/user_prefs/user_prefs.h"
+ #include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/navigation_throttle.h"
+ #include "content/public/browser/navigation_throttle_registry.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/content_switches.h"
+@@ -189,6 +191,37 @@
+ 
+ namespace {
+ 
++class PersonaFailClosedNavigationThrottle
++    : public content::NavigationThrottle {
++ public:
++  explicit PersonaFailClosedNavigationThrottle(
++      content::NavigationThrottleRegistry& registry)
++      : content::NavigationThrottle(registry) {}
++
++  ThrottleCheckResult WillStartRequest() override { return CheckPersona(); }
++  ThrottleCheckResult WillRedirectRequest() override { return CheckPersona(); }
++  const char* GetNameForLogging() override {
++    return "PersonaFailClosedNavigationThrottle";
++  }
++
++ private:
++  ThrottleCheckResult CheckPersona() {
++    const GURL& url = navigation_handle()->GetURL();
++    if (!url.SchemeIsHTTPOrHTTPS()) {
++      return PROCEED;
++    }
++    content::BrowserContext* browser_context =
++        navigation_handle()->GetWebContents()->GetBrowserContext();
++    helium_persona::PersonaRuntimeState state =
++        helium_persona::PersonaRuntimeOverride::ResolveForBrowserContext(
++            browser_context);
++    return state.status ==
++                   helium_persona::PersonaResolutionStatus::kPersonaUnavailable
++               ? BLOCK_REQUEST
++               : PROCEED;
++  }
++};
++
+ // Wrapper for SSLErrorHandler::HandleSSLError() that supplies //chrome-level
+ // parameters.
+ void HandleSSLErrorWrapper(
+@@ -282,6 +315,8 @@
+ void CreateAndAddChromeThrottlesForNavigation(
+     content::NavigationThrottleRegistry& registry) {
+   content::NavigationHandle& handle = registry.GetNavigationHandle();
++  registry.AddThrottle(
++      std::make_unique<PersonaFailClosedNavigationThrottle>(registry));
+   if (handle.IsInMainFrame()) {
+     // MetricsNavigationThrottle requires that it runs before
+     // NavigationThrottles that may delay or cancel navigations, so only
+--- a/chrome/browser/helium_persona/persona_runtime_override.cc
++++ b/chrome/browser/helium_persona/persona_runtime_override.cc
+@@ -4,8 +4,23 @@
+ 
+ #include "chrome/browser/helium_persona/persona_runtime_override.h"
+ 
++#include <map>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/memory/raw_ptr.h"
+ #include "base/no_destructor.h"
+ #include "base/synchronization/lock.h"
++#include "chrome/browser/helium_persona/persona_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "content/public/browser/browser_context.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "net/base/net_errors.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/self_deleting_url_loader_factory.h"
++#include "services/network/public/cpp/url_loader_completion_status.h"
++#include "services/network/public/cpp/url_loader_factory_builder.h"
++#include "services/network/public/mojom/url_loader_factory.mojom.h"
+ 
+ namespace helium_persona {
+ 
+@@ -16,28 +31,138 @@
+   return *lock;
+ }
+ 
+-std::optional<blink::HeliumPersonaSnapshot>& GetPersonaRuntimeOverrideSnapshot() {
+-  static base::NoDestructor<std::optional<blink::HeliumPersonaSnapshot>>
+-      snapshot;
+-  return *snapshot;
++struct CacheEntry {
++  PersonaResolutionStatus status = PersonaResolutionStatus::kPersonaUnavailable;
++  std::string expected_persona_id;
++  std::optional<blink::HeliumPersonaSnapshot> last_valid_snapshot;
++};
++
++std::map<const void*, CacheEntry>& GetPersonaRuntimeOverrideEntries() {
++  static base::NoDestructor<std::map<const void*, CacheEntry>> entries;
++  return *entries;
++}
++
++PersonaRuntimeState MakeRuntimeState(const CacheEntry& entry) {
++  return {.status = entry.status,
++          .expected_persona_id = entry.expected_persona_id,
++          .snapshot = entry.last_valid_snapshot};
+ }
+ 
++class PersonaURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
++ public:
++  PersonaURLLoaderFactory(
++      content::BrowserContext* browser_context,
++      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
++      mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory)
++      : network::SelfDeletingURLLoaderFactory(std::move(receiver)),
++        browser_context_(browser_context),
++        target_factory_(std::move(target_factory)) {
++    target_factory_.set_disconnect_handler(base::BindOnce(
++        &PersonaURLLoaderFactory::OnTargetFactoryDisconnected,
++        base::Unretained(this)));
++  }
++
++  ~PersonaURLLoaderFactory() override = default;
++
++  void CreateLoaderAndStart(
++      mojo::PendingReceiver<network::mojom::URLLoader> loader,
++      int32_t request_id,
++      uint32_t options,
++      const network::ResourceRequest& request,
++      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
++      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
++      override {
++    PersonaRuntimeState state =
++        PersonaRuntimeOverride::ResolveForBrowserContext(browser_context_);
++    if (request.url.SchemeIsHTTPOrHTTPS() &&
++        state.status == PersonaResolutionStatus::kPersonaUnavailable) {
++      mojo::Remote<network::mojom::URLLoaderClient> client_remote(
++          std::move(client));
++      client_remote->OnComplete(
++          network::URLLoaderCompletionStatus(net::ERR_BLOCKED_BY_CLIENT));
++      return;
++    }
++
++    target_factory_->CreateLoaderAndStart(
++        std::move(loader), request_id, options, request, std::move(client),
++        traffic_annotation);
++  }
++
++ private:
++  void OnTargetFactoryDisconnected() { DisconnectReceiversAndDestroy(); }
++
++  raw_ptr<content::BrowserContext> browser_context_;
++  mojo::Remote<network::mojom::URLLoaderFactory> target_factory_;
++};
++
+ }  // namespace
+ 
++PersonaRuntimeState PersonaRuntimeOverride::ResolveForBrowserContext(
++    content::BrowserContext* browser_context) {
++  PersonaResolution resolution;
++  if (browser_context) {
++    Profile* profile = Profile::FromBrowserContext(browser_context);
++    if (auto* service = PersonaServiceFactory::GetForProfile(profile)) {
++      resolution = service->ResolveActivePersona();
++    }
++  }
++  return ApplyForContext(browser_context, resolution);
++}
++
++PersonaRuntimeState PersonaRuntimeOverride::ApplyForContext(
++    const void* context_key,
++    const PersonaResolution& resolution) {
++  base::AutoLock lock(GetPersonaRuntimeOverrideLock());
++  CacheEntry& entry = GetPersonaRuntimeOverrideEntries()[context_key];
++  entry.status = resolution.status;
++  entry.expected_persona_id = resolution.expected_persona_id;
++
++  if (resolution.status == PersonaResolutionStatus::kSystemReal) {
++    entry.last_valid_snapshot = resolution.snapshot;
++  } else if (resolution.status == PersonaResolutionStatus::kPersonaReady) {
++    entry.last_valid_snapshot = resolution.snapshot;
++  } else if (entry.last_valid_snapshot &&
++             !resolution.expected_persona_id.empty() &&
++             entry.last_valid_snapshot->id != resolution.expected_persona_id) {
++    entry.last_valid_snapshot.reset();
++  }
++  return MakeRuntimeState(entry);
++}
++
++void PersonaRuntimeOverride::ClearForContext(const void* context_key) {
++  base::AutoLock lock(GetPersonaRuntimeOverrideLock());
++  GetPersonaRuntimeOverrideEntries().erase(context_key);
++}
++
+ void PersonaRuntimeOverride::ApplyGlobal(
+     const blink::HeliumPersonaSnapshot& snapshot) {
+-  base::AutoLock lock(GetPersonaRuntimeOverrideLock());
+-  GetPersonaRuntimeOverrideSnapshot() = snapshot;
++  PersonaResolution resolution;
++  resolution.status = snapshot.IsEnabled()
++                          ? PersonaResolutionStatus::kPersonaReady
++                          : PersonaResolutionStatus::kSystemReal;
++  resolution.expected_persona_id = snapshot.id;
++  resolution.snapshot = snapshot;
++  ApplyForContext(nullptr, resolution);
+ }
+ 
+ void PersonaRuntimeOverride::ClearGlobal() {
+-  base::AutoLock lock(GetPersonaRuntimeOverrideLock());
+-  GetPersonaRuntimeOverrideSnapshot().reset();
++  ClearForContext(nullptr);
+ }
+ 
+ std::optional<blink::HeliumPersonaSnapshot> PersonaRuntimeOverride::GetGlobal() {
+   base::AutoLock lock(GetPersonaRuntimeOverrideLock());
+-  return GetPersonaRuntimeOverrideSnapshot();
++  auto it = GetPersonaRuntimeOverrideEntries().find(nullptr);
++  return it == GetPersonaRuntimeOverrideEntries().end()
++             ? std::nullopt
++             : it->second.last_valid_snapshot;
++}
++
++void MaybeProxyPersonaURLLoaderFactory(
++    content::BrowserContext* browser_context,
++    network::URLLoaderFactoryBuilder& factory_builder) {
++  auto [receiver, remote] = factory_builder.Append();
++  new PersonaURLLoaderFactory(browser_context, std::move(receiver),
++                              std::move(remote));
+ }
+ 
+ }  // namespace helium_persona
+--- a/chrome/browser/helium_persona/persona_runtime_override.h
++++ b/chrome/browser/helium_persona/persona_runtime_override.h
+@@ -6,17 +6,44 @@
+ 
+ #include <optional>
+ 
++#include "chrome/browser/helium_persona/persona_service.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ 
++namespace content {
++class BrowserContext;
++}
++
++namespace network {
++class URLLoaderFactoryBuilder;
++}
++
+ namespace helium_persona {
+ 
++struct PersonaRuntimeState {
++  PersonaResolutionStatus status = PersonaResolutionStatus::kPersonaUnavailable;
++  std::string expected_persona_id;
++  std::optional<blink::HeliumPersonaSnapshot> snapshot;
++};
++
+ class PersonaRuntimeOverride {
+  public:
++  static PersonaRuntimeState ResolveForBrowserContext(
++      content::BrowserContext* browser_context);
++  static PersonaRuntimeState ApplyForContext(
++      const void* context_key,
++      const PersonaResolution& resolution);
++  static void ClearForContext(const void* context_key);
++
++  // Legacy process-global access for callers without a BrowserContext.
+   static void ApplyGlobal(const blink::HeliumPersonaSnapshot& snapshot);
+   static void ClearGlobal();
+   static std::optional<blink::HeliumPersonaSnapshot> GetGlobal();
+ };
+ 
++void MaybeProxyPersonaURLLoaderFactory(
++    content::BrowserContext* browser_context,
++    network::URLLoaderFactoryBuilder& factory_builder);
++
+ }  // namespace helium_persona
+ 
+ #endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_RUNTIME_OVERRIDE_H_
+--- a/chrome/browser/helium_persona/persona_runtime_override_unittest.cc
++++ b/chrome/browser/helium_persona/persona_runtime_override_unittest.cc
+@@ -67,4 +67,58 @@
+   EXPECT_FALSE(PersonaRuntimeOverride::GetGlobal().has_value());
+ }
+ 
++TEST_F(PersonaRuntimeOverrideTest, UnavailableKeepsSamePersonaSnapshot) {
++  int context;
++  PersonaResolution ready;
++  ready.status = PersonaResolutionStatus::kPersonaReady;
++  ready.expected_persona_id = "persona-a";
++  ready.snapshot = MakeSnapshot("persona-a", true);
++  PersonaRuntimeOverride::ApplyForContext(&context, ready);
++
++  PersonaResolution unavailable;
++  unavailable.expected_persona_id = "persona-a";
++  PersonaRuntimeState state =
++      PersonaRuntimeOverride::ApplyForContext(&context, unavailable);
++
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaUnavailable, state.status);
++  ASSERT_TRUE(state.snapshot);
++  EXPECT_EQ("persona-a", state.snapshot->id);
++  PersonaRuntimeOverride::ClearForContext(&context);
++}
++
++TEST_F(PersonaRuntimeOverrideTest, UnavailableDoesNotReuseAnotherPersona) {
++  int context;
++  PersonaResolution ready;
++  ready.status = PersonaResolutionStatus::kPersonaReady;
++  ready.expected_persona_id = "persona-a";
++  ready.snapshot = MakeSnapshot("persona-a", true);
++  PersonaRuntimeOverride::ApplyForContext(&context, ready);
++
++  PersonaResolution unavailable;
++  unavailable.expected_persona_id = "persona-b";
++  PersonaRuntimeState state =
++      PersonaRuntimeOverride::ApplyForContext(&context, unavailable);
++
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaUnavailable, state.status);
++  EXPECT_FALSE(state.snapshot);
++  PersonaRuntimeOverride::ClearForContext(&context);
++}
++
++TEST_F(PersonaRuntimeOverrideTest, ContextCachesAreIsolated) {
++  int first_context;
++  int second_context;
++  PersonaResolution ready;
++  ready.status = PersonaResolutionStatus::kPersonaReady;
++  ready.expected_persona_id = "persona-a";
++  ready.snapshot = MakeSnapshot("persona-a", true);
++  PersonaRuntimeOverride::ApplyForContext(&first_context, ready);
++
++  PersonaRuntimeState second = PersonaRuntimeOverride::ApplyForContext(
++      &second_context, PersonaResolution());
++
++  EXPECT_FALSE(second.snapshot);
++  PersonaRuntimeOverride::ClearForContext(&first_context);
++  PersonaRuntimeOverride::ClearForContext(&second_context);
++}
++
+ }  // namespace helium_persona
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -1666,6 +1666,44 @@
+   return snapshot;
+ }
+ 
++PersonaResolution PersonaService::ResolveActivePersona() const {
++  PersonaResolution resolution;
++  if (!prefs_) {
++    return resolution;
++  }
++
++  const base::DictValue& raw_state = prefs_->GetDict(kPersonaStatePref);
++  const std::string* active_id = raw_state.FindString("activePersonaId");
++  if (!active_id || active_id->empty()) {
++    return resolution;
++  }
++  resolution.expected_persona_id = *active_id;
++
++  if (*active_id == kDefaultPersonaId) {
++    resolution.status = PersonaResolutionStatus::kSystemReal;
++    resolution.snapshot.id = kDefaultPersonaId;
++    return resolution;
++  }
++
++  const base::DictValue* persona =
++      FindPersonaInList(raw_state.FindList("personas"), *active_id);
++  const std::string* persona_id = persona ? persona->FindString("id") : nullptr;
++  if (!persona_id || *persona_id != *active_id ||
++      !persona->FindBool("enabled").value_or(false)) {
++    return resolution;
++  }
++
++  blink::HeliumPersonaSnapshot snapshot = GetActiveSnapshot();
++  if (!snapshot.enabled || snapshot.id != *active_id || snapshot.locale.empty() ||
++      snapshot.timezone.empty()) {
++    return resolution;
++  }
++
++  resolution.status = PersonaResolutionStatus::kPersonaReady;
++  resolution.snapshot = std::move(snapshot);
++  return resolution;
++}
++
+ base::DictValue PersonaService::ReadState() const {
+   if (!prefs_) {
+     base::DictValue state = MakeDefaultState();
+--- a/chrome/browser/helium_persona/persona_service.h
++++ b/chrome/browser/helium_persona/persona_service.h
+@@ -23,6 +23,18 @@
+   kSite,
+ };
+ 
++enum class PersonaResolutionStatus {
++  kSystemReal,
++  kPersonaReady,
++  kPersonaUnavailable,
++};
++
++struct PersonaResolution {
++  PersonaResolutionStatus status = PersonaResolutionStatus::kPersonaUnavailable;
++  std::string expected_persona_id;
++  blink::HeliumPersonaSnapshot snapshot;
++};
++
+ class PersonaService : public KeyedService {
+  public:
+   explicit PersonaService(PrefService* prefs);
+@@ -45,6 +57,7 @@
+   void RefreshFingerprint(FingerprintRefreshScope scope,
+                           const std::string& site_origin_or_empty);
+   blink::HeliumPersonaSnapshot GetActiveSnapshot() const;
++  PersonaResolution ResolveActivePersona() const;
+ 
+  private:
+   base::DictValue ReadState() const;
+--- a/chrome/browser/helium_persona/persona_service_factory.cc
++++ b/chrome/browser/helium_persona/persona_service_factory.cc
+@@ -41,7 +41,7 @@
+ 
+ void PersonaServiceFactory::BrowserContextShutdown(
+     content::BrowserContext* context) {
+-  PersonaRuntimeOverride::ClearGlobal();
++  PersonaRuntimeOverride::ClearForContext(context);
+   ProfileKeyedServiceFactory::BrowserContextShutdown(context);
+ }
+ 
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -395,6 +395,43 @@
+   EXPECT_FALSE(service_->GetActiveSnapshot().enabled);
+ }
+ 
++TEST_F(PersonaServiceTest, ExplicitDefaultResolvesAsSystemReal) {
++  PersonaResolution resolution = service_->ResolveActivePersona();
++
++  EXPECT_EQ(PersonaResolutionStatus::kSystemReal, resolution.status);
++  EXPECT_EQ(kDefaultPersonaId, resolution.expected_persona_id);
++  EXPECT_FALSE(resolution.snapshot.enabled);
++  EXPECT_EQ(kDefaultPersonaId, resolution.snapshot.id);
++}
++
++TEST_F(PersonaServiceTest, ActiveCustomPersonaResolvesReady) {
++  base::DictValue response = service_->CreatePersonaProfile("Ready");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(service_->SetActivePersona(*persona_id)
++                  .FindBool("ok")
++                  .value_or(false));
++
++  PersonaResolution resolution = service_->ResolveActivePersona();
++
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaReady, resolution.status);
++  EXPECT_EQ(*persona_id, resolution.expected_persona_id);
++  EXPECT_TRUE(resolution.snapshot.enabled);
++  EXPECT_EQ(*persona_id, resolution.snapshot.id);
++}
++
++TEST_F(PersonaServiceTest, MissingActivePersonaFailsClosed) {
++  base::DictValue state = service_->GetPersonaState();
++  state.Set("activePersonaId", "persona-missing");
++  prefs_.SetDict(kPersonaStatePref, std::move(state));
++
++  PersonaResolution resolution = service_->ResolveActivePersona();
++
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaUnavailable, resolution.status);
++  EXPECT_EQ("persona-missing", resolution.expected_persona_id);
++  EXPECT_FALSE(resolution.snapshot.enabled);
++}
++
+ TEST_F(PersonaServiceTest, SnapshotUsesRealisticNavigatorPlatformValues) {
+   base::DictValue create_response = service_->CreatePersonaProfile("Platform");
+   const base::DictValue* created_state = create_response.FindDict("state");
