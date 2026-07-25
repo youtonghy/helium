@@ -36,3 +36,19 @@ def test_normalize_patch_artifacts_preserves_unrelated_separator():
     content = 'note\n===================================================================\n'
 
     assert agent_patch_guard.normalize_patch_artifacts(content) == content
+
+
+def test_source_download_inputs_include_platform_dependencies_when_requested():
+    """Merged macOS validation includes every platform download baseline."""
+    assert agent_patch_guard.source_download_inputs(include_macos=True) == [
+        'downloads.ini',
+        'deps.ini',
+        'platform/macos/downloads.ini',
+    ]
+
+
+def test_source_download_inputs_keep_root_validation_minimal():
+    """Root patch validation avoids unrelated platform-only downloads."""
+    assert agent_patch_guard.source_download_inputs(include_macos=False) == [
+        'downloads.ini',
+    ]

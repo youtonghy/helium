@@ -261,9 +261,49 @@
     "message": "Actualiser les empreintes"
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_REFRESH_SITE_FINGERPRINTS",
+    "source": "Refresh fingerprints for this site",
+    "message": "Actualiser les empreintes pour ce site"
+  },
+  {
     "name": "IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED",
     "source": "Fingerprints refreshed. Reload open tabs for tokens to take effect.",
     "message": "Empreintes actualisées. Rechargez les onglets ouverts pour appliquer les nouveaux jetons."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY",
+    "source": "Rotate complete identity",
+    "message": "Changer l’identité complète"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_TITLE",
+    "source": "Rotate complete identity?",
+    "message": "Changer l’identité complète ?"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches the browser version, user agent, client hints, platform, TLS, HTTP/2, and HTTP/3 identity together. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "Cette opération change simultanément la version du navigateur, l’agent utilisateur, les indications client, la plate-forme et les identités TLS, HTTP/2 et HTTP/3. Les onglets ouverts dans ce profil seront rechargés une fois la nouvelle identité acceptée par la pile réseau."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_CONFIRM",
+    "source": "Rotate and reload",
+    "message": "Changer et recharger"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "Complete identity rotation requires at least two verified browser identity templates. Fingerprint refresh remains available and keeps the current browser version and platform.",
+    "message": "Le changement d’identité complète nécessite au moins deux modèles d’identité de navigateur vérifiés. L’actualisation des empreintes reste disponible et conserve la version actuelle du navigateur et la plate-forme."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_FAILED",
+    "source": "Complete identity rotation failed. Tabs were not reloaded.",
+    "message": "Le changement d’identité complète a échoué. Les onglets n’ont pas été rechargés."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATED",
+    "source": "Complete identity rotated. Reloading open tabs.",
+    "message": "Identité complète modifiée. Rechargement des onglets ouverts."
   },
   {
     "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS",
@@ -1144,5 +1184,15 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP",
     "source": "Controls supported Persona-gated Private State Token operations. Other Privacy Sandbox controls may also apply.",
     "message": "Contrôle les opérations Private State Token prises en charge et soumises à Persona. D'autres contrôles Privacy Sandbox peuvent également s'appliquer."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_LABEL",
+    "source": "Allow WebRTC",
+    "message": "Allow WebRTC"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_TOOLTIP",
+    "source": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls.",
+    "message": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls."
   }
 ]

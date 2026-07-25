@@ -1,0 +1,1724 @@
+--- a/chrome/browser/net/profile_network_context_service.cc
++++ b/chrome/browser/net/profile_network_context_service.cc
+@@ -7,6 +7,7 @@
+ #include <memory>
+ #include <string>
+ #include <string_view>
++#include <vector>
+ 
+ #include "base/base64.h"
+ #include "base/check_op.h"
+@@ -88,6 +89,7 @@
+ #include "crypto/hash.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "net/base/features.h"
++#include "net/base/network_persona_template.h"
+ #include "net/cert/asn1_util.h"
+ #include "net/disk_cache/backend_experiment.h"
+ #include "net/disk_cache/buildflags.h"
+@@ -625,7 +627,13 @@ ProfileNetworkContextService::CreateNetw
+           rotation.FindString("globalGeneration")) {
+     base::StringToUint64(*generation, &config->generation);
+   }
+-  config->template_id = 0;
++  const std::vector<uint32_t> template_ids =
++      net::GetCompatibleNetworkPersonaTemplateIds(149);
++  if (template_ids.empty()) {
++    return nullptr;
++  }
++  config->template_id =
++      template_ids[config->generation % template_ids.size()];
+   const auto seed = crypto::hash::Sha256(salt + "\n" + *active_id);
+   config->deterministic_seed.assign(seed.begin(), seed.end());
+   return config;
+--- a/net/BUILD.gn
++++ b/net/BUILD.gn
+@@ -262,6 +262,8 @@ component("net") {
+     "base/network_isolation_partition.cc",
+     "base/network_isolation_partition.h",
+     "base/network_persona_config.h",
++    "base/network_persona_template.cc",
++    "base/network_persona_template.h",
+     "base/parse_number.cc",
+     "base/parse_number.h",
+     "base/pickle.h",
+@@ -2847,6 +2849,7 @@ target(_test_target_type, "net_unittests
+     "base/network_delegate_unittest.cc",
+     "base/network_interfaces_unittest.cc",
+     "base/network_isolation_key_unittest.cc",
++    "base/network_persona_template_unittest.cc",
+     "base/parse_number_unittest.cc",
+     "base/pickle_base_types_unittest.cc",
+     "base/pickle_unittest.cc",
+--- /dev/null
++++ b/net/base/network_persona_template.cc
+@@ -0,0 +1,67 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "net/base/network_persona_template.h"
++
++#include <array>
++#include <ranges>
++
++namespace net {
++namespace {
++
++// These variants are captured from this Chromium 149 network stack with the
++// production ML-DSA feature disabled and enabled respectively.
++constexpr std::array<NetworkPersonaTemplate, 2> kTemplates = {{
++    {
++        .id = kChromium149DefaultTemplateId,
++        .chrome_major = 149,
++        .platform = "macOS",
++        .capture_source = "Chromium 149.0.7827.114; TlsMldsaSignatures=off",
++        .client_hello_fixture =
++            "network_persona/chromium_149_macos_default_client_hello.hex",
++        .client_hello_fixture_sha256 =
++            "d8c27051142c86b70c6b902dc51b3c501f94ffe18deb95786e537ceba6db0cad",
++        .tls_signature_profile = TlsSignatureProfile::kChromium149Default,
++        .http2_settings = {{{1, 65536}, {2, 0}, {4, 6291456}, {6, 262144}}},
++        .http2_connection_window = 15728640,
++        .http2_pseudo_header_order = "masp",
++        .http3_settings_order = {1, 6, 7},
++    },
++    {
++        .id = kChromium149MldsaTemplateId,
++        .chrome_major = 149,
++        .platform = "macOS",
++        .capture_source = "Chromium 149.0.7827.114; TlsMldsaSignatures=on",
++        .client_hello_fixture =
++            "network_persona/chromium_149_macos_mldsa_client_hello.hex",
++        .client_hello_fixture_sha256 =
++            "78e038414e7d2c5f38e414db2632d156b9cbf34f278f803e6a370adc120cf443",
++        .tls_signature_profile = TlsSignatureProfile::kChromium149Mldsa,
++        .http2_settings = {{{1, 65536}, {2, 0}, {4, 6291456}, {6, 262144}}},
++        .http2_connection_window = 15728640,
++        .http2_pseudo_header_order = "masp",
++        .http3_settings_order = {1, 6, 7},
++    },
++}};
++
++}  // namespace
++
++const NetworkPersonaTemplate* FindNetworkPersonaTemplate(uint32_t template_id) {
++  const auto it = std::ranges::find(kTemplates, template_id,
++                                    &NetworkPersonaTemplate::id);
++  return it == kTemplates.end() ? nullptr : &*it;
++}
++
++std::vector<uint32_t> GetCompatibleNetworkPersonaTemplateIds(
++    int chrome_major) {
++  std::vector<uint32_t> ids;
++  for (const NetworkPersonaTemplate& network_template : kTemplates) {
++    if (network_template.chrome_major == chrome_major) {
++      ids.push_back(network_template.id);
++    }
++  }
++  return ids;
++}
++
++}  // namespace net
+--- /dev/null
++++ b/net/base/network_persona_template.h
+@@ -0,0 +1,52 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef NET_BASE_NETWORK_PERSONA_TEMPLATE_H_
++#define NET_BASE_NETWORK_PERSONA_TEMPLATE_H_
++
++#include <array>
++#include <cstddef>
++#include <cstdint>
++#include <string_view>
++#include <vector>
++
++#include "net/base/net_export.h"
++
++namespace net {
++
++inline constexpr uint32_t kChromium149DefaultTemplateId = 149001;
++inline constexpr uint32_t kChromium149MldsaTemplateId = 149002;
++
++enum class TlsSignatureProfile {
++  kChromium149Default,
++  kChromium149Mldsa,
++};
++
++struct NetworkPersonaHttp2Setting {
++  uint16_t id;
++  uint32_t value;
++};
++
++struct NET_EXPORT NetworkPersonaTemplate {
++  uint32_t id;
++  int chrome_major;
++  std::string_view platform;
++  std::string_view capture_source;
++  std::string_view client_hello_fixture;
++  std::string_view client_hello_fixture_sha256;
++  TlsSignatureProfile tls_signature_profile;
++  std::array<NetworkPersonaHttp2Setting, 4> http2_settings;
++  size_t http2_connection_window;
++  std::string_view http2_pseudo_header_order;
++  std::array<uint64_t, 3> http3_settings_order;
++};
++
++NET_EXPORT const NetworkPersonaTemplate* FindNetworkPersonaTemplate(
++    uint32_t template_id);
++NET_EXPORT std::vector<uint32_t> GetCompatibleNetworkPersonaTemplateIds(
++    int chrome_major);
++
++}  // namespace net
++
++#endif  // NET_BASE_NETWORK_PERSONA_TEMPLATE_H_
+--- /dev/null
++++ b/net/base/network_persona_template_unittest.cc
+@@ -0,0 +1,86 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "net/base/network_persona_template.h"
++
++#include <ranges>
++
++#include "base/files/file_util.h"
++#include "base/strings/string_number_conversions.h"
++#include "crypto/hash.h"
++#include "net/test/test_data_directory.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace net {
++namespace {
++
++bool ExtractFixtureData(std::string* fixture) {
++  constexpr std::string_view kDataMarker = "# DATA\n";
++  const size_t marker = fixture->find(kDataMarker);
++  const size_t metadata = fixture->find("\n#");
++  if (marker == std::string::npos || metadata == std::string::npos ||
++      metadata > marker) {
++    return false;
++  }
++  fixture->erase(metadata + 1);
++  return true;
++}
++
++TEST(NetworkPersonaTemplateTest, CatalogContainsCapturedChromium149Variants) {
++  const NetworkPersonaTemplate* default_variant =
++      FindNetworkPersonaTemplate(kChromium149DefaultTemplateId);
++  ASSERT_TRUE(default_variant);
++  EXPECT_EQ(149, default_variant->chrome_major);
++  EXPECT_EQ(TlsSignatureProfile::kChromium149Default,
++            default_variant->tls_signature_profile);
++
++  const NetworkPersonaTemplate* mldsa_variant =
++      FindNetworkPersonaTemplate(kChromium149MldsaTemplateId);
++  ASSERT_TRUE(mldsa_variant);
++  EXPECT_EQ(149, mldsa_variant->chrome_major);
++  EXPECT_EQ(TlsSignatureProfile::kChromium149Mldsa,
++            mldsa_variant->tls_signature_profile);
++
++  EXPECT_NE(default_variant->client_hello_fixture_sha256,
++            mldsa_variant->client_hello_fixture_sha256);
++  EXPECT_EQ((std::array<uint64_t, 3>{1, 6, 7}),
++            default_variant->http3_settings_order);
++  EXPECT_EQ(default_variant->http3_settings_order,
++            mldsa_variant->http3_settings_order);
++}
++
++TEST(NetworkPersonaTemplateTest, RejectsNativeAndUnknownTemplateIds) {
++  EXPECT_FALSE(FindNetworkPersonaTemplate(0));
++  EXPECT_FALSE(FindNetworkPersonaTemplate(1));
++  EXPECT_FALSE(FindNetworkPersonaTemplate(999999));
++}
++
++TEST(NetworkPersonaTemplateTest, CompatibleIdsAreVersionScoped) {
++  const auto chromium_149 = GetCompatibleNetworkPersonaTemplateIds(149);
++  EXPECT_EQ(2u, chromium_149.size());
++  EXPECT_TRUE(std::ranges::contains(chromium_149,
++                                    kChromium149DefaultTemplateId));
++  EXPECT_TRUE(std::ranges::contains(chromium_149,
++                                    kChromium149MldsaTemplateId));
++  EXPECT_TRUE(GetCompatibleNetworkPersonaTemplateIds(148).empty());
++}
++
++TEST(NetworkPersonaTemplateTest, RawClientHelloFixturesMatchCatalogHashes) {
++  for (uint32_t template_id : {kChromium149DefaultTemplateId,
++                               kChromium149MldsaTemplateId}) {
++    const NetworkPersonaTemplate* network_template =
++        FindNetworkPersonaTemplate(template_id);
++    ASSERT_TRUE(network_template);
++    std::string fixture;
++    ASSERT_TRUE(base::ReadFileToString(
++        GetTestNetDataDirectory().AppendASCII(network_template->client_hello_fixture),
++        &fixture));
++    ASSERT_TRUE(ExtractFixtureData(&fixture));
++    EXPECT_EQ(network_template->client_hello_fixture_sha256,
++              base::HexEncodeLower(crypto::hash::Sha256(fixture)));
++  }
++}
++
++}  // namespace
++}  // namespace net
+--- /dev/null
++++ b/net/data/network_persona/README.md
+@@ -0,0 +1,23 @@
++# Network persona captures
++
++These fixtures are raw TLS ClientHello handshake bodies captured from the
++Chromium 149.0.7827.114 macOS arm64 production SSLClientSocket path. The test
++profile used a 32-byte 0x42 Persona seed and generation 7 for the default
++variant, and generation 8 with the existing Chromium ML-DSA signature feature
++set for the ML-DSA variant.
++
++The random, session ID, key-share material, and GREASE values are preserved as
++captured. Regression tests parse protocol fields and normalize GREASE before
++comparison; they do not require cryptographic random bytes to repeat.
++
++The same catalog records the HTTP/2 SETTINGS order, connection window, pseudo
++header order, and the HTTP/3 SETTINGS order produced by this Chromium build.
++HTTP/2 is checked against exact frame bytes. HTTP/3 and QUIC transport
++parameters are checked by their protocol serializers because the QUIC payload
++is encrypted on the wire. No decrypted or reconstructed QUIC payload is
++labelled as a raw capture.
++
++Persona mode derives separate connection-scoped seeds for TLS extension order,
++HTTP/3 GREASE, and QUIC transport parameter ordering. These seeds never replace
++Chromium's cryptographic randomness for connection IDs, key shares, session
++tokens, or TLS key material.
+--- /dev/null
++++ b/net/data/network_persona/chromium_149_macos_default_client_hello.hex
+@@ -0,0 +1,5 @@
++0303272B3F8DB009F3BBFA85C3F1C48AC540D784084911629984473D6A523CA0D1FD2083260040317A52BA19BF436AD25D95FE23A411F0D57C83AA86F1E0B03A47EC1B00205A5A130113021303C02BC02FC02CC030CCA9CCA8C013C014009C009D002F003501000618AAAA0000FF01000100002B0007067A7A0304030300170000003304EF04EDEAEA00010011EC04C0276972F9817FD84B55EDFAA1A5705A4C441C1B26210ECA5E4137606EEB26CD86A228F510B366A6E42B5A0FC90261DC164205A30D561B13349345191DC5BA8212A42BA42A23EDE86BB2336AF650BDFE72418ED04DEEF88B4667BC9FE5417951392270B8419563C969A5C609104009BD124464910A2A40581C9D574BA10B8EA3760E0411B548F13A07766B2CE75882EC04C38CB284AC25F497A66622673191B590A119DBF43138F58E011A07D63C6781FCC7FD972FF2281929D634FEFB852F7B4AC3F90F29720A6D640B9D2371BCF207DBAB530B301B4B48AB36F1B98C307EB5805FF366B954F2BFC890A272336774F50C3C809A7522CFE5E3A43D59B47C276A0D819800D11F89110A3060B2218C1D19B9757397ABD950BEF9856F94DA46AC88AE2FDB105EAC4BA34B8863EBC506758D736A044BE195703C24A763AE26D007C05702F139515C7B5F822BC271414D3DB0AADF94B43F11C12566B39D58502E661546E894060C351DF29B85109B7FA84EECA1BC96D075BD5036EEB57EFA45212B9802920121B76261A72BA0FD0748994B151C36170DA6A93702649A809F0B27139B6B60EBE2C5A78AB5B3127A62C2886C6BC4129B6CF21335AF4CC32340B135CB4887B4BF9FFAB7FA79AB7EDCCF2EF46EE5FA3BE2615464C1026194B3CC992F62A15941283DC16B2628CB4FF21AA358D8319F9B578C29ABA6FC9594039142AB3F7BB9CDC2DC9697E63AD3F5201E9A6664B35A86325C89D82FEE303072201EF9C2CF1FF04581682EDE80A1DE649D0167B703510DFAD30C7A58AE43E65B82EB6046DCB308E505D42A469931C054F8455FB850997A71D6B8494C91416CA12EFBA7C0651A75EDD11856F98F1EB57702443545A24A1B9A2A8EC364E72AAD820C517902C16785954278CDFFA3245310B012C2493D29A681D0C1072BB2F7D34703A20565F0742CE380167AC05CD7A0A1316966E47547C055FB5334CFF6298F65AD7309A897C68C68645145E9B4625B542C6865ADC9389A79B4567BB03115072E7B3C6A9166798096B72C32C9582E9BAC0FE7F8C9602B88572862FB00BA122392ECF442891A63209A6665E8117217ACA03274B50B70502512D282A8B70A0854F2A639132D23A41BBC81446BAA7077E47C84C72DAE049A488121AEE00466A06C08A535830868FD8AAD9AD5A19ED56DAD706B48C682FA1389502A7E3C2178152B1C26078F5245902804AEC6CAC093D16C1F5228C80050AB50BDA32C25C4238FCF3119E0B91E54C1C71FA53BCBA4A1E591A32FF8810740391B261A5F504412D978CC5375B27A36A1D23A12633C6A30B69FE27D3464801C191E76F5AFB8E077A4145BCA96248A77C294B44B8C32B9D429B9EC5394410816CA33059070094771102D25873F0B3F0EB55BCF0938D9AA0D336682F70C5A5D7C3C5CF5496B9C71C9D0BFC583C1EC148C61EA76436C7D3DBB01A3D3158719C1AADCAD18A2501F45980D7B898BCB66B67C3F5B007F0649BAB39932F0BB7A09788B3CB66A006D22D38B5B125499F6E98DD4DCBD2F06AF664975BF2798BF4A109DD3B492831D4CD06A0F308AE7E8A09C910325575792B6B050E0462F5C9E6F72322308299866421ADC1235151CDF3050DE968374F9EC25048C28C6DEF6D4321D46B6EB6F4FD0B8E20CDC7999CDD100BEE0098AF211C50C7AF29FB45AA64A8114FB37CC66526B6462EBB13D48E2F76A1CFD9813001D002029910B16E347B989A296B16FE578A11519871AB18F445B9C355E3091F225C61C000B00020100000A000C000AEAEA11EC001D00170018001B0003020002000D0012001004030804040105030805050108060601FE0D00BA00000100013A00201082619970EA18E749BF3C216B034995AC221A8C24FEBCCA9C5E394AA6A4F84F0090EC3EB2A5B2A100ADE99F7100CBBC815755D906891CC79E5CB11D231A5EF50F10F70EB0D8AA8C2811FF3602B8D3867B1F51B77B5AEA20A8FD67C4400B1785B48B5C0C5E09B27AA48C96E0727999D4FEF4F075054C5D243C4AEC570E776FAF9FD941BECD37652F58CF90DA20AAA3613C5F76361E3EB1C19707C6EC5DB25B6A8A31EE9D01338DB1A5C37A5C05B97521BF36000500050100000000002D000201010023000000120000BABA000100
++# Copyright 2026 The Helium Authors
++# You can use, redistribute, and/or modify this source code under
++# the terms of the GPL-3.0 license that can be found in the LICENSE file.
++# DATA
+--- /dev/null
++++ b/net/data/network_persona/chromium_149_macos_mldsa_client_hello.hex
+@@ -0,0 +1,5 @@
++03032EB75DFB8EB3BA090D0281D4976A398EB3FDE5A353C444489568C42C3965B28020AA7E992C9EC31CB69849081EB03FB3168135591F25127FF7927BE372E97261B600202A2A130113021303C02BC02FC02CC030CCA9CCA8C013C014009C009D002F00350100065EFAFA00000023000000120000000B00020100002D00020101003304EF04ED5A5A00010011EC04C0DF77A8DB826F3121A071B23BF10A69CC0ABCAB30C9072C8BD9302FBA1A332438A26558ACD123BCBEE33753A141F6B48903506654F7C0D7A14184A8001124A63FC2257C48629992BF50A7C360B744994A2897687A0C1B5561C380E4443F12C0302D785BB6EA8FE1028182552910C5A11ED186BD2142BBC110C8E78DFBD1B078284BFB18BEB13B1BBB22550987668B8A8755AABF192A220A08AE0F8C6C5CC33ACB7C39E088AA310230313A9255671A43BC7957CAB96B8522B19682D08AC90AAC715937937E6675528540676B8F98B341270085BA68C1E4959C42D03B1977103482BF76688D24E728600131B2C47C5CEA43317801F33651D92720A4A374A4832904B02A1BC63371B311D75281AE3796549752E821606E94985168B51E51C7BFF5B67322C00B79BE8DF25F28E9119FB3BDEB090673761D1B346E4F251F62D98F82E077CA6B5B7D8508E7915441657A6A8CA71AE30964640736169F6C2175CE4A876CA9ABBC322609247818B03E674A8AF725B2C8020A6564B704F10D71484C80318EDCE89BDDF7CF91B11B6BD6C40DC85FE67C697A81758D01B6A3F4B35E31A18728B66152747EE2073F9268257875AADACEF4942116F215779C7E556838350C0E5B53AA0AD2538154C5E2ABCFFA8A553CCB30F28779A5E2CADE49AEEEC70A7E57055108C97986C5A9A3AE89437A6E222BE9899DAA057569416BB1334817543AF3F634309764AB67B34107530BAB880509031BC8BFC3676E44924CFC2801A18303F4B6666EA11E67603B97C1AAA1F354D75B0617455A2FA22D333A46F14743C671C0CC274F309B4A6A8ABD331747853742AA4661DE7AC98C641C373C10688A1BEA7B1D7A703B10AB1DD68621155A9658C01CCF25BDA5F6C686B1A8478A4C5F1223C8DA4C98EC4A85737E954BB54D07944F2B5A224168C4AB1DEB532E94A1A4F7196351F7CED4679AD0797289A9CB4F4530A0A82AC1EA6B2801BA9930099A9932BDB17AA32C36ED17CA1D3707BF62C215BB63FCB8CEB11189BD59CDD2285A514734551B05945344DD60878EE02602B48C41A19785CB192C26193C4CBA34411BDD0CCEFBFB0E7F465ADEB64B5279BB8F26AD5BA652D9E83AD17BC9DEE6474C35CA4CC4737CA0413C8ABFFC3AAE49742D1E345AC0442CBBD2A4D9151776A305E7595A29D863A4D8AFC75BAB9F5C1999172D57526035A43CC56C7FAC5BA5777C7398B47300F093A40B9BDB3C02E2B82A2D5115C6670BB5F618038904F35034A5B9C98541C6121542878A8DECA7B52CE34C62C14F90696B8BAA1648851A39E07A5A89596F36BCE3FBB0C2CC7AD9486FE4C63285575E754A0CAA41633854402B341D1F7831FFA1AF17D424CEA099C120BC7B14CF770807236C4125509D10951F6D79A87E6AAE7EA1A074BA0573981234D6A968FAC14D0B2084774E318203C0A216B7A83F9BA15C43B32BFA2628EA23B5314B0342185D38651651FA3FE2B57097432A2E2CA55CD0A8155983FA36C906C1870D25B439F20666AA5ADD954760D43DB924AFA18102A2C0CCA85192080095303618FAABACFAA74A393626F359590D74CF3C603D7DD72A76077689698361FA6BED843489AC6A4D37BC3ED6193669CDB62996F411CBFC0F9E1A5C1E31CEB97911E2CE6B4480A2667FEDAD66E7E58DAF241839D367A51C56F26FC5A85813EA7BFE2999DBE3F34B59CC18529BCD1ADDD07127106E5F7C001D002047AD281156140E83061A04E8B6A820721536A2845A532668F0DDAFF87E97AD6C000D0018001609040905090604030804040105030805050108060601FE0D00FA000001000144002001A2BD810596441E05AFFF655B299DBF2F9CE300D96FE4C5DFE95379F097564C00D00F811AFC76EE090F1E2A7853019ECD4F9214230B9B7C9E20B1A0685BF6F3C83F3912AA34427BAC34FA30725F533E3C63852D0FBC3ED648161E66E8CD3DB008F19588F486A7DF7800C53DDE00FAAB059EF2641707963EB3D0A4AB15EA0B83BF899D9C636D4FD9542B339CAE12B61A7FEC39EE675D95A497D474B9F88F101F111E22C7F4D5CCAE7F8B66216AC9D48C6C4D5E3C675F7AA686FCCBE47429F4F386D13A2FD0C387ECE15E94CC36A2D2FC045EB473143A637A47EE6225074ADAF3F4C3BCA9A82DEDE0EFDBF8FA26FF6B5A3E26001B000302000200170000002B000706AAAA03040303000A000C000A5A5A11EC001D00170018000500050100000000FF010001000A0A000100
++# Copyright 2026 The Helium Authors
++# You can use, redistribute, and/or modify this source code under
++# the terms of the GPL-3.0 license that can be found in the LICENSE file.
++# DATA
+--- a/net/http/http_network_session.cc
++++ b/net/http/http_network_session.cc
+@@ -19,6 +19,7 @@
+ #include "base/values.h"
+ #include "build/build_config.h"
+ #include "net/base/features.h"
++#include "net/base/network_persona_template.h"
+ #include "net/dns/host_resolver.h"
+ #include "net/http/http_auth_handler_factory.h"
+ #include "net/http/http_response_body_drainer.h"
+@@ -193,6 +194,10 @@ HttpNetworkSession::HttpNetworkSession(c
+   CHECK(http_server_properties_);
+   DCHECK(context_.client_socket_factory);
+ 
++  ApplyNetworkPersonaHttp2Profile(params_.network_persona_config);
++  quic_session_pool_.ApplyNetworkPersonaConfig(
++      params_.network_persona_config);
++
+   normal_socket_pool_manager_ = std::make_unique<ClientSocketPoolManagerImpl>(
+       CreateCommonConnectJobParams(false /* for_websockets */),
+       CreateCommonConnectJobParams(true /* for_websockets */),
+@@ -385,9 +390,34 @@ void HttpNetworkSession::ApplyNetworkPer
+   ClearSSLSessionCache();
+   quic_session_pool_.ClearCachedStatesInCryptoConfig(
+       base::RepeatingCallback<bool(const GURL&)>());
++  ApplyNetworkPersonaHttp2Profile(config);
++  quic_session_pool_.ApplyNetworkPersonaConfig(config);
+   params_.network_persona_config = std::move(config);
+ }
+ 
++void HttpNetworkSession::ApplyNetworkPersonaHttp2Profile(
++    const std::optional<NetworkPersonaConfig>& config) {
++  spdy::SettingsMap settings = AddDefaultHttp2Settings(params_.http2_settings);
++  std::vector<std::pair<spdy::SpdySettingsId, uint32_t>> settings_order;
++  size_t connection_window = params_.spdy_session_max_recv_window_size;
++  if (config && config->template_id != 0) {
++    const NetworkPersonaTemplate* network_template =
++        FindNetworkPersonaTemplate(config->template_id);
++    CHECK(network_template);
++    settings.clear();
++    for (const NetworkPersonaHttp2Setting& setting :
++         network_template->http2_settings) {
++      const auto id = static_cast<spdy::SpdySettingsId>(setting.id);
++      settings[id] = setting.value;
++      settings_order.emplace_back(id, setting.value);
++    }
++    settings = AddDefaultHttp2Settings(std::move(settings));
++    connection_window = network_template->http2_connection_window;
++  }
++  spdy_session_pool_.ApplyNetworkPersonaHttp2Profile(
++      connection_window, std::move(settings), std::move(settings_order));
++}
++
+ void HttpNetworkSession::SetTLS13EarlyDataEnabled(bool enabled) {
+   params_.enable_early_data = enabled;
+ }
+@@ -431,7 +461,7 @@ CommonConnectJobParams HttpNetworkSessio
+     bool for_websockets) {
+   // Use null websocket_endpoint_lock_manager, which is only set for WebSockets,
+   // and only when not using a proxy.
+-  return CommonConnectJobParams(
++  CommonConnectJobParams common_connect_job_params(
+       context_.client_socket_factory, context_.host_resolver, &http_auth_cache_,
+       context_.http_auth_handler_factory, &spdy_session_pool_,
+       &context_.quic_context->params()->supported_versions, &quic_session_pool_,
+@@ -441,6 +471,9 @@ CommonConnectJobParams HttpNetworkSessio
+       for_websockets ? &websocket_endpoint_lock_manager_ : nullptr,
+       context_.http_server_properties, &next_protos_, &application_settings_,
+       &params_.ignore_certificate_errors, &params_.enable_early_data);
++  common_connect_job_params.network_persona_config =
++      params_.network_persona_config;
++  return common_connect_job_params;
+ }
+ 
+ void HttpNetworkSession::ApplyTestingFixedPort(
+--- a/net/http/http_stream_pool_attempt_manager.cc
++++ b/net/http/http_stream_pool_attempt_manager.cc
+@@ -489,6 +489,8 @@ SSLConfig HttpStreamPool::AttemptManager
+   // lifetime, so we sample it for each TlsStreamAttempt.
+   config.early_data_enabled =
+       http_network_session()->params().enable_early_data;
++  config.network_persona_config =
++      http_network_session()->params().network_persona_config;
+   return config;
+ }
+ 
+--- a/net/quic/quic_session_pool.cc
++++ b/net/quic/quic_session_pool.cc
+@@ -33,6 +33,7 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/trace_event/trace_event.h"
+ #include "base/values.h"
++#include "crypto/hash.h"
+ #include "crypto/openssl_util.h"
+ #include "net/base/address_list.h"
+ #include "net/base/connection_endpoint_metadata.h"
+@@ -42,6 +43,7 @@
+ #include "net/base/net_errors.h"
+ #include "net/base/network_anonymization_key.h"
+ #include "net/base/network_handle.h"
++#include "net/base/network_persona_template.h"
+ #include "net/base/proxy_delegate.h"
+ #include "net/base/reconnect_notifier.h"
+ #include "net/base/session_usage.h"
+@@ -106,6 +108,20 @@ enum InitialRttEstimateSource {
+   INITIAL_RTT_SOURCE_MAX,
+ };
+ 
++std::array<uint8_t, 32> DeriveNetworkPersonaQuicSeed(
++    const NetworkPersonaConfig& config,
++    std::string_view domain) {
++  std::string input(
++      reinterpret_cast<const char*>(config.deterministic_seed.data()),
++      config.deterministic_seed.size());
++  for (int shift = 56; shift >= 0; shift -= 8) {
++    input.push_back(
++        static_cast<char>((config.generation >> shift) & 0xff));
++  }
++  input.append(domain);
++  return crypto::hash::Sha256(input);
++}
++
+ // These values are persisted to logs. Entries should not be renumbered and
+ // numeric values should never be reused.
+ enum FindMatchingIpSessionResult {
+@@ -1113,6 +1129,11 @@ void QuicSessionPool::AbortAllSessionAtt
+   active_jobs.clear();
+ }
+ 
++void QuicSessionPool::ApplyNetworkPersonaConfig(
++    std::optional<NetworkPersonaConfig> config) {
++  network_persona_config_ = std::move(config);
++}
++
+ base::Value QuicSessionPool::QuicSessionPoolInfoToValue() const {
+   base::ListValue list;
+ 
+@@ -2077,6 +2098,20 @@ QuicSessionPool::CreateSessionHelper(
+   connection->SetMaxPacketLength(max_packet_length);
+ 
+   quic::QuicConfig config = config_;
++  if (network_persona_config_ && network_persona_config_->template_id != 0) {
++    const NetworkPersonaTemplate* network_template =
++        FindNetworkPersonaTemplate(network_persona_config_->template_id);
++    CHECK(network_template);
++    quic::QuicWireSerializationOptions wire_options;
++    wire_options.transport_parameter_seed = DeriveNetworkPersonaQuicSeed(
++        *network_persona_config_, "nitrous-quic-transport-parameters");
++    wire_options.http3_seed = DeriveNetworkPersonaQuicSeed(
++        *network_persona_config_, "nitrous-http3-frames");
++    wire_options.http3_settings_order.assign(
++        network_template->http3_settings_order.begin(),
++        network_template->http3_settings_order.end());
++    config.set_wire_serialization_options(std::move(wire_options));
++  }
+   ConfigureInitialRttEstimate(
+       server_id, key.session_key().network_anonymization_key(), &config);
+ 
+--- a/net/quic/quic_session_pool.h
++++ b/net/quic/quic_session_pool.h
+@@ -36,6 +36,7 @@
+ #include "net/base/net_export.h"
+ #include "net/base/network_change_notifier.h"
+ #include "net/base/network_handle.h"
++#include "net/base/network_persona_config.h"
+ #include "net/base/proxy_chain.h"
+ #include "net/base/proxy_server.h"
+ #include "net/base/reconnect_notifier.h"
+@@ -424,6 +425,11 @@ class NET_EXPORT_PRIVATE QuicSessionPool
+   // this before changing connection-scoped identity state.
+   void AbortAllSessionAttempts();
+ 
++  // Updates connection-scoped QUIC wire serialization for future sessions.
++  // Callers must close existing sessions before changing this value.
++  void ApplyNetworkPersonaConfig(
++      std::optional<NetworkPersonaConfig> config);
++
+   base::Value QuicSessionPoolInfoToValue() const;
+ 
+   // Delete cached state objects in |crypto_config_|. If |origin_filter| is not
+@@ -833,6 +839,7 @@ class NET_EXPORT_PRIVATE QuicSessionPool
+   const raw_ptr<quic::QuicRandom> random_generator_;  // Unowned.
+   const raw_ptr<const quic::QuicClock> clock_;        // Unowned.
+   QuicParams params_;
++  std::optional<NetworkPersonaConfig> network_persona_config_;
+   QuicClockSkewDetector clock_skew_detector_;
+ 
+   // Factory which is used to create socket performance watcher. A new watcher
+--- a/net/socket/connect_job.h
++++ b/net/socket/connect_job.h
+@@ -113,6 +113,7 @@ struct NET_EXPORT_PRIVATE CommonConnectJ
+   raw_ptr<const SSLConfig::ApplicationSettings> application_settings;
+   raw_ptr<const bool> ignore_certificate_errors;
+   raw_ptr<const bool> enable_early_data;
++  std::optional<NetworkPersonaConfig> network_persona_config;
+ };
+ 
+ // When a host resolution completes, OnHostResolutionCallback() is invoked. If
+--- a/net/socket/connect_job_params_factory.cc
++++ b/net/socket/connect_job_params_factory.cc
+@@ -187,6 +187,8 @@ ConnectJobParams CreateProxyParams(
+   SSLConfig proxy_server_ssl_config;
+ 
+   if (proxy_server.is_secure_http_like()) {
++    proxy_server_ssl_config.network_persona_config =
++        common_connect_job_params->network_persona_config;
+     // Disable cert verification network fetches for secure proxies, since
+     // those network requests are probably going to need to go through the
+     // proxy chain too.
+@@ -294,6 +296,8 @@ ConnectJobParams ConstructConnectJobPara
+   // Set up `ssl_config` if using SSL to the endpoint.
+   SSLConfig ssl_config;
+   if (UsingSsl(endpoint)) {
++    ssl_config.network_persona_config =
++        common_connect_job_params->network_persona_config;
+     ssl_config.allowed_bad_certs = allowed_bad_certs;
+     ssl_config.privacy_mode = privacy_mode;
+ 
+--- a/net/socket/ssl_client_socket_impl.cc
++++ b/net/socket/ssl_client_socket_impl.cc
+@@ -8,6 +8,7 @@
+ #include <string.h>
+ 
+ #include <algorithm>
++#include <array>
+ #include <cstring>
+ #include <map>
+ #include <memory>
+@@ -36,10 +37,12 @@
+ #include "base/values.h"
+ #include "build/build_config.h"
+ #include "crypto/openssl_util.h"
++#include "crypto/hash.h"
+ #include "net/base/features.h"
+ #include "net/base/ip_address.h"
+ #include "net/base/ip_endpoint.h"
+ #include "net/base/net_errors.h"
++#include "net/base/network_persona_template.h"
+ #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+ #include "net/base/trace_constants.h"
+ #include "net/base/url_util.h"
+@@ -84,6 +87,18 @@ const int kCertVerifyPending = 1;
+ // Default size of the internal BoringSSL buffers.
+ const int kDefaultOpenSSLBufferSize = 17 * 1024;
+ 
++std::array<uint8_t, 32> DeriveExtensionPermutationSeed(
++    const NetworkPersonaConfig& config) {
++  constexpr std::string_view kDomain = "nitrous-tls-extension-order";
++  std::vector<uint8_t> input(config.deterministic_seed.begin(),
++                             config.deterministic_seed.end());
++  input.insert(input.end(), kDomain.begin(), kDomain.end());
++  for (int shift = 56; shift >= 0; shift -= 8) {
++    input.push_back(static_cast<uint8_t>(config.generation >> shift));
++  }
++  return crypto::hash::Sha256(input);
++}
++
+ base::DictValue NetLogPrivateKeyOperationParams(uint16_t algorithm,
+                                                 SSLPrivateKey* key) {
+   return base::DictValue()
+@@ -664,6 +679,22 @@ int SSLClientSocketImpl::Init() {
+   if (!ssl_ || !context->SetClientSocketForSSL(ssl_.get(), this))
+     return ERR_UNEXPECTED;
+ 
++  const NetworkPersonaTemplate* network_template = nullptr;
++  if (ssl_config_.network_persona_config &&
++      ssl_config_.network_persona_config->template_id != 0) {
++    network_template = FindNetworkPersonaTemplate(
++        ssl_config_.network_persona_config->template_id);
++    if (!network_template) {
++      return ERR_INVALID_ARGUMENT;
++    }
++    const auto permutation_seed =
++        DeriveExtensionPermutationSeed(*ssl_config_.network_persona_config);
++    if (!SSL_set_extension_permutation_seed(
++            ssl_.get(), permutation_seed.data(), permutation_seed.size())) {
++      return ERR_UNEXPECTED;
++    }
++  }
++
+   const bool host_is_ip_address =
+       HostIsIPAddressNoBrackets(host_and_port_.host());
+ 
+@@ -789,7 +820,12 @@ int SSLClientSocketImpl::Init() {
+       SSL_SIGN_RSA_PSS_RSAE_SHA512,
+       SSL_SIGN_RSA_PKCS1_SHA512,
+   };
+-  if (base::FeatureList::IsEnabled(features::kTlsMldsaSignatures)) {
++  const bool enable_mldsa =
++      network_template
++          ? network_template->tls_signature_profile ==
++                TlsSignatureProfile::kChromium149Mldsa
++          : base::FeatureList::IsEnabled(features::kTlsMldsaSignatures);
++  if (enable_mldsa) {
+     if (!SSL_set_verify_algorithm_prefs(ssl_.get(), kVerifyPrefsWithMlDsa,
+                                         std::size(kVerifyPrefsWithMlDsa))) {
+       return ERR_UNEXPECTED;
+--- a/net/socket/ssl_client_socket_unittest.cc
++++ b/net/socket/ssl_client_socket_unittest.cc
+@@ -21,6 +21,7 @@
+ #include "base/containers/span_reader.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
++#include "base/files/file_util.h"
+ #include "base/location.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/ref_counted.h"
+@@ -45,6 +46,7 @@
+ #include "net/base/ip_endpoint.h"
+ #include "net/base/net_errors.h"
+ #include "net/base/network_anonymization_key.h"
++#include "net/base/network_persona_template.h"
+ #include "net/base/schemeful_site.h"
+ #include "net/base/test_completion_callback.h"
+ #include "net/cert/asn1_util.h"
+@@ -121,6 +123,128 @@ class NetLogWithSource;
+ 
+ namespace {
+ 
++std::vector<uint16_t> GetClientHelloExtensionOrder(
++    const SSL_CLIENT_HELLO* client_hello) {
++  CBS extensions;
++  CBS_init(&extensions, client_hello->extensions,
++           client_hello->extensions_len);
++  std::vector<uint16_t> order;
++  while (CBS_len(&extensions) > 0) {
++    uint16_t type = 0;
++    CBS body;
++    if (!CBS_get_u16(&extensions, &type) ||
++        !CBS_get_u16_length_prefixed(&extensions, &body)) {
++      return {};
++    }
++    if ((type & 0x0f0f) != 0x0a0a) {
++      order.push_back(type);
++    }
++  }
++  return order;
++}
++
++std::vector<uint16_t> GetClientHelloSignatureAlgorithms(
++    const SSL_CLIENT_HELLO* client_hello) {
++  const uint8_t* data = nullptr;
++  size_t length = 0;
++  if (!SSL_early_callback_ctx_extension_get(
++          client_hello, TLSEXT_TYPE_signature_algorithms, &data, &length)) {
++    return {};
++  }
++  CBS extension;
++  CBS algorithms;
++  CBS_init(&extension, data, length);
++  if (!CBS_get_u16_length_prefixed(&extension, &algorithms) ||
++      CBS_len(&extension) != 0) {
++    return {};
++  }
++  std::vector<uint16_t> result;
++  while (CBS_len(&algorithms) > 0) {
++    uint16_t algorithm = 0;
++    if (!CBS_get_u16(&algorithms, &algorithm)) {
++      return {};
++    }
++    result.push_back(algorithm);
++  }
++  return result;
++}
++
++struct CapturedClientHelloProfile {
++  std::vector<uint16_t> extension_order;
++  std::vector<uint16_t> signature_algorithms;
++};
++
++std::optional<CapturedClientHelloProfile> LoadCapturedClientHelloProfile(
++    std::string_view fixture_name) {
++  std::string encoded;
++  if (!base::ReadFileToString(
++          GetTestNetDataDirectory()
++              .AppendASCII("network_persona")
++              .AppendASCII(fixture_name),
++          &encoded)) {
++    return std::nullopt;
++  }
++  constexpr std::string_view kDataMarker = "# DATA\n";
++  const size_t marker = encoded.find(kDataMarker);
++  const size_t metadata = encoded.find("\n#");
++  if (marker == std::string::npos || metadata == std::string::npos ||
++      metadata > marker) {
++    return std::nullopt;
++  }
++  encoded.erase(metadata + 1);
++  std::erase_if(encoded,
++                [](char value) { return base::IsAsciiWhitespace(value); });
++  std::vector<uint8_t> bytes;
++  if (!base::HexStringToBytes(encoded, &bytes)) {
++    return std::nullopt;
++  }
++
++  CBS hello;
++  CBS session_id;
++  CBS cipher_suites;
++  CBS compression_methods;
++  CBS extensions;
++  CBS_init(&hello, bytes.data(), bytes.size());
++  uint16_t legacy_version = 0;
++  if (!CBS_get_u16(&hello, &legacy_version) || !CBS_skip(&hello, 32) ||
++      !CBS_get_u8_length_prefixed(&hello, &session_id) ||
++      !CBS_get_u16_length_prefixed(&hello, &cipher_suites) ||
++      !CBS_get_u8_length_prefixed(&hello, &compression_methods) ||
++      !CBS_get_u16_length_prefixed(&hello, &extensions) ||
++      CBS_len(&hello) != 0) {
++    return std::nullopt;
++  }
++
++  CapturedClientHelloProfile profile;
++  while (CBS_len(&extensions) > 0) {
++    uint16_t type = 0;
++    CBS body;
++    if (!CBS_get_u16(&extensions, &type) ||
++        !CBS_get_u16_length_prefixed(&extensions, &body)) {
++      return std::nullopt;
++    }
++    if ((type & 0x0f0f) != 0x0a0a) {
++      profile.extension_order.push_back(type);
++    }
++    if (type != TLSEXT_TYPE_signature_algorithms) {
++      continue;
++    }
++    CBS algorithms;
++    if (!CBS_get_u16_length_prefixed(&body, &algorithms) ||
++        CBS_len(&body) != 0) {
++      return std::nullopt;
++    }
++    while (CBS_len(&algorithms) > 0) {
++      uint16_t algorithm = 0;
++      if (!CBS_get_u16(&algorithms, &algorithm)) {
++        return std::nullopt;
++      }
++      profile.signature_algorithms.push_back(algorithm);
++    }
++  }
++  return profile;
++}
++
+ // When passed to |MakeHashValueVector|, this will generate a key pin that is
+ // sha256/AA...=, and hence will cause pin validation success with the TestSPKI
+ // pin from transport_security_state_static.pins. ("A" is the 0th element of the
+@@ -1703,6 +1827,64 @@ TEST_F(SSLClientSocketTest, MldsaSignatu
+   }
+ }
+ 
++TEST_F(SSLClientSocketTest, NetworkPersonaControlsClientHelloProfile) {
++  std::vector<std::vector<uint16_t>> extension_orders;
++  std::vector<std::vector<uint16_t>> signature_algorithms;
++  SSLServerConfig server_config;
++  server_config.client_hello_callback_for_testing =
++      base::BindLambdaForTesting([&](const SSL_CLIENT_HELLO* client_hello) {
++        extension_orders.push_back(
++            GetClientHelloExtensionOrder(client_hello));
++        signature_algorithms.push_back(
++            GetClientHelloSignatureAlgorithms(client_hello));
++        return true;
++      });
++  ASSERT_TRUE(
++      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
++
++  auto connect = [&](uint32_t template_id, uint64_t generation) {
++    SSLConfig ssl_config;
++    NetworkPersonaConfig persona_config;
++    persona_config.template_id = template_id;
++    persona_config.generation = generation;
++    persona_config.deterministic_seed.fill(0x42);
++    ssl_config.network_persona_config = persona_config;
++    int rv;
++    EXPECT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
++    EXPECT_THAT(rv, IsOk());
++    sock_.reset();
++  };
++
++  connect(kChromium149DefaultTemplateId, 7);
++  connect(kChromium149DefaultTemplateId, 7);
++  connect(kChromium149DefaultTemplateId, 8);
++  connect(kChromium149MldsaTemplateId, 8);
++
++  ASSERT_EQ(4u, extension_orders.size());
++  ASSERT_EQ(4u, signature_algorithms.size());
++  EXPECT_EQ(extension_orders[0], extension_orders[1]);
++  EXPECT_NE(extension_orders[1], extension_orders[2]);
++  EXPECT_FALSE(std::ranges::contains(signature_algorithms[2],
++                                     SSL_SIGN_ML_DSA_44));
++  EXPECT_TRUE(std::ranges::contains(signature_algorithms[3],
++                                    SSL_SIGN_ML_DSA_44));
++  EXPECT_TRUE(std::ranges::contains(signature_algorithms[3],
++                                    SSL_SIGN_ML_DSA_65));
++  EXPECT_TRUE(std::ranges::contains(signature_algorithms[3],
++                                    SSL_SIGN_ML_DSA_87));
++
++  const auto default_capture = LoadCapturedClientHelloProfile(
++      "chromium_149_macos_default_client_hello.hex");
++  const auto mldsa_capture = LoadCapturedClientHelloProfile(
++      "chromium_149_macos_mldsa_client_hello.hex");
++  ASSERT_TRUE(default_capture);
++  ASSERT_TRUE(mldsa_capture);
++  EXPECT_EQ(default_capture->extension_order, extension_orders[0]);
++  EXPECT_EQ(default_capture->signature_algorithms, signature_algorithms[0]);
++  EXPECT_EQ(mldsa_capture->extension_order, extension_orders[3]);
++  EXPECT_EQ(mldsa_capture->signature_algorithms, signature_algorithms[3]);
++}
++
+ // Tests that SSLClientSocket properly handles when the underlying transport
+ // synchronously fails a transport write in during the handshake.
+ TEST_F(SSLClientSocketTest, Connect_WithSynchronousError) {
+--- a/net/spdy/spdy_session.cc
++++ b/net/spdy/spdy_session.cc
+@@ -254,6 +254,33 @@ base::DictValue NetLogSpdySendSettingsPa
+   return base::DictValue().Set("settings", std::move(settings_list));
+ }
+ 
++std::unique_ptr<spdy::SpdySerializedFrame> CreateOrderedSettingsFrame(
++    const std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>& settings) {
++  const size_t payload_size = settings.size() * 6;
++  const size_t frame_size = spdy::kFrameHeaderSize + payload_size;
++  auto data = std::make_unique<char[]>(frame_size);
++  data[0] = static_cast<char>(payload_size >> 16);
++  data[1] = static_cast<char>(payload_size >> 8);
++  data[2] = static_cast<char>(payload_size);
++  data[3] = static_cast<char>(spdy::SpdyFrameType::SETTINGS);
++  data[4] = 0;
++  data[5] = 0;
++  data[6] = 0;
++  data[7] = 0;
++  data[8] = 0;
++  size_t offset = spdy::kFrameHeaderSize;
++  for (const auto& [id, value] : settings) {
++    data[offset++] = static_cast<char>(id >> 8);
++    data[offset++] = static_cast<char>(id);
++    data[offset++] = static_cast<char>(value >> 24);
++    data[offset++] = static_cast<char>(value >> 16);
++    data[offset++] = static_cast<char>(value >> 8);
++    data[offset++] = static_cast<char>(value);
++  }
++  return std::make_unique<spdy::SpdySerializedFrame>(std::move(data),
++                                                      frame_size);
++}
++
+ base::DictValue NetLogSpdyRecvAcceptChParams(
+     spdy::AcceptChOriginValuePair entry) {
+   return base::DictValue()
+@@ -813,6 +840,8 @@ SpdySession::SpdySession(
+     size_t session_max_recv_window_size,
+     int session_max_queued_capped_frames,
+     const spdy::SettingsMap& initial_settings,
++    const std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>&
++        initial_settings_order,
+     bool enable_http2_settings_grease,
+     const std::optional<SpdySessionPool::GreasedHttp2Frame>&
+         greased_http2_frame,
+@@ -829,6 +858,7 @@ SpdySession::SpdySession(
+       ssl_config_service_(ssl_config_service),
+       stream_hi_water_mark_(kFirstStreamId),
+       initial_settings_(initial_settings),
++      initial_settings_order_(initial_settings_order),
+       enable_http2_settings_grease_(enable_http2_settings_grease),
+       greased_http2_frame_(greased_http2_frame),
+       http2_end_stream_with_data_frame_(http2_end_stream_with_data_frame),
+@@ -896,6 +926,12 @@ SpdySession::~SpdySession() {
+   net_log_.EndEvent(NetLogEventType::HTTP2_SESSION);
+ }
+ 
++std::unique_ptr<spdy::SpdySerializedFrame>
++SpdySession::CreateOrderedSettingsFrameForTesting(
++    const std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>& settings) {
++  return CreateOrderedSettingsFrame(settings);
++}
++
+ void SpdySession::InitializeWithSocketHandle(
+     std::unique_ptr<StreamSocketHandle> stream_socket_handle,
+     SpdySessionPool* pool) {
+@@ -2278,8 +2314,18 @@ void SpdySession::SendInitialData() {
+   net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_SEND_SETTINGS, [&] {
+     return NetLogSpdySendSettingsParams(&settings_map);
+   });
+-  std::unique_ptr<spdy::SpdySerializedFrame> settings_frame(
+-      buffered_spdy_framer_->CreateSettings(settings_map));
++  std::unique_ptr<spdy::SpdySerializedFrame> settings_frame;
++  if (!initial_settings_order_.empty() && !enable_http2_settings_grease_) {
++    std::vector<std::pair<spdy::SpdySettingsId, uint32_t>> wire_settings;
++    for (const auto& setting : initial_settings_order_) {
++      if (!IsSpdySettingAtDefaultInitialValue(setting.first, setting.second)) {
++        wire_settings.push_back(setting);
++      }
++    }
++    settings_frame = CreateOrderedSettingsFrame(wire_settings);
++  } else {
++    settings_frame = buffered_spdy_framer_->CreateSettings(settings_map);
++  }
+ 
+   // Prepare initial WINDOW_UPDATE frame.
+   // Make sure |session_max_recv_window_size_ - session_recv_window_size_|
+--- a/net/spdy/spdy_session.h
++++ b/net/spdy/spdy_session.h
+@@ -351,6 +351,8 @@ class NET_EXPORT SpdySession
+               size_t session_max_recv_window_size,
+               int session_max_queued_capped_frames,
+               const spdy::SettingsMap& initial_settings,
++              const std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>&
++                  initial_settings_order,
+               bool enable_http2_settings_grease,
+               const std::optional<SpdySessionPool::GreasedHttp2Frame>&
+                   greased_http2_frame,
+@@ -364,6 +366,10 @@ class NET_EXPORT SpdySession
+ 
+   ~SpdySession() override;
+ 
++  static std::unique_ptr<spdy::SpdySerializedFrame>
++  CreateOrderedSettingsFrameForTesting(
++      const std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>& settings);
++
+   const HostPortPair& host_port_pair() const {
+     return spdy_session_key_.host_port_pair();
+   }
+@@ -1153,6 +1159,8 @@ class NET_EXPORT SpdySession
+   // and also control SpdySession parameters like initial receive window size
+   // and maximum HPACK dynamic table size.
+   const spdy::SettingsMap initial_settings_;
++  const std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>
++      initial_settings_order_;
+ 
+   // If true, a setting parameter with reserved identifier will be sent in every
+   // initial SETTINGS frame, see
+--- a/net/spdy/spdy_session_pool.cc
++++ b/net/spdy/spdy_session_pool.cc
+@@ -149,6 +149,16 @@ SpdySessionPool::~SpdySessionPool() {
+     NetworkChangeNotifier::RemoveIPAddressObserver(this);
+ }
+ 
++void SpdySessionPool::ApplyNetworkPersonaHttp2Profile(
++    size_t session_max_recv_window_size,
++    spdy::SettingsMap initial_settings,
++    std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>
++        initial_settings_order) {
++  session_max_recv_window_size_ = session_max_recv_window_size;
++  initial_settings_ = std::move(initial_settings);
++  initial_settings_order_ = std::move(initial_settings_order);
++}
++
+ int SpdySessionPool::CreateAvailableSessionFromSocketHandle(
+     const SpdySessionKey& key,
+     std::unique_ptr<StreamSocketHandle> stream_socket_handle,
+@@ -664,6 +674,7 @@ std::unique_ptr<SpdySession> SpdySession
+       enable_ping_based_connection_checking_, is_http2_enabled_,
+       is_quic_enabled_, session_max_recv_window_size_,
+       session_max_queued_capped_frames_, initial_settings_,
++      initial_settings_order_,
+       enable_http2_settings_grease_, greased_http2_frame_,
+       http2_end_stream_with_data_frame_, enable_priority_update_, time_func_,
+       network_quality_estimator_, net_log, session_creation_initiator,
+--- a/net/spdy/spdy_session_pool.h
++++ b/net/spdy/spdy_session_pool.h
+@@ -330,6 +330,12 @@ class NET_EXPORT SpdySessionPool
+   // the process of closing those new ones, etc.) are unavailable.
+   void CloseAllSessions();
+ 
++  void ApplyNetworkPersonaHttp2Profile(
++      size_t session_max_recv_window_size,
++      spdy::SettingsMap initial_settings,
++      std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>
++          initial_settings_order);
++
+   // Mark all current sessions as going away.
+   void MakeCurrentSessionsGoingAway(Error error);
+ 
+@@ -543,7 +549,9 @@ class NET_EXPORT SpdySessionPool
+   // (if |enable_sending_initial_data_| is true),
+   // and also control SpdySession parameters like initial receive window size
+   // and maximum HPACK dynamic table size.
+-  const spdy::SettingsMap initial_settings_;
++  spdy::SettingsMap initial_settings_;
++  std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>
++      initial_settings_order_;
+ 
+   // If true, a setting parameter with reserved identifier will be sent in every
+   // initial SETTINGS frame, see
+--- a/net/spdy/spdy_session_unittest.cc
++++ b/net/spdy/spdy_session_unittest.cc
+@@ -83,6 +83,21 @@ namespace net {
+ 
+ namespace {
+ 
++TEST(NetworkPersonaHttp2Test, SerializesCapturedSettingsOrder) {
++  const std::vector<std::pair<spdy::SpdySettingsId, uint32_t>> settings = {
++      {spdy::SETTINGS_HEADER_TABLE_SIZE, 65536},
++      {spdy::SETTINGS_ENABLE_PUSH, 0},
++      {spdy::SETTINGS_INITIAL_WINDOW_SIZE, 6291456},
++      {spdy::SETTINGS_MAX_HEADER_LIST_SIZE, 262144},
++  };
++  const auto frame =
++      SpdySession::CreateOrderedSettingsFrameForTesting(settings);
++  ASSERT_TRUE(frame);
++  EXPECT_EQ("000018040000000000000100010000000200000000000400600000000600040000",
++            base::HexEncode(base::as_byte_span(
++                base::span(frame->data(), frame->size()))));
++}
++
+ const char kBodyData[] = "Body data";
+ const size_t kBodyDataSize = std::size(kBodyData);
+ const std::string_view kBodyDataStringPiece(kBodyData, kBodyDataSize);
+--- a/net/ssl/ssl_config.h
++++ b/net/ssl/ssl_config.h
+@@ -17,6 +17,7 @@
+ #include "net/base/proxy_chain.h"
+ #include "net/base/session_usage.h"
+ #include "net/cert/cert_status_flags.h"
++#include "net/base/network_persona_config.h"
+ #include "net/cert/x509_certificate.h"
+ #include "net/socket/next_proto.h"
+ #include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
+@@ -174,6 +175,10 @@ struct NET_EXPORT SSLConfig {
+   // enough to implement the extension and can process the server's list of
+   // available trust anchors.
+   std::optional<std::vector<uint8_t>> trust_anchor_ids;
++
++  // Profile-scoped wire identity applied to this connection. Nullopt preserves
++  // the native Chromium ClientHello behavior.
++  std::optional<NetworkPersonaConfig> network_persona_config;
+ };
+ 
+ }  // namespace net
+--- a/net/third_party/quiche/src/quiche/quic/core/crypto/transport_parameters.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/crypto/transport_parameters.cc
+@@ -785,6 +785,13 @@ TransportParameters::~TransportParameter
+ 
+ bool SerializeTransportParameters(const TransportParameters& in,
+                                   std::vector<uint8_t>* out) {
++  return SerializeTransportParameters(in, out, nullptr);
++}
++
++bool SerializeTransportParameters(
++    const TransportParameters& in,
++    std::vector<uint8_t>* out,
++    const QuicWireSerializationOptions* wire_options) {
+   std::string error_details;
+   if (!in.AreValid(&error_details)) {
+     QUIC_BUG(invalid transport parameters)
+@@ -930,19 +937,37 @@ bool SerializeTransportParameters(const
+   // "Reserved Transport Parameters" section of RFC 9000.
+   // This forces receivers to support unexpected input.
+   QuicRandom* random = QuicRandom::GetInstance();
++  std::optional<QuicWireDeterministicRandom> deterministic_random;
++  if (wire_options) {
++    deterministic_random.emplace(wire_options->transport_parameter_seed);
++  }
++  const auto next_insecure_value = [&]() {
++    return deterministic_random ? deterministic_random->NextUint64()
++                                : random->InsecureRandUint64();
++  };
+   // Transport parameter identifiers are 62 bits long so we need to
+   // ensure that the output of the computation below fits in 62 bits.
+-  uint64_t grease_id64 = random->RandUint64() % ((1ULL << 62) - 31);
++  uint64_t grease_id64 =
++      (deterministic_random ? deterministic_random->NextUint64()
++                            : random->RandUint64()) %
++      ((1ULL << 62) - 31);
+   // Make sure grease_id % 31 == 27. Note that this is not uniformely
+   // distributed but is acceptable since no security depends on this
+   // randomness.
+   grease_id64 = (grease_id64 / 31) * 31 + 27;
+   TransportParameters::TransportParameterId grease_id =
+       static_cast<TransportParameters::TransportParameterId>(grease_id64);
+-  const size_t grease_length = random->RandUint64() % kMaxGreaseLength;
++  const size_t grease_length =
++      (deterministic_random ? deterministic_random->NextUint64()
++                            : random->RandUint64()) %
++      kMaxGreaseLength;
+   QUICHE_DCHECK_GE(kMaxGreaseLength, grease_length);
+   char grease_contents[kMaxGreaseLength];
+-  random->RandBytes(grease_contents, grease_length);
++  if (deterministic_random) {
++    deterministic_random->FillBytes(grease_contents, grease_length);
++  } else {
++    random->RandBytes(grease_contents, grease_length);
++  }
+   custom_parameters[grease_id] = std::string(grease_contents, grease_length);
+ 
+   // Custom parameters.
+@@ -951,11 +976,17 @@ bool SerializeTransportParameters(const
+     parameter_ids.push_back(kv.first);
+   }
+ 
++  if (deterministic_random) {
++    // ParameterMap is a flat hash map. Canonicalize its contribution before
++    // applying the deterministic permutation so output is process-stable.
++    std::sort(parameter_ids.begin(), parameter_ids.end());
++  }
++
+   // Randomize order of sent transport parameters by walking the array
+   // backwards and swapping each element with a random earlier one.
+   for (size_t i = parameter_ids.size() - 1; i > 0; i--) {
+     std::swap(parameter_ids[i],
+-              parameter_ids[random->InsecureRandUint64() % (i + 1)]);
++              parameter_ids[next_insecure_value() % (i + 1)]);
+   }
+ 
+   out->resize(max_transport_param_length);
+@@ -1358,10 +1389,16 @@ bool SerializeTransportParameters(const
+             in.version_information->other_versions;
+         // Insert one GREASE version at a random index.
+         const size_t grease_index =
+-            random->InsecureRandUint64() % (other_versions.size() + 1);
++            next_insecure_value() % (other_versions.size() + 1);
++        const QuicVersionLabel grease_version =
++            deterministic_random
++                ? static_cast<QuicVersionLabel>(
++                      (deterministic_random->NextUint64() &
++                       ~static_cast<uint64_t>(kReservedVersionMask)) |
++                      kReservedVersionBits)
++                : CreateQuicVersionLabel(QuicVersionReservedForNegotiation());
+         other_versions.insert(
+-            other_versions.begin() + grease_index,
+-            CreateQuicVersionLabel(QuicVersionReservedForNegotiation()));
++            other_versions.begin() + grease_index, grease_version);
+         const uint64_t version_information_length =
+             sizeof(in.version_information->chosen_version) +
+             sizeof(QuicVersionLabel) * other_versions.size();
+--- a/net/third_party/quiche/src/quiche/quic/core/crypto/transport_parameters.h
++++ b/net/third_party/quiche/src/quiche/quic/core/crypto/transport_parameters.h
+@@ -20,6 +20,7 @@
+ #include "quiche/quic/core/quic_tag.h"
+ #include "quiche/quic/core/quic_types.h"
+ #include "quiche/quic/core/quic_versions.h"
++#include "quiche/quic/core/quic_wire_serialization.h"
+ #include "quiche/quic/platform/api/quic_socket_address.h"
+ #include "quiche/common/platform/api/quiche_export.h"
+ 
+@@ -298,6 +299,10 @@ struct QUICHE_EXPORT TransportParameters
+ // parameters are valid and serialization succeeded.
+ QUICHE_EXPORT bool SerializeTransportParameters(const TransportParameters& in,
+                                                 std::vector<uint8_t>* out);
++QUICHE_EXPORT bool SerializeTransportParameters(
++    const TransportParameters& in,
++    std::vector<uint8_t>* out,
++    const QuicWireSerializationOptions* wire_options);
+ 
+ // Parses bytes from the quic_transport_parameters TLS extension and writes the
+ // parsed parameters into |*out|. Input is read from |in| for |in_len| bytes.
+--- a/net/third_party/quiche/src/quiche/quic/core/crypto/transport_parameters_test.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/crypto/transport_parameters_test.cc
+@@ -20,6 +20,7 @@
+ #include "quiche/quic/core/quic_tag.h"
+ #include "quiche/quic/core/quic_types.h"
+ #include "quiche/quic/core/quic_versions.h"
++#include "quiche/quic/core/quic_wire_serialization.h"
+ #include "quiche/quic/platform/api/quic_expect_bug.h"
+ #include "quiche/quic/platform/api/quic_ip_address.h"
+ #include "quiche/quic/platform/api/quic_socket_address.h"
+@@ -1146,6 +1147,35 @@ TEST_P(TransportParametersTest, Serializ
+   }
+ }
+ 
++TEST_P(TransportParametersTest, SerializationIsStableWithWireOptions) {
++  TransportParameters params;
++  params.perspective = Perspective::IS_CLIENT;
++  if (!GetQuicRestartFlag(quic_stop_parsing_legacy_version_info) ||
++      !GetQuicRestartFlag(quic_stop_sending_legacy_version_info)) {
++    params.legacy_version_information =
++        CreateFakeLegacyVersionInformationClient();
++  }
++  params.version_information = CreateFakeVersionInformation();
++  params.max_idle_timeout_ms.set_value(kFakeIdleTimeoutMilliseconds);
++  params.max_udp_payload_size.set_value(kMaxPacketSizeForTest);
++  params.initial_max_data.set_value(kFakeInitialMaxData);
++  params.initial_source_connection_id =
++      CreateFakeInitialSourceConnectionId();
++
++  QuicWireSerializationOptions options;
++  options.transport_parameter_seed.fill(0x42);
++  std::vector<uint8_t> first;
++  std::vector<uint8_t> second;
++  ASSERT_TRUE(SerializeTransportParameters(params, &first, &options));
++  ASSERT_TRUE(SerializeTransportParameters(params, &second, &options));
++  EXPECT_EQ(first, second);
++
++  options.transport_parameter_seed[0] ^= 0xff;
++  std::vector<uint8_t> changed;
++  ASSERT_TRUE(SerializeTransportParameters(params, &changed, &options));
++  EXPECT_NE(first, changed);
++}
++
+ TEST_P(TransportParametersTest, Degrease) {
+   TransportParameters orig_params;
+   orig_params.perspective = Perspective::IS_CLIENT;
+--- a/net/third_party/quiche/src/quiche/quic/core/http/http_encoder.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/http/http_encoder.cc
+@@ -7,6 +7,7 @@
+ #include <algorithm>
+ #include <cstdint>
+ #include <memory>
++#include <set>
+ #include <string>
+ #include <utility>
+ #include <vector>
+@@ -83,10 +84,28 @@ std::string HttpEncoder::SerializeHeader
+ }
+ 
+ std::string HttpEncoder::SerializeSettingsFrame(const SettingsFrame& settings) {
++  return SerializeSettingsFrame(settings, {});
++}
++
++std::string HttpEncoder::SerializeSettingsFrame(
++    const SettingsFrame& settings,
++    const std::vector<uint64_t>& preferred_order) {
+   QuicByteCount payload_length = 0;
+-  std::vector<std::pair<uint64_t, uint64_t>> ordered_settings{
+-      settings.values.begin(), settings.values.end()};
+-  std::sort(ordered_settings.begin(), ordered_settings.end());
++  std::vector<std::pair<uint64_t, uint64_t>> ordered_settings;
++  std::set<uint64_t> emitted;
++  for (uint64_t identifier : preferred_order) {
++    const auto it = settings.values.find(identifier);
++    if (it != settings.values.end() && emitted.insert(identifier).second) {
++      ordered_settings.push_back(*it);
++    }
++  }
++  const size_t preferred_count = ordered_settings.size();
++  for (const auto& setting : settings.values) {
++    if (emitted.insert(setting.first).second) {
++      ordered_settings.push_back(setting);
++    }
++  }
++  std::sort(ordered_settings.begin() + preferred_count, ordered_settings.end());
+   // Calculate the payload length.
+   for (const auto& p : ordered_settings) {
+     payload_length += QuicDataWriter::GetVarInt62Len(p.first);
+@@ -247,6 +266,12 @@ std::string HttpEncoder::SerializeGreasi
+       QuicRandom::GetInstance()->RandBytes(payload.data(), payload_length);
+     }
+   }
++  return SerializeGreasingFrame(frame_type, std::move(payload));
++}
++
++std::string HttpEncoder::SerializeGreasingFrame(uint64_t frame_type,
++                                                std::string payload) {
++  const QuicByteCount payload_length = payload.size();
+   QuicByteCount total_length = QuicDataWriter::GetVarInt62Len(frame_type) +
+                                QuicDataWriter::GetVarInt62Len(payload_length) +
+                                payload_length;
+--- a/net/third_party/quiche/src/quiche/quic/core/http/http_encoder.h
++++ b/net/third_party/quiche/src/quiche/quic/core/http/http_encoder.h
+@@ -6,6 +6,8 @@
+ #define QUICHE_QUIC_CORE_HTTP_HTTP_ENCODER_H_
+ 
+ #include <memory>
++#include <string>
++#include <vector>
+ 
+ #include "quiche/quic/core/http/http_frames.h"
+ #include "quiche/quic/core/quic_error_codes.h"
+@@ -36,6 +38,9 @@ class QUICHE_EXPORT HttpEncoder {
+ 
+   // Serializes a SETTINGS frame.
+   static std::string SerializeSettingsFrame(const SettingsFrame& settings);
++  static std::string SerializeSettingsFrame(
++      const SettingsFrame& settings,
++      const std::vector<uint64_t>& preferred_order);
+ 
+   // Serializes a GOAWAY frame.
+   static std::string SerializeGoAwayFrame(const GoAwayFrame& goaway);
+@@ -53,6 +58,8 @@ class QUICHE_EXPORT HttpEncoder {
+   // Serializes a frame with reserved frame type specified in
+   // https://tools.ietf.org/html/draft-ietf-quic-http-25#section-7.2.9.
+   static std::string SerializeGreasingFrame();
++  static std::string SerializeGreasingFrame(uint64_t frame_type,
++                                            std::string payload);
+ 
+   // Serializes a WEBTRANSPORT_STREAM frame header as specified in
+   // https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-00.html#name-client-initiated-bidirectio
+--- a/net/third_party/quiche/src/quiche/quic/core/http/http_encoder_test.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/http/http_encoder_test.cc
+@@ -54,6 +54,64 @@ TEST(HttpEncoderTest, SerializeSettingsF
+       "SETTINGS", frame.data(), frame.length(), output, ABSL_ARRAYSIZE(output));
+ }
+ 
++TEST(HttpEncoderTest, SerializeSettingsFrameWithPreferredOrder) {
++  SettingsFrame settings;
++  settings.values[1] = 2;
++  settings.values[6] = 5;
++  settings.values[256] = 4;
++  const char output[] = {
++      0x04,  // type (SETTINGS)
++      0x07,  // length
++      0x41, 0x00,  // identifier 0x100, varint encoded
++      0x04,        // content
++      0x06,        // identifier
++      0x05,        // content
++      0x01,        // identifier
++      0x02,        // content
++  };
++
++  std::string frame =
++      HttpEncoder::SerializeSettingsFrame(settings, {256, 6, 1});
++  quiche::test::CompareCharArraysWithHexError(
++      "SETTINGS", frame.data(), frame.length(), output,
++      ABSL_ARRAYSIZE(output));
++}
++
++TEST(HttpEncoderTest, SerializeSettingsFrameAppendsUnspecifiedIds) {
++  SettingsFrame settings;
++  settings.values[1] = 2;
++  settings.values[6] = 5;
++  settings.values[256] = 4;
++  const char output[] = {
++      0x04,  // type (SETTINGS)
++      0x07,  // length
++      0x06,  // preferred identifier
++      0x05,  // content
++      0x01,  // remaining identifiers retain numeric ordering
++      0x02,  // content
++      0x41, 0x00,
++      0x04,
++  };
++
++  std::string frame = HttpEncoder::SerializeSettingsFrame(settings, {6});
++  quiche::test::CompareCharArraysWithHexError(
++      "SETTINGS", frame.data(), frame.length(), output,
++      ABSL_ARRAYSIZE(output));
++}
++
++TEST(HttpEncoderTest, SerializeDeterministicGreasingFrame) {
++  const char output[] = {
++      0x21,  // reserved frame type
++      0x02,  // payload length
++      'x', 'y',
++  };
++
++  std::string frame = HttpEncoder::SerializeGreasingFrame(0x21, "xy");
++  quiche::test::CompareCharArraysWithHexError(
++      "GREASE", frame.data(), frame.length(), output,
++      ABSL_ARRAYSIZE(output));
++}
++
+ TEST(HttpEncoderTest, SerializeGoAwayFrame) {
+   GoAwayFrame goaway;
+   goaway.id = 0x1;
+--- a/net/third_party/quiche/src/quiche/quic/core/http/quic_send_control_stream.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/http/quic_send_control_stream.cc
+@@ -6,7 +6,10 @@
+ 
+ #include <cstdint>
+ #include <memory>
++#include <optional>
+ #include <string>
++#include <utility>
++#include <vector>
+ 
+ #include "absl/base/macros.h"
+ #include "absl/strings/string_view.h"
+@@ -16,6 +19,7 @@
+ #include "quiche/quic/core/quic_session.h"
+ #include "quiche/quic/core/quic_types.h"
+ #include "quiche/quic/core/quic_utils.h"
++#include "quiche/quic/core/quic_wire_serialization.h"
+ #include "quiche/quic/platform/api/quic_logging.h"
+ 
+ namespace quic {
+@@ -58,10 +62,25 @@ void QuicSendControlStream::MaybeSendSet
+                     nullptr);
+ 
+   SettingsFrame settings = settings_;
++  const auto& wire_options =
++      spdy_session_->config()->wire_serialization_options();
++  std::optional<QuicWireDeterministicRandom> deterministic_random;
++  std::vector<uint64_t> settings_order;
++  if (wire_options) {
++    deterministic_random.emplace(wire_options->http3_seed);
++    settings_order = wire_options->http3_settings_order;
++  }
+   // https://tools.ietf.org/html/draft-ietf-quic-http-25#section-7.2.4.1
+   // specifies that setting identifiers of 0x1f * N + 0x21 are reserved and
+   // greasing should be attempted.
+-  if (!GetQuicFlag(quic_enable_http3_grease_randomness)) {
++  if (deterministic_random) {
++    const uint64_t setting_id =
++        0x1fULL * (deterministic_random->NextUint64() % ((1ULL << 57) - 1)) +
++        0x21ULL;
++    settings.values[setting_id] =
++        deterministic_random->NextUint64() % (1ULL << 62);
++    settings_order.push_back(setting_id);
++  } else if (!GetQuicFlag(quic_enable_http3_grease_randomness)) {
+     settings.values[0x40] = 20;
+   } else {
+     uint32_t result;
+@@ -71,7 +90,8 @@ void QuicSendControlStream::MaybeSendSet
+     settings.values[setting_id] = result;
+   }
+ 
+-  std::string settings_frame = HttpEncoder::SerializeSettingsFrame(settings);
++  std::string settings_frame =
++      HttpEncoder::SerializeSettingsFrame(settings, settings_order);
+   QUIC_DVLOG(1) << "Control stream " << id() << " is writing settings frame "
+                 << settings;
+   if (spdy_session_->debug_visitor()) {
+@@ -83,8 +103,19 @@ void QuicSendControlStream::MaybeSendSet
+   // https://tools.ietf.org/html/draft-ietf-quic-http-25#section-7.2.9
+   // specifies that a reserved frame type has no semantic meaning and should be
+   // discarded. A greasing frame is added here.
+-  WriteOrBufferData(HttpEncoder::SerializeGreasingFrame(), /*fin = */ false,
+-                    nullptr);
++  if (deterministic_random) {
++    const uint64_t random_value = deterministic_random->NextUint64();
++    const uint64_t frame_type =
++        0x1fULL * (random_value % ((1ULL << 57) - 1)) + 0x21ULL;
++    std::string payload(random_value % 4, '\0');
++    deterministic_random->FillBytes(payload.data(), payload.size());
++    WriteOrBufferData(
++        HttpEncoder::SerializeGreasingFrame(frame_type, std::move(payload)),
++        /*fin = */ false, nullptr);
++  } else {
++    WriteOrBufferData(HttpEncoder::SerializeGreasingFrame(), /*fin = */ false,
++                      nullptr);
++  }
+ }
+ 
+ void QuicSendControlStream::MaybeSendOriginFrame(
+--- a/net/third_party/quiche/src/quiche/quic/core/quic_config.h
++++ b/net/third_party/quiche/src/quiche/quic/core/quic_config.h
+@@ -587,6 +587,15 @@ class QUICHE_EXPORT QuicConfig {
+     return received_custom_transport_parameters_;
+   }
+ 
++  void set_wire_serialization_options(
++      QuicWireSerializationOptions options) {
++    wire_serialization_options_ = std::move(options);
++  }
++  const std::optional<QuicWireSerializationOptions>&
++  wire_serialization_options() const {
++    return wire_serialization_options_;
++  }
++
+   // Called to clear google_handshake_message to send or received.
+   void ClearGoogleHandshakeMessage();
+ 
+@@ -745,6 +754,7 @@ class QUICHE_EXPORT QuicConfig {
+   // handshake.
+   TransportParameters::ParameterMap custom_transport_parameters_to_send_;
+   TransportParameters::ParameterMap received_custom_transport_parameters_;
++  std::optional<QuicWireSerializationOptions> wire_serialization_options_;
+ 
+   // Length of the data to send in the 'discard' transport parameter. Negative
+   // values means do not send.
+--- /dev/null
++++ b/net/third_party/quiche/src/quiche/quic/core/quic_wire_serialization.h
+@@ -0,0 +1,61 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef NET_THIRD_PARTY_QUICHE_SRC_QUICHE_QUIC_CORE_QUIC_WIRE_SERIALIZATION_H_
++#define NET_THIRD_PARTY_QUICHE_SRC_QUICHE_QUIC_CORE_QUIC_WIRE_SERIALIZATION_H_
++
++#include <array>
++#include <cstddef>
++#include <cstdint>
++#include <vector>
++
++namespace quic {
++
++// Optional connection-scoped controls for non-cryptographic wire
++// randomization. This must never be used for connection IDs, key material,
++// tokens, or other security-sensitive randomness.
++struct QuicWireSerializationOptions {
++  std::array<uint8_t, 32> transport_parameter_seed = {};
++  std::array<uint8_t, 32> http3_seed = {};
++  std::vector<uint64_t> http3_settings_order;
++};
++
++class QuicWireDeterministicRandom {
++ public:
++  explicit QuicWireDeterministicRandom(
++      const std::array<uint8_t, 32>& deterministic_seed) {
++    for (uint8_t byte : deterministic_seed) {
++      state_ = (state_ ^ byte) * 0x100000001b3ULL;
++    }
++  }
++
++  uint64_t NextUint64() {
++    // SplitMix64 is used only to decorrelate non-security-sensitive wire
++    // ordering and GREASE values.
++    uint64_t value = (state_ += 0x9e3779b97f4a7c15ULL);
++    value = (value ^ (value >> 30)) * 0xbf58476d1ce4e5b9ULL;
++    value = (value ^ (value >> 27)) * 0x94d049bb133111ebULL;
++    return value ^ (value >> 31);
++  }
++
++  void FillBytes(void* output, size_t length) {
++    auto* bytes = static_cast<uint8_t*>(output);
++    while (length > 0) {
++      const uint64_t value = NextUint64();
++      const size_t chunk = length < sizeof(value) ? length : sizeof(value);
++      for (size_t i = 0; i < chunk; ++i) {
++        bytes[i] = static_cast<uint8_t>(value >> (i * 8));
++      }
++      bytes += chunk;
++      length -= chunk;
++    }
++  }
++
++ private:
++  uint64_t state_ = 0xcbf29ce484222325ULL;
++};
++
++}  // namespace quic
++
++#endif  // NET_THIRD_PARTY_QUICHE_SRC_QUICHE_QUIC_CORE_QUIC_WIRE_SERIALIZATION_H_
+--- a/net/third_party/quiche/src/quiche/quic/core/tls_client_handshaker.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/tls_client_handshaker.cc
+@@ -324,7 +324,9 @@ bool TlsClientHandshaker::SetTransportPa
+   session()->connection()->OnTransportParametersSent(params);
+ 
+   std::vector<uint8_t> param_bytes;
+-  return SerializeTransportParameters(params, &param_bytes) &&
++  const auto& wire_options = session()->config()->wire_serialization_options();
++  return SerializeTransportParameters(
++             params, &param_bytes, wire_options ? &*wire_options : nullptr) &&
+          SSL_set_quic_transport_params(ssl(), param_bytes.data(),
+                                        param_bytes.size()) == 1;
+ }
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -70,6 +70,7 @@
+ #include "net/base/network_delegate.h"
+ #include "net/base/network_isolation_key.h"
+ #include "net/base/network_persona_config.h"
++#include "net/base/network_persona_template.h"
+ #include "net/base/port_util.h"
+ #include "net/base/reconnect_notifier.h"
+ #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+@@ -216,7 +217,8 @@ namespace {
+ 
+ std::optional<net::NetworkPersonaConfig> ToNetNetworkPersonaConfig(
+     const mojom::NetworkPersonaConfig& config) {
+-  if (config.template_id != 0 ||
++  if ((config.template_id != 0 &&
++       !net::FindNetworkPersonaTemplate(config.template_id)) ||
+       config.deterministic_seed.size() !=
+       net::NetworkPersonaConfig::kDeterministicSeedSize) {
+     return std::nullopt;
+--- a/services/network/network_context_unittest.cc
++++ b/services/network/network_context_unittest.cc
+@@ -78,6 +78,7 @@
+ #include "net/base/ip_endpoint.h"
+ #include "net/base/isolation_info.h"
+ #include "net/base/mock_network_change_notifier.h"
++#include "net/base/network_persona_template.h"
+ #include "net/base/net_errors.h"
+ #include "net/base/network_anonymization_key.h"
+ #include "net/base/network_change_notifier.h"
+@@ -791,25 +792,36 @@ TEST_F(NetworkContextTest, UpdateNetwork
+   EXPECT_EQ(0x5a,
+             session->params().network_persona_config->deterministic_seed[0]);
+ 
++  auto captured_template = mojom::NetworkPersonaConfig::New();
++  captured_template->generation = 8;
++  captured_template->template_id = net::kChromium149MldsaTemplateId;
++  captured_template->deterministic_seed.assign(32, 0xa5);
++  base::test::TestFuture<bool> captured_template_accepted;
++  network_context->UpdateNetworkPersona(
++      std::move(captured_template), captured_template_accepted.GetCallback());
++  EXPECT_TRUE(captured_template_accepted.Get());
++  EXPECT_EQ(net::kChromium149MldsaTemplateId,
++            session->params().network_persona_config->template_id);
++
+   auto unknown_template = mojom::NetworkPersonaConfig::New();
+-  unknown_template->generation = 8;
++  unknown_template->generation = 9;
+   unknown_template->template_id = 14901;
+   unknown_template->deterministic_seed.assign(32, 0xff);
+   base::test::TestFuture<bool> unknown_template_rejected;
+   network_context->UpdateNetworkPersona(
+       std::move(unknown_template), unknown_template_rejected.GetCallback());
+   EXPECT_FALSE(unknown_template_rejected.Get());
+-  EXPECT_EQ(7u, session->params().network_persona_config->generation);
++  EXPECT_EQ(8u, session->params().network_persona_config->generation);
+ 
+   auto invalid_seed = mojom::NetworkPersonaConfig::New();
+-  invalid_seed->generation = 9;
++  invalid_seed->generation = 10;
+   invalid_seed->template_id = 0;
+   invalid_seed->deterministic_seed.assign(31, 0xff);
+   base::test::TestFuture<bool> invalid_seed_rejected;
+   network_context->UpdateNetworkPersona(std::move(invalid_seed),
+                                         invalid_seed_rejected.GetCallback());
+   EXPECT_FALSE(invalid_seed_rejected.Get());
+-  EXPECT_EQ(7u, session->params().network_persona_config->generation);
++  EXPECT_EQ(8u, session->params().network_persona_config->generation);
+ 
+   base::test::TestFuture<bool> restored;
+   network_context->UpdateNetworkPersona(nullptr, restored.GetCallback());
+--- a/third_party/boringssl/src/include/openssl/prefix_symbols.h
++++ b/third_party/boringssl/src/include/openssl/prefix_symbols.h
+@@ -2360,6 +2360,7 @@
+ #pragma redefine_extname SSL_set_ocsp_response BORINGSSL_ADD_USER_LABEL_AND_PREFIX(SSL_set_ocsp_response)
+ #pragma redefine_extname SSL_set_options BORINGSSL_ADD_USER_LABEL_AND_PREFIX(SSL_set_options)
+ #pragma redefine_extname SSL_set_permute_extensions BORINGSSL_ADD_USER_LABEL_AND_PREFIX(SSL_set_permute_extensions)
++#pragma redefine_extname SSL_set_extension_permutation_seed BORINGSSL_ADD_USER_LABEL_AND_PREFIX(SSL_set_extension_permutation_seed)
+ #pragma redefine_extname SSL_set_private_key_method BORINGSSL_ADD_USER_LABEL_AND_PREFIX(SSL_set_private_key_method)
+ #pragma redefine_extname SSL_set_psk_client_callback BORINGSSL_ADD_USER_LABEL_AND_PREFIX(SSL_set_psk_client_callback)
+ #pragma redefine_extname SSL_set_psk_server_callback BORINGSSL_ADD_USER_LABEL_AND_PREFIX(SSL_set_psk_server_callback)
+@@ -5463,6 +5464,7 @@
+ #define SSL_set_ocsp_response BORINGSSL_ADD_PREFIX(SSL_set_ocsp_response)
+ #define SSL_set_options BORINGSSL_ADD_PREFIX(SSL_set_options)
+ #define SSL_set_permute_extensions BORINGSSL_ADD_PREFIX(SSL_set_permute_extensions)
++#define SSL_set_extension_permutation_seed BORINGSSL_ADD_PREFIX(SSL_set_extension_permutation_seed)
+ #define SSL_set_private_key_method BORINGSSL_ADD_PREFIX(SSL_set_private_key_method)
+ #define SSL_set_psk_client_callback BORINGSSL_ADD_PREFIX(SSL_set_psk_client_callback)
+ #define SSL_set_psk_server_callback BORINGSSL_ADD_PREFIX(SSL_set_psk_server_callback)
+--- a/third_party/boringssl/src/include/openssl/ssl.h
++++ b/third_party/boringssl/src/include/openssl/ssl.h
+@@ -5466,6 +5466,14 @@ OPENSSL_EXPORT void SSL_CTX_set_permute_
+ // permute extensions. For now, this is only implemented for the ClientHello.
+ OPENSSL_EXPORT void SSL_set_permute_extensions(SSL *ssl, int enabled);
+ 
++// SSL_set_extension_permutation_seed sets a deterministic seed for the
++// ClientHello extension permutation on |ssl|. This is a Chromium-internal
++// profile hook and does not replace any cryptographic random source. |seed|
++// must contain exactly 32 bytes. It returns one on success and zero on error.
++OPENSSL_EXPORT int SSL_set_extension_permutation_seed(SSL *ssl,
++                                                       const uint8_t *seed,
++                                                       size_t seed_len);
++
+ // SSL_max_seal_overhead returns the maximum overhead, in bytes, of sealing a
+ // record with |ssl|.
+ OPENSSL_EXPORT size_t SSL_max_seal_overhead(const SSL *ssl);
+--- a/third_party/boringssl/src/ssl/extensions.cc
++++ b/third_party/boringssl/src/ssl/extensions.cc
+@@ -38,6 +38,7 @@
+ #include <openssl/nid.h>
+ #include <openssl/pool.h>
+ #include <openssl/rand.h>
++#include <openssl/sha.h>
+ 
+ #include "../crypto/bytestring/internal.h"
+ #include "../crypto/internal.h"
+@@ -4189,10 +4190,31 @@ bool ssl_setup_extension_permutation(SSL
+                 "extensions_permutation type is too small");
+   uint32_t seeds[kNumExtensions - 1];
+   Array<uint8_t> permutation;
+-  if (!RAND_bytes(reinterpret_cast<uint8_t *>(seeds), sizeof(seeds)) ||
+-      !permutation.InitForOverwrite(kNumExtensions)) {
++  if (!permutation.InitForOverwrite(kNumExtensions)) {
+     return false;
+   }
++  if (hs->config->extension_permutation_seed.empty()) {
++    if (!RAND_bytes(reinterpret_cast<uint8_t *>(seeds), sizeof(seeds))) {
++      return false;
++    }
++  } else {
++    uint8_t *out = reinterpret_cast<uint8_t *>(seeds);
++    size_t remaining = sizeof(seeds);
++    for (uint32_t counter = 0; remaining > 0; counter++) {
++      uint8_t input[36];
++      OPENSSL_memcpy(input, hs->config->extension_permutation_seed.data(), 32);
++      input[32] = static_cast<uint8_t>(counter >> 24);
++      input[33] = static_cast<uint8_t>(counter >> 16);
++      input[34] = static_cast<uint8_t>(counter >> 8);
++      input[35] = static_cast<uint8_t>(counter);
++      uint8_t digest[SHA256_DIGEST_LENGTH];
++      SHA256(input, sizeof(input), digest);
++      const size_t copy_len = std::min(remaining, sizeof(digest));
++      OPENSSL_memcpy(out, digest, copy_len);
++      out += copy_len;
++      remaining -= copy_len;
++    }
++  }
+   for (size_t i = 0; i < kNumExtensions; i++) {
+     permutation[i] = i;
+   }
+--- a/third_party/boringssl/src/ssl/internal.h
++++ b/third_party/boringssl/src/ssl/internal.h
+@@ -3431,6 +3431,10 @@ struct SSL_CONFIG {
+   // Contains the QUIC transport params that this endpoint will send.
+   Array<uint8_t> quic_transport_params;
+ 
++  // If non-empty, contains the Chromium-internal deterministic seed used only
++  // to permute ClientHello extensions.
++  Array<uint8_t> extension_permutation_seed;
++
+   // Contains the context used to decide whether to accept early data in QUIC.
+   Array<uint8_t> quic_early_data_context;
+ 
+--- a/third_party/boringssl/src/ssl/ssl_lib.cc
++++ b/third_party/boringssl/src/ssl/ssl_lib.cc
+@@ -3154,6 +3154,15 @@ void SSL_set_permute_extensions(SSL *ssl
+   ssl->config->permute_extensions = !!enabled;
+ }
+ 
++int SSL_set_extension_permutation_seed(SSL *ssl, const uint8_t *seed,
++                                       size_t seed_len) {
++  if (!ssl->config || seed == nullptr || seed_len != 32) {
++    return 0;
++  }
++  return ssl->config->extension_permutation_seed.CopyFrom(
++      bssl::Span(seed, seed_len));
++}
++
+ int32_t SSL_get_ticket_age_skew(const SSL *ssl) {
+   return ssl->s3->ticket_age_skew;
+ }
+--- a/net/http/http_network_session.h
++++ b/net/http/http_network_session.h
+@@ -327,6 +327,9 @@ class NET_EXPORT HttpNetworkSession : pu
+  private:
+   friend class HttpNetworkSessionPeer;
+ 
++  void ApplyNetworkPersonaHttp2Profile(
++      const std::optional<NetworkPersonaConfig>& config);
++
+   ClientSocketPoolManager* GetSocketPoolManager(SocketPoolType pool_type);
+ 
+   const raw_ptr<NetLog> net_log_;

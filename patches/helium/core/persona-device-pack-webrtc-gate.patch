@@ -1,0 +1,604 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -2414,6 +2414,12 @@
+     <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP" desc="Help text for the persona private state tokens gate">
+       Controls supported Persona-gated Private State Token operations. Other Privacy Sandbox controls may also apply.
+     </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_LABEL" desc="Label for the persona WebRTC gate">
++      Allow WebRTC
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_TOOLTIP" desc="Help text for the persona WebRTC gate">
++      When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls.
++    </message>
+ 
+     <!-- Safety check -->
+     <message name="IDS_SETTINGS_SAFETY_CHECK_ICON_INFO_ARIA_LABEL" desc="Accessibility text for a safety check child icon, that indicates info for the child check.">
+--- a/chrome/browser/helium_persona/persona_identity_template.cc
++++ b/chrome/browser/helium_persona/persona_identity_template.cc
+@@ -6,6 +6,9 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <string>
++
++#include "base/strings/string_number_conversions.h"
+ 
+ namespace helium_persona {
+ namespace {
+@@ -100,6 +103,32 @@
+   return nullptr;
+ }
+ 
++const PersonaIdentityTemplate* MatchCompatiblePersonaIdentityTemplate(
++    std::string_view os,
++    std::string_view architecture,
++    std::string_view bitness,
++    std::string_view ua_ch_full_version,
++    bool ua_ch_mobile) {
++  for (const PersonaIdentityTemplate& identity : GetIdentityTemplates()) {
++    if (identity.network_variant_ids.empty()) {
++      continue;
++    }
++    if (os != identity.os || architecture != identity.architecture ||
++        bitness != identity.bitness || ua_ch_mobile != identity.ua_ch_mobile) {
++      continue;
++    }
++    const std::string major_prefix =
++        base::NumberToString(identity.chrome_major) + ".";
++    if (ua_ch_full_version ==
++            base::NumberToString(identity.chrome_major) ||
++        ua_ch_full_version.starts_with(major_prefix) ||
++        ua_ch_full_version == identity.ua_ch_full_version) {
++      return &identity;
++    }
++  }
++  return nullptr;
++}
++
+ uint32_t SelectNetworkVariant(const PersonaIdentityTemplate& identity,
+                               uint64_t generation) {
+   if (identity.network_variant_ids.empty()) {
+@@ -109,6 +138,11 @@
+                                       identity.network_variant_ids.size()];
+ }
+ 
++bool PersonaIdentityHasNetworkVariants(
++    const PersonaIdentityTemplate& identity) {
++  return !identity.network_variant_ids.empty();
++}
++
+ uint32_t SelectNextPersonaIdentityTemplateId(base::span<const uint32_t> ids,
+                                              uint32_t current_id) {
+   if (ids.empty()) {
+--- a/chrome/browser/helium_persona/persona_identity_template.h
++++ b/chrome/browser/helium_persona/persona_identity_template.h
+@@ -57,10 +57,20 @@
+     std::string_view bitness,
+     bool ua_ch_mobile,
+     bool ua_ch_wow64);
++// Cohort match for Device Pack binding: same OS/arch/bitness/major, with a
++// verified network variant catalog. Prefer exact Match when available.
++const PersonaIdentityTemplate* MatchCompatiblePersonaIdentityTemplate(
++    std::string_view os,
++    std::string_view architecture,
++    std::string_view bitness,
++    std::string_view ua_ch_full_version,
++    bool ua_ch_mobile);
+ uint32_t SelectNetworkVariant(const PersonaIdentityTemplate& identity,
+                               uint64_t generation);
+ uint32_t SelectNextPersonaIdentityTemplateId(base::span<const uint32_t> ids,
+                                              uint32_t current_id);
++bool PersonaIdentityHasNetworkVariants(
++    const PersonaIdentityTemplate& identity);
+ 
+ }  // namespace helium_persona
+ 
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -13,6 +13,7 @@
+ 
+ #include "base/check.h"
+ #include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
+ #include "base/i18n/time_formatting.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/stringprintf.h"
+@@ -275,9 +276,71 @@
+       .Set("allowHandwritingRecognition", false)
+       .Set("allowWebNn", false)
+       .Set("allowPrivateStateTokens", false)
++      .Set("allowWebRtc", false)
+       .Set("fingerprintRotation", MakeFingerprintRotationDefaults());
+ }
+ 
++const PersonaIdentityTemplate* ResolveCompleteIdentity(
++    const base::DictValue& persona) {
++  if (std::optional<int> pack_id = persona.FindInt("devicePackId");
++      pack_id && *pack_id > 0) {
++    if (const PersonaIdentityTemplate* by_pack =
++            FindPersonaIdentityTemplate(static_cast<uint32_t>(*pack_id));
++        by_pack && PersonaIdentityHasNetworkVariants(*by_pack)) {
++      return by_pack;
++    }
++  }
++
++  const base::DictValue* ua_ch = persona.FindDict("uaCh");
++  if (!ua_ch) {
++    return nullptr;
++  }
++  const auto find_string = [](const base::DictValue& dict,
++                              std::string_view key) -> std::string_view {
++    const std::string* value = dict.FindString(key);
++    return value ? *value : std::string_view();
++  };
++  const std::string_view user_agent = find_string(persona, "userAgent");
++  const std::string_view os = find_string(persona, "platform");
++  const std::string_view ua_ch_platform = find_string(*ua_ch, "platform");
++  const std::string_view ua_ch_platform_version =
++      find_string(*ua_ch, "platformVersion");
++  const std::string_view ua_ch_full_version = find_string(*ua_ch, "fullVersion");
++  const std::string_view architecture = find_string(*ua_ch, "architecture");
++  const std::string_view bitness = find_string(*ua_ch, "bitness");
++  const bool mobile = ua_ch->FindBool("mobile").value_or(false);
++  const bool wow64 = ua_ch->FindBool("wow64").value_or(false);
++
++  if (const PersonaIdentityTemplate* exact = MatchPersonaIdentityTemplate(
++          user_agent, os, ua_ch_platform, ua_ch_platform_version,
++          ua_ch_full_version, architecture, bitness, mobile, wow64);
++      exact && PersonaIdentityHasNetworkVariants(*exact)) {
++    return exact;
++  }
++
++  return MatchCompatiblePersonaIdentityTemplate(
++      os, architecture, bitness, ua_ch_full_version, mobile);
++}
++
++bool PersonaHasCompleteNetworkIdentity(const base::DictValue& persona) {
++  const PersonaIdentityTemplate* identity = ResolveCompleteIdentity(persona);
++  return identity && PersonaIdentityHasNetworkVariants(*identity);
++}
++
++void AttachDevicePackMetadata(base::DictValue& persona) {
++  const PersonaIdentityTemplate* identity = ResolveCompleteIdentity(persona);
++  if (!identity) {
++    persona.Set("networkReady", false);
++    if (!persona.FindInt("devicePackId").has_value()) {
++      persona.Set("devicePackId", 0);
++    }
++    return;
++  }
++  persona.Set("devicePackId", static_cast<int>(identity->id));
++  persona.Set("networkReady", true);
++}
++
++
+ base::DictValue MakePreset(std::string_view id,
+                            std::string_view name,
+                            std::string_view user_agent,
+@@ -393,29 +456,32 @@
+   network.Set("saveData", false);
+   network.Set("online", true);
+ 
+-  return base::DictValue()
+-      .Set("id", id)
+-      .Set("name", name)
+-      .Set("displayName", name)
+-      .Set("icon", GetPersonaIconForPlatform(platform))
+-      .Set("createdAt", created_at)
+-      .Set("modifiedAt", created_at)
+-      .Set("lastUsedAt", "")
+-      .Set("enabled", true)
+-      .Set("userAgent", user_agent)
+-      .Set("platform", platform)
+-      .Set("navigatorVendor", "Google Inc.")
+-      .Set("navigatorProductSub", "20030107")
+-      .Set("region", std::move(region))
+-      .Set("uaCh", std::move(ua_ch))
+-      .Set("gpu", std::move(gpu))
+-      .Set("hardware", std::move(hardware))
+-      .Set("screen", std::move(screen))
+-      .Set("fonts", std::move(fonts))
+-      .Set("fontRendering", std::move(font_rendering))
+-      .Set("mediaDevices", std::move(media_devices))
+-      .Set("network", std::move(network))
+-      .Set("advanced", MakeAdvancedDefaults());
++  base::DictValue preset =
++      base::DictValue()
++          .Set("id", id)
++          .Set("name", name)
++          .Set("displayName", name)
++          .Set("icon", GetPersonaIconForPlatform(platform))
++          .Set("createdAt", created_at)
++          .Set("modifiedAt", created_at)
++          .Set("lastUsedAt", "")
++          .Set("enabled", true)
++          .Set("userAgent", user_agent)
++          .Set("platform", platform)
++          .Set("navigatorVendor", "Google Inc.")
++          .Set("navigatorProductSub", "20030107")
++          .Set("region", std::move(region))
++          .Set("uaCh", std::move(ua_ch))
++          .Set("gpu", std::move(gpu))
++          .Set("hardware", std::move(hardware))
++          .Set("screen", std::move(screen))
++          .Set("fonts", std::move(fonts))
++          .Set("fontRendering", std::move(font_rendering))
++          .Set("mediaDevices", std::move(media_devices))
++          .Set("network", std::move(network))
++          .Set("advanced", MakeAdvancedDefaults());
++  AttachDevicePackMetadata(preset);
++  return preset;
+ }
+ 
+ base::ListValue MakePresetList() {
+@@ -983,6 +1049,9 @@
+   if (!advanced->FindBool("allowPrivateStateTokens").has_value()) {
+     advanced->Set("allowPrivateStateTokens", false);
+   }
++  if (!advanced->FindBool("allowWebRtc").has_value()) {
++    advanced->Set("allowWebRtc", false);
++  }
+   base::DictValue* fingerprint_rotation =
+       advanced->EnsureDict("fingerprintRotation");
+   const std::string* rotation_scope =
+@@ -1006,6 +1075,7 @@
+     fingerprint_rotation->Set("rotateOnProfileReset", true);
+   }
+ 
++  AttachDevicePackMetadata(persona);
+   return persona;
+ }
+ 
+@@ -1399,12 +1469,46 @@
+   }
+ 
+   base::DictValue persona = current_persona->Clone();
++  AttachDevicePackMetadata(persona);
++  const bool enabled = persona.FindBool("enabled").value_or(false);
++  if (persona_id != kDefaultPersonaId && enabled &&
++      !PersonaHasCompleteNetworkIdentity(persona)) {
++    base::DictValue errors;
++    errors.Set("devicePackId", "network_identity_unavailable");
++    errors.Set(
++        "personaId",
++        "Persona lacks a verified Device Pack network identity; refusing to "
++        "activate a claim without a correlated TLS/H2/H3 profile.");
++    return MakeResponse(false, std::move(state), std::move(errors));
++  }
++
+   persona.Set("lastUsedAt", MakeIsoTimestamp());
+   state.Set("personas", UpsertPersona(state.FindList("personas"), persona));
+   state.Set("activePersonaId", persona_id);
+   state.Set("lastUsedPersonaId", persona_id);
+   SetLastUsedPersonaId(persona_id);
++
++  if (prefs_ && persona_id != kDefaultPersonaId && enabled) {
++    if (const PersonaIdentityTemplate* identity =
++            ResolveCompleteIdentity(persona)) {
++      base::DictValue rotation =
++          prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++      rotation.Set("identityTemplateId", static_cast<int>(identity->id));
++      prefs_->SetDict(kPersonaFingerprintRotationEpochPref,
++                      std::move(rotation));
++    }
++  } else if (prefs_ && persona_id == kDefaultPersonaId) {
++    base::DictValue rotation =
++        prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++    rotation.Remove("identityTemplateId");
++    prefs_->SetDict(kPersonaFingerprintRotationEpochPref, std::move(rotation));
++  }
++
+   WriteState(state.Clone());
++
++  if (identity_rotation_delegate_) {
++    identity_rotation_delegate_->ApplyCurrentNetworkIdentity(base::DoNothing());
++  }
+   return MakeResponse(true, std::move(state));
+ }
+ 
+@@ -1758,6 +1862,12 @@
+     return snapshot;
+   }
+ 
++  // Fail closed: never expose a spoofed claim without a verified Device Pack
++  // network identity (correlated TLS/H2/H3 profile).
++  if (!PersonaHasCompleteNetworkIdentity(*persona)) {
++    return blink::HeliumPersonaSnapshot();
++  }
++
+   if (const std::string* value = persona->FindString("id")) {
+     snapshot.id = *value;
+     snapshot.fingerprint_profile_salt =
+@@ -1880,6 +1990,8 @@
+   snapshot.allow_private_state_tokens =
+       FindNestedBool(*persona, "advanced", "allowPrivateStateTokens")
+           .value_or(false);
++  snapshot.allow_web_rtc =
++      FindNestedBool(*persona, "advanced", "allowWebRtc").value_or(false);
+   snapshot.canvas_noise =
+       FindNestedBool(*persona, "advanced", "canvasNoise").value_or(true);
+   snapshot.audio_noise =
+@@ -2104,7 +2216,8 @@
+   const std::string* persona_id = persona ? persona->FindString("id") : nullptr;
+   if (!persona_id || *persona_id != *active_id ||
+       !persona->FindBool("enabled").value_or(false) ||
+-      !GetPersonaFieldErrors(*persona).empty()) {
++      !GetPersonaFieldErrors(*persona).empty() ||
++      !PersonaHasCompleteNetworkIdentity(*persona)) {
+     return resolution;
+   }
+ 
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -987,3 +987,69 @@
+ }  // namespace
+ 
+ }  // namespace helium_persona
++
++
++TEST_F(PersonaServiceTest, AttachesDevicePackToMacPresetClone) {
++  base::DictValue state = service_->GetPersonaState();
++  const base::ListValue* presets = state.FindList("presets");
++  ASSERT_TRUE(presets);
++  const base::DictValue* mac_preset = nullptr;
++  for (const base::Value& value : *presets) {
++    const base::DictValue* preset = value.GetIfDict();
++    if (!preset) {
++      continue;
++    }
++    if (preset->FindBool("networkReady").value_or(false) &&
++        preset->FindInt("devicePackId").value_or(0) ==
++            static_cast<int>(kChromium149MacArmIdentityTemplateId)) {
++      mac_preset = preset;
++      break;
++    }
++  }
++  ASSERT_TRUE(mac_preset);
++  const std::string* preset_id = mac_preset->FindString("id");
++  ASSERT_TRUE(preset_id);
++  base::DictValue response = service_->ClonePresetIntoProfile(*preset_id);
++  ASSERT_TRUE(response.FindBool("ok").value_or(false));
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(service_->SetActivePersona(*persona_id)
++                  .FindBool("ok")
++                  .value_or(false));
++  EXPECT_TRUE(service_->GetActiveSnapshot().enabled);
++  EXPECT_FALSE(service_->GetActiveSnapshot().allow_web_rtc);
++  EXPECT_EQ(kChromium149MacArmIdentityTemplateId,
++            service_->GetActiveIdentityTemplateId());
++}
++
++TEST_F(PersonaServiceTest, RejectsIncompleteDevicePackActivation) {
++  base::DictValue state = service_->GetPersonaState();
++  const base::ListValue* presets = state.FindList("presets");
++  ASSERT_TRUE(presets);
++  const base::DictValue* windows_preset = nullptr;
++  for (const base::Value& value : *presets) {
++    const base::DictValue* preset = value.GetIfDict();
++    if (!preset) {
++      continue;
++    }
++    const std::string* platform = preset->FindString("platform");
++    if (platform && *platform == "Windows") {
++      windows_preset = preset;
++      break;
++    }
++  }
++  ASSERT_TRUE(windows_preset);
++  EXPECT_FALSE(windows_preset->FindBool("networkReady").value_or(true));
++  const std::string* preset_id = windows_preset->FindString("id");
++  ASSERT_TRUE(preset_id);
++  base::DictValue response = service_->ClonePresetIntoProfile(*preset_id);
++  ASSERT_TRUE(response.FindBool("ok").value_or(false));
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::DictValue activate = service_->SetActivePersona(*persona_id);
++  EXPECT_FALSE(activate.FindBool("ok").value_or(true));
++  const base::DictValue* errors = activate.FindDict("fieldErrors");
++  ASSERT_TRUE(errors);
++  EXPECT_TRUE(errors->FindString("devicePackId"));
++}
++
+--- a/chrome/browser/net/profile_network_context_service.cc
++++ b/chrome/browser/net/profile_network_context_service.cc
+@@ -630,6 +630,15 @@
+                 static_cast<uint32_t>(stored_identity_id))
+           : nullptr;
+   if (!identity) {
++    // Prefer an explicit Device Pack id on the persona, then exact claim match,
++    // then cohort-compatible match (same OS/arch/major with network variants).
++    if (std::optional<int> pack_id = active_persona->FindInt("devicePackId");
++        pack_id && *pack_id > 0) {
++      identity = helium_persona::FindPersonaIdentityTemplate(
++          static_cast<uint32_t>(*pack_id));
++    }
++  }
++  if (!identity) {
+     const base::DictValue* ua_ch = active_persona->FindDict("uaCh");
+     if (stored_identity_id > 0 || !ua_ch) {
+       return nullptr;
+@@ -647,10 +656,18 @@
+         find_string(*ua_ch, "architecture"), find_string(*ua_ch, "bitness"),
+         ua_ch->FindBool("mobile").value_or(false),
+         ua_ch->FindBool("wow64").value_or(false));
++    if (!identity) {
++      identity = helium_persona::MatchCompatiblePersonaIdentityTemplate(
++          find_string(*active_persona, "platform"),
++          find_string(*ua_ch, "architecture"), find_string(*ua_ch, "bitness"),
++          find_string(*ua_ch, "fullVersion"),
++          ua_ch->FindBool("mobile").value_or(false));
++    }
+   }
+   const std::string& salt = profile_->GetPrefs()->GetString(
+       helium_persona::prefs::kFingerprintProfileSalt);
+-  if (!identity || salt.empty() || !active_id) {
++  if (!identity || !helium_persona::PersonaIdentityHasNetworkVariants(*identity) ||
++      salt.empty() || !active_id) {
+     return nullptr;
+   }
+ 
+--- a/chrome/browser/resources/settings/privacy_page/persona_config.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
+@@ -40,6 +40,7 @@
+   allowHandwritingRecognition: boolean;
+   allowWebNn: boolean;
+   allowPrivateStateTokens: boolean;
++  allowWebRtc: boolean;
+   fingerprintRotation: Record<string, unknown>&{
+     scope: string;
+     rotationIntervalDays: number;
+@@ -210,6 +211,7 @@
+   allowHandwritingRecognition: false,
+   allowWebNn: false,
+   allowPrivateStateTokens: false,
++  allowWebRtc: false,
+   fingerprintRotation: {
+     scope: 'site_profile',
+     rotationIntervalDays: 14,
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -180,6 +180,11 @@
+     tooltipKey: 'personaFieldAllowWebNnTooltip',
+   },
+   {
++    path: 'editablePersona_.advanced.allowWebRtc',
++    labelKey: 'personaFieldAllowWebRtcLabel',
++    tooltipKey: 'personaFieldAllowWebRtcTooltip',
++  },
++  {
+     path: 'editablePersona_.advanced.allowPrivateStateTokens',
+     labelKey: 'personaFieldAllowPrivateStateTokensLabel',
+     tooltipKey: 'personaFieldAllowPrivateStateTokensTooltip',
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -2643,6 +2643,10 @@
+        IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_LABEL},
+       {"personaFieldAllowPrivateStateTokensTooltip",
+        IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP},
++      {"personaFieldAllowWebRtcLabel",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_LABEL},
++      {"personaFieldAllowWebRtcTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_TOOLTIP},
+       {"advancedProtectionProgramTitle",
+        IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM},
+       {"advancedProtectionProgramDesc",
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -339,7 +339,7 @@
+   const base::DictValue* advanced =
+       ValidateDictField(value, "advanced", "advanced", true, &errors);
+   if (advanced) {
+-    constexpr std::array<std::string_view, 30> kAdvancedBooleanFields = {
++    constexpr std::array<std::string_view, 31> kAdvancedBooleanFields = {
+         "clientHintsEnabled",
+         "canvasNoise",
+         "audioNoise",
+@@ -370,6 +370,7 @@
+         "allowHandwritingRecognition",
+         "allowWebNn",
+         "allowPrivateStateTokens",
++        "allowWebRtc",
+     };
+     ValidateBooleanFields(*advanced, kAdvancedBooleanFields, "advanced.",
+                           &errors);
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -66,6 +66,7 @@
+   bool allow_handwriting_recognition = false;
+   bool allow_web_nn = false;
+   bool allow_private_state_tokens = false;
++  bool allow_web_rtc = false;
+   bool ua_ch_mobile = false;
+   bool ua_ch_wow64 = false;
+   bool passthrough = false;
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -180,6 +180,10 @@
+     return data.allow_private_state_tokens;
+   }
+ 
++  static bool allow_web_rtc(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.allow_web_rtc;
++  }
++
+   static bool ua_ch_mobile(const ::blink::HeliumPersonaSnapshot& data) {
+     return data.ua_ch_mobile;
+   }
+@@ -514,6 +518,7 @@
+         data.allow_handwriting_recognition();
+     out->allow_web_nn = data.allow_web_nn();
+     out->allow_private_state_tokens = data.allow_private_state_tokens();
++    out->allow_web_rtc = data.allow_web_rtc();
+     out->ua_ch_mobile = data.ua_ch_mobile();
+     out->ua_ch_wow64 = data.ua_ch_wow64();
+     out->passthrough = data.passthrough();
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -42,6 +42,7 @@
+   bool allow_handwriting_recognition;
+   bool allow_web_nn;
+   bool allow_private_state_tokens;
++  bool allow_web_rtc;
+   bool ua_ch_mobile;
+   bool ua_ch_wow64;
+   bool passthrough;
+--- a/third_party/blink/renderer/modules/peerconnection/rtc_peer_connection.cc
++++ b/third_party/blink/renderer/modules/peerconnection/rtc_peer_connection.cc
+@@ -29,6 +29,9 @@
+  */
+ 
+ #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/web/web_local_frame_client.h"
++#include "third_party/blink/renderer/core/workers/worker_global_scope.h"
+ 
+ #include <algorithm>
+ #include <memory>
+@@ -542,6 +545,28 @@
+       GenerateCertificateAlgorithms::kMaxValue);
+ }
+ 
++const HeliumPersonaSnapshot* GetPersonaSnapshot(ExecutionContext* context) {
++  if (!context) {
++    return nullptr;
++  }
++  if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
++    if (!window->GetFrame() || !window->GetFrame()->Client() ||
++        !window->GetFrame()->Client()->GetWebFrame() ||
++        !window->GetFrame()->Client()->GetWebFrame()->Client()) {
++      return nullptr;
++    }
++    const HeliumPersonaSnapshot& snapshot =
++        window->GetFrame()->Client()->GetWebFrame()->Client()
++            ->GetHeliumPersonaSnapshot();
++    return snapshot.IsEnabled() ? &snapshot : nullptr;
++  }
++  if (auto* worker = DynamicTo<WorkerGlobalScope>(context)) {
++    const HeliumPersonaSnapshot& snapshot = worker->GetHeliumPersonaSnapshot();
++    return snapshot.IsEnabled() ? &snapshot : nullptr;
++  }
++  return nullptr;
++}
++
+ }  // namespace
+ 
+ RTCPeerConnection::EventWrapper::EventWrapper(Event* event,
+@@ -570,6 +595,17 @@
+     return nullptr;
+   }
+ 
++  // Persona fail-closed: WebRTC is disabled by default under an active
++  // persona to prevent local-network / host-candidate leakage.
++  if (const HeliumPersonaSnapshot* persona_snapshot =
++          GetPersonaSnapshot(context);
++      persona_snapshot && !persona_snapshot->allow_web_rtc) {
++    exception_state.ThrowDOMException(
++        DOMExceptionCode::kNotAllowedError,
++        "RTCPeerConnection is disabled by the active persona.");
++    return nullptr;
++  }
++
+   // Count number of PeerConnections that could potentially be impacted by CSP
+   auto* content_security_policy = context->GetContentSecurityPolicy();
+   if (content_security_policy &&

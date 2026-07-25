@@ -221,6 +221,23 @@ def test_check_persona_settings_i18n_key_coverage():
         assert check_persona_settings_i18n_key_coverage(patches_dir)
 
 
+def test_check_persona_settings_i18n_key_coverage_accepts_later_provider_mapping():
+    """Later Persona patches may add their UI key and provider mapping together."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        patches_dir = Path(tmpdirname)
+        patch_name = 'persona-late-settings.patch'
+        ui_html = 'chrome/browser/resources/settings/privacy_page/persona_page.html'
+        provider_cc = ('chrome/browser/ui/webui/settings/'
+                       'settings_localized_strings_provider.cc')
+        _write_multi_file_patch(
+            patches_dir, {
+                ui_html: '<div>$i18n{personaLater}</div>',
+                provider_cc: '{"personaLater", IDS_SETTINGS_PERSONA_LATER},',
+            }, patch_name)
+
+        assert not check_persona_settings_i18n_key_coverage(patches_dir)
+
+
 def test_check_persona_profile_management_coverage():
     """Test persona profile management coverage guard."""
 

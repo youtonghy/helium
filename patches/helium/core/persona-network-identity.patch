@@ -1,0 +1,350 @@
+--- a/chrome/browser/ui/webui/settings/persona_handler.cc
++++ b/chrome/browser/ui/webui/settings/persona_handler.cc
+@@ -4,13 +4,19 @@
+ #include "chrome/browser/ui/webui/settings/persona_handler.h"
+ 
+ #include <string>
++#include <utility>
++#include <vector>
+ 
+ #include "base/check.h"
+ #include "base/functional/bind.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/values.h"
+ #include "chrome/browser/helium_persona/persona_service.h"
+ #include "chrome/browser/helium_persona/persona_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/web_ui.h"
++#include "services/network/public/mojom/network_context.mojom.h"
+ 
+ namespace settings {
+ 
+@@ -202,6 +208,19 @@ void PersonaHandler::HandleRefreshFinger
+   CHECK(service);
+   service->RefreshFingerprint(
+       helium_persona::FingerprintRefreshScope::kProfile, std::string());
++  const blink::HeliumPersonaSnapshot snapshot = service->GetActiveSnapshot();
++  std::vector<uint8_t> deterministic_seed;
++  if (base::HexStringToBytes(snapshot.fingerprint_profile_salt,
++                             &deterministic_seed) &&
++      deterministic_seed.size() == 32u) {
++    auto config = network::mojom::NetworkPersonaConfig::New();
++    config->generation = snapshot.fingerprint_generation;
++    config->template_id = 0;
++    config->deterministic_seed = std::move(deterministic_seed);
++    profile_->GetDefaultStoragePartition()
++        ->GetNetworkContext()
++        ->UpdateNetworkPersona(std::move(config), base::DoNothing());
++  }
+   ResolveJavascriptCallback(callback_id, service->GetPersonaState());
+ }
+ 
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -69,6 +69,7 @@
+ #include "net/base/network_anonymization_key.h"
+ #include "net/base/network_delegate.h"
+ #include "net/base/network_isolation_key.h"
++#include "net/base/network_persona_config.h"
+ #include "net/base/port_util.h"
+ #include "net/base/reconnect_notifier.h"
+ #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+@@ -213,6 +214,22 @@ namespace network {
+ 
+ namespace {
+ 
++std::optional<net::NetworkPersonaConfig> ToNetNetworkPersonaConfig(
++    const mojom::NetworkPersonaConfig& config) {
++  if (config.template_id != 0 ||
++      config.deterministic_seed.size() !=
++      net::NetworkPersonaConfig::kDeterministicSeedSize) {
++    return std::nullopt;
++  }
++
++  net::NetworkPersonaConfig result;
++  result.generation = config.generation;
++  result.template_id = config.template_id;
++  std::ranges::copy(config.deterministic_seed,
++                    result.deterministic_seed.begin());
++  return result;
++}
++
+ net::CertVerifier* g_cert_verifier_for_testing = nullptr;
+ 
+ // A CertVerifier that forwards all requests to |g_cert_verifier_for_testing|.
+@@ -1847,6 +1864,33 @@ void NetworkContext::CloseAllConnections
+   std::move(callback).Run();
+ }
+ 
++void NetworkContext::UpdateNetworkPersona(
++    mojom::NetworkPersonaConfigPtr config,
++    UpdateNetworkPersonaCallback callback) {
++  if (!config) {
++    std::move(callback).Run(false);
++    return;
++  }
++
++  std::optional<net::NetworkPersonaConfig> net_config =
++      ToNetNetworkPersonaConfig(*config);
++  if (!net_config) {
++    std::move(callback).Run(false);
++    return;
++  }
++
++  net::HttpNetworkSession* http_session =
++      url_request_context_->http_transaction_factory()->GetSession();
++  DCHECK(http_session);
++  if (http_session->params().network_persona_config == net_config) {
++    std::move(callback).Run(true);
++    return;
++  }
++
++  http_session->ApplyNetworkPersonaConfig(std::move(net_config));
++  std::move(callback).Run(true);
++}
++
+ void NetworkContext::CloseIdleConnections(
+     CloseIdleConnectionsCallback callback) {
+   net::HttpNetworkSession* http_session =
+--- a/services/network/network_context.h
++++ b/services/network/network_context.h
+@@ -326,6 +326,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE)
+                               DomainReliabilityClearMode mode,
+                               ClearDomainReliabilityCallback callback) override;
+   void CloseAllConnections(CloseAllConnectionsCallback callback) override;
++  void UpdateNetworkPersona(
++      mojom::NetworkPersonaConfigPtr config,
++      UpdateNetworkPersonaCallback callback) override;
+   void CloseIdleConnections(CloseIdleConnectionsCallback callback) override;
+   void SetNetworkConditions(
+       const base::UnguessableToken& throttling_profile_id,
+--- a/services/network/public/mojom/network_context.mojom
++++ b/services/network/public/mojom/network_context.mojom
+@@ -331,6 +331,14 @@ struct SocketBrokerRemotes {
+   pending_remote<SocketBroker> server;
+ };
+ 
++// Profile-scoped identity state for deterministic network fingerprint
++// selection. Template 0 is the browser's native network identity.
++struct NetworkPersonaConfig {
++  uint64 generation;
++  uint32 template_id;
++  array<uint8> deterministic_seed;
++};
++
+ // Parameters for constructing a network context.
+ struct NetworkContextParams {
+   // The user agent string.
+@@ -1278,6 +1286,11 @@ interface NetworkContext {
+   // Closes all open connections within this context.
+   CloseAllConnections() => ();
+ 
++  // Installs a new profile-scoped network identity. A changed identity closes
++  // all existing connections and clears cached TLS sessions before returning.
++  // The deterministic seed must contain exactly 32 bytes.
++  UpdateNetworkPersona(NetworkPersonaConfig config) => (bool accepted);
++
+   // Close all idle connections for the HTTP network session used by
+   // this context.
+   CloseIdleConnections() => ();
+--- a/services/network/test/test_network_context.h
++++ b/services/network/test/test_network_context.h
+@@ -150,6 +150,12 @@ class TestNetworkContext : public mojom:
+       mojom::SignedExchangeReportPtr report,
+       const net::NetworkAnonymizationKey& network_anonymization_key) override {}
+   void CloseAllConnections(CloseAllConnectionsCallback callback) override {}
++  void UpdateNetworkPersona(
++      mojom::NetworkPersonaConfigPtr config,
++      UpdateNetworkPersonaCallback callback) override {
++    std::move(callback).Run(config &&
++                            config->deterministic_seed.size() == 32u);
++  }
+   void CloseIdleConnections(CloseIdleConnectionsCallback callback) override {}
+   void SetNetworkConditions(
+       const base::UnguessableToken& throttling_profile_id,
+--- a/net/BUILD.gn
++++ b/net/BUILD.gn
+@@ -261,6 +261,7 @@ component("net") {
+     "base/network_isolation_key.h",
+     "base/network_isolation_partition.cc",
+     "base/network_isolation_partition.h",
++    "base/network_persona_config.h",
+     "base/parse_number.cc",
+     "base/parse_number.h",
+     "base/pickle.h",
+--- /dev/null
++++ b/net/base/network_persona_config.h
+@@ -0,0 +1,30 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef NET_BASE_NETWORK_PERSONA_CONFIG_H_
++#define NET_BASE_NETWORK_PERSONA_CONFIG_H_
++
++#include <array>
++#include <cstddef>
++#include <cstdint>
++
++#include "net/base/net_export.h"
++
++namespace net {
++
++// Profile-scoped identity state owned by //net. Template 0 preserves the
++// native Chromium wire identity.
++struct NET_EXPORT NetworkPersonaConfig {
++  static constexpr size_t kDeterministicSeedSize = 32;
++
++  uint64_t generation = 0;
++  uint32_t template_id = 0;
++  std::array<uint8_t, kDeterministicSeedSize> deterministic_seed = {};
++
++  bool operator==(const NetworkPersonaConfig&) const = default;
++};
++
++}  // namespace net
++
++#endif  // NET_BASE_NETWORK_PERSONA_CONFIG_H_
+--- a/net/http/http_network_session.cc
++++ b/net/http/http_network_session.cc
+@@ -373,6 +373,21 @@ void HttpNetworkSession::CloseIdleConnec
+   spdy_session_pool_.CloseCurrentIdleSessions(net_log_reason_utf8);
+ }
+ 
++void HttpNetworkSession::ApplyNetworkPersonaConfig(
++    std::optional<NetworkPersonaConfig> config) {
++  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
++  if (params_.network_persona_config == config) {
++    return;
++  }
++
++  quic_session_pool_.AbortAllSessionAttempts();
++  CloseAllConnections(ERR_ABORTED, "Network persona generation changed");
++  ClearSSLSessionCache();
++  quic_session_pool_.ClearCachedStatesInCryptoConfig(
++      base::RepeatingCallback<bool(const GURL&)>());
++  params_.network_persona_config = std::move(config);
++}
++
+ void HttpNetworkSession::SetTLS13EarlyDataEnabled(bool enabled) {
+   params_.enable_early_data = enabled;
+ }
+--- a/net/http/http_network_session.h
++++ b/net/http/http_network_session.h
+@@ -25,6 +25,7 @@
+ #include "build/buildflag.h"
+ #include "net/base/host_port_pair.h"
+ #include "net/base/net_export.h"
++#include "net/base/network_persona_config.h"
+ #include "net/http/http_auth_cache.h"
+ #include "net/http/http_stream_factory.h"
+ #include "net/net_buildflags.h"
+@@ -163,6 +164,10 @@ struct NET_EXPORT HttpNetworkSessionPara
+ 
+   // Whether to use the ALPN information in the DNS HTTPS record.
+   bool use_dns_https_svcb_alpn = true;
++
++  // The selected profile-scoped network identity. Null preserves Chromium's
++  // native wire behavior.
++  std::optional<NetworkPersonaConfig> network_persona_config;
+ };
+ 
+ // Structure with pointers to the dependencies of the HttpNetworkSession.
+@@ -302,6 +307,11 @@ class NET_EXPORT HttpNetworkSession : pu
+   // Clear the SSL session cache.
+   void ClearSSLSessionCache();
+ 
++  // Closes resources owned by the previous generation before publishing the
++  // new identity for subsequent connections.
++  void ApplyNetworkPersonaConfig(
++      std::optional<NetworkPersonaConfig> config);
++
+   // Returns a CommonConnectJobParams that references the NetworkSession's
+   // components. If |for_websockets| is true, the Params'
+   // |websocket_endpoint_lock_manager| field will be populated. Otherwise, it
+--- a/net/quic/quic_session_pool.cc
++++ b/net/quic/quic_session_pool.cc
+@@ -1102,6 +1102,17 @@ void QuicSessionPool::CloseAllSessions(i
+   });
+ }
+ 
++void QuicSessionPool::AbortAllSessionAttempts() {
++  std::unique_ptr<QuicSessionAttemptManager> previous_attempt_manager =
++      std::move(session_attempt_manager_);
++  session_attempt_manager_ =
++      std::make_unique<QuicSessionAttemptManager>(this);
++  previous_attempt_manager.reset();
++
++  JobMap active_jobs = std::move(active_jobs_);
++  active_jobs.clear();
++}
++
+ base::Value QuicSessionPool::QuicSessionPoolInfoToValue() const {
+   base::ListValue list;
+ 
+--- a/net/quic/quic_session_pool.h
++++ b/net/quic/quic_session_pool.h
+@@ -420,6 +420,10 @@ class NET_EXPORT_PRIVATE QuicSessionPool
+   // It sends connection close packet when closing connections.
+   void CloseAllSessions(int error, quic::QuicErrorCode quic_error);
+ 
++  // Aborts both legacy jobs and endpoint-based session attempts. Callers use
++  // this before changing connection-scoped identity state.
++  void AbortAllSessionAttempts();
++
+   base::Value QuicSessionPoolInfoToValue() const;
+ 
+   // Delete cached state objects in |crypto_config_|. If |origin_filter| is not
+--- a/services/network/network_context_unittest.cc
++++ b/services/network/network_context_unittest.cc
+@@ -769,6 +769,49 @@ class NetworkContextTest : public testin
+   base::test::ScopedFeatureList features_;
+ };
+ 
++TEST_F(NetworkContextTest, UpdateNetworkPersonaInstallsNetOwnedConfig) {
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(CreateNetworkContextParamsForTesting());
++
++  auto config = mojom::NetworkPersonaConfig::New();
++  config->generation = 7;
++  config->template_id = 0;
++  config->deterministic_seed.assign(32, 0x5a);
++  base::test::TestFuture<bool> accepted;
++  network_context->UpdateNetworkPersona(std::move(config),
++                                        accepted.GetCallback());
++  ASSERT_TRUE(accepted.Get());
++
++  net::HttpNetworkSession* session = network_context->url_request_context()
++                                         ->http_transaction_factory()
++                                         ->GetSession();
++  ASSERT_TRUE(session->params().network_persona_config);
++  EXPECT_EQ(7u, session->params().network_persona_config->generation);
++  EXPECT_EQ(0u, session->params().network_persona_config->template_id);
++  EXPECT_EQ(0x5a,
++            session->params().network_persona_config->deterministic_seed[0]);
++
++  auto unknown_template = mojom::NetworkPersonaConfig::New();
++  unknown_template->generation = 8;
++  unknown_template->template_id = 14901;
++  unknown_template->deterministic_seed.assign(32, 0xff);
++  base::test::TestFuture<bool> unknown_template_rejected;
++  network_context->UpdateNetworkPersona(
++      std::move(unknown_template), unknown_template_rejected.GetCallback());
++  EXPECT_FALSE(unknown_template_rejected.Get());
++  EXPECT_EQ(7u, session->params().network_persona_config->generation);
++
++  auto invalid_seed = mojom::NetworkPersonaConfig::New();
++  invalid_seed->generation = 9;
++  invalid_seed->template_id = 0;
++  invalid_seed->deterministic_seed.assign(31, 0xff);
++  base::test::TestFuture<bool> invalid_seed_rejected;
++  network_context->UpdateNetworkPersona(std::move(invalid_seed),
++                                        invalid_seed_rejected.GetCallback());
++  EXPECT_FALSE(invalid_seed_rejected.Get());
++  EXPECT_EQ(7u, session->params().network_persona_config->generation);
++}
++
+ class NetworkContextTestWithMockTime : public NetworkContextTest {
+  public:
+   NetworkContextTestWithMockTime()

@@ -56,39 +56,84 @@ def _rpath_dylib_name(dependency):
     return name
 
 
+def _dylib_is_stale(source, destination):
+    """True when destination is missing or does not match source size/mtime."""
+    if not destination.is_file():
+        return True
+    source_stat = source.stat()
+    destination_stat = destination.stat()
+    if source_stat.st_size != destination_stat.st_size:
+        return True
+    # Incremental rebuilds update out/Default first; app Frameworks must follow.
+    if source_stat.st_mtime > destination_stat.st_mtime:
+        return True
+    return False
+
+
+def _copy_dylib(source, destination, check_only, context):
+    if check_only:
+        raise FileNotFoundError(f'{context}: {destination} is missing or stale vs {source}')
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    return destination
+
+
+def _enqueue_dylib(pending, queued, path):
+    path = Path(path)
+    key = str(path.resolve()) if path.exists() else str(path)
+    if key in queued:
+        return
+    queued.add(key)
+    pending.append(path)
+
+
 def sync_dylib_closure(seed_paths,
                        frameworks_dir,
                        source_dir,
                        dependency_reader=_read_dyld_info_dependencies,
                        check_only=False):
-    """Copy or verify the recursive component dylib closure for seed_paths."""
+    """Copy or verify the recursive component dylib closure for seed_paths.
+
+    Existing Frameworks/*.dylib files are refreshed when ``source_dir`` has a
+    newer or different-sized copy. Older behavior only copied *missing* files,
+    so incremental component builds could package a Nitrous.app still using
+    stale dylibs (e.g. libcontent without recent crash fixes).
+    """
     frameworks_dir = Path(frameworks_dir)
     source_dir = Path(source_dir)
-    pending = deque(Path(path) for path in seed_paths)
-    queued = {path.name for path in pending}
+    pending = deque()
+    queued = set()
     copied = []
+
+    for seed in seed_paths:
+        _enqueue_dylib(pending, queued, seed)
 
     while pending:
         current = pending.popleft()
+        # Refresh component dylibs that already live under Frameworks/.
+        if (current.parent == frameworks_dir and current.suffix == '.dylib'):
+            source = source_dir / current.name
+            if source.is_file() and _dylib_is_stale(source, current):
+                copied.append(_copy_dylib(source, current, check_only,
+                                          f'seed dylib {current.name}'))
+
         for dependency in dependency_reader(current):
             name = _rpath_dylib_name(dependency)
-            if name is None or name in queued:
+            if name is None:
                 continue
 
             destination = frameworks_dir / name
-            if not destination.is_file():
-                if check_only:
-                    raise FileNotFoundError(
-                        f'{current} requires {dependency}, but {destination} is missing')
-                source = source_dir / name
-                if not source.is_file():
-                    raise FileNotFoundError(
-                        f'{current} requires {dependency}, but {source} is missing')
-                shutil.copy2(source, destination)
-                copied.append(destination)
+            source = source_dir / name
 
-            queued.add(name)
-            pending.append(destination)
+            if source.is_file():
+                if _dylib_is_stale(source, destination):
+                    copied.append(
+                        _copy_dylib(source, destination, check_only,
+                                    f'{current} requires {dependency}'))
+            elif not destination.is_file():
+                raise FileNotFoundError(f'{current} requires {dependency}, but {source} is missing')
+
+            _enqueue_dylib(pending, queued, destination)
 
     return tuple(copied)
 

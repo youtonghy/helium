@@ -1,0 +1,576 @@
+--- a/third_party/blink/renderer/modules/BUILD.gn
++++ b/third_party/blink/renderer/modules/BUILD.gn
+@@ -632,6 +632,7 @@ source_set("unit_tests") {
+     "wake_lock/wake_lock_test_utils.h",
+     "webaudio/audio_context_autoplay_test.cc",
+     "webaudio/audio_context_test.cc",
++    "webaudio/audio_fingerprint_noise_test.cc",
+     "webaudio/audio_node_input_test.cc",
+     "webaudio/audio_param_handler_test.cc",
+     "webaudio/audio_worklet_global_scope_test.cc",
+--- a/third_party/blink/renderer/modules/webaudio/BUILD.gn
++++ b/third_party/blink/renderer/modules/webaudio/BUILD.gn
+@@ -22,6 +22,8 @@ blink_modules_sources("webaudio") {
+     "audio_destination_handler.h",
+     "audio_destination_node.cc",
+     "audio_destination_node.h",
++    "audio_fingerprint_noise.cc",
++    "audio_fingerprint_noise.h",
+     "audio_graph_tracer.cc",
+     "audio_graph_tracer.h",
+     "audio_handler.cc",
+--- a/third_party/blink/renderer/modules/webaudio/analyser_node.cc
++++ b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
+@@ -27,6 +27,7 @@
+ 
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_analyser_options.h"
+ #include "third_party/blink/renderer/modules/webaudio/analyser_handler.h"
++#include "third_party/blink/renderer/modules/webaudio/audio_fingerprint_noise.h"
+ #include "third_party/blink/renderer/modules/webaudio/audio_graph_tracer.h"
+ #include "third_party/blink/renderer/modules/webaudio/base_audio_context.h"
+ 
+@@ -119,19 +120,47 @@ double AnalyserNode::smoothingTimeConsta
+ void AnalyserNode::getFloatFrequencyData(NotShared<DOMFloat32Array> array) {
+   GetAnalyserHandler().GetFloatFrequencyData(array.Get(),
+                                              context()->currentTime());
++  if (const std::optional<NoiseToken>& token =
++          context()->GetExecutionContext()->AudioNoiseToken()) {
++    ApplyAudioFingerprintNoise(
++        array->AsSpan().first(std::min<size_t>(array->length(),
++                                              frequencyBinCount())),
++        *token, AudioFingerprintDomain::kFloatFrequency, 0,
++        /*clamp_unit_range=*/false);
++  }
+ }
+ 
+ void AnalyserNode::getByteFrequencyData(NotShared<DOMUint8Array> array) {
+   GetAnalyserHandler().GetByteFrequencyData(array.Get(),
+                                             context()->currentTime());
++  if (const std::optional<NoiseToken>& token =
++          context()->GetExecutionContext()->AudioNoiseToken()) {
++    ApplyAudioFingerprintNoise(
++        array->AsSpan().first(std::min<size_t>(array->length(),
++                                              frequencyBinCount())),
++        *token, AudioFingerprintDomain::kByteFrequency, 0);
++  }
+ }
+ 
+ void AnalyserNode::getFloatTimeDomainData(NotShared<DOMFloat32Array> array) {
+   GetAnalyserHandler().GetFloatTimeDomainData(array.Get());
++  if (const std::optional<NoiseToken>& token =
++          context()->GetExecutionContext()->AudioNoiseToken()) {
++    ApplyAudioFingerprintNoise(
++        array->AsSpan().first(std::min<size_t>(array->length(), fftSize())),
++        *token, AudioFingerprintDomain::kFloatTimeDomain, 0,
++        /*clamp_unit_range=*/true);
++  }
+ }
+ 
+ void AnalyserNode::getByteTimeDomainData(NotShared<DOMUint8Array> array) {
+   GetAnalyserHandler().GetByteTimeDomainData(array.Get());
++  if (const std::optional<NoiseToken>& token =
++          context()->GetExecutionContext()->AudioNoiseToken()) {
++    ApplyAudioFingerprintNoise(
++        array->AsSpan().first(std::min<size_t>(array->length(), fftSize())),
++        *token, AudioFingerprintDomain::kByteTimeDomain, 0);
++  }
+ }
+ 
+ void AnalyserNode::ReportDidCreate() {
+--- /dev/null
++++ b/third_party/blink/renderer/modules/webaudio/audio_fingerprint_noise.cc
+@@ -0,0 +1,89 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "third_party/blink/renderer/modules/webaudio/audio_fingerprint_noise.h"
++
++#include <algorithm>
++#include <cmath>
++#include <limits>
++
++namespace blink {
++
++namespace {
++
++constexpr uint64_t kFnvPrime = 0x00000100000001b3;
++constexpr float kMinimumGain = 0x1p-15f;
++constexpr float kGainRange = 0x1p-15f;
++constexpr float kMaximumUnboundedDelta = 0x1p-15f;
++constexpr float kMaximumAbsoluteError = 1e-4f;
++
++uint64_t Mix(uint64_t hash, uint64_t value) {
++  hash ^= value;
++  hash *= kFnvPrime;
++  return hash;
++}
++
++uint64_t DomainSeed(NoiseToken token,
++                    AudioFingerprintDomain domain,
++                    uint64_t stream_id) {
++  return Mix(Mix(token.Value(), static_cast<uint64_t>(domain)), stream_id + 1);
++}
++
++float GainForSeed(uint64_t seed) {
++  constexpr float kFractionScale = 1.0f / 65535.0f;
++  const float magnitude =
++      kMinimumGain + static_cast<float>((seed >> 1) & 0xffff) *
++                         kFractionScale * kGainRange;
++  return (seed & 1) ? magnitude : -magnitude;
++}
++
++}  // namespace
++
++void ApplyAudioFingerprintNoise(base::span<float> values,
++                                NoiseToken token,
++                                AudioFingerprintDomain domain,
++                                uint64_t stream_id,
++                                bool clamp_unit_range) {
++  const uint64_t seed = DomainSeed(token, domain, stream_id);
++  const float gain = GainForSeed(seed);
++  for (size_t i = 0; i < values.size(); ++i) {
++    const float value = values[i];
++    if (!std::isfinite(value) || value == 0.0f) {
++      continue;
++    }
++
++    const uint64_t element_seed = Mix(seed, i + 1);
++    const float direction =
++        (element_seed & 1) ? std::numeric_limits<float>::infinity()
++                           : -std::numeric_limits<float>::infinity();
++    if (clamp_unit_range) {
++      const float perturbed = std::nextafter(value * (1.0f + gain), direction);
++      values[i] = std::clamp(perturbed, -1.0f, 1.0f);
++      continue;
++    }
++
++    const float delta = std::clamp(value * gain, -kMaximumUnboundedDelta,
++                                   kMaximumUnboundedDelta);
++    const float perturbed = std::nextafter(value + delta, direction);
++    if (std::abs(perturbed - value) <= kMaximumAbsoluteError) {
++      values[i] = perturbed;
++    }
++  }
++}
++
++void ApplyAudioFingerprintNoise(base::span<uint8_t> values,
++                                NoiseToken token,
++                                AudioFingerprintDomain domain,
++                                uint64_t stream_id) {
++  const uint64_t seed = DomainSeed(token, domain, stream_id);
++  for (size_t i = 0; i < values.size(); ++i) {
++    if (values[i] == 0 || values[i] == 255) {
++      continue;
++    }
++    values[i] = static_cast<uint8_t>(
++        values[i] + ((Mix(seed, i + 1) & 1) ? 1 : -1));
++  }
++}
++
++}  // namespace blink
+--- /dev/null
++++ b/third_party/blink/renderer/modules/webaudio/audio_fingerprint_noise.h
+@@ -0,0 +1,36 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_AUDIO_FINGERPRINT_NOISE_H_
++#define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_AUDIO_FINGERPRINT_NOISE_H_
++
++#include <cstdint>
++
++#include "base/containers/span.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
++
++namespace blink {
++
++enum class AudioFingerprintDomain : uint64_t {
++  kOfflineRender = 1,
++  kFloatFrequency = 2,
++  kByteFrequency = 3,
++  kFloatTimeDomain = 4,
++  kByteTimeDomain = 5,
++};
++
++void ApplyAudioFingerprintNoise(base::span<float> values,
++                                NoiseToken token,
++                                AudioFingerprintDomain domain,
++                                uint64_t stream_id,
++                                bool clamp_unit_range);
++
++void ApplyAudioFingerprintNoise(base::span<uint8_t> values,
++                                NoiseToken token,
++                                AudioFingerprintDomain domain,
++                                uint64_t stream_id);
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_AUDIO_FINGERPRINT_NOISE_H_
+--- /dev/null
++++ b/third_party/blink/renderer/modules/webaudio/audio_fingerprint_noise_test.cc
+@@ -0,0 +1,86 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "third_party/blink/renderer/modules/webaudio/audio_fingerprint_noise.h"
++
++#include <array>
++#include <cmath>
++#include <limits>
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace blink {
++
++TEST(AudioFingerprintNoiseTest, FloatNoiseIsStableBoundedAndTokenSpecific) {
++  const std::array<float, 6> input = {
++      -1.0f, -0.25f, 0.0f, 0.25f, 0.75f, 1.0f};
++  auto first = input;
++  auto repeat = input;
++  auto rotated = input;
++
++  ApplyAudioFingerprintNoise(first, NoiseToken(11),
++                             AudioFingerprintDomain::kOfflineRender, 0, true);
++  ApplyAudioFingerprintNoise(repeat, NoiseToken(11),
++                             AudioFingerprintDomain::kOfflineRender, 0, true);
++  ApplyAudioFingerprintNoise(rotated, NoiseToken(12),
++                             AudioFingerprintDomain::kOfflineRender, 0, true);
++
++  EXPECT_EQ(first, repeat);
++  EXPECT_NE(first, rotated);
++  for (size_t i = 0; i < input.size(); ++i) {
++    EXPECT_LE(std::abs(first[i] - input[i]), 1e-4f);
++    EXPECT_GE(first[i], -1.0f);
++    EXPECT_LE(first[i], 1.0f);
++  }
++  EXPECT_EQ(first[2], 0.0f);
++}
++
++TEST(AudioFingerprintNoiseTest, FloatNoisePreservesNonFiniteValues) {
++  std::array<float, 3> values = {
++      std::numeric_limits<float>::infinity(),
++      -std::numeric_limits<float>::infinity(),
++      std::numeric_limits<float>::quiet_NaN()};
++
++  ApplyAudioFingerprintNoise(values, NoiseToken(21),
++                             AudioFingerprintDomain::kFloatFrequency, 0,
++                             false);
++
++  EXPECT_EQ(values[0], std::numeric_limits<float>::infinity());
++  EXPECT_EQ(values[1], -std::numeric_limits<float>::infinity());
++  EXPECT_TRUE(std::isnan(values[2]));
++}
++
++TEST(AudioFingerprintNoiseTest, FloatFrequencyNoiseHasBoundedAbsoluteError) {
++  const std::array<float, 4> input = {-120.0f, -60.0f, -1.0f, 0.0f};
++  auto values = input;
++
++  ApplyAudioFingerprintNoise(values, NoiseToken(22),
++                             AudioFingerprintDomain::kFloatFrequency, 0,
++                             false);
++
++  for (size_t i = 0; i < input.size(); ++i) {
++    EXPECT_LE(std::abs(values[i] - input[i]), 1e-4f);
++  }
++  EXPECT_EQ(values.back(), 0.0f);
++}
++
++TEST(AudioFingerprintNoiseTest, ByteNoiseIsStableAndPreservesBoundaries) {
++  const std::array<uint8_t, 5> input = {0, 1, 127, 254, 255};
++  auto first = input;
++  auto repeat = input;
++
++  ApplyAudioFingerprintNoise(first, NoiseToken(31),
++                             AudioFingerprintDomain::kByteTimeDomain, 0);
++  ApplyAudioFingerprintNoise(repeat, NoiseToken(31),
++                             AudioFingerprintDomain::kByteTimeDomain, 0);
++
++  EXPECT_EQ(first, repeat);
++  EXPECT_EQ(first.front(), 0);
++  EXPECT_EQ(first.back(), 255);
++  for (size_t i = 1; i + 1 < input.size(); ++i) {
++    EXPECT_EQ(std::abs(static_cast<int>(first[i]) - input[i]), 1);
++  }
++}
++
++}  // namespace blink
+--- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
++++ b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+@@ -26,13 +26,9 @@
+ #include "third_party/blink/renderer/modules/webaudio/offline_audio_context.h"
+ 
+ #include <cmath>
+-#include <limits>
+-
+-#include "base/containers/span.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/metrics/histogram_macros.h"
+ #include "media/base/audio_glitch_info.h"
+-#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_offline_audio_context_options.h"
+@@ -41,6 +37,7 @@
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/modules/webaudio/audio_buffer.h"
++#include "third_party/blink/renderer/modules/webaudio/audio_fingerprint_noise.h"
+ #include "third_party/blink/renderer/modules/webaudio/audio_listener.h"
+ #include "third_party/blink/renderer/modules/webaudio/deferred_task_handler.h"
+ #include "third_party/blink/renderer/modules/webaudio/offline_audio_completion_event.h"
+@@ -59,36 +56,13 @@ namespace blink {
+ 
+ namespace {
+ 
+-constexpr uint64_t kFnvPrime = 0x00000100000001b3;
+-
+-uint64_t MixHeliumAudioNoise(uint64_t hash, uint64_t value) {
+-  hash ^= value;
+-  hash *= kFnvPrime;
+-  return hash;
+-}
+-
+ void ApplyHeliumAudioNoise(AudioBuffer* rendered_buffer, NoiseToken token) {
+-  const uint64_t token_hash = token.Value();
+   for (uint32_t channel = 0; channel < rendered_buffer->numberOfChannels();
+        ++channel) {
+-    base::span<float> samples =
+-        rendered_buffer->getChannelData(channel)->AsSpan();
+-    const uint64_t channel_hash = MixHeliumAudioNoise(token_hash, channel + 1);
+-    for (size_t i = 0; i < samples.size(); ++i) {
+-      const float sample = samples[i];
+-      if (!std::isfinite(sample) || sample == 0.0f)
+-        continue;
+-
+-      uint64_t sample_hash = MixHeliumAudioNoise(channel_hash, i + 1);
+-      const float target = (sample_hash & 1)
+-                               ? std::numeric_limits<float>::infinity()
+-                               : -std::numeric_limits<float>::infinity();
+-      float jittered = sample;
+-      const uint64_t ulp_steps = ((sample_hash >> 1) % 31) + 1;
+-      for (uint64_t step = 0; step < ulp_steps; ++step)
+-        jittered = std::nextafter(jittered, target);
+-      samples[i] = jittered;
+-    }
++    ApplyAudioFingerprintNoise(
++        rendered_buffer->getChannelData(channel)->AsSpan(), token,
++        AudioFingerprintDomain::kOfflineRender, channel,
++        /*clamp_unit_range=*/true);
+   }
+ }
+ 
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_audio_readback_browsertest.cc
+@@ -0,0 +1,199 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/helium_persona/persona_service.h"
++#include "chrome/browser/helium_persona/persona_service_factory.h"
++
++#include <algorithm>
++#include <cmath>
++#include <string>
++#include <vector>
++
++#include "base/check.h"
++#include "base/values.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test_utils.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "url/gurl.h"
++
++namespace helium_persona {
++
++namespace {
++
++struct AudioCapture {
++  bool consistent = false;
++  std::string buffer_hash;
++  std::string analyser_hash;
++  double sum = 0.0;
++  std::vector<double> samples;
++};
++
++double MaxAbsoluteError(const AudioCapture& expected,
++                        const AudioCapture& actual) {
++  CHECK_EQ(expected.samples.size(), actual.samples.size());
++  double maximum = 0.0;
++  for (size_t i = 0; i < expected.samples.size(); ++i) {
++    maximum =
++        std::max(maximum, std::abs(expected.samples[i] - actual.samples[i]));
++  }
++  return maximum;
++}
++
++AudioCapture CaptureAudio(content::WebContents* web_contents) {
++  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
++    (async () => {
++      const hashArrays = arrays => {
++        let hash = 2166136261;
++        for (const array of arrays) {
++          const bytes = new Uint8Array(
++              array.buffer, array.byteOffset, array.byteLength);
++          for (const byte of bytes) {
++            hash = Math.imul(hash ^ byte, 16777619) >>> 0;
++          }
++        }
++        return hash.toString(16).padStart(8, '0');
++      };
++      const sameBytes = (left, right) => {
++        if (left.byteLength !== right.byteLength) {
++          return false;
++        }
++        const leftBytes = new Uint8Array(
++            left.buffer, left.byteOffset, left.byteLength);
++        const rightBytes = new Uint8Array(
++            right.buffer, right.byteOffset, right.byteLength);
++        return leftBytes.every((value, index) => value === rightBytes[index]);
++      };
++      const readAnalyser = analyser => {
++        const floatFrequency = new Float32Array(analyser.frequencyBinCount);
++        const byteFrequency = new Uint8Array(analyser.frequencyBinCount);
++        const floatTime = new Float32Array(analyser.fftSize);
++        const byteTime = new Uint8Array(analyser.fftSize);
++        analyser.getFloatFrequencyData(floatFrequency);
++        analyser.getByteFrequencyData(byteFrequency);
++        analyser.getFloatTimeDomainData(floatTime);
++        analyser.getByteTimeDomainData(byteTime);
++        return [floatFrequency, byteFrequency, floatTime, byteTime];
++      };
++
++      const context = new OfflineAudioContext(1, 5000, 44100);
++      const oscillator = context.createOscillator();
++      oscillator.type = 'triangle';
++      oscillator.frequency.value = 10000;
++      const analyser = context.createAnalyser();
++      analyser.fftSize = 2048;
++      analyser.smoothingTimeConstant = 0;
++      const compressor = context.createDynamicsCompressor();
++      compressor.threshold.value = -50;
++      compressor.knee.value = 40;
++      compressor.ratio.value = 12;
++      compressor.attack.value = 0;
++      compressor.release.value = 0.25;
++      oscillator.connect(analyser);
++      analyser.connect(compressor);
++      compressor.connect(context.destination);
++      oscillator.start(0);
++
++      let eventBuffer = null;
++      context.oncomplete = event => {
++        eventBuffer = event.renderedBuffer;
++      };
++      const promiseBuffer = await context.startRendering();
++      const channel = promiseBuffer.getChannelData(0);
++      const repeatedChannel = promiseBuffer.getChannelData(0);
++      const copiedChannel = new Float32Array(channel.length);
++      promiseBuffer.copyFromChannel(copiedChannel, 0);
++      const firstAnalyser = readAnalyser(analyser);
++      const secondAnalyser = readAnalyser(analyser);
++
++      const consistent =
++          eventBuffer === promiseBuffer && channel === repeatedChannel &&
++          sameBytes(channel, copiedChannel) &&
++          firstAnalyser.every(
++              (array, index) => sameBytes(array, secondAnalyser[index]));
++      let sum = 0;
++      for (let i = 4500; i < 5000; ++i) {
++        sum += Math.abs(channel[i]);
++      }
++      return {
++        consistent,
++        bufferHash: hashArrays([channel]),
++        analyserHash: hashArrays(firstAnalyser),
++        sum,
++        samples: Array.from(channel),
++      };
++    })()
++  )JS");
++
++  CHECK(result.is_ok()) << result.ExtractError();
++  const base::DictValue& dict = result.ExtractDict();
++  const base::ListValue* samples = dict.FindList("samples");
++  const std::string* buffer_hash = dict.FindString("bufferHash");
++  const std::string* analyser_hash = dict.FindString("analyserHash");
++  CHECK(samples);
++  CHECK(buffer_hash);
++  CHECK(analyser_hash);
++
++  AudioCapture capture;
++  capture.consistent = dict.FindBool("consistent").value_or(false);
++  capture.buffer_hash = *buffer_hash;
++  capture.analyser_hash = *analyser_hash;
++  capture.sum = dict.FindDouble("sum").value_or(0.0);
++  capture.samples.reserve(samples->size());
++  for (const base::Value& sample : *samples) {
++    capture.samples.push_back(sample.GetDouble());
++  }
++  return capture;
++}
++
++}  // namespace
++
++class PersonaAudioReadbackBrowserTest : public InProcessBrowserTest {};
++
++IN_PROC_BROWSER_TEST_F(PersonaAudioReadbackBrowserTest,
++                       StableWithinGenerationAndChangesAfterRefresh) {
++  const GURL test_url("data:text/html,<body></body>");
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(content::NavigateToURL(web_contents, test_url));
++  const AudioCapture baseline = CaptureAudio(web_contents);
++  ASSERT_TRUE(baseline.consistent);
++
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response = service->CreatePersonaProfile("Audio test");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(service->SetActivePersona(*persona_id)
++                  .FindBool("ok")
++                  .value_or(false));
++
++  ASSERT_TRUE(content::NavigateToURL(web_contents, test_url));
++  const AudioCapture generation_zero = CaptureAudio(web_contents);
++  const AudioCapture generation_zero_repeat = CaptureAudio(web_contents);
++  ASSERT_TRUE(generation_zero.consistent);
++  ASSERT_TRUE(generation_zero_repeat.consistent);
++  EXPECT_EQ(generation_zero.buffer_hash,
++            generation_zero_repeat.buffer_hash);
++  EXPECT_EQ(generation_zero.analyser_hash,
++            generation_zero_repeat.analyser_hash);
++  EXPECT_EQ(generation_zero.sum, generation_zero_repeat.sum);
++  EXPECT_NE(baseline.buffer_hash, generation_zero.buffer_hash);
++  EXPECT_GT(MaxAbsoluteError(baseline, generation_zero), 0.0);
++  EXPECT_LE(MaxAbsoluteError(baseline, generation_zero), 1e-4);
++
++  service->RefreshFingerprint(FingerprintRefreshScope::kProfile,
++                              std::string());
++  ASSERT_TRUE(content::NavigateToURL(web_contents, test_url));
++  const AudioCapture generation_one = CaptureAudio(web_contents);
++  ASSERT_TRUE(generation_one.consistent);
++  EXPECT_NE(generation_zero.buffer_hash, generation_one.buffer_hash);
++  EXPECT_NE(generation_zero.analyser_hash, generation_one.analyser_hash);
++  EXPECT_NE(generation_zero.sum, generation_one.sum);
++  EXPECT_LE(MaxAbsoluteError(baseline, generation_one), 1e-4);
++}
++
++}  // namespace helium_persona
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -3578,6 +3578,7 @@ if (!is_android) {
+       "../browser/glic/suggestions/contextual_cueing_service_browsertest.cc",
+       "../browser/glic/suggestions/zero_state_suggestions_browsertest.cc",
+       "../browser/guest_view/mime_handler_view/chrome_mime_handler_view_browsertest.cc",
++      "../browser/helium_persona/persona_audio_readback_browsertest.cc",
+       "../browser/helium_persona/persona_font_virtualization_browsertest.cc",
+       "../browser/hid/hid_browsertest.cc",
+       "../browser/icon_loader_browsertest.cc",

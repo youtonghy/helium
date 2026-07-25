@@ -1,0 +1,63 @@
+--- a/net/data/network_persona/README.md
++++ b/net/data/network_persona/README.md
+@@ -1,11 +1,36 @@
+ # Network persona captures
+ 
++## Production support matrix
++
++| Template | Chrome build | Platform | Feature state | Golden evidence |
++| --- | --- | --- | --- | --- |
++| 149001 | 149.0.7827.114 | macOS arm64 | `TlsMldsaSignatures=off` | Raw ClientHello body, parsed TLS fields, exact H2 first write |
++| 149002 | 149.0.7827.114 | macOS arm64 | `TlsMldsaSignatures=on` | Raw ClientHello body, parsed TLS fields, exact H2 first write |
++
++Both network variants belong to complete identity template `149000`. That is
++currently the only production complete identity, so complete identity rotation
++is unavailable until a second independently captured, correlated identity is
++added. Chrome 147-148 and Windows/Linux have no production template in this
++catalog. Tests that reject those versions are compatibility guards, not hidden
++fallback templates.
++
++## Capture and verification
++
+ These fixtures are raw TLS ClientHello handshake bodies captured from the
+ Chromium 149.0.7827.114 macOS arm64 production SSLClientSocket path. The test
+ profile used a 32-byte 0x42 Persona seed and generation 7 for the default
+ variant, and generation 8 with the existing Chromium ML-DSA signature feature
+ set for the ML-DSA variant.
+ 
++The capture workflow runs that SSLClientSocket path against Chromium's embedded
++BoringSSL test server. The server's `client_hello_callback_for_testing` parses
++the emitted cipher suites, extension order, supported groups, key shares,
++signature algorithms, supported versions, and ALPN. The raw outbound
++ClientHello handshake body is stored in the matching `.hex` fixture and its
++SHA-256 is pinned in the template catalog. The regression test recreates the
++same feature state, seed, and generation and compares parsed protocol fields;
++the fixture hash separately protects the original bytes.
++
+ The random, session ID, key-share material, and GREASE values are preserved as
+ captured. Regression tests parse protocol fields and normalize GREASE before
+ comparison; they do not require cryptographic random bytes to repeat.
+@@ -17,7 +42,23 @@
+ is encrypted on the wire. No decrypted or reconstructed QUIC payload is
+ labelled as a raw capture.
+ 
++There is not yet an independent raw HTTP/2 HEADERS fixture or a decrypted
++QUIC/HTTP/3 golden capture. H2 SETTINGS order, connection WINDOW_UPDATE, and
++pseudo-header order are asserted against exact serializer output. H3 SETTINGS
++and reproducible QUIC transport parameters are asserted through the production
++serializers. Future raw fixtures must be captured from an authentic build and
++must not be reconstructed from the expected catalog values.
++
+ Persona mode derives separate connection-scoped seeds for TLS extension order,
+ HTTP/3 GREASE, and QUIC transport parameter ordering. These seeds never replace
+ Chromium's cryptographic randomness for connection IDs, key shares, session
+ tokens, or TLS key material.
++
++## Adding a template
++
++Record the exact Chromium full version, operating system and architecture,
++feature state, Persona seed/generation used for capture, capture path, and all
++available raw fixtures. A complete identity must correlate UA, UA-CH, platform,
++TLS, HTTP/2, and HTTP/3 behavior from the same browser identity. Do not assemble
++JA3/JA4 or protocol fields by hand, and do not add combinations that the
++current Chromium, BoringSSL, or QUIC stack cannot emit.

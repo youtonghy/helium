@@ -1,0 +1,548 @@
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -5,6 +5,8 @@
+ #include "content/browser/browser_interface_binders.h"
+ 
+ #include <concepts>
++#include <optional>
++#include <vector>
+ 
+ #include "base/check_op.h"
+ #include "base/command_line.h"
+@@ -115,6 +117,11 @@
+ #include "mojo/public/cpp/bindings/binder_map.h"
+ #include "mojo/public/cpp/bindings/message.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
++#include "mojo/public/cpp/bindings/self_owned_receiver.h"
++#include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom.h"
++#include "third_party/blink/public/mojom/contacts/contacts_manager.mojom.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "ui/gfx/geometry/size.h"
+ #include "net/base/features.h"
+ #include "services/device/public/cpp/compute_pressure/buildflags.h"
+ #include "services/device/public/mojom/battery_monitor.mojom.h"
+@@ -279,6 +286,14 @@
+ 
+ namespace {
+ 
++// Persona helpers defined later in this file.
++bool HeliumPersonaAllowsWebNn(BrowserContext* browser_context);
++
++template <typename Interface>
++void DropReceiverForPersonaDeny(mojo::PendingReceiver<Interface> receiver) {
++  DVLOG(1) << "Persona-denied drop for interface " << Interface::Name_;
++}
++
+ void BindBarcodeDetectionProvider(
+     mojo::PendingReceiver<shape_detection::mojom::BarcodeDetectionProvider>
+         receiver) {
+@@ -299,6 +314,10 @@
+ void BindWebNNContextProviderForRenderFrame(
+     RenderFrameHost* host,
+     mojo::PendingReceiver<webnn::mojom::WebNNContextProvider> receiver) {
++  if (!HeliumPersonaAllowsWebNn(host->GetBrowserContext())) {
++    DropReceiverForPersonaDeny(std::move(receiver));
++    return;
++  }
+   auto* process_host = static_cast<RenderProcessHostImpl*>(host->GetProcess());
+   const bool is_incognito = host->GetBrowserContext()->IsOffTheRecord();
+ #if BUILDFLAG(IS_MAC)
+@@ -318,6 +337,10 @@
+     mojo::PendingReceiver<webnn::mojom::WebNNContextProvider> receiver) {
+   auto* process_host =
+       static_cast<RenderProcessHostImpl*>(host->GetProcessHost());
++  if (!HeliumPersonaAllowsWebNn(process_host->GetBrowserContext())) {
++    DropReceiverForPersonaDeny(std::move(receiver));
++    return;
++  }
+   const bool is_incognito = process_host->GetBrowserContext()->IsOffTheRecord();
+ #if BUILDFLAG(IS_MAC)
+   webnn::InitializeCacheDirAndRun(
+@@ -333,6 +356,10 @@
+ void BindWebNNWeightsFileCreatorForRenderFrame(
+     RenderFrameHost* host,
+     mojo::PendingReceiver<webnn::mojom::WebNNWeightsFileCreator> receiver) {
++  if (!HeliumPersonaAllowsWebNn(host->GetBrowserContext())) {
++    DropReceiverForPersonaDeny(std::move(receiver));
++    return;
++  }
+   const bool is_incognito = host->GetBrowserContext()->IsOffTheRecord();
+   webnn::WeightsFileCreatorImpl::Create(std::move(receiver), is_incognito);
+ }
+@@ -341,8 +368,13 @@
+ void BindWebNNWeightsFileCreatorForWorker(
+     WorkerHost* host,
+     mojo::PendingReceiver<webnn::mojom::WebNNWeightsFileCreator> receiver) {
+-  const bool is_incognito =
+-      host->GetProcessHost()->GetBrowserContext()->IsOffTheRecord();
++  BrowserContext* browser_context =
++      host->GetProcessHost()->GetBrowserContext();
++  if (!HeliumPersonaAllowsWebNn(browser_context)) {
++    DropReceiverForPersonaDeny(std::move(receiver));
++    return;
++  }
++  const bool is_incognito = browser_context->IsOffTheRecord();
+   webnn::WeightsFileCreatorImpl::Create(std::move(receiver), is_incognito);
+ }
+ 
+@@ -661,6 +693,123 @@
+            << " for the frame/document scope";
+ }
+ 
++// Forward declarations — full definitions appear with the other persona helpers.
++bool HeliumPersonaAllowsContacts(RenderFrameHost* host);
++bool HeliumPersonaAllowsBackgroundFetch(RenderFrameHost* host);
++bool HeliumPersonaAllowsBackgroundFetch(ServiceWorkerHost* host);
++bool HeliumPersonaAllowsGamepads(RenderFrameHost* host);
++bool HeliumPersonaAllowsShapeDetection(BrowserContext* browser_context);
++bool HeliumPersonaAllowsWebNn(BrowserContext* browser_context);
++
++class DeniedContactsManager : public blink::mojom::ContactsManager {
++ public:
++  void Select(bool,
++              bool,
++              bool,
++              bool,
++              bool,
++              bool,
++              SelectCallback callback) override {
++    std::move(callback).Run(std::nullopt);
++  }
++};
++
++void BindContactsManager(
++    RenderFrameHost* host,
++    mojo::PendingReceiver<blink::mojom::ContactsManager> receiver) {
++  if (!HeliumPersonaAllowsContacts(host)) {
++    mojo::MakeSelfOwnedReceiver(std::make_unique<DeniedContactsManager>(),
++                                std::move(receiver));
++    return;
++  }
++  ContactsManagerImpl::Create(host, std::move(receiver));
++}
++
++class DeniedBackgroundFetchService
++    : public blink::mojom::BackgroundFetchService {
++ public:
++  void Fetch(int64_t,
++             const std::string&,
++             std::vector<blink::mojom::FetchAPIRequestPtr>,
++             blink::mojom::BackgroundFetchOptionsPtr,
++             const SkBitmap&,
++             blink::mojom::BackgroundFetchUkmDataPtr,
++             FetchCallback callback) override {
++    std::move(callback).Run(
++        blink::mojom::BackgroundFetchError::PERMISSION_DENIED,
++        /*registration=*/nullptr);
++  }
++
++  void GetRegistration(int64_t,
++                       const std::string&,
++                       GetRegistrationCallback callback) override {
++    std::move(callback).Run(
++        blink::mojom::BackgroundFetchError::PERMISSION_DENIED,
++        /*registration=*/nullptr);
++  }
++
++  void GetDeveloperIds(int64_t, GetDeveloperIdsCallback callback) override {
++    std::move(callback).Run(
++        blink::mojom::BackgroundFetchError::PERMISSION_DENIED,
++        /*developer_ids=*/std::vector<std::string>());
++  }
++
++  void GetIconDisplaySize(GetIconDisplaySizeCallback callback) override {
++    std::move(callback).Run(gfx::Size());
++  }
++};
++
++void BindBackgroundFetchServiceForFrame(
++    RenderFrameHost* host,
++    mojo::PendingReceiver<blink::mojom::BackgroundFetchService> receiver) {
++  if (!HeliumPersonaAllowsBackgroundFetch(host)) {
++    mojo::MakeSelfOwnedReceiver(
++        std::make_unique<DeniedBackgroundFetchService>(), std::move(receiver));
++    return;
++  }
++  BackgroundFetchServiceImpl::CreateForFrame(host, std::move(receiver));
++}
++
++class DeniedGamepadHapticsManager : public device::mojom::GamepadHapticsManager {
++ public:
++  void PlayVibrationEffectOnce(
++      uint32_t,
++      device::mojom::GamepadHapticEffectType,
++      device::mojom::GamepadEffectParametersPtr,
++      PlayVibrationEffectOnceCallback callback) override {
++    std::move(callback).Run(
++        device::mojom::GamepadHapticsResult::GamepadHapticsResultNotSupported);
++  }
++
++  void ResetVibrationActuator(
++      uint32_t,
++      ResetVibrationActuatorCallback callback) override {
++    std::move(callback).Run(
++        device::mojom::GamepadHapticsResult::GamepadHapticsResultNotSupported);
++  }
++};
++
++void BindGamepadHapticsManager(
++    RenderFrameHost* host,
++    mojo::PendingReceiver<device::mojom::GamepadHapticsManager> receiver) {
++  if (!HeliumPersonaAllowsGamepads(host)) {
++    mojo::MakeSelfOwnedReceiver(
++        std::make_unique<DeniedGamepadHapticsManager>(), std::move(receiver));
++    return;
++  }
++  device::GamepadHapticsManager::Create(host, std::move(receiver));
++}
++
++void BindGamepadMonitor(
++    RenderFrameHost* host,
++    mojo::PendingReceiver<device::mojom::GamepadMonitor> receiver) {
++  if (!HeliumPersonaAllowsGamepads(host)) {
++    EmptyBinderForFrame(host, std::move(receiver));
++    return;
++  }
++  device::GamepadMonitor::Create(host, std::move(receiver));
++}
++
+ void BindBatteryMonitor(
+     RenderFrameHost* host,
+     mojo::PendingReceiver<device::mojom::BatteryMonitor> receiver) {
+@@ -897,9 +1046,7 @@
+   }
+ #endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
+ 
+-  if (HeliumPersonaAllowsContacts(host)) {
+-    map->Add<blink::mojom::ContactsManager>(&ContactsManagerImpl::Create);
+-  }
++  map->Add<blink::mojom::ContactsManager>(&BindContactsManager);
+ 
+   map->Add<blink::mojom::ContentSecurityNotifier>(base::BindRepeating(
+       [](RenderFrameHost* host,
+@@ -931,10 +1078,7 @@
+         &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetFontAccessManager>);
+   }
+ 
+-  if (HeliumPersonaAllowsGamepads(host)) {
+-    map->Add<device::mojom::GamepadHapticsManager>(
+-        &device::GamepadHapticsManager::Create);
+-  }
++  map->Add<device::mojom::GamepadHapticsManager>(&BindGamepadHapticsManager);
+ 
+   map->Add<blink::mojom::GeolocationService>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetGeolocationService>);
+@@ -1043,9 +1187,7 @@
+       base::ThreadPool::CreateSequencedTaskRunner(
+           {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
+ 
+-  if (HeliumPersonaAllowsGamepads(host)) {
+-    map->Add<device::mojom::GamepadMonitor>(&device::GamepadMonitor::Create);
+-  }
++  map->Add<device::mojom::GamepadMonitor>(&BindGamepadMonitor);
+ 
+   map->Add<blink::mojom::WebSensorProvider>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetSensorProvider>);
+@@ -1056,8 +1198,7 @@
+   map->Add<handwriting::mojom::HandwritingRecognitionService>(
+       &CreateHandwritingRecognitionService);
+ 
+-  if (HeliumPersonaAllowsWebNn(host->GetBrowserContext()) &&
+-      base::FeatureList::IsEnabled(
++  if (base::FeatureList::IsEnabled(
+           webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
+     map->Add<webnn::mojom::WebNNContextProvider>(
+         &BindWebNNContextProviderForRenderFrame);
+@@ -1190,25 +1331,38 @@
+       &BindRenderFrameHostImpl<
+           &RenderFrameHostImpl::BindTrustTokenQueryAnswerer>);
+ 
+-  if (HeliumPersonaAllowsShapeDetection(host->GetBrowserContext())) {
+-    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-        base::BindRepeating(
+-            [](RenderFrameHost* host,
+-               mojo::PendingReceiver<
+-                   shape_detection::mojom::BarcodeDetectionProvider> receiver) {
+-              BindBarcodeDetectionProvider(std::move(receiver));
+-            }));
++  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(base::BindRepeating(
++      [](RenderFrameHost* host,
++         mojo::PendingReceiver<
++             shape_detection::mojom::BarcodeDetectionProvider> receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(host->GetBrowserContext())) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindBarcodeDetectionProvider(std::move(receiver));
++      }));
+ 
+-    map->Add<shape_detection::mojom::FaceDetectionProvider>(base::BindRepeating(
+-        [](RenderFrameHost* host,
+-           mojo::PendingReceiver<shape_detection::mojom::FaceDetectionProvider>
+-               receiver) { BindFaceDetectionProvider(std::move(receiver)); }));
++  map->Add<shape_detection::mojom::FaceDetectionProvider>(base::BindRepeating(
++      [](RenderFrameHost* host,
++         mojo::PendingReceiver<shape_detection::mojom::FaceDetectionProvider>
++             receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(host->GetBrowserContext())) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindFaceDetectionProvider(std::move(receiver));
++      }));
+ 
+-    map->Add<shape_detection::mojom::TextDetection>(base::BindRepeating(
+-        [](RenderFrameHost* host,
+-           mojo::PendingReceiver<shape_detection::mojom::TextDetection>
+-               receiver) { BindTextDetection(std::move(receiver)); }));
+-  }
++  map->Add<shape_detection::mojom::TextDetection>(base::BindRepeating(
++      [](RenderFrameHost* host,
++         mojo::PendingReceiver<shape_detection::mojom::TextDetection>
++             receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(host->GetBrowserContext())) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindTextDetection(std::move(receiver));
++      }));
+ 
+   auto* command_line = base::CommandLine::ForCurrentProcess();
+   if (command_line->HasSwitch(switches::kEnableGpuBenchmarking)) {
+@@ -1297,10 +1451,8 @@
+                 std::move(receiver));
+           }));
+ 
+-  if (HeliumPersonaAllowsBackgroundFetch(host)) {
+-    map->Add<blink::mojom::BackgroundFetchService>(
+-        &BackgroundFetchServiceImpl::CreateForFrame);
+-  }
++  map->Add<blink::mojom::BackgroundFetchService>(
++      &BindBackgroundFetchServiceForFrame);
+   map->Add<device::mojom::BatteryMonitor>(&BindBatteryMonitor);
+   map->Add<blink::mojom::ColorChooserFactory>(&BindColorChooserFactoryForFrame);
+   map->Add<blink::mojom::EyeDropperChooser>(&EyeDropperChooserImpl::Create);
+@@ -1444,15 +1596,43 @@
+   // always expect to be bound.
+   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
+ 
+-  // static binders
+-  if (HeliumPersonaAllowsShapeDetection(
+-          host->GetProcessHost()->GetBrowserContext())) {
+-    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-        &BindBarcodeDetectionProvider);
+-    map->Add<shape_detection::mojom::FaceDetectionProvider>(
+-        &BindFaceDetectionProvider);
+-    map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
+-  }
++  // static binders — always register shape detection; deny drops the pipe.
++  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(base::BindRepeating(
++      [](DedicatedWorkerHost* host,
++         mojo::PendingReceiver<
++             shape_detection::mojom::BarcodeDetectionProvider> receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(
++                host->GetProcessHost()->GetBrowserContext())) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindBarcodeDetectionProvider(std::move(receiver));
++      },
++      base::Unretained(host)));
++  map->Add<shape_detection::mojom::FaceDetectionProvider>(base::BindRepeating(
++      [](DedicatedWorkerHost* host,
++         mojo::PendingReceiver<shape_detection::mojom::FaceDetectionProvider>
++             receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(
++                host->GetProcessHost()->GetBrowserContext())) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindFaceDetectionProvider(std::move(receiver));
++      },
++      base::Unretained(host)));
++  map->Add<shape_detection::mojom::TextDetection>(base::BindRepeating(
++      [](DedicatedWorkerHost* host,
++         mojo::PendingReceiver<shape_detection::mojom::TextDetection>
++             receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(
++                host->GetProcessHost()->GetBrowserContext())) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindTextDetection(std::move(receiver));
++      },
++      base::Unretained(host)));
+   map->Add<ukm::mojom::UkmRecorderFactory>(&BindUkmRecorderFactory);
+ 
+   // worker host binders
+@@ -1472,11 +1652,10 @@
+       base::ThreadPool::CreateSequencedTaskRunner(
+           {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
+ 
+-  if (HeliumPersonaAllowsWebNn(host->GetProcessHost()->GetBrowserContext()) &&
+-      base::FeatureList::IsEnabled(
++  if (base::FeatureList::IsEnabled(
+           webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
+-    // base::Unretained(host->GetProcessHost()) is safe because the map is owned
+-    // by |DedicatedWorkerHost::broker_|.
++    // base::Unretained(host) is safe because the map is owned by
++    // |DedicatedWorkerHost::broker_|.
+     map->Add<webnn::mojom::WebNNContextProvider>(base::BindRepeating(
+         &BindWebNNContextProviderForWorker<DedicatedWorkerHost>,
+         base::Unretained(host)));
+@@ -1625,15 +1804,43 @@
+   // don't have the ancestor frame.
+   map->Add<blink::mojom::ContentSecurityNotifier>(base::DoNothing());
+ 
+-  // static binders
+-  if (HeliumPersonaAllowsShapeDetection(
+-          host->GetProcessHost()->GetBrowserContext())) {
+-    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-        &BindBarcodeDetectionProvider);
+-    map->Add<shape_detection::mojom::FaceDetectionProvider>(
+-        &BindFaceDetectionProvider);
+-    map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
+-  }
++  // static binders — always register shape detection; deny drops the pipe.
++  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(base::BindRepeating(
++      [](SharedWorkerHost* host,
++         mojo::PendingReceiver<
++             shape_detection::mojom::BarcodeDetectionProvider> receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(
++                host->GetProcessHost()->GetBrowserContext())) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindBarcodeDetectionProvider(std::move(receiver));
++      },
++      base::Unretained(host)));
++  map->Add<shape_detection::mojom::FaceDetectionProvider>(base::BindRepeating(
++      [](SharedWorkerHost* host,
++         mojo::PendingReceiver<shape_detection::mojom::FaceDetectionProvider>
++             receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(
++                host->GetProcessHost()->GetBrowserContext())) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindFaceDetectionProvider(std::move(receiver));
++      },
++      base::Unretained(host)));
++  map->Add<shape_detection::mojom::TextDetection>(base::BindRepeating(
++      [](SharedWorkerHost* host,
++         mojo::PendingReceiver<shape_detection::mojom::TextDetection>
++             receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(
++                host->GetProcessHost()->GetBrowserContext())) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindTextDetection(std::move(receiver));
++      },
++      base::Unretained(host)));
+   map->Add<ukm::mojom::UkmRecorderFactory>(&BindUkmRecorderFactory);
+ 
+   // worker host binders
+@@ -1676,8 +1883,7 @@
+         &SharedWorkerHost::BindPressureService, base::Unretained(host)));
+   }
+ #endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
+-  if (HeliumPersonaAllowsWebNn(host->GetProcessHost()->GetBrowserContext()) &&
+-      base::FeatureList::IsEnabled(
++  if (base::FeatureList::IsEnabled(
+           webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
+     map->Add<webnn::mojom::WebNNContextProvider>(base::BindRepeating(
+         &BindWebNNContextProviderForWorker<SharedWorkerHost>,
+@@ -1806,17 +2012,45 @@
+   // don't have the ancestor frame.
+   map->Add<blink::mojom::ContentSecurityNotifier>(base::DoNothing());
+ 
+-  // static binders
++  // static binders — always register shape detection; deny drops the pipe.
+   map->Add<blink::mojom::FileUtilitiesHost>(
+       base::BindRepeating(&BindFileUtilitiesHost, host));
+-  if (HeliumPersonaAllowsShapeDetection(
+-          GetHeliumPersonaBrowserContext(host))) {
+-    map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
+-        &BindBarcodeDetectionProvider);
+-    map->Add<shape_detection::mojom::FaceDetectionProvider>(
+-        &BindFaceDetectionProvider);
+-    map->Add<shape_detection::mojom::TextDetection>(&BindTextDetection);
+-  }
++  map->Add<shape_detection::mojom::BarcodeDetectionProvider>(base::BindRepeating(
++      [](ServiceWorkerHost* host,
++         mojo::PendingReceiver<
++             shape_detection::mojom::BarcodeDetectionProvider> receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(
++                GetHeliumPersonaBrowserContext(host))) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindBarcodeDetectionProvider(std::move(receiver));
++      },
++      base::Unretained(host)));
++  map->Add<shape_detection::mojom::FaceDetectionProvider>(base::BindRepeating(
++      [](ServiceWorkerHost* host,
++         mojo::PendingReceiver<shape_detection::mojom::FaceDetectionProvider>
++             receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(
++                GetHeliumPersonaBrowserContext(host))) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindFaceDetectionProvider(std::move(receiver));
++      },
++      base::Unretained(host)));
++  map->Add<shape_detection::mojom::TextDetection>(base::BindRepeating(
++      [](ServiceWorkerHost* host,
++         mojo::PendingReceiver<shape_detection::mojom::TextDetection>
++             receiver) {
++        if (!HeliumPersonaAllowsShapeDetection(
++                GetHeliumPersonaBrowserContext(host))) {
++          DropReceiverForPersonaDeny(std::move(receiver));
++          return;
++        }
++        BindTextDetection(std::move(receiver));
++      },
++      base::Unretained(host)));
+   map->Add<ukm::mojom::UkmRecorderFactory>(&BindUkmRecorderFactory);
+ 
+   // worker host binders
+@@ -1853,8 +2087,7 @@
+   map->Add<blink::mojom::AIManager>(base::BindRepeating(
+       &ServiceWorkerHost::BindAIManager, base::Unretained(host)));
+ 
+-  if (HeliumPersonaAllowsWebNn(GetHeliumPersonaBrowserContext(host)) &&
+-      base::FeatureList::IsEnabled(
++  if (base::FeatureList::IsEnabled(
+           webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
+     map->Add<webnn::mojom::WebNNContextProvider>(base::BindRepeating(
+         &BindWebNNContextProviderForWorker<ServiceWorkerHost>,
+@@ -1905,11 +2138,22 @@
+   // static binders
+   // Use a task runner if ServiceWorkerHost lives on the IO thread, as
+   // CreateForWorker() needs to be called on the UI thread.
+-  if (HeliumPersonaAllowsBackgroundFetch(host)) {
+-    map->Add<blink::mojom::BackgroundFetchService>(
+-        base::BindRepeating(&BackgroundFetchServiceImpl::CreateForWorker,
+-                            host->GetNetworkIsolationKey()));
+-  }
++  map->Add<blink::mojom::BackgroundFetchService>(base::BindRepeating(
++      [](ServiceWorkerHost* host,
++         const net::NetworkIsolationKey& network_isolation_key,
++         const ServiceWorkerVersionBaseInfo& info,
++         mojo::PendingReceiver<blink::mojom::BackgroundFetchService>
++             receiver) {
++        if (!HeliumPersonaAllowsBackgroundFetch(host)) {
++          mojo::MakeSelfOwnedReceiver(
++              std::make_unique<DeniedBackgroundFetchService>(),
++              std::move(receiver));
++          return;
++        }
++        BackgroundFetchServiceImpl::CreateForWorker(network_isolation_key,
++                                                    info, std::move(receiver));
++      },
++      base::Unretained(host), host->GetNetworkIsolationKey()));
+   map->Add<blink::mojom::ContentIndexService>(
+       &ContentIndexServiceImpl::CreateForWorker);
+   map->Add<blink::mojom::CookieStore>(

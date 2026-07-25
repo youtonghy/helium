@@ -1,6 +1,6 @@
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -3205,23 +3205,21 @@
+@@ -3205,23 +3205,21 @@ std::string ChromeContentBrowserClient::
  
  blink::HeliumPersonaSnapshot ChromeContentBrowserClient::GetHeliumPersonaSnapshot(
      content::BrowserContext* browser_context) {
@@ -38,7 +38,7 @@
  }
  
  gfx::ImageSkia ChromeContentBrowserClient::GetDefaultFavicon() {
-@@ -6653,6 +6651,8 @@
+@@ -6653,6 +6651,8 @@ void ChromeContentBrowserClient::WillCre
      bool* disable_secure_dns,
      network::mojom::URLLoaderFactoryOverridePtr* factory_override,
      scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner) {
@@ -103,7 +103,7 @@
  // Wrapper for SSLErrorHandler::HandleSSLError() that supplies //chrome-level
  // parameters.
  void HandleSSLErrorWrapper(
-@@ -282,6 +315,8 @@
+@@ -282,6 +315,8 @@ void MaybeCreateAndAddVisitedLinkNavigat
  void CreateAndAddChromeThrottlesForNavigation(
      content::NavigationThrottleRegistry& registry) {
    content::NavigationHandle& handle = registry.GetNavigationHandle();
@@ -138,7 +138,7 @@
  
  namespace helium_persona {
  
-@@ -16,28 +31,138 @@
+@@ -16,28 +31,138 @@ base::Lock& GetPersonaRuntimeOverrideLoc
    return *lock;
  }
  
@@ -335,7 +335,7 @@
  #endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_RUNTIME_OVERRIDE_H_
 --- a/chrome/browser/helium_persona/persona_runtime_override_unittest.cc
 +++ b/chrome/browser/helium_persona/persona_runtime_override_unittest.cc
-@@ -67,4 +67,58 @@
+@@ -67,4 +67,58 @@ TEST_F(PersonaRuntimeOverrideTest, Clear
    EXPECT_FALSE(PersonaRuntimeOverride::GetGlobal().has_value());
  }
  
@@ -396,7 +396,7 @@
  }  // namespace helium_persona
 --- a/chrome/browser/helium_persona/persona_service.cc
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -1666,6 +1666,44 @@
+@@ -1666,6 +1666,44 @@ blink::HeliumPersonaSnapshot PersonaServ
    return snapshot;
  }
  
@@ -443,7 +443,7 @@
      base::DictValue state = MakeDefaultState();
 --- a/chrome/browser/helium_persona/persona_service.h
 +++ b/chrome/browser/helium_persona/persona_service.h
-@@ -23,6 +23,18 @@
+@@ -23,6 +23,18 @@ enum class FingerprintRefreshScope {
    kSite,
  };
  
@@ -462,7 +462,7 @@
  class PersonaService : public KeyedService {
   public:
    explicit PersonaService(PrefService* prefs);
-@@ -45,6 +57,7 @@
+@@ -45,6 +57,7 @@ class PersonaService : public KeyedServi
    void RefreshFingerprint(FingerprintRefreshScope scope,
                            const std::string& site_origin_or_empty);
    blink::HeliumPersonaSnapshot GetActiveSnapshot() const;
@@ -472,7 +472,7 @@
    base::DictValue ReadState() const;
 --- a/chrome/browser/helium_persona/persona_service_factory.cc
 +++ b/chrome/browser/helium_persona/persona_service_factory.cc
-@@ -41,7 +41,7 @@
+@@ -41,7 +41,7 @@ PersonaServiceFactory::BuildServiceInsta
  
  void PersonaServiceFactory::BrowserContextShutdown(
      content::BrowserContext* context) {
@@ -483,7 +483,7 @@
  
 --- a/chrome/browser/helium_persona/persona_service_unittest.cc
 +++ b/chrome/browser/helium_persona/persona_service_unittest.cc
-@@ -395,6 +395,43 @@
+@@ -395,6 +395,43 @@ TEST_F(PersonaServiceTest, ReadStateCano
    EXPECT_FALSE(service_->GetActiveSnapshot().enabled);
  }
  
@@ -527,3 +527,515 @@
  TEST_F(PersonaServiceTest, SnapshotUsesRealisticNavigatorPlatformValues) {
    base::DictValue create_response = service_->CreatePersonaProfile("Platform");
    const base::DictValue* created_state = create_response.FindDict("state");
+--- a/chrome/browser/ai/ai_manager.cc
++++ b/chrome/browser/ai/ai_manager.cc
+@@ -36,8 +36,7 @@
+ #include "chrome/browser/ai/features.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/component_updater/optimization_guide_on_device_model_installer.h"
+-#include "chrome/browser/helium_persona/persona_service.h"
+-#include "chrome/browser/helium_persona/persona_service_factory.h"
++#include "chrome/browser/helium_persona/persona_runtime_override.h"
+ #include "chrome/browser/optimization_guide/model_execution/optimization_guide_global_state.h"
+ #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
+ #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
+@@ -83,6 +82,7 @@
+ 
+ namespace {
+ 
++constexpr char kPersonaStatePref[] = "helium.persona.state";
+ constexpr float kDefaultMaxTemperature = 2.0f;
+ constexpr uint32_t kMinTopK = 1;
+ constexpr float kMinTemperature = 0.0f;
+@@ -627,6 +627,25 @@ AIManager::AIManager(content::BrowserCon
+   if (rfh && rfh->GetRenderWidgetHost()) {
+     widget_observer_.Observe(rfh->GetRenderWidgetHost());
+   }
++  persona_blocked_ = IsBlockedByPersona();
++  if (!persona_blocked_) {
++    EnsureModelBrokerClient();
++  }
++  if (auto* profile = Profile::FromBrowserContext(browser_context_)) {
++    persona_pref_registrar_.Init(profile->GetPrefs());
++    persona_pref_registrar_.Add(
++        kPersonaStatePref,
++        base::BindRepeating(&AIManager::OnPersonaStateChanged,
++                            base::Unretained(this)));
++  }
++}
++
++AIManager::~AIManager() = default;
++
++void AIManager::EnsureModelBrokerClient() {
++  if (model_broker_client_) {
++    return;
++  }
+   auto* service = OptimizationGuideKeyedServiceFactory::GetForProfile(
+       Profile::FromBrowserContext(browser_context_));
+   if (service) {
+@@ -634,7 +653,51 @@ AIManager::AIManager(content::BrowserCon
+   }
+ }
+ 
+-AIManager::~AIManager() = default;
++void AIManager::OnPersonaStateChanged() {
++  const bool blocked = IsBlockedByPersona();
++  if (blocked == persona_blocked_) {
++    return;
++  }
++  persona_blocked_ = blocked;
++  if (!blocked) {
++    EnsureModelBrokerClient();
++    return;
++  }
++
++  ++persona_revocation_generation_;
++  RejectPendingCanCreateCallbacks();
++  model_broker_client_.reset();
++  tried_init_.clear();
++  context_bound_object_set_.Clear();
++}
++
++AIManager::CanCreateLanguageModelCallback AIManager::TrackCanCreateCallback(
++    CanCreateLanguageModelCallback callback) {
++  const uint64_t request_id = ++next_can_create_request_id_;
++  pending_can_create_callbacks_.emplace(request_id, std::move(callback));
++  return base::BindOnce(&AIManager::CompleteTrackedCanCreate,
++                        weak_factory_.GetWeakPtr(), request_id);
++}
++
++void AIManager::CompleteTrackedCanCreate(
++    uint64_t request_id,
++    blink::mojom::ModelAvailabilityCheckResult result) {
++  auto it = pending_can_create_callbacks_.find(request_id);
++  if (it == pending_can_create_callbacks_.end()) {
++    return;
++  }
++  CanCreateLanguageModelCallback callback = std::move(it->second);
++  pending_can_create_callbacks_.erase(it);
++  std::move(callback).Run(result);
++}
++
++void AIManager::RejectPendingCanCreateCallbacks() {
++  auto callbacks = std::move(pending_can_create_callbacks_);
++  pending_can_create_callbacks_.clear();
++  for (auto& entry : callbacks) {
++    ReplyUnavailable(std::move(entry.second));
++  }
++}
+ 
+ void AIManager::AddReceiver(
+     mojo::PendingReceiver<blink::mojom::AIManager> receiver) {
+@@ -693,6 +756,7 @@ void AIManager::CanCreateLanguageModel(
+     return;
+   }
+ 
++  callback = TrackCanCreateCallback(std::move(callback));
+   if (base::FeatureList::IsEnabled(
+           optimization_guide::kOptimizationGuideManifestBroker)) {
+     CanCreateSessionWithConfig<
+@@ -765,6 +829,10 @@ void AIManager::CreateLanguageModelInter
+         client,
+     blink::mojom::AILanguageModelCreateOptionsPtr options,
+     base::WeakPtr<optimization_guide::ModelClient> model_client) {
++  if (IsBlockedByPersona()) {
++    RejectCreate(std::move(client));
++    return;
++  }
+   if (!model_client) {
+     mojo::Remote<blink::mojom::AIManagerCreateLanguageModelClient>
+         client_remote(std::move(client));
+@@ -922,6 +990,7 @@ void AIManager::CanCreateSummarizer(
+     }
+   }
+ 
++  callback = TrackCanCreateCallback(std::move(callback));
+   if (base::FeatureList::IsEnabled(
+           optimization_guide::kOptimizationGuideManifestBroker)) {
+     if (!model_broker_client_) {
+@@ -1014,6 +1083,10 @@ void AIManager::OnGetSummarizerConfigFor
+     blink::mojom::AISummarizerCreateOptionsPtr options,
+     CanCreateSummarizerCallback callback,
+     std::optional<mojo_base::ProtoWrapper> config_wrapper) {
++  if (IsBlockedByPersona()) {
++    ReplyUnavailable(std::move(callback));
++    return;
++  }
+   std::optional<std::string> use_case_opt =
+       ResolveSummarizerUseCaseName(config_wrapper, options);
+ 
+@@ -1031,6 +1104,10 @@ void AIManager::OnGetSummarizerConfigFor
+     mojo::PendingRemote<blink::mojom::AIManagerCreateSummarizerClient> client,
+     blink::mojom::AISummarizerCreateOptionsPtr options,
+     std::optional<mojo_base::ProtoWrapper> config_wrapper) {
++  if (IsBlockedByPersona()) {
++    RejectCreate(std::move(client));
++    return;
++  }
+   std::optional<std::string> use_case_opt =
+       ResolveSummarizerUseCaseName(config_wrapper, options);
+ 
+@@ -1108,6 +1185,7 @@ void AIManager::CanCreateProofreader(
+                                 kUnavailableUnsupportedLanguage);
+     return;
+   }
++  callback = TrackCanCreateCallback(std::move(callback));
+   CanCreateSession(optimization_guide::mojom::OnDeviceFeature::kProofreaderApi,
+                    on_device_model::Capabilities(), std::move(callback));
+ }
+@@ -1241,6 +1319,7 @@ void AIManager::CanCreateWriter(blink::m
+     return;
+   }
+ 
++  callback = TrackCanCreateCallback(std::move(callback));
+   if (base::FeatureList::IsEnabled(
+           optimization_guide::kOptimizationGuideManifestBroker)) {
+     CanCreateSessionWithConfig<
+@@ -1338,6 +1417,7 @@ void AIManager::CanCreateRewriter(
+                                 kUnavailableUnsupportedLanguage);
+     return;
+   }
++  callback = TrackCanCreateCallback(std::move(callback));
+   if (base::FeatureList::IsEnabled(
+           optimization_guide::kOptimizationGuideManifestBroker)) {
+     CanCreateSessionWithConfig<
+@@ -1425,6 +1505,7 @@ void AIManager::CanCreateClassifier(
+     std::move(callback).Run(*pref_blocked_result);
+     return;
+   }
++  callback = TrackCanCreateCallback(std::move(callback));
+   CanCreateSession(optimization_guide::mojom::OnDeviceFeature::kClassifier,
+                    on_device_model::Capabilities(), std::move(callback));
+ }
+@@ -1468,6 +1549,10 @@ void AIManager::CanCreateSession(
+     optimization_guide::mojom::OnDeviceFeature capability,
+     on_device_model::Capabilities capabilities,
+     CanCreateLanguageModelCallback callback) {
++  if (IsBlockedByPersona()) {
++    ReplyUnavailable(std::move(callback));
++    return;
++  }
+   StartModelPathValidationIfOverrideSet();
+ 
+   if (!model_broker_client_) {
+@@ -1486,6 +1571,10 @@ void AIManager::CanCreateSession(
+ void AIManager::CanCreateSession(const std::string& use_case_string,
+                                  on_device_model::Capabilities capabilities,
+                                  CanCreateLanguageModelCallback callback) {
++  if (IsBlockedByPersona()) {
++    ReplyUnavailable(std::move(callback));
++    return;
++  }
+   auto model_path =
+       optimization_guide::switches::GetOnDeviceModelExecutionOverride();
+   if (model_path.has_value()) {
+@@ -1514,6 +1603,10 @@ void AIManager::FinishCanCreateSessionWi
+     on_device_model::Capabilities capabilities,
+     CanCreateLanguageModelCallback callback,
+     std::optional<mojo_base::ProtoWrapper> wrapper) {
++  if (IsBlockedByPersona()) {
++    ReplyUnavailable(std::move(callback));
++    return;
++  }
+   std::optional<std::string> use_case =
+       GetUseCaseFromFeatureConfig<FeatureConfigProto>(wrapper);
+   if (!use_case.has_value() || use_case->empty()) {
+@@ -1532,6 +1625,10 @@ void AIManager::CanCreateSessionWithConf
+     optimization_guide::mojom::OnDeviceFeature capability,
+     on_device_model::Capabilities capabilities,
+     CanCreateLanguageModelCallback callback) {
++  if (IsBlockedByPersona()) {
++    ReplyUnavailable(std::move(callback));
++    return;
++  }
+   StartModelPathValidationIfOverrideSet();
+ 
+   if (!model_broker_client_) {
+@@ -1552,6 +1649,10 @@ void AIManager::FinishCanCreateSession(
+     std::optional<optimization_guide::mojom::ModelUnavailableReason> reason,
+     std::optional<optimization_guide::mojom::ModelNotSupportedDetailedReason>
+         detailed_reason) {
++  if (IsBlockedByPersona()) {
++    ReplyUnavailable(std::move(callback));
++    return;
++  }
+   std::move(callback).Run(
+       ConvertModelEligibilityReasonToModelAvailabilityCheckResult(
+           reason, detailed_reason));
+@@ -1568,6 +1669,12 @@ void AIManager::OnSessionCreated(
+     std::unique_ptr<optimization_guide::OnDeviceSession> session) {
+   mojo::Remote<ClientRemoteInterface> client_remote(std::move(client));
+ 
++  if (IsBlockedByPersona()) {
++    on_device_ai::SendClientRemoteError(
++        client_remote,
++        blink::mojom::AIManagerCreateClientError::kUnableToCreateSession);
++    return;
++  }
+   if (!session) {
+     on_device_ai::SendClientRemoteError(
+         client_remote,
+@@ -1586,7 +1693,8 @@ void AIManager::OnSessionCreated(
+                 ContextBoundObjectType, ContextBoundObjectReceiverInterface,
+                 ClientRemoteInterface, CreateOptionsPtrType>,
+             weak_factory_.GetWeakPtr(), std::move(options),
+-            std::move(client_remote), std::move(session)));
++            std::move(client_remote), std::move(session),
++            persona_revocation_generation_));
+     return;
+   }
+ 
+@@ -1606,7 +1714,15 @@ void AIManager::OnGotExecutionInputSizeI
+     CreateOptionsPtrType options,
+     mojo::Remote<ClientRemoteInterface> client_remote,
+     std::unique_ptr<optimization_guide::OnDeviceSession> session,
++    uint64_t persona_revocation_generation,
+     std::optional<uint32_t> result) {
++  if (IsBlockedByPersona() ||
++      persona_revocation_generation != persona_revocation_generation_) {
++    on_device_ai::SendClientRemoteError(
++        client_remote,
++        blink::mojom::AIManagerCreateClientError::kUnableToCreateSession);
++    return;
++  }
+   if (!result.has_value()) {
+     on_device_ai::SendClientRemoteError(
+         client_remote,
+@@ -1670,15 +1786,18 @@ bool AIManager::CheckAndFixLanguages(
+ }
+ 
+ bool AIManager::IsBlockedByPersona() const {
+-  auto* persona_service =
+-      helium_persona::PersonaServiceFactory::GetForProfile(
+-          Profile::FromBrowserContext(browser_context_));
+-  if (!persona_service) {
++  helium_persona::PersonaRuntimeState state =
++      helium_persona::PersonaRuntimeOverride::ResolveForBrowserContext(
++          browser_context_);
++  if (state.status ==
++      helium_persona::PersonaResolutionStatus::kSystemReal) {
+     return false;
+   }
+-  const blink::HeliumPersonaSnapshot snapshot =
+-      persona_service->GetActiveSnapshot();
+-  return snapshot.IsEnabled() && !snapshot.allow_ai_apis;
++  if (state.status ==
++      helium_persona::PersonaResolutionStatus::kPersonaUnavailable) {
++    return true;
++  }
++  return !state.snapshot || !state.snapshot->allow_ai_apis;
+ }
+ 
+ std::optional<blink::mojom::ModelAvailabilityCheckResult>
+--- a/chrome/browser/ai/ai_context_bound_object_set.cc
++++ b/chrome/browser/ai/ai_context_bound_object_set.cc
+@@ -22,6 +22,10 @@ void AIContextBoundObjectSet::RemoveCont
+   context_bound_object_set_.erase(object);
+ }
+ 
++void AIContextBoundObjectSet::Clear() {
++  context_bound_object_set_.clear();
++}
++
+ void AIContextBoundObjectSet::SetPriority(
+     on_device_model::mojom::Priority priority) {
+   priority_ = priority;
+--- a/chrome/browser/ai/ai_context_bound_object_set.h
++++ b/chrome/browser/ai/ai_context_bound_object_set.h
+@@ -27,6 +27,9 @@ class AIContextBoundObjectSet {
+   // Remove the `AIContextBoundObject` from the set.
+   void RemoveContextBoundObject(AIContextBoundObject* object);
+ 
++  // Destroys all objects owned by this set.
++  void Clear();
++
+   // Sets the priority for all objects owned by this.
+   void SetPriority(on_device_model::mojom::Priority priority);
+ 
+--- a/chrome/browser/ai/ai_language_model_unittest.cc
++++ b/chrome/browser/ai/ai_language_model_unittest.cc
+@@ -30,6 +30,8 @@
+ #include "chrome/browser/ai/ai_test_utils.h"
+ #include "chrome/browser/ai/features.h"
+ #include "chrome/browser/component_updater/optimization_guide_on_device_model_installer.h"
++#include "chrome/browser/helium_persona/persona_service.h"
++#include "chrome/browser/helium_persona/persona_service_factory.h"
+ #include "components/on_device_ai/ai_utils.h"
+ #include "components/optimization_guide/core/model_execution/multimodal_message.h"
+ #include "components/optimization_guide/core/model_execution/on_device_capability.h"
+@@ -138,6 +140,62 @@ class TestCreateLanguageModelClient
+       this};
+ };
+ 
++class TestDisconnectAwareCreateLanguageModelClient
++    : public blink::mojom::AIManagerCreateLanguageModelClient {
++ public:
++  mojo::PendingRemote<blink::mojom::AIManagerCreateLanguageModelClient>
++  BindNewPipeAndPassRemote() {
++    mojo::PendingRemote<blink::mojom::AIManagerCreateLanguageModelClient>
++        remote = receiver_.BindNewPipeAndPassRemote();
++    receiver_.set_disconnect_handler(base::BindOnce(
++        &TestDisconnectAwareCreateLanguageModelClient::OnDisconnect,
++        base::Unretained(this)));
++    return remote;
++  }
++
++  void OnResult(
++      mojo::PendingRemote<blink::mojom::AILanguageModel> language_model,
++      blink::mojom::AILanguageModelInstanceInfoPtr info) override {
++    ADD_FAILURE() << "Revoked create unexpectedly returned a session";
++    SetError(blink::mojom::AIManagerCreateClientError::kUnableToCreateSession);
++  }
++
++  void OnError(blink::mojom::AIManagerCreateClientError error,
++               blink::mojom::QuotaErrorInfoPtr quota_error_info) override {
++    EXPECT_FALSE(quota_error_info);
++    SetError(error);
++  }
++
++  blink::mojom::AIManagerCreateClientError WaitForError() {
++    return error_.Take();
++  }
++
++ private:
++  void OnDisconnect() {
++    SetError(blink::mojom::AIManagerCreateClientError::kUnableToCreateSession);
++  }
++
++  void SetError(blink::mojom::AIManagerCreateClientError error) {
++    receiver_.reset();
++    error_.SetValue(error);
++  }
++
++  TestFuture<blink::mojom::AIManagerCreateClientError> error_;
++  mojo::Receiver<blink::mojom::AIManagerCreateLanguageModelClient> receiver_{
++      this};
++};
++
++helium_persona::PersonaService* ActivateDisabledPersona(Profile* profile) {
++  auto* service =
++      helium_persona::PersonaServiceFactory::GetForProfile(profile);
++  CHECK(service);
++  base::DictValue response = service->CreatePersonaProfile("No AI");
++  const std::string* persona_id = response.FindString("personaId");
++  CHECK(persona_id);
++  CHECK(service->SetActivePersona(*persona_id).FindBool("ok").value_or(false));
++  return service;
++}
++
+ SkBitmap CreateTestBitmap(int width, int height) {
+   SkBitmap bitmap;
+   bitmap.allocN32Pixels(width, height);
+@@ -371,6 +429,33 @@ TEST_F(AILanguageModelTest, AIContextBou
+       [&] { return GetAIManagerContextBoundObjectSetSize() == 0u; }));
+ }
+ 
++TEST_F(AILanguageModelTest, PersonaDenialRevokesExistingSession) {
++  mojo::Remote<blink::mojom::AIManager> manager = GetAIManagerRemote();
++  mojo::Remote<blink::mojom::AILanguageModel> session = CreateSession();
++  ASSERT_EQ(1u, GetAIManagerContextBoundObjectSetSize());
++
++  ActivateDisabledPersona(profile());
++
++  EXPECT_EQ(0u, GetAIManagerContextBoundObjectSetSize());
++  session.FlushForTesting();
++  EXPECT_FALSE(session.is_connected());
++  manager.FlushForTesting();
++  EXPECT_TRUE(manager.is_connected());
++}
++
++TEST_F(AILanguageModelTest, PersonaDenialCancelsPendingCreate) {
++  TestDisconnectAwareCreateLanguageModelClient client;
++  ai_manager_->CreateLanguageModel(
++      client.BindNewPipeAndPassRemote(),
++      blink::mojom::AILanguageModelCreateOptions::New());
++
++  ActivateDisabledPersona(profile());
++
++  EXPECT_EQ(client.WaitForError(),
++            blink::mojom::AIManagerCreateClientError::kUnableToCreateSession);
++  EXPECT_EQ(0u, GetAIManagerContextBoundObjectSetSize());
++}
++
+ TEST_F(AILanguageModelTest, Prompt) {
+   auto session = CreateSession();
+   EXPECT_THAT(Prompt(*session, MakeInput("foo")), ElementsAreArray({"UfooEM"}));
+--- a/chrome/browser/ai/ai_manager.h
++++ b/chrome/browser/ai/ai_manager.h
+@@ -5,9 +5,11 @@
+ #ifndef CHROME_BROWSER_AI_AI_MANAGER_H_
+ #define CHROME_BROWSER_AI_AI_MANAGER_H_
+ 
++#include <cstdint>
+ #include <optional>
+ #include <string>
+ 
++#include "base/containers/flat_map.h"
+ #include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -20,6 +22,7 @@
+ #include "chrome/browser/ai/ai_summarizer.h"
+ #include "components/on_device_ai/ai_utils.h"
+ #include "components/optimization_guide/public/mojom/model_broker.mojom-forward.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "content/public/browser/browser_context.h"
+ #include "content/public/browser/render_widget_host.h"
+ #include "content/public/browser/render_widget_host_observer.h"
+@@ -136,6 +139,14 @@ class AIManager : public base::SupportsU
+   // Checks the active persona for every request because Blink caches this
+   // interface for the lifetime of its execution context.
+   bool IsBlockedByPersona() const;
++  void OnPersonaStateChanged();
++  void EnsureModelBrokerClient();
++  CanCreateLanguageModelCallback TrackCanCreateCallback(
++      CanCreateLanguageModelCallback callback);
++  void CompleteTrackedCanCreate(
++      uint64_t request_id,
++      blink::mojom::ModelAvailabilityCheckResult result);
++  void RejectPendingCanCreateCallbacks();
+ 
+   // Called when the summarizer configuration is fetched to check if a session
+   // can be created.
+@@ -224,6 +235,7 @@ class AIManager : public base::SupportsU
+       CreateOptionsPtrType options,
+       mojo::Remote<ClientRemoteInterface> client_remote,
+       std::unique_ptr<optimization_guide::OnDeviceSession> session,
++      uint64_t persona_revocation_generation,
+       std::optional<uint32_t> result);
+ 
+   // Eagerly initializes a broad set of features.
+@@ -250,6 +262,12 @@ class AIManager : public base::SupportsU
+ 
+   AIContextBoundObjectSet context_bound_object_set_;
+   raw_ptr<content::BrowserContext> browser_context_;
++  PrefChangeRegistrar persona_pref_registrar_;
++  base::flat_map<uint64_t, CanCreateLanguageModelCallback>
++      pending_can_create_callbacks_;
++  uint64_t next_can_create_request_id_ = 0;
++  uint64_t persona_revocation_generation_ = 0;
++  bool persona_blocked_ = false;
+ 
+   base::ScopedObservation<content::RenderWidgetHost,
+                           content::RenderWidgetHostObserver>
+--- a/chrome/browser/ai/ai_manager_unittest.cc
++++ b/chrome/browser/ai/ai_manager_unittest.cc
+@@ -250,6 +250,18 @@ TEST_F(AIManagerTest, PersonaDenialRejec
+   EXPECT_TRUE(remote.is_connected());
+ }
+ 
++TEST_F(AIManagerTest, PersonaDenialSettlesPendingAvailabilityRequest) {
++  base::test::TestFuture<blink::mojom::ModelAvailabilityCheckResult> future;
++  ai_manager_->CanCreateLanguageModel(
++      blink::mojom::AILanguageModelCreateOptions::New(), future.GetCallback());
++
++  ActivateDisabledPersona();
++
++  EXPECT_EQ(future.Get(),
++            blink::mojom::ModelAvailabilityCheckResult::
++                kUnavailableFeatureNotEnabled);
++}
++
+ // Tests that involve invalid on-device model file paths should not crash when
+ // the associated RFH is destroyed.
+ TEST_F(AIManagerTest, NoUAFWithInvalidOnDeviceModelPath) {

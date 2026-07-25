@@ -1,0 +1,398 @@
+--- a/net/base/network_persona_template.cc
++++ b/net/base/network_persona_template.cc
+@@ -6,6 +6,12 @@
+ 
+ #include <array>
+ #include <ranges>
++#include <span>
++#include <string_view>
++#include <vector>
++
++#include "crypto/hash.h"
++#include "third_party/boringssl/src/include/openssl/ssl.h"
+ 
+ namespace net {
+ namespace {
+@@ -45,6 +51,27 @@
+     },
+ }};
+ 
++constexpr std::array<uint16_t, 8> kChromium149DefaultVerifyPrefs = {
++    SSL_SIGN_ECDSA_SECP256R1_SHA256, SSL_SIGN_RSA_PSS_RSAE_SHA256,
++    SSL_SIGN_RSA_PKCS1_SHA256,       SSL_SIGN_ECDSA_SECP384R1_SHA384,
++    SSL_SIGN_RSA_PSS_RSAE_SHA384,    SSL_SIGN_RSA_PKCS1_SHA384,
++    SSL_SIGN_RSA_PSS_RSAE_SHA512,    SSL_SIGN_RSA_PKCS1_SHA512,
++};
++
++constexpr std::array<uint16_t, 11> kChromium149MldsaVerifyPrefs = {
++    SSL_SIGN_ML_DSA_44,
++    SSL_SIGN_ML_DSA_65,
++    SSL_SIGN_ML_DSA_87,
++    SSL_SIGN_ECDSA_SECP256R1_SHA256,
++    SSL_SIGN_RSA_PSS_RSAE_SHA256,
++    SSL_SIGN_RSA_PKCS1_SHA256,
++    SSL_SIGN_ECDSA_SECP384R1_SHA384,
++    SSL_SIGN_RSA_PSS_RSAE_SHA384,
++    SSL_SIGN_RSA_PKCS1_SHA384,
++    SSL_SIGN_RSA_PSS_RSAE_SHA512,
++    SSL_SIGN_RSA_PKCS1_SHA512,
++};
++
+ }  // namespace
+ 
+ const NetworkPersonaTemplate* FindNetworkPersonaTemplate(uint32_t template_id) {
+@@ -64,4 +91,24 @@
+   return ids;
+ }
+ 
++std::span<const uint16_t> GetNetworkPersonaTlsVerifyAlgorithmPrefs(
++    TlsSignatureProfile profile) {
++  if (profile == TlsSignatureProfile::kChromium149Mldsa) {
++    return kChromium149MldsaVerifyPrefs;
++  }
++  return kChromium149DefaultVerifyPrefs;
++}
++
++std::array<uint8_t, 32> DeriveNetworkPersonaTlsExtensionSeed(
++    const NetworkPersonaConfig& config) {
++  constexpr std::string_view kDomain = "nitrous-tls-extension-order";
++  std::vector<uint8_t> input(config.deterministic_seed.begin(),
++                             config.deterministic_seed.end());
++  input.insert(input.end(), kDomain.begin(), kDomain.end());
++  for (int shift = 56; shift >= 0; shift -= 8) {
++    input.push_back(static_cast<uint8_t>(config.generation >> shift));
++  }
++  return crypto::hash::Sha256(input);
++}
++
+ }  // namespace net
+--- a/net/base/network_persona_template.h
++++ b/net/base/network_persona_template.h
+@@ -8,10 +8,12 @@
+ #include <array>
+ #include <cstddef>
+ #include <cstdint>
++#include <span>
+ #include <string_view>
+ #include <vector>
+ 
+ #include "net/base/net_export.h"
++#include "net/base/network_persona_config.h"
+ 
+ namespace net {
+ 
+@@ -46,6 +48,10 @@
+     uint32_t template_id);
+ NET_EXPORT std::vector<uint32_t> GetCompatibleNetworkPersonaTemplateIds(
+     int chrome_major);
++NET_EXPORT std::span<const uint16_t> GetNetworkPersonaTlsVerifyAlgorithmPrefs(
++    TlsSignatureProfile profile);
++NET_EXPORT std::array<uint8_t, 32> DeriveNetworkPersonaTlsExtensionSeed(
++    const NetworkPersonaConfig& config);
+ 
+ }  // namespace net
+ 
+--- a/net/base/network_persona_template_unittest.cc
++++ b/net/base/network_persona_template_unittest.cc
+@@ -11,6 +11,7 @@
+ #include "crypto/hash.h"
+ #include "net/test/test_data_directory.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/boringssl/src/include/openssl/ssl.h"
+ 
+ namespace net {
+ namespace {
+@@ -66,6 +67,50 @@
+   EXPECT_TRUE(GetCompatibleNetworkPersonaTemplateIds(148).empty());
+ }
+ 
++TEST(NetworkPersonaTemplateTest, TlsProfileSettingsMatchCapturedVariants) {
++  const auto default_prefs = GetNetworkPersonaTlsVerifyAlgorithmPrefs(
++      TlsSignatureProfile::kChromium149Default);
++  EXPECT_EQ((std::vector<uint16_t>{
++                SSL_SIGN_ECDSA_SECP256R1_SHA256,
++                SSL_SIGN_RSA_PSS_RSAE_SHA256,
++                SSL_SIGN_RSA_PKCS1_SHA256,
++                SSL_SIGN_ECDSA_SECP384R1_SHA384,
++                SSL_SIGN_RSA_PSS_RSAE_SHA384,
++                SSL_SIGN_RSA_PKCS1_SHA384,
++                SSL_SIGN_RSA_PSS_RSAE_SHA512,
++                SSL_SIGN_RSA_PKCS1_SHA512,
++            }),
++            std::vector<uint16_t>(default_prefs.begin(), default_prefs.end()));
++  const auto mldsa_prefs = GetNetworkPersonaTlsVerifyAlgorithmPrefs(
++      TlsSignatureProfile::kChromium149Mldsa);
++  EXPECT_EQ((std::vector<uint16_t>{
++                SSL_SIGN_ML_DSA_44,
++                SSL_SIGN_ML_DSA_65,
++                SSL_SIGN_ML_DSA_87,
++                SSL_SIGN_ECDSA_SECP256R1_SHA256,
++                SSL_SIGN_RSA_PSS_RSAE_SHA256,
++                SSL_SIGN_RSA_PKCS1_SHA256,
++                SSL_SIGN_ECDSA_SECP384R1_SHA384,
++                SSL_SIGN_RSA_PSS_RSAE_SHA384,
++                SSL_SIGN_RSA_PKCS1_SHA384,
++                SSL_SIGN_RSA_PSS_RSAE_SHA512,
++                SSL_SIGN_RSA_PKCS1_SHA512,
++            }),
++            std::vector<uint16_t>(mldsa_prefs.begin(), mldsa_prefs.end()));
++}
++
++TEST(NetworkPersonaTemplateTest, TlsExtensionSeedIsGenerationScoped) {
++  NetworkPersonaConfig config;
++  config.template_id = kChromium149DefaultTemplateId;
++  config.generation = 7;
++  config.deterministic_seed.fill(0x42);
++
++  const auto first = DeriveNetworkPersonaTlsExtensionSeed(config);
++  EXPECT_EQ(first, DeriveNetworkPersonaTlsExtensionSeed(config));
++  ++config.generation;
++  EXPECT_NE(first, DeriveNetworkPersonaTlsExtensionSeed(config));
++}
++
+ TEST(NetworkPersonaTemplateTest, RawClientHelloFixturesMatchCatalogHashes) {
+   for (uint32_t template_id : {kChromium149DefaultTemplateId,
+                                kChromium149MldsaTemplateId}) {
+--- a/net/quic/quic_chromium_client_session.cc
++++ b/net/quic/quic_chromium_client_session.cc
+@@ -1070,6 +1070,7 @@
+       transport_security_state_(transport_security_state),
+       ssl_config_service_(ssl_config_service),
+       server_info_(std::move(server_info)),
++      wire_serialization_options_(config.wire_serialization_options()),
+       enable_origin_frame_(enable_origin_frame),
+       task_runner_(task_runner),
+       net_log_(NetLogWithSource::Make(net_log.net_log(),
+@@ -1731,6 +1732,13 @@
+ 
+ quic::QuicSSLConfig QuicChromiumClientSession::GetSSLConfig() const {
+   quic::QuicSSLConfig config = quic::QuicSpdyClientSessionBase::GetSSLConfig();
++  if (wire_serialization_options_) {
++    config.extension_permutation_seed =
++        wire_serialization_options_->tls_extension_permutation_seed;
++    config.verify_algorithm_prefs.emplace(
++        wire_serialization_options_->tls_verify_algorithm_prefs.begin(),
++        wire_serialization_options_->tls_verify_algorithm_prefs.end());
++  }
+   SSLContextConfig ssl_context_config =
+       ssl_config_service_->GetSSLContextConfig();
+   if (ssl_context_config.ech_enabled) {
+--- a/net/quic/quic_chromium_client_session.h
++++ b/net/quic/quic_chromium_client_session.h
+@@ -1207,6 +1207,8 @@
+   raw_ptr<TransportSecurityState> transport_security_state_;
+   raw_ptr<SSLConfigService> ssl_config_service_;
+   std::unique_ptr<QuicServerInfo> server_info_;
++  const std::optional<quic::QuicWireSerializationOptions>
++      wire_serialization_options_;
+   std::unique_ptr<CertVerifyResult> cert_verify_result_;
+   bool pkp_bypassed_ = false;
+   bool is_fatal_cert_error_ = false;
+--- a/net/quic/quic_session_pool.cc
++++ b/net/quic/quic_session_pool.cc
+@@ -2107,6 +2107,12 @@
+         *network_persona_config_, "nitrous-quic-transport-parameters");
+     wire_options.http3_seed = DeriveNetworkPersonaQuicSeed(
+         *network_persona_config_, "nitrous-http3-frames");
++    wire_options.tls_extension_permutation_seed =
++        DeriveNetworkPersonaTlsExtensionSeed(*network_persona_config_);
++    const auto verify_prefs = GetNetworkPersonaTlsVerifyAlgorithmPrefs(
++        network_template->tls_signature_profile);
++    wire_options.tls_verify_algorithm_prefs.assign(verify_prefs.begin(),
++                                                   verify_prefs.end());
+     wire_options.http3_settings_order.assign(
+         network_template->http3_settings_order.begin(),
+         network_template->http3_settings_order.end());
+--- a/net/quic/quic_session_pool_test.cc
++++ b/net/quic/quic_session_pool_test.cc
+@@ -41,6 +41,7 @@
+ #include "net/base/net_error_details.h"
+ #include "net/base/net_errors.h"
+ #include "net/base/network_anonymization_key.h"
++#include "net/base/network_persona_template.h"
+ #include "net/base/privacy_mode.h"
+ #include "net/base/proxy_chain.h"
+ #include "net/base/proxy_server.h"
+@@ -14693,6 +14694,40 @@
+   EXPECT_TRUE(config.ech_config_list.empty());
+ }
+ 
++TEST_P(QuicSessionPoolTest, NetworkPersonaConfiguresQuicTlsProfile) {
++  Initialize();
++  NetworkPersonaConfig persona_config;
++  persona_config.template_id = kChromium149MldsaTemplateId;
++  persona_config.generation = 7;
++  persona_config.deterministic_seed.fill(0x42);
++  pool_->ApplyNetworkPersonaConfig(persona_config);
++
++  ProofVerifyDetailsChromium verify_details = DefaultProofVerifyDetails();
++  crypto_client_stream_factory_.AddProofVerifyDetails(&verify_details);
++
++  // Persona also changes the HTTP/3 SETTINGS wire image. Accept arbitrary
++  // writes so this TLS propagation test does not duplicate H3 serialization.
++  StaticSocketDataProvider socket_data;
++  socket_factory_->AddSocketDataProvider(&socket_data);
++
++  RequestBuilder builder(this);
++  EXPECT_EQ(ERR_IO_PENDING, builder.CallRequest());
++  EXPECT_THAT(callback_.WaitForResult(), IsOk());
++
++  QuicChromiumClientSession* session = GetActiveSession(kDefaultDestination);
++  ASSERT_TRUE(session);
++  const quic::QuicSSLConfig config = session->GetSSLConfig();
++  ASSERT_TRUE(config.extension_permutation_seed);
++  EXPECT_EQ(DeriveNetworkPersonaTlsExtensionSeed(persona_config),
++            *config.extension_permutation_seed);
++  ASSERT_TRUE(config.verify_algorithm_prefs);
++  const auto verify_prefs = GetNetworkPersonaTlsVerifyAlgorithmPrefs(
++      TlsSignatureProfile::kChromium149Mldsa);
++  EXPECT_EQ(std::vector<uint16_t>(verify_prefs.begin(), verify_prefs.end()),
++            std::vector<uint16_t>(config.verify_algorithm_prefs->begin(),
++                                  config.verify_algorithm_prefs->end()));
++}
++
+ // Test that, connections where we discover QUIC from Alt-Svc (as opposed to
+ // HTTPS-RR), ECH is picked up from DNS.
+ TEST_P(QuicSessionPoolTest, EchWithQuicFromAltSvc) {
+--- a/net/socket/ssl_client_socket_impl.cc
++++ b/net/socket/ssl_client_socket_impl.cc
+@@ -37,7 +37,6 @@
+ #include "base/values.h"
+ #include "build/build_config.h"
+ #include "crypto/openssl_util.h"
+-#include "crypto/hash.h"
+ #include "net/base/features.h"
+ #include "net/base/ip_address.h"
+ #include "net/base/ip_endpoint.h"
+@@ -87,18 +86,6 @@
+ // Default size of the internal BoringSSL buffers.
+ const int kDefaultOpenSSLBufferSize = 17 * 1024;
+ 
+-std::array<uint8_t, 32> DeriveExtensionPermutationSeed(
+-    const NetworkPersonaConfig& config) {
+-  constexpr std::string_view kDomain = "nitrous-tls-extension-order";
+-  std::vector<uint8_t> input(config.deterministic_seed.begin(),
+-                             config.deterministic_seed.end());
+-  input.insert(input.end(), kDomain.begin(), kDomain.end());
+-  for (int shift = 56; shift >= 0; shift -= 8) {
+-    input.push_back(static_cast<uint8_t>(config.generation >> shift));
+-  }
+-  return crypto::hash::Sha256(input);
+-}
+-
+ base::DictValue NetLogPrivateKeyOperationParams(uint16_t algorithm,
+                                                 SSLPrivateKey* key) {
+   return base::DictValue()
+@@ -687,8 +674,8 @@
+     if (!network_template) {
+       return ERR_INVALID_ARGUMENT;
+     }
+-    const auto permutation_seed =
+-        DeriveExtensionPermutationSeed(*ssl_config_.network_persona_config);
++    const auto permutation_seed = DeriveNetworkPersonaTlsExtensionSeed(
++        *ssl_config_.network_persona_config);
+     if (!SSL_set_extension_permutation_seed(
+             ssl_.get(), permutation_seed.data(), permutation_seed.size())) {
+       return ERR_UNEXPECTED;
+@@ -801,40 +788,17 @@
+   // Disable SHA-1 server signatures.
+   // TODO(crbug.com/boringssl/699): Once the default is flipped in BoringSSL, we
+   // no longer need to override it.
+-  static const uint16_t kVerifyPrefs[] = {
+-      SSL_SIGN_ECDSA_SECP256R1_SHA256, SSL_SIGN_RSA_PSS_RSAE_SHA256,
+-      SSL_SIGN_RSA_PKCS1_SHA256,       SSL_SIGN_ECDSA_SECP384R1_SHA384,
+-      SSL_SIGN_RSA_PSS_RSAE_SHA384,    SSL_SIGN_RSA_PKCS1_SHA384,
+-      SSL_SIGN_RSA_PSS_RSAE_SHA512,    SSL_SIGN_RSA_PKCS1_SHA512,
+-  };
+-  static const uint16_t kVerifyPrefsWithMlDsa[] = {
+-      SSL_SIGN_ML_DSA_44,
+-      SSL_SIGN_ML_DSA_65,
+-      SSL_SIGN_ML_DSA_87,
+-      SSL_SIGN_ECDSA_SECP256R1_SHA256,
+-      SSL_SIGN_RSA_PSS_RSAE_SHA256,
+-      SSL_SIGN_RSA_PKCS1_SHA256,
+-      SSL_SIGN_ECDSA_SECP384R1_SHA384,
+-      SSL_SIGN_RSA_PSS_RSAE_SHA384,
+-      SSL_SIGN_RSA_PKCS1_SHA384,
+-      SSL_SIGN_RSA_PSS_RSAE_SHA512,
+-      SSL_SIGN_RSA_PKCS1_SHA512,
+-  };
+   const bool enable_mldsa =
+       network_template
+           ? network_template->tls_signature_profile ==
+                 TlsSignatureProfile::kChromium149Mldsa
+           : base::FeatureList::IsEnabled(features::kTlsMldsaSignatures);
+-  if (enable_mldsa) {
+-    if (!SSL_set_verify_algorithm_prefs(ssl_.get(), kVerifyPrefsWithMlDsa,
+-                                        std::size(kVerifyPrefsWithMlDsa))) {
+-      return ERR_UNEXPECTED;
+-    }
+-  } else {
+-    if (!SSL_set_verify_algorithm_prefs(ssl_.get(), kVerifyPrefs,
+-                                        std::size(kVerifyPrefs))) {
+-      return ERR_UNEXPECTED;
+-    }
++  const auto verify_prefs = GetNetworkPersonaTlsVerifyAlgorithmPrefs(
++      enable_mldsa ? TlsSignatureProfile::kChromium149Mldsa
++                   : TlsSignatureProfile::kChromium149Default);
++  if (!SSL_set_verify_algorithm_prefs(ssl_.get(), verify_prefs.data(),
++                                      verify_prefs.size())) {
++    return ERR_UNEXPECTED;
+   }
+ 
+   SSL_set_alps_use_new_codepoint(
+--- a/net/third_party/quiche/src/quiche/quic/core/crypto/tls_connection.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/crypto/tls_connection.cc
+@@ -113,6 +113,16 @@
+         ssl(), ssl_config_.signing_algorithm_prefs->data(),
+         ssl_config_.signing_algorithm_prefs->size());
+   }
++  if (ssl_config_.verify_algorithm_prefs.has_value()) {
++    QUICHE_CHECK(SSL_set_verify_algorithm_prefs(
++        ssl(), ssl_config_.verify_algorithm_prefs->data(),
++        ssl_config_.verify_algorithm_prefs->size()));
++  }
++  if (ssl_config_.extension_permutation_seed.has_value()) {
++    QUICHE_CHECK(SSL_set_extension_permutation_seed(
++        ssl(), ssl_config_.extension_permutation_seed->data(),
++        ssl_config_.extension_permutation_seed->size()));
++  }
+   if (ssl_config_.disable_ticket_support.has_value()) {
+     if (*ssl_config_.disable_ticket_support) {
+       SSL_set_options(ssl(), SSL_OP_NO_TICKET);
+--- a/net/third_party/quiche/src/quiche/quic/core/quic_types.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/quic_types.cc
+@@ -490,6 +490,8 @@
+   return lhs.early_data_enabled == rhs.early_data_enabled &&
+          lhs.disable_ticket_support == rhs.disable_ticket_support &&
+          lhs.signing_algorithm_prefs == rhs.signing_algorithm_prefs &&
++         lhs.verify_algorithm_prefs == rhs.verify_algorithm_prefs &&
++         lhs.extension_permutation_seed == rhs.extension_permutation_seed &&
+          lhs.client_cert_mode == rhs.client_cert_mode &&
+          lhs.ech_config_list == rhs.ech_config_list &&
+          lhs.ech_grease_enabled == rhs.ech_grease_enabled;
+--- a/net/third_party/quiche/src/quiche/quic/core/quic_types.h
++++ b/net/third_party/quiche/src/quiche/quic/core/quic_types.h
+@@ -876,6 +876,11 @@
+   // If set, used to configure the SSL object with
+   // SSL_set_signing_algorithm_prefs.
+   std::optional<QuicSignatureAlgorithmVector> signing_algorithm_prefs;
++  // If set, used to configure the SSL object with
++  // SSL_set_verify_algorithm_prefs.
++  std::optional<QuicSignatureAlgorithmVector> verify_algorithm_prefs;
++  // If set, deterministically controls ClientHello extension permutation.
++  std::optional<std::array<uint8_t, 32>> extension_permutation_seed;
+   // Client certificate mode for mTLS support. Only used at server side.
+   ClientCertMode client_cert_mode = ClientCertMode::kNone;
+   // As a client, the ECHConfigList to use with ECH. If empty, ECH is not
+--- a/net/third_party/quiche/src/quiche/quic/core/quic_wire_serialization.h
++++ b/net/third_party/quiche/src/quiche/quic/core/quic_wire_serialization.h
+@@ -18,6 +18,8 @@
+ struct QuicWireSerializationOptions {
+   std::array<uint8_t, 32> transport_parameter_seed = {};
+   std::array<uint8_t, 32> http3_seed = {};
++  std::array<uint8_t, 32> tls_extension_permutation_seed = {};
++  std::vector<uint16_t> tls_verify_algorithm_prefs;
+   std::vector<uint64_t> http3_settings_order;
+ };
+ 

@@ -1,0 +1,671 @@
+--- a/third_party/blink/renderer/platform/BUILD.gn
++++ b/third_party/blink/renderer/platform/BUILD.gn
+@@ -741,6 +741,8 @@ component("platform") {
+     "fonts/plain_text_node.h",
+     "fonts/plain_text_painter.cc",
+     "fonts/plain_text_painter.h",
++    "fonts/persona_cjk_fallback_font.cc",
++    "fonts/persona_cjk_fallback_font.h",
+     "fonts/resolved_font_features.cc",
+     "fonts/resolved_font_features.h",
+     "fonts/script_run_iterator.cc",
+@@ -2217,6 +2219,7 @@ source_set("blink_platform_unittests_sou
+     "fonts/bitmap_glyphs_block_list_test.cc",
+     "fonts/font_cache_test.cc",
+     "fonts/font_description_test.cc",
++    "fonts/font_fallback_list_test.cc",
+     "fonts/font_fallback_iterator_test.cc",
+     "fonts/font_family_test.cc",
+     "fonts/font_palette_test.cc",
+--- a/third_party/blink/renderer/platform/fonts/font_fallback_list.cc
++++ b/third_party/blink/renderer/platform/fonts/font_fallback_list.cc
+@@ -167,8 +167,11 @@ const FontData* FontFallbackList::GetFon
+ 
+     const FontData* result =
+         font_selector_->GetFontData(font_description, *curr_family);
+-    // Don't query system fonts for empty font family name.
+-    if (!result && !curr_family->FamilyName().empty()) {
++    // The selector may reject an installed platform font due to document
++    // policy. Do not bypass that decision through the process-global cache.
++    if (!result && !curr_family->FamilyName().empty() &&
++        font_selector_->IsPlatformFamilyMatchAvailable(font_description,
++                                                        *curr_family)) {
+       result = FontCache::Get().GetFontData(font_description,
+                                             curr_family->FamilyName());
+     }
+--- /dev/null
++++ b/third_party/blink/renderer/platform/fonts/font_fallback_list_test.cc
+@@ -0,0 +1,64 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "third_party/blink/renderer/platform/fonts/font_fallback_list.h"
++
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/renderer/platform/fonts/font_description.h"
++#include "third_party/blink/renderer/platform/fonts/font_family.h"
++#include "third_party/blink/renderer/platform/testing/font_test_base.h"
++
++namespace blink {
++
++namespace {
++
++class RejectingFontSelector final : public FontSelector {
++ public:
++  const FontData* GetFontData(const FontDescription&,
++                              const FontFamily&) override {
++    return nullptr;
++  }
++
++  bool IsPlatformFamilyMatchAvailable(const FontDescription&,
++                                      const FontFamily&) override {
++    ++availability_checks_;
++    return false;
++  }
++
++  void WillUseFontData(const FontDescription&,
++                       const FontFamily&,
++                       const String&) override {}
++  void WillUseRange(const FontDescription&,
++                    const AtomicString&,
++                    const FontDataForRangeSet&) override {}
++  void ReportNotDefGlyph() const override {}
++  void RegisterForInvalidationCallbacks(FontSelectorClient*) override {}
++  void UnregisterForInvalidationCallbacks(FontSelectorClient*) override {}
++  void FontCacheInvalidated() override {}
++  ExecutionContext* GetExecutionContext() const override { return nullptr; }
++  FontFaceCache* GetFontFaceCache() override { return nullptr; }
++
++  unsigned availability_checks() const { return availability_checks_; }
++
++ private:
++  unsigned availability_checks_ = 0;
++};
++
++class FontFallbackListTest : public FontTestBase {};
++
++TEST_F(FontFallbackListTest, PolicyRejectionDoesNotBypassFontSelector) {
++  auto* selector = MakeGarbageCollected<RejectingFontSelector>();
++  auto* fallback_list = MakeGarbageCollected<FontFallbackList>(selector);
++  FontDescription description;
++  description.SetFamily(
++      FontFamily(AtomicString("Arial"), FontFamily::Type::kFamilyName));
++  description.SetComputedSize(12.0f);
++
++  ASSERT_TRUE(fallback_list->FontDataAt(description, 0));
++  EXPECT_EQ(selector->availability_checks(), 1u);
++}
++
++}  // namespace
++
++}  // namespace blink
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_font_virtualization_browsertest.cc
+@@ -0,0 +1,99 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/helium_persona/persona_service.h"
++#include "chrome/browser/helium_persona/persona_service_factory.h"
++
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "content/public/test/browser_test_utils.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace helium_persona {
++
++class PersonaFontVirtualizationBrowserTest : public InProcessBrowserTest {};
++
++IN_PROC_BROWSER_TEST_F(PersonaFontVirtualizationBrowserTest,
++                       RejectsCjkFamilyWidthProbesAcrossRenderingPaths) {
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response = service->CreatePersonaProfile("Font test");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(service->SetActivePersona(*persona_id)
++                  .FindBool("ok")
++                  .value_or(false));
++
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), GURL("data:text/html,<body></body>")));
++
++  EXPECT_EQ(true, content::EvalJs(
++                      browser()->tab_strip_model()->GetActiveWebContents(),
++                      R"JS(
++    (async () => {
++      const text = '\u6d4b\u8bd5\u4e2d\u6587\u5b57\u4f53\u6307\u7eb9';
++      const candidates = [
++        'PingFang SC',
++        'Hiragino Sans GB',
++        'Microsoft YaHei',
++        '\u5fae\u8f6f\u96c5\u9ed1',
++        'MiSans',
++        'HarmonyOS Sans',
++        'OPPO Sans',
++        'Noto Sans SC',
++      ];
++      const generics = ['serif', 'sans-serif', 'monospace'];
++      const missing = '__nitrous_missing_cjk_font__';
++      const threshold = 0.5;
++
++      const canvas = document.createElement('canvas');
++      const context = canvas.getContext('2d');
++      const offscreen = new OffscreenCanvas(512, 128);
++      const offscreenContext = offscreen.getContext('2d');
++
++      const canvasWidth = (ctx, family, generic) => {
++        ctx.font = `72px "${family}", ${generic}`;
++        return ctx.measureText(text).width;
++      };
++      const domWidth = (family, generic) => {
++        const element = document.createElement('span');
++        element.textContent = text;
++        element.style.cssText =
++            `position:absolute;white-space:nowrap;font:72px "${family}", ${generic}`;
++        document.body.appendChild(element);
++        const width = element.getBoundingClientRect().width;
++        element.remove();
++        return width;
++      };
++
++      for (const generic of generics) {
++        const canvasBaseline = canvasWidth(context, missing, generic);
++        const offscreenBaseline =
++            canvasWidth(offscreenContext, missing, generic);
++        const domBaseline = domWidth(missing, generic);
++        for (const candidate of candidates) {
++          if (Math.abs(canvasWidth(context, candidate, generic) -
++                       canvasBaseline) > threshold ||
++              Math.abs(canvasWidth(offscreenContext, candidate, generic) -
++                       offscreenBaseline) > threshold ||
++              Math.abs(domWidth(candidate, generic) - domBaseline) >
++                  threshold) {
++            return false;
++          }
++        }
++      }
++
++      try {
++        await new FontFace('private-probe', 'local("Noto Sans SC")').load();
++        return false;
++      } catch {
++        return true;
++      }
++    })()
++  )JS"));
++}
++
++}  // namespace helium_persona
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -3578,6 +3578,7 @@ if (!is_android) {
+       "../browser/glic/suggestions/contextual_cueing_service_browsertest.cc",
+       "../browser/glic/suggestions/zero_state_suggestions_browsertest.cc",
+       "../browser/guest_view/mime_handler_view/chrome_mime_handler_view_browsertest.cc",
++      "../browser/helium_persona/persona_font_virtualization_browsertest.cc",
+       "../browser/hid/hid_browsertest.cc",
+       "../browser/icon_loader_browsertest.cc",
+       "../browser/idle/idle_browsertest.cc",
+--- a/third_party/blink/public/blink_resources.grd
++++ b/third_party/blink/public/blink_resources.grd
+@@ -53,6 +53,8 @@
+         <include name="IDR_LIST_PICKER_JS" file="../renderer/core/html/forms/resources/list_picker.js" type="BINDATA" compress="brotli"/>
+       </if>
+       <include name="IDR_AUDIO_SPATIALIZATION_COMPOSITE" file="../renderer/platform/audio/resources/Composite.flac" type="BINDATA"/>
++      <include name="IDR_NITROUS_NOTO_SANS_SC_REGULAR" file="../../nitrous_fonts/noto_sans_sc/NotoSansSC-Regular.otf" type="BINDATA" compress="brotli"/>
++      <include name="IDR_NITROUS_NOTO_SANS_SC_LICENSE" file="../../nitrous_fonts/noto_sans_sc/LICENSE" type="BINDATA" compress="brotli"/>
+       <include name="IDR_UASTYLE_JSON_DOCUMENT_CSS" file="../renderer/core/css/json-document.css" type="BINDATA" compress="brotli"/>
+       <include name="IDR_PERMISSION_ICON_CAMERA_SVG" file="../renderer/core/html/resources/images/permission_icon_camera.svg" type="BINDATA" compress="brotli"/>
+       <include name="IDR_PERMISSION_ICON_INSTALL_SVG" file="../renderer/core/html/resources/images/permission_icon_install.svg" type="BINDATA" compress="brotli"/>
+--- a/third_party/blink/renderer/core/css/css_font_selector_base.cc
++++ b/third_party/blink/renderer/core/css/css_font_selector_base.cc
+@@ -9,6 +9,7 @@
+ #include "third_party/blink/renderer/core/css/persona_font_policy.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
+ #include "third_party/blink/renderer/platform/fonts/font_cache.h"
++#include "third_party/blink/renderer/platform/fonts/persona_cjk_fallback_font.h"
+ #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+ #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+ #include "third_party/blink/renderer/platform/wtf/cross_thread_copier.h"
+@@ -51,6 +52,16 @@ bool CSSFontSelectorBase::IsPlatformFami
+                                                          family);
+ }
+ 
++const SimpleFontData* CSSFontSelectorBase::GetPrivateFallbackFontData(
++    const FontDescription& font_description,
++    UChar32 character) {
++  if (!PersonaFontPolicy::IsActive(GetExecutionContext()) ||
++      !IsPersonaCjkCharacter(character)) {
++    return nullptr;
++  }
++  return GetPersonaCjkFallbackFontData(font_description);
++}
++
+ void CSSFontSelectorBase::ReportNotDefGlyph() const {
+   UseCounter::Count(GetUseCounter(),
+                     WebFeature::kFontShapingNotDefGlyphObserved);
+--- a/third_party/blink/renderer/core/css/css_font_selector_base.h
++++ b/third_party/blink/renderer/core/css/css_font_selector_base.h
+@@ -24,6 +24,9 @@ class CORE_EXPORT CSSFontSelectorBase :
+  public:
+   bool IsPlatformFamilyMatchAvailable(const FontDescription&,
+                                       const FontFamily& family) override;
++  const SimpleFontData* GetPrivateFallbackFontData(
++      const FontDescription&,
++      UChar32) override;
+ 
+   void WillUseFontData(const FontDescription&,
+                        const FontFamily& family,
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.cc
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+@@ -17,6 +17,8 @@
+ #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+ #include "third_party/blink/renderer/platform/fonts/character_range.h"
+ #include "third_party/blink/renderer/platform/fonts/font.h"
++#include "third_party/blink/renderer/platform/fonts/persona_cjk_fallback_font.h"
++#include "third_party/blink/renderer/platform/wtf/text/code_point_iterator.h"
+ #include "third_party/blink/renderer/platform/fonts/font_description.h"
+ #include "third_party/blink/renderer/platform/fonts/font_metrics.h"
+ #include "third_party/blink/renderer/platform/fonts/plain_text_node.h"
+@@ -36,6 +38,9 @@ namespace blink {
+ constexpr int kHangingAsPercentOfAscent = 80;
+ constexpr uint64_t kFnvPrime = 0x00000100000001b3;
+ constexpr double kHeliumFontMetricNoiseDelta = 0.001;
++constexpr uint64_t kMeasureTextNoiseDomain = 0x6d65617375726554;
++constexpr uint64_t kPrivateCjkFallbackDomain = 0x70726976434a4b00;
++constexpr uint64_t kRegularFallbackDomain = 0x726567756c617200;
+ 
+ uint64_t MixHeliumFontMetricNoise(uint64_t hash, uint64_t value) {
+   hash ^= value;
+@@ -103,7 +108,17 @@ void TextMetrics::Trace(Visitor* visitor
+ }
+ 
+ void TextMetrics::ApplyFontMetricNoise(const NoiseToken& token) {
+-  const uint64_t token_hash = token.Value();
++  uint64_t token_hash =
++      MixHeliumFontMetricNoise(token.Value(), kMeasureTextNoiseDomain);
++  bool contains_cjk = false;
++  for (UChar32 character : text_) {
++    token_hash = MixHeliumFontMetricNoise(
++        token_hash, static_cast<uint32_t>(character));
++    contains_cjk |= IsPersonaCjkCharacter(character);
++  }
++  token_hash = MixHeliumFontMetricNoise(
++      token_hash, contains_cjk ? kPrivateCjkFallbackDomain
++                               : kRegularFallbackDomain);
+   width_ = ApplyHeliumFontMetricNoise(width_, token_hash, 1);
+   actual_bounding_box_left_ =
+       ApplyHeliumFontMetricNoise(actual_bounding_box_left_, token_hash, 2);
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics_test.cc
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics_test.cc
+@@ -5,6 +5,7 @@
+ #include "third_party/blink/renderer/core/html/canvas/text_metrics.h"
+ 
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_align.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_baseline.h"
+ #include "third_party/blink/renderer/platform/fonts/font.h"
+@@ -241,4 +242,44 @@ TEST_P(CaretPositionForOffsetBidiTest, C
+   }
+ }
+ 
++TEST_F(TextMetricsTest, FontMetricNoiseIsStableForSameMeasurementInput) {
++  auto* painter =
++      MakeGarbageCollected<PlainTextPainter>(PlainTextPainter::kCanvas);
++  TextMetrics* first = MakeGarbageCollected<TextMetrics>(
++      GetFont(kLatinFont), TextDirection::kLtr,
++      V8CanvasTextBaseline::Enum::kAlphabetic,
++      V8CanvasTextAlign::Enum::kLeft, "stable input", *painter);
++  TextMetrics* second = MakeGarbageCollected<TextMetrics>(
++      GetFont(kLatinFont), TextDirection::kLtr,
++      V8CanvasTextBaseline::Enum::kAlphabetic,
++      V8CanvasTextAlign::Enum::kLeft, "stable input", *painter);
++
++  first->ApplyFontMetricNoise(NoiseToken(0x123456789abcdef0));
++  second->ApplyFontMetricNoise(NoiseToken(0x123456789abcdef0));
++
++  EXPECT_EQ(first->width(), second->width());
++  EXPECT_EQ(first->actualBoundingBoxRight(),
++            second->actualBoundingBoxRight());
++}
++
++TEST_F(TextMetricsTest, FontMetricNoiseSeparatesMeasurementInput) {
++  auto* painter =
++      MakeGarbageCollected<PlainTextPainter>(PlainTextPainter::kCanvas);
++  TextMetrics* first = MakeGarbageCollected<TextMetrics>(
++      GetFont(kLatinFont), TextDirection::kLtr,
++      V8CanvasTextBaseline::Enum::kAlphabetic,
++      V8CanvasTextAlign::Enum::kLeft, "input alpha", *painter);
++  TextMetrics* second = MakeGarbageCollected<TextMetrics>(
++      GetFont(kLatinFont), TextDirection::kLtr,
++      V8CanvasTextBaseline::Enum::kAlphabetic,
++      V8CanvasTextAlign::Enum::kLeft, "input bravo", *painter);
++  const double first_width = first->width();
++  const double second_width = second->width();
++
++  first->ApplyFontMetricNoise(NoiseToken(0x123456789abcdef0));
++  second->ApplyFontMetricNoise(NoiseToken(0x123456789abcdef0));
++
++  EXPECT_NE(first->width() - first_width, second->width() - second_width);
++}
++
+ }  // namespace blink
+--- a/third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc
++++ b/third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc
+@@ -8,6 +8,7 @@
+ #include "third_party/blink/renderer/platform/fonts/font_cache.h"
+ #include "third_party/blink/renderer/platform/fonts/font_description.h"
+ #include "third_party/blink/renderer/platform/fonts/font_fallback_list.h"
++#include "third_party/blink/renderer/platform/fonts/persona_cjk_fallback_font.h"
+ #include "third_party/blink/renderer/platform/fonts/segmented_font_data.h"
+ #include "third_party/blink/renderer/platform/fonts/shaping/harfbuzz_face.h"
+ #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
+@@ -133,6 +134,24 @@ FontDataForRangeSet* FontFallbackIterato
+     return Next(hint_list);
+   }
+ 
++  if (fallback_stage_ == kPrivateFallbackFont) {
++    fallback_stage_ = kSystemFonts;
++    if (!hint_list.empty()) {
++      const UChar32 hint = hint_list[ChooseHintIndex(hint_list)];
++      FontSelector* selector = font_fallback_list_->GetFontSelector();
++      if (selector && IsPersonaCjkCharacter(hint)) {
++        if (const SimpleFontData* private_fallback =
++                selector->GetPrivateFallbackFontData(font_description_,
++                                                     hint)) {
++          return UniqueOrNext(
++              MakeGarbageCollected<FontDataForRangeSet>(private_fallback),
++              hint_list);
++        }
++      }
++    }
++    return Next(hint_list);
++  }
++
+   if (fallback_stage_ == kSystemFonts) {
+     // We've reached pref + system fallback.
+     const SimpleFontData* system_font = UniqueSystemFontForHintList(hint_list);
+@@ -174,7 +193,7 @@ FontDataForRangeSet* FontFallbackIterato
+     // or emoji fonts or by calling system fallback API.
+     fallback_stage_ = IsNonTextFallbackPriority(font_fallback_priority_)
+                           ? kFallbackPriorityFonts
+-                          : kSystemFonts;
++                          : kPrivateFallbackFont;
+     return Next(hint_list);
+   }
+ 
+--- a/third_party/blink/renderer/platform/fonts/font_fallback_iterator.h
++++ b/third_party/blink/renderer/platform/fonts/font_fallback_iterator.h
+@@ -74,6 +74,7 @@ class PLATFORM_EXPORT FontFallbackIterat
+     kFontGroupFonts,
+     kSegmentedFace,
+     kPreferencesFonts,
++    kPrivateFallbackFont,
+     kSystemFonts,
+     kFirstCandidateForNotdefGlyph,
+     kOutOfLuck
+--- a/third_party/blink/renderer/platform/fonts/font_fallback_iterator_test.cc
++++ b/third_party/blink/renderer/platform/fonts/font_fallback_iterator_test.cc
+@@ -6,15 +6,111 @@
+ 
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/blink/renderer/platform/fonts/font.h"
++#include "third_party/blink/renderer/platform/fonts/font_custom_platform_data.h"
+ #include "third_party/blink/renderer/platform/fonts/font_fallback_priority.h"
++#include "third_party/blink/renderer/platform/fonts/font_selector.h"
++#include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
+ #include "third_party/blink/renderer/platform/testing/font_test_base.h"
+ #include "third_party/blink/renderer/platform/testing/font_test_helpers.h"
+ #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
++#include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
+ 
+ using blink::test::CreateTestFont;
+ 
+ namespace blink {
+ 
++namespace {
++
++class PrivateFallbackFontSelector final : public FontSelector {
++ public:
++  PrivateFallbackFontSelector() {
++    std::optional<Vector<char>> bytes =
++        test::ReadFromFile(test::PlatformTestDataPath("Ahem.woff"));
++    CHECK(bytes);
++    scoped_refptr<SharedBuffer> font_buffer =
++        SharedBuffer::Create(std::move(*bytes));
++    String ots_parse_message;
++    primary_font_ =
++        FontCustomPlatformData::Create(font_buffer.get(), ots_parse_message);
++    private_fallback_font_ =
++        FontCustomPlatformData::Create(font_buffer.get(), ots_parse_message);
++    CHECK(primary_font_);
++    CHECK(private_fallback_font_);
++  }
++
++  const FontData* GetFontData(const FontDescription& description,
++                              const FontFamily&) override {
++    return CreateFontData(primary_font_, description);
++  }
++
++  const SimpleFontData* GetPrivateFallbackFontData(
++      const FontDescription& description,
++      UChar32) override {
++    ++private_fallback_requests_;
++    return CreateFontData(private_fallback_font_, description);
++  }
++
++  void WillUseFontData(const FontDescription&,
++                       const FontFamily&,
++                       const String&) override {}
++  void WillUseRange(const FontDescription&,
++                    const AtomicString&,
++                    const FontDataForRangeSet&) override {}
++  void ReportNotDefGlyph() const override {}
++  void RegisterForInvalidationCallbacks(FontSelectorClient*) override {}
++  void UnregisterForInvalidationCallbacks(FontSelectorClient*) override {}
++  void FontCacheInvalidated() override {}
++  ExecutionContext* GetExecutionContext() const override { return nullptr; }
++  FontFaceCache* GetFontFaceCache() override { return nullptr; }
++  bool IsPlatformFamilyMatchAvailable(const FontDescription&,
++                                      const FontFamily&) override {
++    return false;
++  }
++
++  unsigned private_fallback_requests() const {
++    return private_fallback_requests_;
++  }
++
++  void Trace(Visitor* visitor) const override {
++    visitor->Trace(primary_font_);
++    visitor->Trace(private_fallback_font_);
++    FontSelector::Trace(visitor);
++  }
++
++ private:
++  static SimpleFontData* CreateFontData(
++      FontCustomPlatformData* custom_platform_data,
++      const FontDescription& description) {
++    FontSelectionCapabilities normal_capabilities(
++        {kNormalWidthValue, kNormalWidthValue},
++        {kNormalSlopeValue, kNormalSlopeValue},
++        {kNormalWeightValue, kNormalWeightValue});
++    const FontPlatformData* platform_data =
++        custom_platform_data->GetFontPlatformData(
++            description.EffectiveFontSize(),
++            description.AdjustedSpecifiedSize(), false, false,
++            description.GetFontSelectionRequest(), normal_capabilities,
++            description.FontOpticalSizing(), description.TextRendering(), {},
++            description.Orientation());
++    return MakeGarbageCollected<SimpleFontData>(platform_data);
++  }
++
++  Member<FontCustomPlatformData> primary_font_;
++  Member<FontCustomPlatformData> private_fallback_font_;
++  unsigned private_fallback_requests_ = 0;
++};
++
++Font* CreatePrivateFallbackTestFont(PrivateFallbackFontSelector* selector) {
++  FontDescription description;
++  description.SetFamily(
++      FontFamily(AtomicString("TestFont"), FontFamily::Type::kFamilyName));
++  description.SetSpecifiedSize(100);
++  description.SetComputedSize(100);
++  return MakeGarbageCollected<Font>(description, selector);
++}
++
++}  // namespace
++
+ const FontFallbackPriority FallbackPriorities[] = {
+     FontFallbackPriority::kText, FontFallbackPriority::kEmojiText,
+     FontFallbackPriority::kEmojiEmoji};
+@@ -45,4 +141,28 @@ TEST_P(TestReset, TestResetWithFallbackP
+   EXPECT_EQ(fallback_iterator_reset, fallback_iterator);
+ }
+ 
++TEST_F(FontTestBase, CjkTextUsesPrivateFallbackBeforeSystemFonts) {
++  auto* selector = MakeGarbageCollected<PrivateFallbackFontSelector>();
++  Font* font = CreatePrivateFallbackTestFont(selector);
++  FontFallbackIterator iterator =
++      font->CreateFontFallbackIterator(FontFallbackPriority::kText);
++  FontFallbackIterator::HintCharList hint = {0x4E2D};
++
++  ASSERT_TRUE(iterator.Next(hint)->HasFontData());
++  ASSERT_TRUE(iterator.Next(hint)->HasFontData());
++  EXPECT_EQ(selector->private_fallback_requests(), 1u);
++}
++
++TEST_F(FontTestBase, EmojiPriorityDoesNotUsePrivateCjkFallback) {
++  auto* selector = MakeGarbageCollected<PrivateFallbackFontSelector>();
++  Font* font = CreatePrivateFallbackTestFont(selector);
++  FontFallbackIterator iterator =
++      font->CreateFontFallbackIterator(FontFallbackPriority::kEmojiEmoji);
++  FontFallbackIterator::HintCharList hint = {0x1F642};
++
++  ASSERT_TRUE(iterator.Next(hint)->HasFontData());
++  iterator.Next(hint);
++  EXPECT_EQ(selector->private_fallback_requests(), 0u);
++}
++
+ }  // namespace blink
+--- a/third_party/blink/renderer/platform/fonts/font_selector.h
++++ b/third_party/blink/renderer/platform/fonts/font_selector.h
+@@ -46,6 +46,7 @@ class FontFallbackMap;
+ class FontFamily;
+ class FontSelectorClient;
+ class GenericFontFamilySettings;
++class SimpleFontData;
+ class UseCounter;
+ 
+ class PLATFORM_EXPORT FontSelector : public FontCacheClient {
+@@ -54,6 +55,15 @@ class PLATFORM_EXPORT FontSelector : pub
+   virtual const FontData* GetFontData(const FontDescription&,
+                                       const FontFamily&) = 0;
+ 
++  // Returns an internal fallback that is not addressable through CSS font
++  // family names. Policy-aware selectors override this when a document uses a
++  // virtualized font environment.
++  virtual const SimpleFontData* GetPrivateFallbackFontData(
++      const FontDescription&,
++      UChar32) {
++    return nullptr;
++  }
++
+   // TODO(crbug.com/542629): The String variant of this method should be
+   // replaced with a better approach, now that we only have complex text.
+   virtual void WillUseFontData(const FontDescription&,
+--- /dev/null
++++ b/third_party/blink/renderer/platform/fonts/persona_cjk_fallback_font.cc
+@@ -0,0 +1,61 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "third_party/blink/renderer/platform/fonts/persona_cjk_fallback_font.h"
++
++#include "base/memory/ref_counted_memory.h"
++#include "base/no_destructor.h"
++#include "third_party/blink/public/platform/platform.h"
++#include "third_party/blink/public/resources/grit/blink_resources.h"
++#include "third_party/blink/renderer/platform/fonts/font_description.h"
++#include "third_party/blink/renderer/platform/fonts/font_platform_data.h"
++#include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
++#include "third_party/skia/include/core/SkData.h"
++#include "third_party/skia/include/ports/SkTypeface_fontations.h"
++#include "unicode/uscript.h"
++
++namespace blink {
++
++namespace {
++
++sk_sp<SkTypeface> LoadPrivateCjkTypeface() {
++  base::RefCountedMemory* resource =
++      Platform::Current()->GetDataResourceBytes(
++          IDR_NITROUS_NOTO_SANS_SC_REGULAR);
++  if (!resource || resource->size() == 0) {
++    return nullptr;
++  }
++  sk_sp<SkData> data = SkData::MakeWithCopy(resource->data(), resource->size());
++  return SkTypeface_Make_Fontations(std::move(data), SkFontArguments());
++}
++
++}  // namespace
++
++bool IsPersonaCjkCharacter(UChar32 character) {
++  return uscript_hasScript(character, USCRIPT_HAN) ||
++         uscript_hasScript(character, USCRIPT_HIRAGANA) ||
++         uscript_hasScript(character, USCRIPT_KATAKANA) ||
++         uscript_hasScript(character, USCRIPT_HANGUL) ||
++         uscript_hasScript(character, USCRIPT_BOPOMOFO);
++}
++
++const SimpleFontData* GetPersonaCjkFallbackFontData(
++    const FontDescription& description) {
++  static const base::NoDestructor<sk_sp<SkTypeface>> typeface(
++      LoadPrivateCjkTypeface());
++  if (!*typeface) {
++    return nullptr;
++  }
++
++  auto* platform_data = MakeGarbageCollected<FontPlatformData>(
++      *typeface, std::string(), description.EffectiveFontSize(),
++      description.IsSyntheticBold() && description.SyntheticBoldAllowed(),
++      description.IsSyntheticItalic() && description.SyntheticItalicAllowed(),
++      description.TextRendering(), ResolvedFontFeatures(),
++      description.Orientation());
++  return MakeGarbageCollected<SimpleFontData>(
++      platform_data, nullptr, description.SubpixelAscentDescent());
++}
++
++}  // namespace blink
+--- /dev/null
++++ b/third_party/blink/renderer/platform/fonts/persona_cjk_fallback_font.h
+@@ -0,0 +1,22 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_PERSONA_CJK_FALLBACK_FONT_H_
++#define THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_PERSONA_CJK_FALLBACK_FONT_H_
++
++#include "third_party/blink/renderer/platform/platform_export.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_uchar.h"
++
++namespace blink {
++
++class FontDescription;
++class SimpleFontData;
++
++PLATFORM_EXPORT bool IsPersonaCjkCharacter(UChar32 character);
++PLATFORM_EXPORT const SimpleFontData* GetPersonaCjkFallbackFontData(
++    const FontDescription&);
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_PERSONA_CJK_FALLBACK_FONT_H_

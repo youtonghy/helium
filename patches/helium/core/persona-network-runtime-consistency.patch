@@ -1,0 +1,201 @@
+--- a/net/BUILD.gn
++++ b/net/BUILD.gn
+@@ -3082,6 +3082,7 @@
+     "shared_dictionary/shared_dictionary_network_transaction_factory_unittest.cc",
+     "shared_dictionary/shared_dictionary_network_transaction_unittest.cc",
+     "socket/client_socket_pool_base_unittest.cc",
++    "socket/client_socket_pool_manager_impl_unittest.cc",
+     "socket/client_socket_pool_unittest.cc",
+     "socket/connect_job_factory_unittest.cc",
+     "socket/connect_job_params_factory_unittest.cc",
+--- a/net/http/http_network_session.cc
++++ b/net/http/http_network_session.cc
+@@ -385,14 +385,19 @@
+     return;
+   }
+ 
++  // Publish the new identity to every connection creation path before closing
++  // the previous generation. Closing a pool may synchronously trigger retries.
++  params_.network_persona_config = config;
++  normal_socket_pool_manager_->UpdateNetworkPersonaConfig(config);
++  websocket_socket_pool_manager_->UpdateNetworkPersonaConfig(config);
++  ApplyNetworkPersonaHttp2Profile(config);
++  quic_session_pool_.ApplyNetworkPersonaConfig(config);
++
+   quic_session_pool_.AbortAllSessionAttempts();
+   CloseAllConnections(ERR_ABORTED, "Network persona generation changed");
+   ClearSSLSessionCache();
+   quic_session_pool_.ClearCachedStatesInCryptoConfig(
+       base::RepeatingCallback<bool(const GURL&)>());
+-  ApplyNetworkPersonaHttp2Profile(config);
+-  quic_session_pool_.ApplyNetworkPersonaConfig(config);
+-  params_.network_persona_config = std::move(config);
+ }
+ 
+ void HttpNetworkSession::ApplyNetworkPersonaHttp2Profile(
+--- a/net/socket/client_socket_pool.h
++++ b/net/socket/client_socket_pool.h
+@@ -375,6 +375,11 @@
+ 
+   SocketPoolState StateForTest() const { return State(); }
+ 
++  const std::optional<NetworkPersonaConfig>&
++  NetworkPersonaConfigForTest() const {
++    return common_connect_job_params_->network_persona_config;
++  }
++
+  protected:
+   ClientSocketPool(size_t socket_soft_cap,
+                    SocketPoolAdditionalCapacity additional_capacity,
+--- a/net/socket/client_socket_pool_manager.h
++++ b/net/socket/client_socket_pool_manager.h
+@@ -67,6 +67,8 @@
+   virtual void FlushSocketPoolsWithError(int net_error,
+                                          const char* net_log_reason_utf8) = 0;
+   virtual void CloseIdleSockets(const char* net_log_reason_utf8) = 0;
++  virtual void UpdateNetworkPersonaConfig(
++      std::optional<NetworkPersonaConfig> config) = 0;
+ 
+   // Returns the socket pool for the specified ProxyChain (Which may be
+   // ProxyChain::Direct()).
+--- a/net/socket/client_socket_pool_manager_impl.cc
++++ b/net/socket/client_socket_pool_manager_impl.cc
+@@ -60,6 +60,13 @@
+   }
+ }
+ 
++void ClientSocketPoolManagerImpl::UpdateNetworkPersonaConfig(
++    std::optional<NetworkPersonaConfig> config) {
++  common_connect_job_params_.network_persona_config = config;
++  websocket_common_connect_job_params_.network_persona_config =
++      std::move(config);
++}
++
+ ClientSocketPool* ClientSocketPoolManagerImpl::GetSocketPool(
+     const ProxyChain& proxy_chain) {
+   SocketPoolMap::const_iterator it = socket_pools_.find(proxy_chain);
+--- a/net/socket/client_socket_pool_manager_impl.h
++++ b/net/socket/client_socket_pool_manager_impl.h
+@@ -44,6 +44,8 @@
+   void FlushSocketPoolsWithError(int net_error,
+                                  const char* net_log_reason_utf8) override;
+   void CloseIdleSockets(const char* net_log_reason_utf8) override;
++  void UpdateNetworkPersonaConfig(
++      std::optional<NetworkPersonaConfig> config) override;
+ 
+   ClientSocketPool* GetSocketPool(const ProxyChain& proxy_chain) override;
+ 
+@@ -53,9 +55,9 @@
+  private:
+   using SocketPoolMap = std::map<ProxyChain, std::unique_ptr<ClientSocketPool>>;
+ 
+-  const CommonConnectJobParams common_connect_job_params_;
++  CommonConnectJobParams common_connect_job_params_;
+   // Used only for direct WebSocket connections (i.e., no proxy in use).
+-  const CommonConnectJobParams websocket_common_connect_job_params_;
++  CommonConnectJobParams websocket_common_connect_job_params_;
+ 
+   const HttpNetworkSession::SocketPoolType pool_type_;
+ 
+--- /dev/null
++++ b/net/socket/client_socket_pool_manager_impl_unittest.cc
+@@ -0,0 +1,76 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "net/socket/client_socket_pool_manager_impl.h"
++
++#include "base/test/task_environment.h"
++#include "net/base/network_persona_config.h"
++#include "net/base/proxy_chain.h"
++#include "net/socket/client_socket_pool.h"
++#include "net/socket/websocket_endpoint_lock_manager.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace net {
++namespace {
++
++CommonConnectJobParams MakeCommonParams(
++    WebSocketEndpointLockManager* websocket_endpoint_lock_manager,
++    const NetworkPersonaConfig& config) {
++  static const bool kDisabled = false;
++  CommonConnectJobParams params(
++      /*client_socket_factory=*/nullptr, /*host_resolver=*/nullptr,
++      /*http_auth_cache=*/nullptr, /*http_auth_handler_factory=*/nullptr,
++      /*spdy_session_pool=*/nullptr, /*quic_supported_versions=*/nullptr,
++      /*quic_session_pool=*/nullptr, /*proxy_delegate=*/nullptr,
++      /*http_user_agent_settings=*/nullptr, /*ssl_client_context=*/nullptr,
++      /*socket_performance_watcher_factory=*/nullptr,
++      /*network_quality_estimator=*/nullptr, /*net_log=*/nullptr,
++      websocket_endpoint_lock_manager, /*http_server_properties=*/nullptr,
++      /*alpn_protos=*/nullptr, /*application_settings=*/nullptr, &kDisabled,
++      &kDisabled);
++  params.network_persona_config = config;
++  return params;
++}
++
++TEST(ClientSocketPoolManagerImplTest,
++     RuntimePersonaUpdateReachesNormalAndWebSocketPools) {
++  base::test::TaskEnvironment task_environment;
++  NetworkPersonaConfig initial_config;
++  initial_config.generation = 7;
++  WebSocketEndpointLockManager endpoint_lock_manager;
++  CommonConnectJobParams normal_params =
++      MakeCommonParams(nullptr, initial_config);
++  CommonConnectJobParams websocket_params =
++      MakeCommonParams(&endpoint_lock_manager, initial_config);
++  ClientSocketPoolManagerImpl normal_manager(
++      normal_params, websocket_params,
++      HttpNetworkSession::SocketPoolType::kNormal);
++  ClientSocketPoolManagerImpl websocket_manager(
++      normal_params, websocket_params,
++      HttpNetworkSession::SocketPoolType::kWebSocket);
++  ClientSocketPool* normal_pool =
++      normal_manager.GetSocketPool(ProxyChain::Direct());
++  ClientSocketPool* websocket_pool =
++      websocket_manager.GetSocketPool(ProxyChain::Direct());
++
++  NetworkPersonaConfig updated_config = initial_config;
++  updated_config.generation = 8;
++  normal_manager.UpdateNetworkPersonaConfig(updated_config);
++  websocket_manager.UpdateNetworkPersonaConfig(updated_config);
++
++  ASSERT_TRUE(normal_pool->NetworkPersonaConfigForTest());
++  EXPECT_EQ(8u,
++            normal_pool->NetworkPersonaConfigForTest()->generation);
++  ASSERT_TRUE(websocket_pool->NetworkPersonaConfigForTest());
++  EXPECT_EQ(8u,
++            websocket_pool->NetworkPersonaConfigForTest()->generation);
++
++  normal_manager.UpdateNetworkPersonaConfig(std::nullopt);
++  websocket_manager.UpdateNetworkPersonaConfig(std::nullopt);
++  EXPECT_FALSE(normal_pool->NetworkPersonaConfigForTest());
++  EXPECT_FALSE(websocket_pool->NetworkPersonaConfigForTest());
++}
++
++}  // namespace
++}  // namespace net
+--- a/net/socket/mock_client_socket_pool_manager.cc
++++ b/net/socket/mock_client_socket_pool_manager.cc
+@@ -32,6 +32,9 @@
+   NOTIMPLEMENTED();
+ }
+ 
++void MockClientSocketPoolManager::UpdateNetworkPersonaConfig(
++    std::optional<NetworkPersonaConfig>) {}
++
+ ClientSocketPool* MockClientSocketPoolManager::GetSocketPool(
+     const ProxyChain& proxy_chain) {
+   ClientSocketPoolMap::const_iterator it = socket_pools_.find(proxy_chain);
+--- a/net/socket/mock_client_socket_pool_manager.h
++++ b/net/socket/mock_client_socket_pool_manager.h
+@@ -35,6 +35,8 @@
+   void FlushSocketPoolsWithError(int error,
+                                  const char* net_log_reason_utf8) override;
+   void CloseIdleSockets(const char* net_log_reason_utf8) override;
++  void UpdateNetworkPersonaConfig(
++      std::optional<NetworkPersonaConfig> config) override;
+   ClientSocketPool* GetSocketPool(const ProxyChain& proxy_chain) override;
+   base::Value SocketPoolInfoToValue() const override;
+ 

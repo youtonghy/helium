@@ -1,0 +1,1150 @@
+--- a/chrome/browser/helium_persona/persona_identity_template.cc
++++ b/chrome/browser/helium_persona/persona_identity_template.cc
+@@ -36,18 +36,41 @@
+     },
+ }};
+ 
++base::span<const PersonaIdentityTemplate> g_test_identity_templates;
++
++base::span<const PersonaIdentityTemplate> GetIdentityTemplates() {
++  return g_test_identity_templates.empty()
++             ? base::span<const PersonaIdentityTemplate>(kIdentityTemplates)
++             : g_test_identity_templates;
++}
++
+ }  // namespace
+ 
++ScopedPersonaIdentityTemplatesForTesting::
++    ScopedPersonaIdentityTemplatesForTesting(
++        base::span<const PersonaIdentityTemplate> templates)
++    : previous_templates_(g_test_identity_templates) {
++  g_test_identity_templates = templates;
++}
++
++ScopedPersonaIdentityTemplatesForTesting::
++    ~ScopedPersonaIdentityTemplatesForTesting() {
++  g_test_identity_templates = previous_templates_;
++}
++
+ const PersonaIdentityTemplate* FindPersonaIdentityTemplate(uint32_t id) {
+-  auto it = std::ranges::find(kIdentityTemplates, id,
+-                              &PersonaIdentityTemplate::id);
+-  return it == kIdentityTemplates.end() ? nullptr : &*it;
++  const base::span<const PersonaIdentityTemplate> templates =
++      GetIdentityTemplates();
++  auto it = std::ranges::find(templates, id, &PersonaIdentityTemplate::id);
++  return it == templates.end() ? nullptr : &*it;
+ }
+ 
+ std::vector<uint32_t> GetRotatablePersonaIdentityTemplateIds() {
+   std::vector<uint32_t> ids;
+-  ids.reserve(kIdentityTemplates.size());
+-  for (const PersonaIdentityTemplate& identity : kIdentityTemplates) {
++  const base::span<const PersonaIdentityTemplate> templates =
++      GetIdentityTemplates();
++  ids.reserve(templates.size());
++  for (const PersonaIdentityTemplate& identity : templates) {
+     ids.push_back(identity.id);
+   }
+   return ids;
+@@ -63,7 +86,7 @@
+     std::string_view bitness,
+     bool ua_ch_mobile,
+     bool ua_ch_wow64) {
+-  for (const PersonaIdentityTemplate& identity : kIdentityTemplates) {
++  for (const PersonaIdentityTemplate& identity : GetIdentityTemplates()) {
+     if (user_agent == identity.user_agent && os == identity.os &&
+         ua_ch_platform == identity.ua_ch_platform &&
+         ua_ch_platform_version == identity.ua_ch_platform_version &&
+--- a/chrome/browser/helium_persona/persona_identity_template.h
++++ b/chrome/browser/helium_persona/persona_identity_template.h
+@@ -31,6 +31,20 @@
+   base::span<const uint32_t> network_variant_ids;
+ };
+ 
++class ScopedPersonaIdentityTemplatesForTesting {
++ public:
++  explicit ScopedPersonaIdentityTemplatesForTesting(
++      base::span<const PersonaIdentityTemplate> templates);
++  ScopedPersonaIdentityTemplatesForTesting(
++      const ScopedPersonaIdentityTemplatesForTesting&) = delete;
++  ScopedPersonaIdentityTemplatesForTesting& operator=(
++      const ScopedPersonaIdentityTemplatesForTesting&) = delete;
++  ~ScopedPersonaIdentityTemplatesForTesting();
++
++ private:
++  base::span<const PersonaIdentityTemplate> previous_templates_;
++};
++
+ const PersonaIdentityTemplate* FindPersonaIdentityTemplate(uint32_t id);
+ std::vector<uint32_t> GetRotatablePersonaIdentityTemplateIds();
+ const PersonaIdentityTemplate* MatchPersonaIdentityTemplate(
+--- a/chrome/browser/helium_persona/persona_identity_template_unittest.cc
++++ b/chrome/browser/helium_persona/persona_identity_template_unittest.cc
+@@ -50,4 +50,23 @@
+                                                     10));
+ }
+ 
++TEST(PersonaIdentityTemplateTest,
++     ScopedTestCatalogDoesNotChangeProductionData) {
++  static constexpr std::array<uint32_t, 1> kTestVariants = {149001};
++  static constexpr std::array<PersonaIdentityTemplate, 2> kTestTemplates = {{
++      {.id = 100, .network_variant_ids = kTestVariants},
++      {.id = 200, .network_variant_ids = kTestVariants},
++  }};
++  {
++    ScopedPersonaIdentityTemplatesForTesting scoped_templates(kTestTemplates);
++    EXPECT_EQ(std::vector<uint32_t>({100, 200}),
++              GetRotatablePersonaIdentityTemplateIds());
++    EXPECT_TRUE(FindPersonaIdentityTemplate(200));
++  }
++
++  EXPECT_EQ(std::vector<uint32_t>({kChromium149MacArmIdentityTemplateId}),
++            GetRotatablePersonaIdentityTemplateIds());
++  EXPECT_FALSE(FindPersonaIdentityTemplate(200));
++}
++
+ }  // namespace helium_persona
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -11,12 +11,18 @@
+ #include <string_view>
+ #include <vector>
+ 
++#include "base/check.h"
++#include "base/functional/bind.h"
+ #include "base/i18n/time_formatting.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_util.h"
+ #include "base/time/time.h"
+ #include "base/uuid.h"
+ #include "chrome/browser/helium_persona/persona_identity_template.h"
++#include "chrome/browser/net/profile_network_context_service.h"
++#include "chrome/browser/net/profile_network_context_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/persona_tab_reloader.h"
+ #include "components/helium_persona/persona_snapshot.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+@@ -45,6 +51,55 @@
+ constexpr char kPersonaChromeMajorVersion[] = "149";
+ constexpr char kPersonaChromeFullVersion[] = "149.0.7827.114";
+ 
++class ProfilePersonaIdentityRotationDelegate
++    : public PersonaIdentityRotationDelegate {
++ public:
++  explicit ProfilePersonaIdentityRotationDelegate(Profile* profile)
++      : profile_(profile->GetWeakPtr()) {}
++
++  void ApplyNetworkIdentity(uint32_t identity_template_id,
++                            uint64_t generation,
++                            ApplyCallback callback) override {
++    if (!profile_) {
++      std::move(callback).Run(false);
++      return;
++    }
++    ProfileNetworkContextService* network_service =
++        ProfileNetworkContextServiceFactory::GetForContext(profile_.get());
++    if (!network_service) {
++      std::move(callback).Run(false);
++      return;
++    }
++    network_service->ApplyNetworkPersonaIdentity(
++        identity_template_id, generation, std::move(callback));
++  }
++
++  void ApplyCurrentNetworkIdentity(ApplyCallback callback) override {
++    if (!profile_) {
++      std::move(callback).Run(false);
++      return;
++    }
++    ProfileNetworkContextService* network_service =
++        ProfileNetworkContextServiceFactory::GetForContext(profile_.get());
++    if (!network_service) {
++      std::move(callback).Run(false);
++      return;
++    }
++    network_service->ApplyNetworkPersonaConfig(std::move(callback));
++  }
++
++  void RestartExecutionContexts(base::OnceClosure callback) override {
++    if (!profile_) {
++      std::move(callback).Run();
++      return;
++    }
++    RestartPersonaExecutionContexts(profile_.get(), std::move(callback));
++  }
++
++ private:
++  base::WeakPtr<Profile> profile_;
++};
++
+ std::string MakeIsoTimestamp(base::Time time = base::Time::Now()) {
+   return base::TimeFormatAsIso8601(time);
+ }
+@@ -1078,7 +1133,23 @@
+ 
+ }  // namespace
+ 
+-PersonaService::PersonaService(PrefService* prefs) : prefs_(prefs) {}
++struct PersonaService::PendingIdentityRotation {
++  base::DictValue old_state;
++  base::DictValue old_rotation;
++  base::DictValue new_rotation;
++  uint32_t old_identity_id = 0;
++  uint64_t old_generation = 0;
++  uint64_t new_generation = 0;
++  IdentityRotationCallback callback;
++};
++
++PersonaService::PersonaService(PrefService* prefs, Profile* profile)
++    : prefs_(prefs) {
++  if (profile) {
++    identity_rotation_delegate_ =
++        std::make_unique<ProfilePersonaIdentityRotationDelegate>(profile);
++  }
++}
+ PersonaService::~PersonaService() = default;
+ 
+ void PersonaService::RegisterProfilePrefs(
+@@ -1397,13 +1468,20 @@
+                   std::move(rotation_epoch));
+ }
+ 
+-base::DictValue PersonaService::RotateIdentity() {
++void PersonaService::RotateIdentity(IdentityRotationCallback callback) {
+   base::DictValue state = ReadState();
+   const std::vector<uint32_t> ids = GetRotatablePersonaIdentityTemplateIds();
+-  if (!prefs_ || ids.size() < 2u) {
+-    return MakeResponse(
+-        false, std::move(state),
+-        base::DictValue().Set("identityRotation", "unavailable"));
++  if (pending_identity_rotation_) {
++    std::move(callback).Run(
++        MakeResponse(false, std::move(state),
++                     base::DictValue().Set("identityRotation", "inProgress")));
++    return;
++  }
++  if (!prefs_ || !identity_rotation_delegate_ || ids.size() < 2u) {
++    std::move(callback).Run(
++        MakeResponse(false, std::move(state),
++                     base::DictValue().Set("identityRotation", "unavailable")));
++    return;
+   }
+ 
+   const blink::HeliumPersonaSnapshot snapshot = GetActiveSnapshot();
+@@ -1421,30 +1499,107 @@
+     current = nullptr;
+   }
+   if (!snapshot.enabled || !current) {
+-    return MakeResponse(
+-        false, std::move(state),
+-        base::DictValue().Set("identityRotation", "unavailable"));
++    std::move(callback).Run(
++        MakeResponse(false, std::move(state),
++                     base::DictValue().Set("identityRotation", "unavailable")));
++    return;
+   }
+ 
+   const uint32_t next_id = SelectNextPersonaIdentityTemplateId(ids, current->id);
+   if (!next_id || next_id == current->id ||
+       !FindPersonaIdentityTemplate(next_id)) {
+-    return MakeResponse(
+-        false, std::move(state),
+-        base::DictValue().Set("identityRotation", "unavailable"));
++    std::move(callback).Run(
++        MakeResponse(false, std::move(state),
++                     base::DictValue().Set("identityRotation", "unavailable")));
++    return;
+   }
+ 
+-  base::DictValue rotation_epoch =
++  base::DictValue old_rotation =
+       prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
+-  rotation_epoch.Set("global", MakeIsoTimestamp());
+-  rotation_epoch.Set(
+-      "globalGeneration",
+-      base::NumberToString(NextGeneration(
+-          ReadGeneration(rotation_epoch.Find("globalGeneration")))));
+-  rotation_epoch.Set("identityTemplateId", static_cast<int>(next_id));
++  const uint64_t old_generation =
++      ReadGeneration(old_rotation.Find("globalGeneration"));
++  base::DictValue new_rotation = old_rotation.Clone();
++  new_rotation.Set("global", MakeIsoTimestamp());
++  new_rotation.Set("globalGeneration",
++                   base::NumberToString(NextGeneration(old_generation)));
++  new_rotation.Set("identityTemplateId", static_cast<int>(next_id));
++
++  pending_identity_rotation_ = std::make_unique<PendingIdentityRotation>();
++  pending_identity_rotation_->old_state = state.Clone();
++  pending_identity_rotation_->old_rotation = std::move(old_rotation);
++  pending_identity_rotation_->new_rotation = std::move(new_rotation);
++  pending_identity_rotation_->old_identity_id = current->id;
++  pending_identity_rotation_->old_generation = old_generation;
++  pending_identity_rotation_->new_generation = NextGeneration(old_generation);
++  pending_identity_rotation_->callback = std::move(callback);
++  identity_rotation_delegate_->ApplyNetworkIdentity(
++      next_id, pending_identity_rotation_->new_generation,
++      base::BindOnce(&PersonaService::OnCandidateNetworkIdentityApplied,
++                     weak_ptr_factory_.GetWeakPtr()));
++}
++
++void PersonaService::OnCandidateNetworkIdentityApplied(bool accepted) {
++  if (!pending_identity_rotation_) {
++    return;
++  }
++  if (!accepted) {
++    const bool state_changed =
++        prefs_->GetDict(kPersonaFingerprintRotationEpochPref) !=
++            pending_identity_rotation_->old_rotation ||
++        ReadState() != pending_identity_rotation_->old_state;
++    auto rollback_callback =
++        base::BindOnce(&PersonaService::OnRollbackNetworkIdentityApplied,
++                       weak_ptr_factory_.GetWeakPtr(), "networkUpdateFailed");
++    if (state_changed) {
++      identity_rotation_delegate_->ApplyCurrentNetworkIdentity(
++          std::move(rollback_callback));
++    } else {
++      identity_rotation_delegate_->ApplyNetworkIdentity(
++          pending_identity_rotation_->old_identity_id,
++          pending_identity_rotation_->old_generation,
++          std::move(rollback_callback));
++    }
++    return;
++  }
++
++  const base::DictValue current_rotation =
++      prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  if (current_rotation != pending_identity_rotation_->old_rotation ||
++      ReadState() != pending_identity_rotation_->old_state) {
++    identity_rotation_delegate_->ApplyCurrentNetworkIdentity(
++        base::BindOnce(&PersonaService::OnRollbackNetworkIdentityApplied,
++                       weak_ptr_factory_.GetWeakPtr(), "stateChanged"));
++    return;
++  }
++
+   prefs_->SetDict(kPersonaFingerprintRotationEpochPref,
+-                  std::move(rotation_epoch));
+-  return MakeResponse(true, ReadState());
++                  pending_identity_rotation_->new_rotation.Clone());
++  identity_rotation_delegate_->RestartExecutionContexts(
++      base::BindOnce(&PersonaService::OnExecutionContextsRestarted,
++                     weak_ptr_factory_.GetWeakPtr()));
++}
++
++void PersonaService::OnRollbackNetworkIdentityApplied(std::string error,
++                                                      bool accepted) {
++  base::DictValue field_errors;
++  field_errors.Set("identityRotation",
++                   accepted ? std::move(error) : "networkRollbackFailed");
++  FinishIdentityRotation(
++      MakeResponse(false, ReadState(), std::move(field_errors)));
++}
++
++void PersonaService::OnExecutionContextsRestarted() {
++  FinishIdentityRotation(MakeResponse(true, ReadState()));
++}
++
++void PersonaService::FinishIdentityRotation(base::DictValue response) {
++  if (!pending_identity_rotation_) {
++    return;
++  }
++  IdentityRotationCallback callback =
++      std::move(pending_identity_rotation_->callback);
++  pending_identity_rotation_.reset();
++  std::move(callback).Run(std::move(response));
+ }
+ 
+ bool PersonaService::CanRotateIdentity() const {
+@@ -1461,6 +1616,12 @@
+   return id && *id > 0 ? static_cast<uint32_t>(*id) : 0;
+ }
+ 
++void PersonaService::SetIdentityRotationDelegateForTesting(
++    std::unique_ptr<PersonaIdentityRotationDelegate> delegate) {
++  CHECK(!pending_identity_rotation_);
++  identity_rotation_delegate_ = std::move(delegate);
++}
++
+ blink::HeliumPersonaSnapshot PersonaService::GetActiveSnapshot() const {
+   base::DictValue state = ReadState();
+   const base::DictValue* persona =
+--- a/chrome/browser/helium_persona/persona_service.h
++++ b/chrome/browser/helium_persona/persona_service.h
+@@ -4,20 +4,37 @@
+ #ifndef CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
+ #define CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
+ 
++#include <cstdint>
++#include <memory>
+ #include <string>
+ 
++#include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
+ #include "base/values.h"
+ #include "components/keyed_service/core/keyed_service.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ 
+ class PrefService;
++class Profile;
+ namespace user_prefs {
+ class PrefRegistrySyncable;
+ }
+ 
+ namespace helium_persona {
+ 
++class PersonaIdentityRotationDelegate {
++ public:
++  using ApplyCallback = base::OnceCallback<void(bool)>;
++
++  virtual ~PersonaIdentityRotationDelegate() = default;
++  virtual void ApplyNetworkIdentity(uint32_t identity_template_id,
++                                    uint64_t generation,
++                                    ApplyCallback callback) = 0;
++  virtual void ApplyCurrentNetworkIdentity(ApplyCallback callback) = 0;
++  virtual void RestartExecutionContexts(base::OnceClosure callback) = 0;
++};
++
+ enum class FingerprintRefreshScope {
+   kProfile,
+   kSite,
+@@ -37,7 +54,9 @@
+ 
+ class PersonaService : public KeyedService {
+  public:
+-  explicit PersonaService(PrefService* prefs);
++  using IdentityRotationCallback = base::OnceCallback<void(base::DictValue)>;
++
++  explicit PersonaService(PrefService* prefs, Profile* profile = nullptr);
+   ~PersonaService() override;
+ 
+   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+@@ -56,19 +75,30 @@
+   void SetLaunchSelectionMode(const std::string& mode);
+   void RefreshFingerprint(FingerprintRefreshScope scope,
+                           const std::string& site_origin_or_empty);
+-  base::DictValue RotateIdentity();
++  void RotateIdentity(IdentityRotationCallback callback);
+   bool CanRotateIdentity() const;
+   uint32_t GetActiveIdentityTemplateId() const;
+   blink::HeliumPersonaSnapshot GetActiveSnapshot() const;
+   PersonaResolution ResolveActivePersona() const;
++  void SetIdentityRotationDelegateForTesting(
++      std::unique_ptr<PersonaIdentityRotationDelegate> delegate);
+ 
+  private:
++  struct PendingIdentityRotation;
++
+   base::DictValue ReadState() const;
+   void WriteState(base::DictValue state);
+   std::string GetOrCreateFingerprintProfileSalt() const;
+   std::string GetOrCreateFingerprintGlobalEpoch() const;
++  void OnCandidateNetworkIdentityApplied(bool accepted);
++  void OnRollbackNetworkIdentityApplied(std::string error, bool accepted);
++  void OnExecutionContextsRestarted();
++  void FinishIdentityRotation(base::DictValue response);
+ 
+   raw_ptr<PrefService> prefs_;
++  std::unique_ptr<PersonaIdentityRotationDelegate> identity_rotation_delegate_;
++  std::unique_ptr<PendingIdentityRotation> pending_identity_rotation_;
++  base::WeakPtrFactory<PersonaService> weak_ptr_factory_{this};
+ };
+ 
+ }  // namespace helium_persona
+--- a/chrome/browser/helium_persona/persona_service_factory.cc
++++ b/chrome/browser/helium_persona/persona_service_factory.cc
+@@ -36,7 +36,7 @@
+ PersonaServiceFactory::BuildServiceInstanceForBrowserContext(
+     content::BrowserContext* context) const {
+   Profile* profile = Profile::FromBrowserContext(context);
+-  return std::make_unique<PersonaService>(profile->GetPrefs());
++  return std::make_unique<PersonaService>(profile->GetPrefs(), profile);
+ }
+ 
+ void PersonaServiceFactory::BrowserContextShutdown(
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -8,7 +8,10 @@
+ #include <memory>
+ #include <optional>
+ #include <string>
++#include <utility>
++#include <vector>
+ 
++#include "base/test/test_future.h"
+ #include "base/values.h"
+ #include "chrome/browser/helium_persona/persona_identity_template.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+@@ -73,6 +76,74 @@
+   std::unique_ptr<PersonaService> service_;
+ };
+ 
++constexpr std::array<uint32_t, 1> kTestNetworkVariants = {149001};
++constexpr std::array<PersonaIdentityTemplate, 2> kTestIdentityTemplates = {{
++    {
++        .id = kChromium149MacArmIdentityTemplateId,
++        .chrome_major = 149,
++        .os = "macOS",
++        .user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
++                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 "
++                      "Safari/537.36",
++        .navigator_platform = "MacIntel",
++        .ua_ch_platform = "macOS",
++        .ua_ch_platform_version = "14.5.0",
++        .ua_ch_full_version = "149.0.7827.114",
++        .architecture = "arm",
++        .bitness = "64",
++        .network_variant_ids = kTestNetworkVariants,
++    },
++    {
++        .id = 149100,
++        .chrome_major = 149,
++        .os = "macOS",
++        .user_agent = "test-only-next-identity",
++        .navigator_platform = "MacIntel",
++        .ua_ch_platform = "macOS",
++        .ua_ch_platform_version = "15.0.0",
++        .ua_ch_full_version = "149.0.7827.114",
++        .architecture = "arm",
++        .bitness = "64",
++        .network_variant_ids = kTestNetworkVariants,
++    },
++}};
++
++class FakeIdentityRotationDelegate : public PersonaIdentityRotationDelegate {
++ public:
++  struct ApplyCall {
++    bool apply_current;
++    uint32_t identity_template_id;
++    uint64_t generation;
++    ApplyCallback callback;
++  };
++
++  void ApplyNetworkIdentity(uint32_t identity_template_id,
++                            uint64_t generation,
++                            ApplyCallback callback) override {
++    apply_calls.push_back(
++        {false, identity_template_id, generation, std::move(callback)});
++  }
++
++  void ApplyCurrentNetworkIdentity(ApplyCallback callback) override {
++    apply_calls.push_back({true, 0, 0, std::move(callback)});
++  }
++
++  void RestartExecutionContexts(base::OnceClosure callback) override {
++    ++restart_count;
++    std::move(callback).Run();
++  }
++
++  void CompleteNextApply(bool accepted) {
++    ASSERT_FALSE(apply_calls.empty());
++    ApplyCall call = std::move(apply_calls.front());
++    apply_calls.erase(apply_calls.begin());
++    std::move(call.callback).Run(accepted);
++  }
++
++  std::vector<ApplyCall> apply_calls;
++  int restart_count = 0;
++};
++
+ TEST_F(PersonaServiceTest, CreateDoesNotActivateAndHasCompleteDefaults) {
+   base::DictValue response = service_->CreatePersonaProfile("Work");
+ 
+@@ -600,7 +671,9 @@
+   prefs_.SetDict(kPersonaFingerprintRotationEpochPref, rotation.Clone());
+ 
+   EXPECT_FALSE(service_->CanRotateIdentity());
+-  base::DictValue response = service_->RotateIdentity();
++  base::test::TestFuture<base::DictValue> result;
++  service_->RotateIdentity(result.GetCallback());
++  base::DictValue response = result.Take();
+ 
+   EXPECT_FALSE(response.FindBool("ok").value_or(true));
+   EXPECT_EQ("unavailable", *response.FindDict("fieldErrors")
+@@ -610,6 +683,128 @@
+   EXPECT_EQ(0u, service_->GetActiveIdentityTemplateId());
+ }
+ 
++TEST_F(PersonaServiceTest, IdentityRotationRollsBackNetworkBeforeFailure) {
++  ScopedPersonaIdentityTemplatesForTesting scoped_templates(
++      kTestIdentityTemplates);
++  base::DictValue response = service_->ClonePresetIntoProfile("us-west-macos");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(
++      service_->SetActivePersona(*persona_id).FindBool("ok").value_or(false));
++  const base::DictValue original_rotation =
++      base::DictValue()
++          .Set("global", "2026-01-02T03:04:05.000Z")
++          .Set("globalGeneration", "7")
++          .Set("identityTemplateId",
++               static_cast<int>(kChromium149MacArmIdentityTemplateId));
++  prefs_.SetDict(kPersonaFingerprintRotationEpochPref,
++                 original_rotation.Clone());
++
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  FakeIdentityRotationDelegate* delegate_ptr = delegate.get();
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  base::test::TestFuture<base::DictValue> result;
++  service_->RotateIdentity(result.GetCallback());
++
++  ASSERT_EQ(1u, delegate_ptr->apply_calls.size());
++  EXPECT_FALSE(delegate_ptr->apply_calls.front().apply_current);
++  EXPECT_EQ(149100u, delegate_ptr->apply_calls.front().identity_template_id);
++  EXPECT_EQ(8u, delegate_ptr->apply_calls.front().generation);
++  delegate_ptr->CompleteNextApply(false);
++  ASSERT_EQ(1u, delegate_ptr->apply_calls.size());
++  EXPECT_FALSE(delegate_ptr->apply_calls.front().apply_current);
++  EXPECT_EQ(kChromium149MacArmIdentityTemplateId,
++            delegate_ptr->apply_calls.front().identity_template_id);
++  EXPECT_EQ(7u, delegate_ptr->apply_calls.front().generation);
++  delegate_ptr->CompleteNextApply(true);
++
++  const base::DictValue failed = result.Take();
++  EXPECT_FALSE(failed.FindBool("ok").value_or(true));
++  EXPECT_EQ("networkUpdateFailed",
++            *failed.FindDict("fieldErrors")->FindString("identityRotation"));
++  EXPECT_EQ(original_rotation,
++            prefs_.GetDict(kPersonaFingerprintRotationEpochPref));
++  EXPECT_EQ(0, delegate_ptr->restart_count);
++}
++
++TEST_F(PersonaServiceTest, IdentityRotationCommitsOnceAndRejectsConcurrentRun) {
++  ScopedPersonaIdentityTemplatesForTesting scoped_templates(
++      kTestIdentityTemplates);
++  base::DictValue response = service_->ClonePresetIntoProfile("us-west-macos");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(
++      service_->SetActivePersona(*persona_id).FindBool("ok").value_or(false));
++  prefs_.SetDict(
++      kPersonaFingerprintRotationEpochPref,
++      base::DictValue()
++          .Set("globalGeneration", "3")
++          .Set("identityTemplateId",
++               static_cast<int>(kChromium149MacArmIdentityTemplateId)));
++
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  FakeIdentityRotationDelegate* delegate_ptr = delegate.get();
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  base::test::TestFuture<base::DictValue> first_result;
++  base::test::TestFuture<base::DictValue> concurrent_result;
++  service_->RotateIdentity(first_result.GetCallback());
++  service_->RotateIdentity(concurrent_result.GetCallback());
++
++  const base::DictValue concurrent = concurrent_result.Take();
++  EXPECT_FALSE(concurrent.FindBool("ok").value_or(true));
++  EXPECT_EQ(
++      "inProgress",
++      *concurrent.FindDict("fieldErrors")->FindString("identityRotation"));
++  delegate_ptr->CompleteNextApply(true);
++
++  const base::DictValue committed = first_result.Take();
++  EXPECT_TRUE(committed.FindBool("ok").value_or(false));
++  EXPECT_EQ(149100u, service_->GetActiveIdentityTemplateId());
++  EXPECT_EQ("4", *prefs_.GetDict(kPersonaFingerprintRotationEpochPref)
++                      .FindString("globalGeneration"));
++  EXPECT_EQ(1, delegate_ptr->restart_count);
++}
++
++TEST_F(PersonaServiceTest, IdentityRotationRestoresLatestStateOnConflict) {
++  ScopedPersonaIdentityTemplatesForTesting scoped_templates(
++      kTestIdentityTemplates);
++  base::DictValue response = service_->ClonePresetIntoProfile("us-west-macos");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(
++      service_->SetActivePersona(*persona_id).FindBool("ok").value_or(false));
++  prefs_.SetDict(
++      kPersonaFingerprintRotationEpochPref,
++      base::DictValue()
++          .Set("globalGeneration", "3")
++          .Set("identityTemplateId",
++               static_cast<int>(kChromium149MacArmIdentityTemplateId)));
++
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  FakeIdentityRotationDelegate* delegate_ptr = delegate.get();
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  base::test::TestFuture<base::DictValue> result;
++  service_->RotateIdentity(result.GetCallback());
++
++  base::DictValue changed_state = prefs_.GetDict(kPersonaStatePref).Clone();
++  changed_state.Set("activePersonaId", kDefaultPersonaId);
++  prefs_.SetDict(kPersonaStatePref, std::move(changed_state));
++  delegate_ptr->CompleteNextApply(true);
++
++  ASSERT_EQ(1u, delegate_ptr->apply_calls.size());
++  EXPECT_TRUE(delegate_ptr->apply_calls.front().apply_current);
++  delegate_ptr->CompleteNextApply(true);
++
++  const base::DictValue conflicted = result.Take();
++  EXPECT_FALSE(conflicted.FindBool("ok").value_or(true));
++  EXPECT_EQ("stateChanged",
++            *conflicted.FindDict("fieldErrors")
++                 ->FindString("identityRotation"));
++  EXPECT_EQ("3", *prefs_.GetDict(kPersonaFingerprintRotationEpochPref)
++                      .FindString("globalGeneration"));
++  EXPECT_EQ(0, delegate_ptr->restart_count);
++}
++
+ TEST_F(PersonaServiceTest, IdentityTemplateAtomicallyOverlaysSnapshot) {
+   base::DictValue response = service_->ClonePresetIntoProfile("us-west-macos");
+   const std::string* persona_id = response.FindString("personaId");
+--- a/chrome/browser/net/profile_network_context_service.cc
++++ b/chrome/browser/net/profile_network_context_service.cc
+@@ -89,6 +89,7 @@
+ #include "content/public/common/url_constants.h"
+ #include "crypto/crypto_buildflags.h"
+ #include "crypto/hash.h"
++#include "mojo/public/cpp/bindings/callback_helpers.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "net/base/features.h"
+ #include "net/base/network_persona_template.h"
+@@ -595,7 +596,9 @@
+ ProfileNetworkContextService::~ProfileNetworkContextService() = default;
+ 
+ network::mojom::NetworkPersonaConfigPtr
+-ProfileNetworkContextService::CreateNetworkPersonaConfig() const {
++ProfileNetworkContextService::CreateNetworkPersonaConfig(
++    std::optional<uint32_t> identity_template_id,
++    std::optional<uint64_t> generation) const {
+   const base::DictValue& state =
+       profile_->GetPrefs()->GetDict(helium_persona::prefs::kState);
+   const std::string* active_id = state.FindString("activePersonaId");
+@@ -619,7 +622,8 @@
+   const base::DictValue& rotation = profile_->GetPrefs()->GetDict(
+       helium_persona::prefs::kFingerprintRotationEpoch);
+   const int stored_identity_id =
+-      rotation.FindInt("identityTemplateId").value_or(0);
++      identity_template_id ? static_cast<int>(*identity_template_id)
++                           : rotation.FindInt("identityTemplateId").value_or(0);
+   const helium_persona::PersonaIdentityTemplate* identity =
+       stored_identity_id > 0
+           ? helium_persona::FindPersonaIdentityTemplate(
+@@ -651,9 +655,11 @@
+   }
+ 
+   auto config = network::mojom::NetworkPersonaConfig::New();
+-  if (const std::string* generation =
+-          rotation.FindString("globalGeneration")) {
+-    base::StringToUint64(*generation, &config->generation);
++  if (generation) {
++    config->generation = *generation;
++  } else if (const std::string* stored_generation =
++                 rotation.FindString("globalGeneration")) {
++    base::StringToUint64(*stored_generation, &config->generation);
+   }
+   config->template_id =
+       helium_persona::SelectNetworkVariant(*identity, config->generation);
+@@ -673,6 +679,25 @@
+ 
+ void ProfileNetworkContextService::ApplyNetworkPersonaConfig(
+     NetworkPersonaUpdateCallback callback) {
++  ApplyNetworkPersonaConfig(CreateNetworkPersonaConfig(), std::move(callback));
++}
++
++void ProfileNetworkContextService::ApplyNetworkPersonaIdentity(
++    uint32_t identity_template_id,
++    uint64_t generation,
++    NetworkPersonaUpdateCallback callback) {
++  network::mojom::NetworkPersonaConfigPtr config =
++      CreateNetworkPersonaConfig(identity_template_id, generation);
++  if (!config) {
++    std::move(callback).Run(false);
++    return;
++  }
++  ApplyNetworkPersonaConfig(std::move(config), std::move(callback));
++}
++
++void ProfileNetworkContextService::ApplyNetworkPersonaConfig(
++    network::mojom::NetworkPersonaConfigPtr config,
++    NetworkPersonaUpdateCallback callback) {
+   std::vector<content::StoragePartition*> partitions;
+   profile_->ForEachLoadedStoragePartition(
+       [&](content::StoragePartition* storage_partition) {
+@@ -694,7 +719,9 @@
+           std::move(callback)));
+   for (content::StoragePartition* partition : partitions) {
+     partition->GetNetworkContext()->UpdateNetworkPersona(
+-        CreateNetworkPersonaConfig(), barrier);
++        config ? config.Clone() : nullptr,
++        mojo::WrapCallbackWithDefaultInvokeIfNotRun(base::BindOnce(barrier),
++                                                    false));
+   }
+ }
+ 
+--- a/chrome/browser/net/profile_network_context_service.h
++++ b/chrome/browser/net/profile_network_context_service.h
+@@ -5,7 +5,9 @@
+ #ifndef CHROME_BROWSER_NET_PROFILE_NETWORK_CONTEXT_SERVICE_H_
+ #define CHROME_BROWSER_NET_PROFILE_NETWORK_CONTEXT_SERVICE_H_
+ 
++#include <cstdint>
+ #include <memory>
++#include <optional>
+ #include <string>
+ #include <utility>
+ 
+@@ -135,6 +137,9 @@
+ 
+   using NetworkPersonaUpdateCallback = base::OnceCallback<void(bool)>;
+   void ApplyNetworkPersonaConfig(NetworkPersonaUpdateCallback callback);
++  void ApplyNetworkPersonaIdentity(uint32_t identity_template_id,
++                                   uint64_t generation,
++                                   NetworkPersonaUpdateCallback callback);
+ 
+   void set_client_cert_store_factory_for_testing(
+       base::RepeatingCallback<std::unique_ptr<net::ClientCertStore>()>
+@@ -233,7 +238,11 @@
+       network::mojom::NetworkContextParams* network_context_params,
+       cert_verifier::mojom::CertVerifierCreationParams*
+           cert_verifier_creation_params);
+-  network::mojom::NetworkPersonaConfigPtr CreateNetworkPersonaConfig() const;
++  network::mojom::NetworkPersonaConfigPtr CreateNetworkPersonaConfig(
++      std::optional<uint32_t> identity_template_id = std::nullopt,
++      std::optional<uint64_t> generation = std::nullopt) const;
++  void ApplyNetworkPersonaConfig(network::mojom::NetworkPersonaConfigPtr config,
++                                 NetworkPersonaUpdateCallback callback);
+   void UpdateNetworkPersona();
+ 
+   // Returns the path for a given storage partition.
+--- a/chrome/browser/net/profile_network_context_service_browsertest.cc
++++ b/chrome/browser/net/profile_network_context_service_browsertest.cc
+@@ -47,6 +47,7 @@
+ #include "chrome/browser/profiles/profile_test_util.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/persona_tab_reloader.h"
+ #include "chrome/common/chrome_constants.h"
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/common/chrome_paths.h"
+@@ -246,6 +247,36 @@
+   base::test::TestFuture<bool> update_future;
+   service->ApplyNetworkPersonaConfig(update_future.GetCallback());
+   EXPECT_TRUE(update_future.Get());
++
++  base::test::TestFuture<bool> identity_update_future;
++  service->ApplyNetworkPersonaIdentity(
++      helium_persona::kChromium149MacArmIdentityTemplateId, 42,
++      identity_update_future.GetCallback());
++  EXPECT_TRUE(identity_update_future.Get());
++
++  base::test::TestFuture<bool> invalid_identity_future;
++  service->ApplyNetworkPersonaIdentity(net::kChromium149DefaultTemplateId, 43,
++                                       invalid_identity_future.GetCallback());
++  EXPECT_FALSE(invalid_identity_future.Get());
++}
++
++IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest,
++                       PersonaExecutionContextRestartReloadsProfileTabs) {
++  const GURL url("data:text/html,<title>persona rotation</title>");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
++  content::WebContents* contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(contents);
++
++  content::TestNavigationObserver reload_observer(contents);
++  base::test::TestFuture<void> restart_future;
++  helium_persona::RestartPersonaExecutionContexts(
++      browser()->profile(), restart_future.GetCallback());
++
++  reload_observer.Wait();
++  EXPECT_TRUE(reload_observer.last_navigation_succeeded());
++  EXPECT_EQ(url, contents->GetLastCommittedURL());
++  EXPECT_TRUE(restart_future.Wait());
+ }
+ 
+ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest,
+--- a/chrome/browser/ui/persona_tab_reloader.cc
++++ b/chrome/browser/ui/persona_tab_reloader.cc
+@@ -4,12 +4,19 @@
+ 
+ #include "chrome/browser/ui/persona_tab_reloader.h"
+ 
++#include <vector>
++
++#include "base/barrier_closure.h"
++#include "base/functional/bind.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "content/public/browser/reload_type.h"
++#include "content/public/browser/service_worker_context.h"
++#include "content/public/browser/shared_worker_service.h"
++#include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/web_contents.h"
+ 
+ namespace helium_persona {
+@@ -41,4 +48,33 @@
+   return reload_count;
+ }
+ 
++void RestartPersonaExecutionContexts(Profile* profile,
++                                     base::OnceClosure callback) {
++  std::vector<content::StoragePartition*> partitions;
++  profile->ForEachLoadedStoragePartition(
++      [&](content::StoragePartition* partition) {
++        partitions.push_back(partition);
++      });
++
++  base::OnceClosure reload_and_complete = base::BindOnce(
++      [](base::WeakPtr<Profile> profile, base::OnceClosure callback) {
++        if (profile) {
++          ReloadPersonaTabs(profile.get());
++        }
++        std::move(callback).Run();
++      },
++      profile->GetWeakPtr(), std::move(callback));
++  if (partitions.empty()) {
++    std::move(reload_and_complete).Run();
++    return;
++  }
++
++  base::RepeatingClosure stopped =
++      base::BarrierClosure(partitions.size(), std::move(reload_and_complete));
++  for (content::StoragePartition* partition : partitions) {
++    partition->GetSharedWorkerService()->TerminateAllWorkers();
++    partition->GetServiceWorkerContext()->StopAllServiceWorkers(stopped);
++  }
++}
++
+ }  // namespace helium_persona
+--- a/chrome/browser/ui/persona_tab_reloader.h
++++ b/chrome/browser/ui/persona_tab_reloader.h
+@@ -7,11 +7,15 @@
+ 
+ #include <cstddef>
+ 
++#include "base/functional/callback_forward.h"
++
+ class Profile;
+ 
+ namespace helium_persona {
+ 
+ size_t ReloadPersonaTabs(Profile* profile);
++void RestartPersonaExecutionContexts(Profile* profile,
++                                     base::OnceClosure callback);
+ 
+ }  // namespace helium_persona
+ 
+--- a/chrome/browser/ui/webui/settings/persona_handler.cc
++++ b/chrome/browser/ui/webui/settings/persona_handler.cc
+@@ -7,14 +7,10 @@
+ 
+ #include "base/check.h"
+ #include "base/functional/bind.h"
+-#include "base/task/sequenced_task_runner.h"
+ #include "base/values.h"
+ #include "chrome/browser/helium_persona/persona_service.h"
+ #include "chrome/browser/helium_persona/persona_service_factory.h"
+-#include "chrome/browser/net/profile_network_context_service.h"
+-#include "chrome/browser/net/profile_network_context_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+-#include "chrome/browser/ui/persona_tab_reloader.h"
+ #include "content/public/browser/web_ui.h"
+ 
+ namespace settings {
+@@ -226,40 +222,14 @@
+   helium_persona::PersonaService* persona_service =
+       GetPersonaService(profile_);
+   CHECK(persona_service);
+-  base::DictValue response = persona_service->RotateIdentity();
+-  if (!response.FindBool("ok").value_or(false)) {
+-    ResolveJavascriptCallback(base::Value(callback_id), response);
+-    return;
+-  }
+-
+-  ProfileNetworkContextService* network_service =
+-      ProfileNetworkContextServiceFactory::GetForContext(profile_);
+-  CHECK(network_service);
+-  network_service->ApplyNetworkPersonaConfig(base::BindOnce(
+-      &PersonaHandler::OnRotatePersonaIdentityNetworkApplied,
+-      weak_ptr_factory_.GetWeakPtr(), std::move(callback_id),
+-      std::move(response)));
+-}
+-
+-void PersonaHandler::OnRotatePersonaIdentityNetworkApplied(
+-    std::string callback_id,
+-    base::DictValue response,
+-    bool accepted) {
+-  if (!accepted) {
+-    response.Set("ok", false);
+-    response.EnsureDict("fieldErrors")
+-        ->Set("identityRotation", "networkUpdateFailed");
+-    ResolveJavascriptCallback(base::Value(callback_id), response);
+-    return;
+-  }
+-
+-  ResolveJavascriptCallback(base::Value(callback_id), response.Clone());
+-  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+-      FROM_HERE, base::BindOnce(
+-                     [](Profile* profile) {
+-                       helium_persona::ReloadPersonaTabs(profile);
+-                     },
+-                     profile_.get()));
++  persona_service->RotateIdentity(
++      base::BindOnce(&PersonaHandler::OnRotatePersonaIdentityFinished,
++                     weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
++}
++
++void PersonaHandler::OnRotatePersonaIdentityFinished(std::string callback_id,
++                                                     base::DictValue response) {
++  ResolveJavascriptCallback(base::Value(callback_id), response);
+ }
+ 
+ }  // namespace settings
+--- a/chrome/browser/ui/webui/settings/persona_handler.h
++++ b/chrome/browser/ui/webui/settings/persona_handler.h
+@@ -34,9 +34,8 @@
+   void HandleSetLaunchSelectionMode(const base::ListValue& args);
+   void HandleRefreshFingerprints(const base::ListValue& args);
+   void HandleRotatePersonaIdentity(const base::ListValue& args);
+-  void OnRotatePersonaIdentityNetworkApplied(std::string callback_id,
+-                                             base::DictValue response,
+-                                             bool accepted);
++  void OnRotatePersonaIdentityFinished(std::string callback_id,
++                                       base::DictValue response);
+ 
+   raw_ptr<Profile> profile_;
+   base::WeakPtrFactory<PersonaHandler> weak_ptr_factory_{this};
+--- a/content/browser/worker_host/mock_shared_worker.cc
++++ b/content/browser/worker_host/mock_shared_worker.cc
+@@ -139,10 +139,10 @@
+     const std::string& user_agent,
+     const blink::UserAgentMetadata& ua_metadata,
+     const blink::HeliumPersonaSnapshot& persona_snapshot,
+-    const std::optional<blink::NoiseToken>& helium_canvas_noise_token,
+-    const std::optional<blink::NoiseToken>& helium_audio_noise_token,
+-    const std::optional<blink::NoiseToken>& helium_hardware_noise_token,
+-    const std::optional<blink::NoiseToken>& helium_font_metric_noise_token,
++    std::optional<blink::NoiseToken> helium_canvas_noise_token,
++    std::optional<blink::NoiseToken> helium_audio_noise_token,
++    std::optional<blink::NoiseToken> helium_hardware_noise_token,
++    std::optional<blink::NoiseToken> helium_font_metric_noise_token,
+     bool pause_on_start,
+     const base::UnguessableToken& devtools_worker_token,
+     const blink::RendererPreferences& renderer_preferences,
+--- a/content/browser/worker_host/mock_shared_worker.h
++++ b/content/browser/worker_host/mock_shared_worker.h
+@@ -108,10 +108,10 @@
+       const std::string& user_agent,
+       const blink::UserAgentMetadata& ua_metadata,
+       const blink::HeliumPersonaSnapshot& persona_snapshot,
+-      const std::optional<blink::NoiseToken>& helium_canvas_noise_token,
+-      const std::optional<blink::NoiseToken>& helium_audio_noise_token,
+-      const std::optional<blink::NoiseToken>& helium_hardware_noise_token,
+-      const std::optional<blink::NoiseToken>& helium_font_metric_noise_token,
++      std::optional<blink::NoiseToken> helium_canvas_noise_token,
++      std::optional<blink::NoiseToken> helium_audio_noise_token,
++      std::optional<blink::NoiseToken> helium_hardware_noise_token,
++      std::optional<blink::NoiseToken> helium_font_metric_noise_token,
+       bool pause_on_start,
+       const base::UnguessableToken& devtools_worker_token,
+       const blink::RendererPreferences& renderer_preferences,
+--- a/content/browser/worker_host/shared_worker_service_impl.cc
++++ b/content/browser/worker_host/shared_worker_service_impl.cc
+@@ -111,8 +111,13 @@
+ }
+ 
+ void SharedWorkerServiceImpl::Shutdown() {
+-  worker_hosts_.clear();
++  TerminateAllWorkers();
++}
++
++void SharedWorkerServiceImpl::TerminateAllWorkers() {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+   shared_worker_hosts_.clear();
++  worker_hosts_.clear();
+ }
+ 
+ void SharedWorkerServiceImpl::SetURLLoaderFactoryForTesting(
+--- a/content/browser/worker_host/shared_worker_service_impl.h
++++ b/content/browser/worker_host/shared_worker_service_impl.h
+@@ -75,6 +75,7 @@
+                        const blink::StorageKey& storage_key,
+                        const blink::mojom::SharedWorkerSameSiteCookies
+                            same_site_cookies) override;
++  void TerminateAllWorkers() override;
+   void Shutdown() override;
+ 
+   // Uses |url_loader_factory| to load workers' scripts instead of
+--- a/content/browser/worker_host/shared_worker_service_impl_unittest.cc
++++ b/content/browser/worker_host/shared_worker_service_impl_unittest.cc
+@@ -192,6 +192,16 @@
+     return web_contents;
+   }
+ 
++  SharedWorkerServiceImpl* shared_worker_service() {
++    return static_cast<SharedWorkerServiceImpl*>(
++        browser_context_->GetDefaultStoragePartition()
++            ->GetSharedWorkerService());
++  }
++
++  size_t worker_host_count() {
++    return shared_worker_service()->worker_hosts_.size();
++  }
++
+  protected:
+   SharedWorkerServiceImplTest() : browser_context_(new TestBrowserContext()) {}
+ 
+@@ -362,6 +372,45 @@
+   base::RunLoop().RunUntilIdle();
+ }
+ 
++TEST_F(SharedWorkerServiceImplTest, TerminateAllWorkers) {
++  std::unique_ptr<TestWebContents> web_contents =
++      CreateWebContents(GURL("http://example.com/"));
++  TestRenderFrameHost* render_frame_host = web_contents->GetPrimaryMainFrame();
++  MockRenderProcessHost* renderer_host = render_frame_host->GetProcess();
++  const int process_id = renderer_host->GetDeprecatedID();
++  renderer_host->OverrideBinderForTesting(
++      blink::mojom::SharedWorkerFactory::Name_,
++      base::BindRepeating(&SharedWorkerServiceImplTest::BindSharedWorkerFactory,
++                          base::Unretained(this), process_id));
++
++  MockSharedWorkerClient client;
++  MessagePortChannel local_port;
++  const GURL kUrl("http://example.com/w.js");
++  ConnectToSharedWorker(
++      MakeSharedWorkerConnector(render_frame_host->GetGlobalId()), kUrl, "name",
++      &client, &local_port);
++
++  mojo::PendingReceiver<blink::mojom::SharedWorkerFactory> factory_receiver;
++  std::tie(factory_receiver, std::ignore) = WaitForFactoryReceiver();
++  MockSharedWorkerFactory factory(std::move(factory_receiver));
++  base::RunLoop().RunUntilIdle();
++
++  mojo::Remote<blink::mojom::SharedWorkerHost> worker_host;
++  mojo::PendingReceiver<blink::mojom::SharedWorker> worker_receiver;
++  ASSERT_TRUE(factory.CheckReceivedCreateSharedWorker(
++      kUrl, "name", std::vector<network::mojom::ContentSecurityPolicyPtr>(),
++      &worker_host, &worker_receiver));
++  MockSharedWorker worker(std::move(worker_receiver));
++  base::RunLoop().RunUntilIdle();
++  ASSERT_EQ(1u, worker_host_count());
++
++  shared_worker_service()->TerminateAllWorkers();
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_EQ(0u, worker_host_count());
++  EXPECT_TRUE(worker.CheckReceivedTerminate());
++}
++
+ // Tests that the shared worker will not be started if the hosting web contents
+ // is destroyed while the script is being fetched.
+ TEST_F(SharedWorkerServiceImplTest, WebContentsDestroyed) {
+--- a/content/public/browser/shared_worker_service.h
++++ b/content/public/browser/shared_worker_service.h
+@@ -92,6 +92,9 @@
+       const blink::StorageKey& storage_key,
+       const blink::mojom::SharedWorkerSameSiteCookies same_site_cookies) = 0;
+ 
++  // Terminates all shared workers without shutting down the service itself.
++  virtual void TerminateAllWorkers() = 0;
++
+   // Drops all shared workers and references to processes for shared workers
+   // synchronously.
+   virtual void Shutdown() = 0;
