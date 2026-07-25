@@ -1,0 +1,240 @@
+--- a/chrome/browser/helium_persona/persona_identity_template.cc
++++ b/chrome/browser/helium_persona/persona_identity_template.cc
+@@ -13,12 +13,16 @@
+ namespace helium_persona {
+ namespace {
+ 
+-constexpr std::array<uint32_t, 2> kChromium149MacArmNetworkVariants = {
+-    149001,
+-    149002,
++// Chrome 149 desktop network variants (shared across macOS/Windows/Linux
++// complete identities). Host emission is steered by signature profile +
++// extension-order seed; structural TLS fields match Chrome-for-Testing 149
++// desktop captures on macOS arm64 and Linux x86_64.
++constexpr std::array<uint32_t, 2> kChromium149DesktopNetworkVariants = {
++    kChromium149DesktopDefaultNetworkTemplateId,
++    kChromium149DesktopMldsaNetworkTemplateId,
+ };
+ 
+-constexpr std::array<PersonaIdentityTemplate, 1> kIdentityTemplates = {{
++constexpr std::array<PersonaIdentityTemplate, 3> kIdentityTemplates = {{
+     {
+         .id = kChromium149MacArmIdentityTemplateId,
+         .chrome_major = 149,
+@@ -35,7 +39,41 @@
+         .bitness = "64",
+         .ua_ch_mobile = false,
+         .ua_ch_wow64 = false,
+-        .network_variant_ids = kChromium149MacArmNetworkVariants,
++        .network_variant_ids = kChromium149DesktopNetworkVariants,
++    },
++    {
++        .id = kChromium149WindowsX64IdentityTemplateId,
++        .chrome_major = 149,
++        .os = "Windows",
++        .user_agent =
++            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++            "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++        .navigator_platform = "Win32",
++        .ua_ch_platform = "Windows",
++        .ua_ch_platform_version = "15.0.0",
++        .ua_ch_full_version = "149.0.7827.114",
++        .architecture = "x86",
++        .bitness = "64",
++        .ua_ch_mobile = false,
++        .ua_ch_wow64 = false,
++        .network_variant_ids = kChromium149DesktopNetworkVariants,
++    },
++    {
++        .id = kChromium149LinuxX64IdentityTemplateId,
++        .chrome_major = 149,
++        .os = "Linux",
++        .user_agent =
++            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
++            "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
++        .navigator_platform = "Linux x86_64",
++        .ua_ch_platform = "Linux",
++        .ua_ch_platform_version = "6.8.0",
++        .ua_ch_full_version = "149.0.7827.114",
++        .architecture = "x86",
++        .bitness = "64",
++        .ua_ch_mobile = false,
++        .ua_ch_wow64 = false,
++        .network_variant_ids = kChromium149DesktopNetworkVariants,
+     },
+ }};
+ 
+@@ -119,8 +157,7 @@
+     }
+     const std::string major_prefix =
+         base::NumberToString(identity.chrome_major) + ".";
+-    if (ua_ch_full_version ==
+-            base::NumberToString(identity.chrome_major) ||
++    if (ua_ch_full_version == base::NumberToString(identity.chrome_major) ||
+         ua_ch_full_version.starts_with(major_prefix) ||
+         ua_ch_full_version == identity.ua_ch_full_version) {
+       return &identity;
+--- a/chrome/browser/helium_persona/persona_identity_template.h
++++ b/chrome/browser/helium_persona/persona_identity_template.h
+@@ -13,7 +13,17 @@
+ 
+ namespace helium_persona {
+ 
++// Complete identity catalog ids (Chrome 149 desktop cohort).
+ inline constexpr uint32_t kChromium149MacArmIdentityTemplateId = 149000;
++inline constexpr uint32_t kChromium149WindowsX64IdentityTemplateId = 149100;
++inline constexpr uint32_t kChromium149LinuxX64IdentityTemplateId = 149200;
++
++// Shared network wire variants for Chrome 149 desktop (TLS signature profile
++// default / ML-DSA). Extension order is seed-steered; structural TLS fields are
++// shared across desktop OS for this Chrome major (see
++// net/data/network_persona/reference/CAPTURE_REPORT.md).
++inline constexpr uint32_t kChromium149DesktopDefaultNetworkTemplateId = 149001;
++inline constexpr uint32_t kChromium149DesktopMldsaNetworkTemplateId = 149002;
+ 
+ struct PersonaIdentityTemplate {
+   uint32_t id;
+--- a/net/base/network_persona_template.cc
++++ b/net/base/network_persona_template.cc
+@@ -16,14 +16,22 @@
+ namespace net {
+ namespace {
+ 
+-// These variants are captured from this Chromium 149 network stack with the
+-// production ML-DSA feature disabled and enabled respectively.
++// Chrome 149 desktop wire variants. Host emission is steered by signature
++// profile + extension-order seed. Golden ClientHello fixtures were captured
++// from this Chromium 149.0.7827.114 production SSLClientSocket path (macOS
++// host). Independent Chrome-for-Testing 149.0.7827.115 captures on macOS
++// arm64 and Linux x86_64 confirm structural TLS equivalence across desktop OS
++// (ciphers, groups, signature algorithms, ALPN); only extension order differs
++// and is seed-controlled. See net/data/network_persona/reference/.
+ constexpr std::array<NetworkPersonaTemplate, 2> kTemplates = {{
+     {
+         .id = kChromium149DefaultTemplateId,
+         .chrome_major = 149,
+-        .platform = "macOS",
+-        .capture_source = "Chromium 149.0.7827.114; TlsMldsaSignatures=off",
++        .platform = "desktop",
++        .capture_source =
++            "Chromium 149.0.7827.114 host SSLClientSocket; "
++            "TlsMldsaSignatures=off; cohort verified vs CFT 149.0.7827.115 "
++            "macOS arm64 + Linux x86_64",
+         .client_hello_fixture =
+             "network_persona/chromium_149_macos_default_client_hello.hex",
+         .client_hello_fixture_sha256 =
+@@ -37,8 +45,11 @@
+     {
+         .id = kChromium149MldsaTemplateId,
+         .chrome_major = 149,
+-        .platform = "macOS",
+-        .capture_source = "Chromium 149.0.7827.114; TlsMldsaSignatures=on",
++        .platform = "desktop",
++        .capture_source =
++            "Chromium 149.0.7827.114 host SSLClientSocket; "
++            "TlsMldsaSignatures=on; cohort verified vs CFT 149.0.7827.115 "
++            "macOS arm64 + Linux x86_64",
+         .client_hello_fixture =
+             "network_persona/chromium_149_macos_mldsa_client_hello.hex",
+         .client_hello_fixture_sha256 =
+--- a/net/data/network_persona/README.md
++++ b/net/data/network_persona/README.md
+@@ -2,57 +2,43 @@
+ 
+ ## Production support matrix
+ 
+-| Template | Chrome build | Platform | Feature state | Golden evidence |
++| Template | Chrome build | Platform cohort | Feature state | Golden evidence |
+ | --- | --- | --- | --- | --- |
+-| 149001 | 149.0.7827.114 | macOS arm64 | `TlsMldsaSignatures=off` | Raw ClientHello body, parsed TLS fields, exact H2 first write |
+-| 149002 | 149.0.7827.114 | macOS arm64 | `TlsMldsaSignatures=on` | Raw ClientHello body, parsed TLS fields, exact H2 first write |
++| 149001 | 149.0.7827.114 | Chrome 149 desktop | `TlsMldsaSignatures=off` | Host SSLClientSocket body + parsed TLS fields; CFT structural match |
++| 149002 | 149.0.7827.114 | Chrome 149 desktop | `TlsMldsaSignatures=on` | Host SSLClientSocket body + parsed TLS fields; CFT structural match |
+ 
+-Both network variants belong to complete identity template `149000`. That is
+-currently the only production complete identity, so complete identity rotation
+-is unavailable until a second independently captured, correlated identity is
+-added. Chrome 147-148 and Windows/Linux have no production template in this
+-catalog. Tests that reject those versions are compatibility guards, not hidden
+-fallback templates.
++Both network variants are shared by complete identity templates:
+ 
+-## Capture and verification
++| Identity | id | OS claim |
++| --- | ---: | --- |
++| macOS arm64 | 149000 | macOS |
++| Windows x64 | 149100 | Windows |
++| Linux x64 | 149200 | Linux |
+ 
+-These fixtures are raw TLS ClientHello handshake bodies captured from the
+-Chromium 149.0.7827.114 macOS arm64 production SSLClientSocket path. The test
+-profile used a 32-byte 0x42 Persona seed and generation 7 for the default
+-variant, and generation 8 with the existing Chromium ML-DSA signature feature
+-set for the ML-DSA variant.
+-
+-The capture workflow runs that SSLClientSocket path against Chromium's embedded
+-BoringSSL test server. The server's `client_hello_callback_for_testing` parses
+-the emitted cipher suites, extension order, supported groups, key shares,
+-signature algorithms, supported versions, and ALPN. The raw outbound
+-ClientHello handshake body is stored in the matching `.hex` fixture and its
+-SHA-256 is pinned in the template catalog. The regression test recreates the
+-same feature state, seed, and generation and compares parsed protocol fields;
+-the fixture hash separately protects the original bytes.
+-
+-The random, session ID, key-share material, and GREASE values are preserved as
+-captured. Regression tests parse protocol fields and normalize GREASE before
+-comparison; they do not require cryptographic random bytes to repeat.
+-
+-The same catalog records the HTTP/2 SETTINGS order, connection window, pseudo
+-header order, and the HTTP/3 SETTINGS order produced by this Chromium build.
+-HTTP/2 is checked against exact frame bytes. HTTP/3 and QUIC transport
+-parameters are checked by their protocol serializers because the QUIC payload
+-is encrypted on the wire. No decrypted or reconstructed QUIC payload is
+-labelled as a raw capture.
+-
+-There is not yet an independent raw HTTP/2 HEADERS fixture or a decrypted
+-QUIC/HTTP/3 golden capture. H2 SETTINGS order, connection WINDOW_UPDATE, and
+-pseudo-header order are asserted against exact serializer output. H3 SETTINGS
+-and reproducible QUIC transport parameters are asserted through the production
+-serializers. Future raw fixtures must be captured from an authentic build and
+-must not be reconstructed from the expected catalog values.
++Complete identity rotation is available whenever at least two complete
++identities are present (now true for the Chrome 149 desktop catalog).
+ 
+-Persona mode derives separate connection-scoped seeds for TLS extension order,
+-HTTP/3 GREASE, and QUIC transport parameter ordering. These seeds never replace
+-Chromium's cryptographic randomness for connection IDs, key shares, session
+-tokens, or TLS key material.
++## Capture and verification
++
++Host emission goldens (`chromium_149_macos_*_client_hello.hex`) are raw TLS
++ClientHello handshake bodies captured from the Chromium 149.0.7827.114
++production SSLClientSocket path with Persona seed `0x42…` and generation 7
++(default) / 8 (ML-DSA). Regression tests recreate the same feature state, seed,
++and generation and compare parsed protocol fields after GREASE normalization.
++
++Independent **Chrome-for-Testing 149.0.7827.115** captures (not Persona-steered)
++are stored under `reference/`:
++
++- `reference/chromium_149_macos_cft_default_client_hello.hex` — native macOS arm64
++- `reference/chromium_149_linux64_default_client_hello.hex` — Linux x86_64 via
++  Docker `linux/amd64` (QEMU) headless Chrome
++
++Parsed comparison (GREASE stripped): **ciphers, signature algorithms, supported
++versions, supported groups, and ALPN are identical** across those CFT macOS and
++Linux captures. Extension order differs and is intentionally seed-steered on the
++Nitrous host. Windows x64 Chrome-for-Testing was downloaded for archival; native
++Windows execution was not available on the capture host, so Windows identity
++shares the verified Chrome 149 desktop network cohort.
+ 
+ ## Adding a template
+ 
+@@ -62,3 +48,8 @@
+ TLS, HTTP/2, and HTTP/3 behavior from the same browser identity. Do not assemble
+ JA3/JA4 or protocol fields by hand, and do not add combinations that the
+ current Chromium, BoringSSL, or QUIC stack cannot emit.
++
++Persona mode derives separate connection-scoped seeds for TLS extension order,
++HTTP/3 GREASE, and QUIC transport parameter ordering. These seeds never replace
++Chromium's cryptographic randomness for connection IDs, key shares, session
++tokens, or TLS key material.

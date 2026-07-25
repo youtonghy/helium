@@ -260,9 +260,49 @@
     "message": "지문 새로고침"
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_REFRESH_SITE_FINGERPRINTS",
+    "source": "Refresh fingerprints for this site",
+    "message": "이 사이트의 지문 새로고침"
+  },
+  {
     "name": "IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED",
     "source": "Fingerprints refreshed. Reload open tabs for tokens to take effect.",
     "message": "지문을 새로고침했습니다. 토큰을 적용하려면 열려 있는 탭을 새로고침하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY",
+    "source": "Rotate complete identity",
+    "message": "전체 ID 전환"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_TITLE",
+    "source": "Rotate complete identity?",
+    "message": "전체 ID를 전환하시겠습니까?"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches the browser version, user agent, client hints, platform, TLS, HTTP/2, and HTTP/3 identity together. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "브라우저 버전, 사용자 에이전트, 클라이언트 힌트, 플랫폼, TLS, HTTP/2 및 HTTP/3 ID를 함께 전환합니다. 네트워크 스택이 새 ID를 적용하면 이 프로필에서 열려 있는 탭이 새로고침됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_CONFIRM",
+    "source": "Rotate and reload",
+    "message": "전환 후 새로고침"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "Complete identity rotation requires at least two verified browser identity templates. Fingerprint refresh remains available and keeps the current browser version and platform.",
+    "message": "전체 ID를 전환하려면 검증된 브라우저 ID 템플릿이 두 개 이상 필요합니다. 지문 새로고침은 계속 사용할 수 있으며 현재 브라우저 버전과 플랫폼을 유지합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_FAILED",
+    "source": "Complete identity rotation failed. Tabs were not reloaded.",
+    "message": "전체 ID를 전환하지 못했습니다. 탭을 새로고침하지 않았습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATED",
+    "source": "Complete identity rotated. Reloading open tabs.",
+    "message": "전체 ID를 전환했습니다. 열려 있는 탭을 새로고침하는 중입니다."
   },
   {
     "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS",
@@ -1143,5 +1183,15 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP",
     "source": "Controls supported Persona-gated Private State Token operations. Other Privacy Sandbox controls may also apply.",
     "message": "지원되는 페르소나 제어 Private State Token 작업을 제어합니다. 다른 Privacy Sandbox 제어 기능도 적용될 수 있습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_LABEL",
+    "source": "Allow WebRTC",
+    "message": "Allow WebRTC"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_TOOLTIP",
+    "source": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls.",
+    "message": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls."
   }
 ]

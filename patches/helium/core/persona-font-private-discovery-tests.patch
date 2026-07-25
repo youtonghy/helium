@@ -1,0 +1,75 @@
+--- a/chrome/browser/helium_persona/persona_font_virtualization_browsertest.cc
++++ b/chrome/browser/helium_persona/persona_font_virtualization_browsertest.cc
+@@ -5,9 +5,16 @@
+ #include "chrome/browser/helium_persona/persona_service.h"
+ #include "chrome/browser/helium_persona/persona_service_factory.h"
+ 
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+@@ -23,12 +30,34 @@
+   base::DictValue response = service->CreatePersonaProfile("Font test");
+   const std::string* persona_id = response.FindString("personaId");
+   ASSERT_TRUE(persona_id);
++
++  const base::DictValue* state = response.FindDict("state");
++  ASSERT_TRUE(state);
++  const base::ListValue* personas = state->FindList("personas");
++  ASSERT_TRUE(personas);
++  const base::DictValue* created_persona = nullptr;
++  for (const base::Value& persona : *personas) {
++    const std::string* candidate_id =
++        persona.is_dict() ? persona.GetDict().FindString("id") : nullptr;
++    if (candidate_id && *candidate_id == *persona_id) {
++      created_persona = &persona.GetDict();
++      break;
++    }
++  }
++  ASSERT_TRUE(created_persona);
++  base::DictValue payload = created_persona->Clone();
++  payload.EnsureDict("advanced")->Set("allowLocalFonts", true);
++  ASSERT_TRUE(service->SavePersona(payload).FindBool("ok").value_or(false));
+   ASSERT_TRUE(service->SetActivePersona(*persona_id)
+                   .FindBool("ok")
+                   .value_or(false));
+ 
++  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
++      ->SetDefaultContentSetting(ContentSettingsType::LOCAL_FONTS,
++                                 CONTENT_SETTING_ALLOW);
++  ASSERT_TRUE(embedded_test_server()->Start());
+   ASSERT_TRUE(ui_test_utils::NavigateToURL(
+-      browser(), GURL("data:text/html,<body></body>")));
++      browser(), embedded_test_server()->GetURL("/empty.html")));
+ 
+   EXPECT_EQ(true, content::EvalJs(
+                       browser()->tab_strip_model()->GetActiveWebContents(),
+@@ -89,9 +118,17 @@
+       try {
+         await new FontFace('private-probe', 'local("Noto Sans SC")').load();
+         return false;
+-      } catch {
+-        return true;
++      } catch {}
++
++      if (document.fonts.check('72px "Noto Sans SC"', text)) {
++        return false;
+       }
++
++      const localFonts = await self.queryLocalFonts();
++      return !localFonts.some(font =>
++        [font.family, font.fullName, font.postscriptName].some(name =>
++          name && name.toLowerCase().replace(/[^a-z0-9]/g, '')
++              .includes('notosanssc')));
+     })()
+   )JS"));
+ }

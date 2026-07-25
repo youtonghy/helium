@@ -1,0 +1,161 @@
+--- a/content/browser/renderer_host/render_frame_host_impl.cc
++++ b/content/browser/renderer_host/render_frame_host_impl.cc
+@@ -14791,6 +14791,10 @@
+       GetContentClient()->browser()->GetHeliumPersonaSnapshot(
+           GetProcess()->GetBrowserContext());
+   if (snapshot.IsEnabled() && !snapshot.allow_web_otp) {
++    // Bind a deny stub that settles Receive() immediately. Dropping the
++    // pending receiver leaves Blink's OTP ScriptPromiseResolver pending until
++    // GC, which aborts under DCHECK builds (sad-tab error 6 / SIGABRT).
++    WebOTPService::BindDenied(std::move(receiver));
+     return;
+   }
+ 
+--- a/content/browser/sms/webotp_service.cc
++++ b/content/browser/sms/webotp_service.cc
+@@ -25,6 +25,7 @@
+ #include "content/public/browser/web_contents_delegate.h"
+ #include "content/public/common/content_features.h"
+ #include "content/public/common/content_switches.h"
++#include "mojo/public/cpp/bindings/self_owned_receiver.h"
+ #include "services/metrics/public/cpp/ukm_builders.h"
+ #include "third_party/blink/public/common/sms/webotp_constants.h"
+ #include "third_party/blink/public/mojom/sms/webotp_service.mojom-shared.h"
+@@ -36,6 +37,17 @@
+ using blink::mojom::SmsStatus;
+ using Outcome = blink::WebOTPServiceOutcome;
+ 
++// Fail-closed WebOTP endpoint used when persona disables OTP. Settles every
++// Receive() so renderer ScriptPromiseResolvers cannot remain pending until GC.
++class DeniedWebOTPService : public blink::mojom::WebOTPService {
++ public:
++  void Receive(ReceiveCallback callback) override {
++    std::move(callback).Run(SmsStatus::kUnhandledRequest, std::nullopt);
++  }
++
++  void Abort() override {}
++};
++
+ // Only |kMaxUniqueOriginInAncestorChainForWebOTP| unique origins in the chain
+ // is considered valid. In addition, the unique origins must be consecutive.
+ // e.g. the following are valid:
+@@ -176,6 +188,13 @@
+                             std::move(receiver));
+ }
+ 
++// static
++void WebOTPService::BindDenied(
++    mojo::PendingReceiver<blink::mojom::WebOTPService> receiver) {
++  mojo::MakeSelfOwnedReceiver(std::make_unique<DeniedWebOTPService>(),
++                              std::move(receiver));
++}
++
+ void WebOTPService::WillBeDestroyed(DocumentServiceDestructionReason) {
+   // Resolve any pending callback and invoke clean up to unsubscribe this
+   // service from fetcher.
+--- a/content/browser/sms/webotp_service.h
++++ b/content/browser/sms/webotp_service.h
+@@ -53,6 +53,12 @@
+       RenderFrameHost&,
+       mojo::PendingReceiver<blink::mojom::WebOTPService>);
+ 
++  // Binds a self-owned deny stub that settles Receive() immediately with
++  // kUnhandledRequest. Used when the active persona disables WebOTP so the
++  // renderer never keeps an abandoned ScriptPromiseResolver.
++  static void BindDenied(
++      mojo::PendingReceiver<blink::mojom::WebOTPService> receiver);
++
+   WebOTPService(const WebOTPService&) = delete;
+   WebOTPService& operator=(const WebOTPService&) = delete;
+ 
+--- a/content/browser/sms/webotp_service_unittest.cc
++++ b/content/browser/sms/webotp_service_unittest.cc
+@@ -26,7 +26,10 @@
+ #include "content/browser/sms/test/mock_user_consent_handler.h"
+ #include "content/browser/sms/user_consent_handler.h"
+ #include "content/browser/web_contents/web_contents_impl.h"
++#include "content/browser/renderer_host/render_frame_host_impl.h"
++#include "content/public/browser/content_browser_client.h"
+ #include "content/public/browser/sms_fetcher.h"
++#include "content/public/common/content_client.h"
+ #include "content/public/common/content_switches.h"
+ #include "content/public/test/navigation_simulator.h"
+ #include "content/public/test/test_browser_context.h"
+@@ -37,6 +40,7 @@
+ #include "services/service_manager/public/cpp/bind_source_info.h"
+ #include "testing/gmock/include/gmock/gmock.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/sms/webotp_service_outcome.h"
+ #include "third_party/blink/public/mojom/sms/webotp_service.mojom.h"
+ 
+@@ -1097,4 +1101,69 @@
+       blink::WebOTPServiceOutcome::kCrossDeviceFailure);
+ }
+ 
++TEST_F(WebOTPServiceTest, BindDeniedSettlesReceiveWithUnhandledRequest) {
++  mojo::Remote<WebOTPService> remote;
++  content::WebOTPService::BindDenied(remote.BindNewPipeAndPassReceiver());
++
++  base::RunLoop loop;
++  SmsStatus result_status = SmsStatus::kSuccess;
++  optional<string> result_otp = string("should-be-cleared");
++  remote->Receive(BindLambdaForTesting(
++      [&](SmsStatus status, const optional<string>& otp) {
++        result_status = status;
++        result_otp = otp;
++        loop.Quit();
++      }));
++  loop.Run();
++
++  EXPECT_EQ(SmsStatus::kUnhandledRequest, result_status);
++  EXPECT_FALSE(result_otp.has_value());
++  EXPECT_TRUE(remote.is_connected());
++}
++
++namespace {
++
++class PersonaDisablingWebOTPBrowserClient : public ContentBrowserClient {
++ public:
++  blink::HeliumPersonaSnapshot GetHeliumPersonaSnapshot(
++      BrowserContext*) override {
++    blink::HeliumPersonaSnapshot snapshot;
++    snapshot.enabled = true;
++    snapshot.allow_web_otp = false;
++    return snapshot;
++  }
++};
++
++}  // namespace
++
++TEST_F(WebOTPServiceTest,
++       DisabledPersonaBindSettlesReceiveWithoutSmsSideEffects) {
++  PersonaDisablingWebOTPBrowserClient browser_client;
++  ContentBrowserClient* previous =
++      SetBrowserClientForTesting(&browser_client);
++
++  NavigateAndCommit(GURL(kTestUrl));
++  auto* rfh = static_cast<RenderFrameHostImpl*>(main_rfh());
++  ASSERT_FALSE(rfh->DocumentUsedWebOTP());
++
++  mojo::Remote<WebOTPService> remote;
++  rfh->BindWebOTPServiceReceiver(remote.BindNewPipeAndPassReceiver());
++
++  base::RunLoop loop;
++  SmsStatus result_status = SmsStatus::kSuccess;
++  remote->Receive(BindLambdaForTesting(
++      [&](SmsStatus status, const optional<string>& otp) {
++        result_status = status;
++        EXPECT_FALSE(otp.has_value());
++        loop.Quit();
++      }));
++  loop.Run();
++
++  EXPECT_EQ(SmsStatus::kUnhandledRequest, result_status);
++  EXPECT_FALSE(rfh->DocumentUsedWebOTP());
++  EXPECT_TRUE(remote.is_connected());
++
++  SetBrowserClientForTesting(previous);
++}
++
+ }  // namespace content

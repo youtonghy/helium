@@ -1,0 +1,161 @@
+--- /dev/null
++++ b/content/browser/persona_interface_binder_fail_closed_unittest.cc
+@@ -0,0 +1,148 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/run_loop.h"
++#include "base/test/bind.h"
++#include "content/browser/renderer_host/render_frame_host_impl.h"
++#include "content/public/browser/content_browser_client.h"
++#include "content/public/common/content_client.h"
++#include "content/public/test/navigation_simulator.h"
++#include "content/public/test/test_renderer_host.h"
++#include "device/gamepad/public/mojom/gamepad.mojom.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom.h"
++#include "third_party/blink/public/mojom/browser_interface_broker.mojom.h"
++#include "third_party/blink/public/mojom/contacts/contacts_manager.mojom.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "url/gurl.h"
++
++namespace content {
++namespace {
++
++const char kTestUrl[] = "https://example.com/";
++
++class PersonaDenyBrowserClient : public ContentBrowserClient {
++ public:
++  blink::HeliumPersonaSnapshot GetHeliumPersonaSnapshot(
++      BrowserContext*) override {
++    blink::HeliumPersonaSnapshot snapshot;
++    snapshot.enabled = true;
++    snapshot.allow_contacts = false;
++    snapshot.allow_background_sync = false;
++    snapshot.allow_gamepads = false;
++    snapshot.allow_shape_detection = false;
++    snapshot.allow_web_nn = false;
++    return snapshot;
++  }
++};
++
++class PersonaInterfaceBinderFailClosedTest : public RenderViewHostTestHarness {
++ protected:
++  void SetUp() override {
++    RenderViewHostTestHarness::SetUp();
++    previous_client_ = SetBrowserClientForTesting(&browser_client_);
++    NavigateAndCommit(GURL(kTestUrl));
++  }
++
++  void TearDown() override {
++    SetBrowserClientForTesting(previous_client_);
++    RenderViewHostTestHarness::TearDown();
++  }
++
++  mojo::Remote<blink::mojom::BrowserInterfaceBroker> BindBroker() {
++    auto* rfh = static_cast<RenderFrameHostImpl*>(main_rfh());
++    // The harness may already have bound the broker to a stub renderer end.
++    // Reset so tests can drive GetInterface() from this process.
++    rfh->ResetBrowserInterfaceBrokerReceiverForTesting();
++    mojo::Remote<blink::mojom::BrowserInterfaceBroker> broker;
++    rfh->BindBrowserInterfaceBrokerReceiver(
++        broker.BindNewPipeAndPassReceiver());
++    return broker;
++  }
++
++  PersonaDenyBrowserClient browser_client_;
++  raw_ptr<ContentBrowserClient> previous_client_ = nullptr;
++};
++
++TEST_F(PersonaInterfaceBinderFailClosedTest,
++       DisabledContactsSelectSettlesWithNullopt) {
++  auto broker = BindBroker();
++  mojo::Remote<blink::mojom::ContactsManager> contacts;
++  broker->GetInterface(contacts.BindNewPipeAndPassReceiver());
++
++  base::RunLoop loop;
++  std::optional<std::vector<blink::mojom::ContactInfoPtr>> result =
++      std::vector<blink::mojom::ContactInfoPtr>();
++  contacts->Select(
++      /*multiple=*/false, /*include_names=*/true, /*include_emails=*/false,
++      /*include_tel=*/false, /*include_addresses=*/false,
++      /*include_icons=*/false,
++      base::BindLambdaForTesting(
++          [&](std::optional<std::vector<blink::mojom::ContactInfoPtr>>
++                  contacts_out) {
++            result = std::move(contacts_out);
++            loop.Quit();
++          }));
++  loop.Run();
++
++  EXPECT_EQ(std::nullopt, result);
++  EXPECT_TRUE(contacts.is_connected());
++}
++
++TEST_F(PersonaInterfaceBinderFailClosedTest,
++       DisabledBackgroundFetchSettlesWithPermissionDenied) {
++  auto broker = BindBroker();
++  mojo::Remote<blink::mojom::BackgroundFetchService> service;
++  broker->GetInterface(service.BindNewPipeAndPassReceiver());
++
++  base::RunLoop loop;
++  blink::mojom::BackgroundFetchError error =
++      blink::mojom::BackgroundFetchError::NONE;
++  service->Fetch(
++      /*service_worker_registration_id=*/1, /*developer_id=*/"persona-deny",
++      /*requests=*/{}, blink::mojom::BackgroundFetchOptions::New(), SkBitmap(),
++      blink::mojom::BackgroundFetchUkmData::New(),
++      base::BindLambdaForTesting(
++          [&](blink::mojom::BackgroundFetchError fetch_error,
++              blink::mojom::BackgroundFetchRegistrationPtr) {
++            error = fetch_error;
++            loop.Quit();
++          }));
++  loop.Run();
++
++  EXPECT_EQ(blink::mojom::BackgroundFetchError::PERMISSION_DENIED, error);
++  EXPECT_TRUE(service.is_connected());
++}
++
++TEST_F(PersonaInterfaceBinderFailClosedTest,
++       DisabledGamepadHapticsSettlesWithNotSupported) {
++  auto broker = BindBroker();
++  mojo::Remote<device::mojom::GamepadHapticsManager> haptics;
++  broker->GetInterface(haptics.BindNewPipeAndPassReceiver());
++
++  base::RunLoop loop;
++  device::mojom::GamepadHapticsResult result =
++      device::mojom::GamepadHapticsResult::GamepadHapticsResultComplete;
++  haptics->ResetVibrationActuator(
++      /*pad_index=*/0,
++      base::BindLambdaForTesting([&](device::mojom::GamepadHapticsResult r) {
++        result = r;
++        loop.Quit();
++      }));
++  loop.Run();
++
++  EXPECT_EQ(
++      device::mojom::GamepadHapticsResult::GamepadHapticsResultNotSupported,
++      result);
++  EXPECT_TRUE(haptics.is_connected());
++}
++
++}  // namespace
++}  // namespace content
+--- a/content/test/BUILD.gn
++++ b/content/test/BUILD.gn
+@@ -3000,6 +3000,7 @@
+     "../browser/sms/sms_parser_unittest.cc",
+     "../browser/sms/user_consent_handler_unittest.cc",
+     "../browser/sms/webotp_service_unittest.cc",
++    "../browser/persona_interface_binder_fail_closed_unittest.cc",
+     "../browser/speech/tts_controller_unittest.cc",
+     "../browser/startup_task_runner_unittest.cc",
+     "../browser/storage_partition_config_unittest.cc",

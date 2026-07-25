@@ -1,0 +1,369 @@
+--- a/net/http/http_network_session.cc
++++ b/net/http/http_network_session.cc
+@@ -405,6 +405,7 @@
+   spdy::SettingsMap settings = AddDefaultHttp2Settings(params_.http2_settings);
+   std::vector<std::pair<spdy::SpdySettingsId, uint32_t>> settings_order;
+   size_t connection_window = params_.spdy_session_max_recv_window_size;
++  std::string pseudo_header_order;
+   if (config && config->template_id != 0) {
+     const NetworkPersonaTemplate* network_template =
+         FindNetworkPersonaTemplate(config->template_id);
+@@ -418,9 +419,11 @@
+     }
+     settings = AddDefaultHttp2Settings(std::move(settings));
+     connection_window = network_template->http2_connection_window;
++    pseudo_header_order = network_template->http2_pseudo_header_order;
+   }
+   spdy_session_pool_.ApplyNetworkPersonaHttp2Profile(
+-      connection_window, std::move(settings), std::move(settings_order));
++      connection_window, std::move(settings), std::move(settings_order),
++      std::move(pseudo_header_order));
+ }
+ 
+ void HttpNetworkSession::SetTLS13EarlyDataEnabled(bool enabled) {
+--- a/net/spdy/spdy_http_utils.cc
++++ b/net/spdy/spdy_http_utils.cc
+@@ -280,6 +280,70 @@
+   }
+ }
+ 
++bool ReorderSpdyRequestPseudoHeaders(
++    std::string_view pseudo_header_order,
++    quiche::HttpHeaderBlock* headers) {
++  if (pseudo_header_order.empty()) {
++    return true;
++  }
++  if (pseudo_header_order.size() != 4u) {
++    return false;
++  }
++
++  std::string seen;
++  for (char key : pseudo_header_order) {
++    if (std::string_view("masp").find(key) == std::string_view::npos ||
++        seen.find(key) != std::string::npos) {
++      return false;
++    }
++    seen.push_back(key);
++  }
++
++  for (const auto& header : *headers) {
++    if (!header.first.starts_with(':')) {
++      continue;
++    }
++    if (header.first != spdy::kHttp2MethodHeader &&
++        header.first != spdy::kHttp2AuthorityHeader &&
++        header.first != spdy::kHttp2SchemeHeader &&
++        header.first != spdy::kHttp2PathHeader) {
++      return false;
++    }
++  }
++
++  quiche::HttpHeaderBlock reordered;
++  for (char key : pseudo_header_order) {
++    std::string_view name;
++    switch (key) {
++      case 'm':
++        name = spdy::kHttp2MethodHeader;
++        break;
++      case 'a':
++        name = spdy::kHttp2AuthorityHeader;
++        break;
++      case 's':
++        name = spdy::kHttp2SchemeHeader;
++        break;
++      case 'p':
++        name = spdy::kHttp2PathHeader;
++        break;
++      default:
++        return false;
++    }
++    const auto existing = headers->find(name);
++    if (existing != headers->end()) {
++      reordered.insert(*existing);
++    }
++  }
++  for (const auto& header : *headers) {
++    if (!header.first.starts_with(':')) {
++      reordered.insert(header);
++    }
++  }
++  *headers = std::move(reordered);
++  return true;
++}
++
+ static_assert(HIGHEST - LOWEST < 4 && HIGHEST - MINIMUM_PRIORITY < 6,
+               "request priority incompatible with spdy");
+ 
+--- a/net/spdy/spdy_http_utils.h
++++ b/net/spdy/spdy_http_utils.h
+@@ -6,6 +6,7 @@
+ #define NET_SPDY_SPDY_HTTP_UTILS_H_
+ 
+ #include <optional>
++#include <string_view>
+ 
+ #include "base/memory/scoped_refptr.h"
+ #include "base/types/expected.h"
+@@ -79,6 +80,14 @@
+     const HttpRequestHeaders& request_headers,
+     quiche::HttpHeaderBlock* headers);
+ 
++// Reorders the standard request pseudo-headers according to a complete
++// permutation of "masp". Missing pseudo-headers are skipped, as for CONNECT.
++// Returns false without modifying `headers` for invalid orders or unmodelled
++// pseudo-headers.
++NET_EXPORT bool ReorderSpdyRequestPseudoHeaders(
++    std::string_view pseudo_header_order,
++    quiche::HttpHeaderBlock* headers);
++
+ NET_EXPORT spdy::SpdyPriority ConvertRequestPriorityToSpdyPriority(
+     RequestPriority priority);
+ 
+--- a/net/spdy/spdy_http_utils_unittest.cc
++++ b/net/spdy/spdy_http_utils_unittest.cc
+@@ -8,6 +8,8 @@
+ #include <stdint.h>
+ 
+ #include <limits>
++#include <string>
++#include <vector>
+ 
+ #include "base/test/gmock_expected_support.h"
+ #include "base/test/scoped_feature_list.h"
+@@ -69,6 +71,72 @@
+   }
+ }
+ 
++std::vector<std::string> HeaderNames(
++    const quiche::HttpHeaderBlock& headers) {
++  std::vector<std::string> names;
++  names.reserve(headers.size());
++  for (const auto& header : headers) {
++    names.emplace_back(header.first);
++  }
++  return names;
++}
++
++TEST(SpdyHttpUtilsTest, ReordersPersonaPseudoHeaders) {
++  quiche::HttpHeaderBlock headers;
++  headers[":path"] = "/index.html";
++  headers[":scheme"] = "https";
++  headers[":authority"] = "www.example.test";
++  headers[":method"] = "GET";
++  headers["accept"] = "text/html";
++  headers["user-agent"] = "Nitrous";
++
++  EXPECT_TRUE(ReorderSpdyRequestPseudoHeaders("masp", &headers));
++  EXPECT_EQ((std::vector<std::string>{":method", ":authority", ":scheme",
++                                      ":path", "accept", "user-agent"}),
++            HeaderNames(headers));
++}
++
++TEST(SpdyHttpUtilsTest, ReordersOnlyPresentConnectPseudoHeaders) {
++  quiche::HttpHeaderBlock headers;
++  headers[":authority"] = "www.example.test:443";
++  headers[":method"] = "CONNECT";
++  headers["user-agent"] = "Nitrous";
++
++  EXPECT_TRUE(ReorderSpdyRequestPseudoHeaders("masp", &headers));
++  EXPECT_EQ((std::vector<std::string>{":method", ":authority", "user-agent"}),
++            HeaderNames(headers));
++  EXPECT_FALSE(headers.contains(":scheme"));
++  EXPECT_FALSE(headers.contains(":path"));
++}
++
++TEST(SpdyHttpUtilsTest, LeavesUnmodelledPseudoHeadersUnchanged) {
++  quiche::HttpHeaderBlock headers;
++  headers[":scheme"] = "https";
++  headers[":path"] = "/socket";
++  headers[":protocol"] = "websocket";
++  headers[":method"] = "CONNECT";
++  headers[":authority"] = "www.example.test";
++  headers["user-agent"] = "Nitrous";
++  const std::vector<std::string> original = HeaderNames(headers);
++
++  EXPECT_FALSE(ReorderSpdyRequestPseudoHeaders("masp", &headers));
++  EXPECT_EQ(original, HeaderNames(headers));
++}
++
++TEST(SpdyHttpUtilsTest, RejectsInvalidPersonaPseudoHeaderOrders) {
++  for (std::string_view order : {"mas", "maap", "masx"}) {
++    quiche::HttpHeaderBlock headers;
++    headers[":method"] = "GET";
++    headers[":authority"] = "www.example.test";
++    headers[":scheme"] = "https";
++    headers[":path"] = "/";
++    const std::vector<std::string> original = HeaderNames(headers);
++
++    EXPECT_FALSE(ReorderSpdyRequestPseudoHeaders(order, &headers));
++    EXPECT_EQ(original, HeaderNames(headers));
++  }
++}
++
+ TEST(SpdyHttpUtilsTest, CreateSpdyHeadersFromHttpRequestHTTP2) {
+   GURL url("https://www.google.com/index.html");
+   HttpRequestInfo request;
+--- a/net/spdy/spdy_session.cc
++++ b/net/spdy/spdy_session.cc
+@@ -851,7 +851,8 @@
+     NetworkQualityEstimator* network_quality_estimator,
+     NetLog* net_log,
+     MultiplexedSessionCreationInitiator session_creation_initiator,
+-    SpdySessionInitiator spdy_session_initiator)
++    SpdySessionInitiator spdy_session_initiator,
++    std::string_view http2_pseudo_header_order)
+     : spdy_session_key_(spdy_session_key),
+       http_server_properties_(http_server_properties),
+       transport_security_state_(transport_security_state),
+@@ -859,6 +860,7 @@
+       stream_hi_water_mark_(kFirstStreamId),
+       initial_settings_(initial_settings),
+       initial_settings_order_(initial_settings_order),
++      http2_pseudo_header_order_(http2_pseudo_header_order),
+       enable_http2_settings_grease_(enable_http2_settings_grease),
+       greased_http2_frame_(greased_http2_frame),
+       http2_end_stream_with_data_frame_(http2_end_stream_with_data_frame),
+--- a/net/spdy/spdy_session.h
++++ b/net/spdy/spdy_session.h
+@@ -362,7 +362,8 @@
+               NetworkQualityEstimator* network_quality_estimator,
+               NetLog* net_log,
+               MultiplexedSessionCreationInitiator session_creation_initiator,
+-              SpdySessionInitiator spdy_session_initiator);
++              SpdySessionInitiator spdy_session_initiator,
++              std::string_view http2_pseudo_header_order = {});
+ 
+   ~SpdySession() override;
+ 
+@@ -639,6 +640,9 @@
+   SpdySessionInitiator spdy_session_initiator() const {
+     return spdy_session_initiator_;
+   }
++  std::string_view http2_pseudo_header_order() const {
++    return http2_pseudo_header_order_;
++  }
+ 
+  private:
+   friend class base::RefCounted<SpdySession>;
+@@ -1161,6 +1165,7 @@
+   const spdy::SettingsMap initial_settings_;
+   const std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>
+       initial_settings_order_;
++  const std::string http2_pseudo_header_order_;
+ 
+   // If true, a setting parameter with reserved identifier will be sent in every
+   // initial SETTINGS frame, see
+--- a/net/spdy/spdy_session_pool.cc
++++ b/net/spdy/spdy_session_pool.cc
+@@ -153,10 +153,12 @@
+     size_t session_max_recv_window_size,
+     spdy::SettingsMap initial_settings,
+     std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>
+-        initial_settings_order) {
++        initial_settings_order,
++    std::string pseudo_header_order) {
+   session_max_recv_window_size_ = session_max_recv_window_size;
+   initial_settings_ = std::move(initial_settings);
+   initial_settings_order_ = std::move(initial_settings_order);
++  pseudo_header_order_ = std::move(pseudo_header_order);
+ }
+ 
+ int SpdySessionPool::CreateAvailableSessionFromSocketHandle(
+@@ -678,7 +680,7 @@
+       enable_http2_settings_grease_, greased_http2_frame_,
+       http2_end_stream_with_data_frame_, enable_priority_update_, time_func_,
+       network_quality_estimator_, net_log, session_creation_initiator,
+-      spdy_session_initiator);
++      spdy_session_initiator, pseudo_header_order_);
+ }
+ 
+ base::expected<base::WeakPtr<SpdySession>, int> SpdySessionPool::InsertSession(
+--- a/net/spdy/spdy_session_pool.h
++++ b/net/spdy/spdy_session_pool.h
+@@ -334,7 +334,8 @@
+       size_t session_max_recv_window_size,
+       spdy::SettingsMap initial_settings,
+       std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>
+-          initial_settings_order);
++          initial_settings_order,
++      std::string pseudo_header_order);
+ 
+   // Mark all current sessions as going away.
+   void MakeCurrentSessionsGoingAway(Error error);
+@@ -552,6 +553,7 @@
+   spdy::SettingsMap initial_settings_;
+   std::vector<std::pair<spdy::SpdySettingsId, uint32_t>>
+       initial_settings_order_;
++  std::string pseudo_header_order_;
+ 
+   // If true, a setting parameter with reserved identifier will be sent in every
+   // initial SETTINGS frame, see
+--- a/net/spdy/spdy_session_unittest.cc
++++ b/net/spdy/spdy_session_unittest.cc
+@@ -6165,6 +6165,55 @@
+   EXPECT_FALSE(session_);
+ }
+ 
++TEST_F(SpdySessionTest, NetworkPersonaReordersPseudoHeadersOnWire) {
++  quiche::HttpHeaderBlock expected_headers;
++  expected_headers[":method"] = "GET";
++  expected_headers[":authority"] = "www.example.org";
++  expected_headers[":scheme"] = "https";
++  expected_headers[":path"] = "/persona";
++  expected_headers["user-agent"] = "Nitrous";
++  spdy::SpdySerializedFrame expected_frame(spdy_util_.ConstructSpdyHeaders(
++      1, std::move(expected_headers), LOWEST, true));
++
++  MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING)};
++  MockWrite writes[] = {CreateMockWrite(expected_frame, 0)};
++  StaticSocketDataProvider data(reads, writes);
++  session_deps_.socket_factory->AddSocketDataProvider(&data);
++  AddSSLSocketData();
++
++  CreateNetworkSession();
++  NetworkPersonaConfig config;
++  config.template_id = kChromium149DefaultTemplateId;
++  config.generation = 4;
++  config.deterministic_seed.fill(0x42);
++  http_session_->ApplyNetworkPersonaConfig(config);
++  CreateSpdySession();
++  ASSERT_TRUE(session_);
++  EXPECT_EQ("masp", session_->http2_pseudo_header_order());
++
++  base::WeakPtr<SpdyStream> stream =
++      CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
++                                test_url_, LOWEST, NetLogWithSource());
++  ASSERT_TRUE(stream);
++  test::StreamDelegateDoNothing delegate(stream);
++  stream->SetDelegate(&delegate);
++
++  quiche::HttpHeaderBlock actual_headers;
++  actual_headers[":path"] = "/persona";
++  actual_headers[":scheme"] = "https";
++  actual_headers[":authority"] = "www.example.org";
++  actual_headers[":method"] = "GET";
++  actual_headers["user-agent"] = "Nitrous";
++  EXPECT_EQ(ERR_IO_PENDING,
++            stream->SendRequestHeaders(std::move(actual_headers),
++                                       NO_MORE_DATA_TO_SEND));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_TRUE(data.AllWriteDataConsumed());
++  session_->CloseSessionOnError(ERR_ABORTED, "Ending test session");
++  base::RunLoop().RunUntilIdle();
++}
++
+ class AltSvcFrameTest : public SpdySessionTest {
+  public:
+   AltSvcFrameTest()
+--- a/net/spdy/spdy_stream.cc
++++ b/net/spdy/spdy_stream.cc
+@@ -628,6 +628,8 @@
+ 
+ int SpdyStream::SendRequestHeaders(quiche::HttpHeaderBlock request_headers,
+                                    SpdySendStatus send_status) {
++  ReorderSpdyRequestPseudoHeaders(
++      session_->http2_pseudo_header_order(), &request_headers);
+   net_log_.AddEvent(
+       NetLogEventType::HTTP_TRANSACTION_HTTP2_SEND_REQUEST_HEADERS,
+       [&](NetLogCaptureMode capture_mode) {

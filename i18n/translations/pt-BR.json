@@ -261,9 +261,49 @@
     "message": "Atualizar impressões digitais"
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_REFRESH_SITE_FINGERPRINTS",
+    "source": "Refresh fingerprints for this site",
+    "message": "Atualizar impressões digitais deste site"
+  },
+  {
     "name": "IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED",
     "source": "Fingerprints refreshed. Reload open tabs for tokens to take effect.",
     "message": "Impressões digitais atualizadas. Recarregue as guias abertas para aplicar os tokens."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY",
+    "source": "Rotate complete identity",
+    "message": "Alternar identidade completa"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_TITLE",
+    "source": "Rotate complete identity?",
+    "message": "Alternar a identidade completa?"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches the browser version, user agent, client hints, platform, TLS, HTTP/2, and HTTP/3 identity together. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "Isso alterna em conjunto a versão do navegador, o agente do usuário, as dicas do cliente, a plataforma e as identidades de TLS, HTTP/2 e HTTP/3. As guias abertas neste perfil serão recarregadas depois que a pilha de rede aceitar a nova identidade."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_CONFIRM",
+    "source": "Rotate and reload",
+    "message": "Alternar e recarregar"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "Complete identity rotation requires at least two verified browser identity templates. Fingerprint refresh remains available and keeps the current browser version and platform.",
+    "message": "A alternância da identidade completa exige pelo menos dois modelos de identidade de navegador verificados. A atualização das impressões digitais continua disponível e mantém a versão e a plataforma atuais do navegador."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_FAILED",
+    "source": "Complete identity rotation failed. Tabs were not reloaded.",
+    "message": "Falha ao alternar a identidade completa. As guias não foram recarregadas."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATED",
+    "source": "Complete identity rotated. Reloading open tabs.",
+    "message": "Identidade completa alternada. Recarregando as guias abertas."
   },
   {
     "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS",
@@ -1144,5 +1184,15 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP",
     "source": "Controls supported Persona-gated Private State Token operations. Other Privacy Sandbox controls may also apply.",
     "message": "Controla, conforme a Persona, as operações compatíveis de Private State Tokens. Outros controles do Privacy Sandbox também podem se aplicar."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_LABEL",
+    "source": "Allow WebRTC",
+    "message": "Allow WebRTC"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_TOOLTIP",
+    "source": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls.",
+    "message": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls."
   }
 ]

@@ -600,7 +600,8 @@ def check_persona_settings_i18n_key_coverage(patches_dir, series_path=Path('seri
         re.findall(r"(?:labelKey|tooltipKey)\s*:\s*['\"](persona[A-Za-z0-9]+)['\"]", ui_text))
 
     provider_lines = _collect_persona_patch_lines(
-        patches_dir, series_path, lambda path: str(path) == 'helium/core/services-prefs.patch')
+        patches_dir, series_path, lambda path: str(path) == 'helium/core/services-prefs.patch' or
+        str(path).startswith('helium/core/persona-'))
     provider_text = '\n'.join(
         provider_lines.get(
             'chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc', []))

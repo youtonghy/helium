@@ -1,0 +1,983 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -1742,6 +1742,60 @@
+     <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN" desc="Validation error shown when the custom Nitrous services origin is invalid.">
+       Invalid origin
+     </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_TITLE" desc="Name of the page used to manage fingerprint seed settings">
++      Fingerprints
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_DESCRIPTION" desc="Description of the fingerprint settings page">
++      Manage fingerprint seeds and automatic rotation
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_CURRENT_SEED_TITLE" desc="Section title for the effective fingerprint seed">
++      Current fingerprint seed
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_CURRENT_SEED_DESCRIPTION" desc="Description of the effective fingerprint seed">
++      This seed determines the stable fingerprint noise for this profile.
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_SEED_LABEL" desc="Label for the displayed fingerprint seed">
++      Seed
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_GENERATION_LABEL" desc="Label for the fingerprint generation number">
++      Generation
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_LAST_CHANGED_LABEL" desc="Label for the last fingerprint seed change time">
++      Last changed
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_MODE_TITLE" desc="Section title for fingerprint seed mode">
++      Seed mode
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_MODE_DESCRIPTION" desc="Description of fixed and random fingerprint seed modes">
++      Use a fixed seed for repeatable fingerprints, or let Nitrous generate a random seed.
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_FIXED_SEED_LABEL" desc="Label for the fixed fingerprint seed input">
++      Fixed seed
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_FIXED_SEED_INVALID" desc="Validation error for a malformed fixed fingerprint seed">
++      Enter 64 hexadecimal characters.
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_USE_FIXED_SEED" desc="Button label that applies the entered fixed seed">
++      Use fixed seed
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_GENERATE_RANDOM_SEED" desc="Button label that generates a new random fingerprint seed">
++      Generate random seed
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_AUTOMATION_TITLE" desc="Section title for automatic fingerprint seed policies">
++      Automatic management
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_AUTOMATION_DESCRIPTION" desc="Description of automatic fingerprint seed policies">
++      Automatic options are available only while random seed mode is active.
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_CLEAR_ON_EXIT" desc="Label for the automatic clear-on-exit fingerprint setting">
++      Clear random fingerprint on exit
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_ROTATE_DAILY" desc="Label for the automatic daily fingerprint setting">
++      Change random fingerprint daily
++    </message>
++    <message name="IDS_SETTINGS_FINGERPRINT_UNAVAILABLE" desc="Status shown when fingerprint settings cannot be read for the current profile">
++      Fingerprint settings are unavailable for this profile.
++    </message>
+     <message name="IDS_SETTINGS_PERSONA_TITLE" desc="Name of the page used to manage browser persona settings">
+       Persona
+     </message>
+--- a/chrome/browser/helium_persona/persona_pref_names.h
++++ b/chrome/browser/helium_persona/persona_pref_names.h
+@@ -11,6 +11,18 @@ inline constexpr char kFingerprintProfil
+     "helium.persona.fingerprint_profile_salt";
+ inline constexpr char kFingerprintRotationEpoch[] =
+     "helium.persona.fingerprint_rotation_epoch";
++inline constexpr char kFingerprintSeedMode[] =
++    "helium.persona.fingerprint_seed_mode";
++inline constexpr char kFingerprintFixedSeed[] =
++    "helium.persona.fingerprint_fixed_seed";
++inline constexpr char kFingerprintClearOnExit[] =
++    "helium.persona.fingerprint_clear_on_exit";
++inline constexpr char kFingerprintRotateDaily[] =
++    "helium.persona.fingerprint_rotate_daily";
++inline constexpr char kFingerprintLastRotationDay[] =
++    "helium.persona.fingerprint_last_rotation_day";
++inline constexpr char kFingerprintLastChanged[] =
++    "helium.persona.fingerprint_last_changed";
+ }  // namespace helium_persona::prefs
+ 
+ #endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_PREF_NAMES_H_
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -15,10 +15,12 @@
+ #include "base/functional/bind.h"
+ #include "base/i18n/time_formatting.h"
+ #include "base/strings/string_number_conversions.h"
++#include "base/strings/stringprintf.h"
+ #include "base/strings/string_util.h"
+ #include "base/time/time.h"
+ #include "base/uuid.h"
+ #include "chrome/browser/helium_persona/persona_identity_template.h"
++#include "chrome/browser/helium_persona/persona_pref_names.h"
+ #include "chrome/browser/net/profile_network_context_service.h"
+ #include "chrome/browser/net/profile_network_context_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -42,6 +44,8 @@ constexpr char kPersonaFingerprintProfil
+     "helium.persona.fingerprint_profile_salt";
+ constexpr char kPersonaFingerprintRotationEpochPref[] =
+     "helium.persona.fingerprint_rotation_epoch";
++constexpr char kFingerprintSeedModeRandom[] = "random";
++constexpr char kFingerprintSeedModeFixed[] = "fixed";
+ constexpr char kDefaultPersonaId[] = "default";
+ constexpr char kPersonaImportSchema[] = "helium.persona/v1";
+ constexpr char kLaunchSelectionModeAlwaysAsk[] = "always_ask";
+@@ -133,6 +137,42 @@ uint64_t NextGeneration(uint64_t generat
+                                                              : generation + 1;
+ }
+ 
++std::string GetCurrentLocalDay() {
++  base::Time::Exploded exploded;
++  base::Time::Now().LocalExplode(&exploded);
++  return base::StringPrintf("%04d-%02d-%02d", exploded.year, exploded.month,
++                            exploded.day_of_month);
++}
++
++bool IsValidFingerprintSeed(const std::string& seed) {
++  std::vector<uint8_t> bytes;
++  return seed.size() == 64u && base::HexStringToBytes(seed, &bytes) &&
++         bytes.size() == 32u;
++}
++
++base::DictValue MakeFingerprintSettingsResponse(PrefService* prefs,
++                                                bool ok,
++                                                std::string error = {}) {
++  base::DictValue response;
++  response.Set("ok", ok);
++  response.Set("mode", prefs->GetString(prefs::kFingerprintSeedMode));
++  response.Set("seed", prefs->GetString(prefs::kFingerprintProfileSalt));
++  response.Set("clearOnExit",
++               prefs->GetBoolean(prefs::kFingerprintClearOnExit));
++  response.Set("rotateDaily",
++               prefs->GetBoolean(prefs::kFingerprintRotateDaily));
++  response.Set("lastChanged", prefs->GetString(prefs::kFingerprintLastChanged));
++  response.Set(
++      "generation",
++      base::NumberToString(ReadGeneration(
++          prefs->GetDict(prefs::kFingerprintRotationEpoch)
++              .Find("globalGeneration"))));
++  if (!error.empty()) {
++    response.Set("error", std::move(error));
++  }
++  return response;
++}
++
+ std::string GetPersonaIconForPlatform(std::string_view platform) {
+   if (platform == "macOS") {
+     return "macos";
+@@ -1152,6 +1192,20 @@ PersonaService::PersonaService(PrefServi
+ }
+ PersonaService::~PersonaService() = default;
+ 
++void PersonaService::Shutdown() {
++  if (!prefs_ ||
++      prefs_->GetString(prefs::kFingerprintSeedMode) ==
++          kFingerprintSeedModeFixed ||
++      !prefs_->GetBoolean(prefs::kFingerprintClearOnExit)) {
++    return;
++  }
++
++  prefs_->ClearPref(kPersonaFingerprintProfileSaltPref);
++  prefs_->ClearPref(kPersonaFingerprintRotationEpochPref);
++  prefs_->ClearPref(prefs::kFingerprintLastRotationDay);
++  prefs_->ClearPref(prefs::kFingerprintLastChanged);
++}
++
+ void PersonaService::RegisterProfilePrefs(
+     user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterDictionaryPref(kPersonaStatePref);
+@@ -1161,6 +1215,14 @@ void PersonaService::RegisterProfilePref
+   registry->RegisterStringPref(kPersonaFingerprintProfileSaltPref,
+                                std::string());
+   registry->RegisterDictionaryPref(kPersonaFingerprintRotationEpochPref);
++  registry->RegisterStringPref(prefs::kFingerprintSeedMode,
++                               kFingerprintSeedModeRandom);
++  registry->RegisterStringPref(prefs::kFingerprintFixedSeed, std::string());
++  registry->RegisterBooleanPref(prefs::kFingerprintClearOnExit, false);
++  registry->RegisterBooleanPref(prefs::kFingerprintRotateDaily, false);
++  registry->RegisterStringPref(prefs::kFingerprintLastRotationDay,
++                               std::string());
++  registry->RegisterStringPref(prefs::kFingerprintLastChanged, std::string());
+ }
+ 
+ base::DictValue PersonaService::GetPersonaState() const {
+@@ -1468,6 +1530,66 @@ void PersonaService::RefreshFingerprint(
+                   std::move(rotation_epoch));
+ }
+ 
++base::DictValue PersonaService::GetFingerprintSettings() const {
++  if (!prefs_) {
++    return base::DictValue().Set("ok", false).Set("error", "unavailable");
++  }
++  EnsureFingerprintSeedForCurrentDay();
++  return MakeFingerprintSettingsResponse(prefs_, true);
++}
++
++base::DictValue PersonaService::SetFixedFingerprintSeed(
++    const std::string& seed) {
++  if (!prefs_ || !IsValidFingerprintSeed(seed)) {
++    return prefs_ ? MakeFingerprintSettingsResponse(prefs_, false, "invalid")
++                  : base::DictValue().Set("ok", false).Set("error", "invalid");
++  }
++
++  const std::string normalized_seed = base::ToLowerASCII(seed);
++  prefs_->SetString(prefs::kFingerprintSeedMode, kFingerprintSeedModeFixed);
++  prefs_->SetString(prefs::kFingerprintFixedSeed, normalized_seed);
++  prefs_->SetBoolean(prefs::kFingerprintClearOnExit, false);
++  prefs_->SetBoolean(prefs::kFingerprintRotateDaily, false);
++  ReplaceFingerprintSeed(normalized_seed);
++  return MakeFingerprintSettingsResponse(prefs_, true);
++}
++
++base::DictValue PersonaService::GenerateRandomFingerprintSeed() {
++  if (!prefs_) {
++    return base::DictValue().Set("ok", false).Set("error", "unavailable");
++  }
++
++  prefs_->SetString(prefs::kFingerprintSeedMode, kFingerprintSeedModeRandom);
++  prefs_->ClearPref(prefs::kFingerprintFixedSeed);
++  ReplaceFingerprintSeed(MakeFingerprintSalt());
++  if (prefs_->GetBoolean(prefs::kFingerprintRotateDaily)) {
++    prefs_->SetString(prefs::kFingerprintLastRotationDay, GetCurrentLocalDay());
++  }
++  return MakeFingerprintSettingsResponse(prefs_, true);
++}
++
++base::DictValue PersonaService::SetFingerprintAutomation(bool clear_on_exit,
++                                                         bool rotate_daily) {
++  if (!prefs_) {
++    return base::DictValue().Set("ok", false).Set("error", "unavailable");
++  }
++  if (prefs_->GetString(prefs::kFingerprintSeedMode) ==
++      kFingerprintSeedModeFixed) {
++    prefs_->SetBoolean(prefs::kFingerprintClearOnExit, false);
++    prefs_->SetBoolean(prefs::kFingerprintRotateDaily, false);
++    return GetFingerprintSettings();
++  }
++
++  prefs_->SetBoolean(prefs::kFingerprintClearOnExit, clear_on_exit);
++  prefs_->SetBoolean(prefs::kFingerprintRotateDaily, rotate_daily);
++  if (rotate_daily) {
++    prefs_->SetString(prefs::kFingerprintLastRotationDay, GetCurrentLocalDay());
++  } else {
++    prefs_->ClearPref(prefs::kFingerprintLastRotationDay);
++  }
++  return GetFingerprintSettings();
++}
++
+ void PersonaService::RotateIdentity(IdentityRotationCallback callback) {
+   base::DictValue state = ReadState();
+   const std::vector<uint32_t> ids = GetRotatablePersonaIdentityTemplateIds();
+@@ -2040,12 +2162,55 @@ std::string PersonaService::GetOrCreateF
+     return "transient-profile";
+   }
+ 
+-  std::string salt = prefs_->GetString(kPersonaFingerprintProfileSaltPref);
+-  if (salt.empty()) {
+-    salt = MakeFingerprintSalt();
+-    prefs_->SetString(kPersonaFingerprintProfileSaltPref, salt);
++  EnsureFingerprintSeedForCurrentDay();
++  return prefs_->GetString(kPersonaFingerprintProfileSaltPref);
++}
++
++void PersonaService::EnsureFingerprintSeedForCurrentDay() const {
++  if (!prefs_) {
++    return;
+   }
+-  return salt;
++
++  const std::string mode = prefs_->GetString(prefs::kFingerprintSeedMode);
++  if (mode == kFingerprintSeedModeFixed) {
++    const std::string fixed_seed = prefs_->GetString(prefs::kFingerprintFixedSeed);
++    if (IsValidFingerprintSeed(fixed_seed) &&
++        prefs_->GetString(kPersonaFingerprintProfileSaltPref) != fixed_seed) {
++      ReplaceFingerprintSeed(fixed_seed);
++    }
++    return;
++  }
++
++  const bool rotate_daily =
++      prefs_->GetBoolean(prefs::kFingerprintRotateDaily);
++  const std::string current_day = GetCurrentLocalDay();
++  const bool seed_missing =
++      prefs_->GetString(kPersonaFingerprintProfileSaltPref).empty();
++  const bool day_changed =
++      rotate_daily &&
++      prefs_->GetString(prefs::kFingerprintLastRotationDay) != current_day;
++  if (seed_missing || day_changed) {
++    ReplaceFingerprintSeed(MakeFingerprintSalt());
++  }
++  if (rotate_daily) {
++    prefs_->SetString(prefs::kFingerprintLastRotationDay, current_day);
++  }
++}
++
++void PersonaService::ReplaceFingerprintSeed(const std::string& seed) const {
++  DCHECK(prefs_);
++  prefs_->SetString(kPersonaFingerprintProfileSaltPref, seed);
++  prefs_->SetString(prefs::kFingerprintLastChanged, MakeIsoTimestamp());
++
++  base::DictValue rotation_epoch =
++      prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  rotation_epoch.Set("global", MakeIsoTimestamp());
++  rotation_epoch.Set(
++      "globalGeneration",
++      base::NumberToString(NextGeneration(
++          ReadGeneration(rotation_epoch.Find("globalGeneration")))));
++  prefs_->SetDict(kPersonaFingerprintRotationEpochPref,
++                  std::move(rotation_epoch));
+ }
+ 
+ std::string PersonaService::GetOrCreateFingerprintGlobalEpoch() const {
+--- a/chrome/browser/helium_persona/persona_service.h
++++ b/chrome/browser/helium_persona/persona_service.h
+@@ -75,6 +75,12 @@ class PersonaService : public KeyedServi
+   void SetLaunchSelectionMode(const std::string& mode);
+   void RefreshFingerprint(FingerprintRefreshScope scope,
+                           const std::string& site_origin_or_empty);
++  base::DictValue GetFingerprintSettings() const;
++  base::DictValue SetFixedFingerprintSeed(const std::string& seed);
++  base::DictValue GenerateRandomFingerprintSeed();
++  base::DictValue SetFingerprintAutomation(bool clear_on_exit,
++                                           bool rotate_daily);
++  void Shutdown() override;
+   void RotateIdentity(IdentityRotationCallback callback);
+   bool CanRotateIdentity() const;
+   uint32_t GetActiveIdentityTemplateId() const;
+@@ -88,6 +94,8 @@ class PersonaService : public KeyedServi
+ 
+   base::DictValue ReadState() const;
+   void WriteState(base::DictValue state);
++  void EnsureFingerprintSeedForCurrentDay() const;
++  void ReplaceFingerprintSeed(const std::string& seed) const;
+   std::string GetOrCreateFingerprintProfileSalt() const;
+   std::string GetOrCreateFingerprintGlobalEpoch() const;
+   void OnCandidateNetworkIdentityApplied(bool accepted);
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -27,6 +27,14 @@ constexpr char kPersonaFingerprintProfil
+     "helium.persona.fingerprint_profile_salt";
+ constexpr char kPersonaFingerprintRotationEpochPref[] =
+     "helium.persona.fingerprint_rotation_epoch";
++constexpr char kFingerprintSeedModePref[] =
++    "helium.persona.fingerprint_seed_mode";
++constexpr char kFingerprintClearOnExitPref[] =
++    "helium.persona.fingerprint_clear_on_exit";
++constexpr char kFingerprintRotateDailyPref[] =
++    "helium.persona.fingerprint_rotate_daily";
++constexpr char kFingerprintLastRotationDayPref[] =
++    "helium.persona.fingerprint_last_rotation_day";
+ constexpr char kDefaultPersonaId[] = "default";
+ 
+ const base::DictValue* FindPersona(const base::ListValue* personas,
+@@ -889,6 +897,93 @@ TEST_F(PersonaServiceTest, SiteRefreshMi
+   EXPECT_TRUE(migrated->FindString("epoch"));
+ }
+ 
++TEST_F(PersonaServiceTest, FixedSeedIsValidatedAndDisablesAutomation) {
++  const base::DictValue rejected = service_->SetFixedFingerprintSeed("invalid");
++  EXPECT_FALSE(rejected.FindBool("ok").value_or(true));
++  ASSERT_TRUE(rejected.FindString("error"));
++  EXPECT_EQ("invalid", *rejected.FindString("error"));
++
++  const base::DictValue accepted = service_->SetFixedFingerprintSeed(
++      "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF");
++  EXPECT_TRUE(accepted.FindBool("ok").value_or(false));
++  ASSERT_TRUE(accepted.FindString("mode"));
++  EXPECT_EQ("fixed", *accepted.FindString("mode"));
++  ASSERT_TRUE(accepted.FindString("seed"));
++  EXPECT_EQ("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
++            *accepted.FindString("seed"));
++  EXPECT_FALSE(accepted.FindBool("clearOnExit").value_or(true));
++  EXPECT_FALSE(accepted.FindBool("rotateDaily").value_or(true));
++}
++
++TEST_F(PersonaServiceTest, DailyRandomRotationRunsOnlyOnceForAStaleDay) {
++  constexpr char kPreviousSeed[] =
++      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
++  prefs_.SetString(kPersonaFingerprintProfileSaltPref, kPreviousSeed);
++  prefs_.SetString(kFingerprintSeedModePref, "random");
++  prefs_.SetBoolean(kFingerprintRotateDailyPref, true);
++  prefs_.SetString(kFingerprintLastRotationDayPref, "1970-01-01");
++
++  const base::DictValue first = service_->GetFingerprintSettings();
++  ASSERT_TRUE(first.FindString("seed"));
++  EXPECT_NE(kPreviousSeed, *first.FindString("seed"));
++
++  const base::DictValue second = service_->GetFingerprintSettings();
++  EXPECT_EQ(*first.FindString("seed"), *second.FindString("seed"));
++}
++
++TEST_F(PersonaServiceTest, ExitCleanupClearsOnlyRandomFingerprintState) {
++  constexpr char kSeed[] =
++      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
++  prefs_.SetString(kPersonaFingerprintProfileSaltPref, kSeed);
++  prefs_.SetString(kFingerprintSeedModePref, "random");
++  prefs_.SetBoolean(kFingerprintClearOnExitPref, true);
++  prefs_.SetDict(kPersonaFingerprintRotationEpochPref,
++                 base::DictValue().Set("globalGeneration", "3"));
++
++  service_->Shutdown();
++
++  EXPECT_TRUE(prefs_.GetString(kPersonaFingerprintProfileSaltPref).empty());
++  EXPECT_TRUE(prefs_.GetDict(kPersonaFingerprintRotationEpochPref).empty());
++}
++
++TEST_F(PersonaServiceTest, ExitCleanupPreservesFixedFingerprintSeed) {
++  constexpr char kSeed[] =
++      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
++  ASSERT_TRUE(service_->SetFixedFingerprintSeed(kSeed).FindBool("ok").value_or(false));
++
++  service_->Shutdown();
++
++  EXPECT_EQ(kSeed, prefs_.GetString(kPersonaFingerprintProfileSaltPref));
++}
++
++TEST_F(PersonaServiceTest, RandomSeedGenerationReplacesTheEffectiveSeed) {
++  const base::DictValue before = service_->GetFingerprintSettings();
++  ASSERT_TRUE(before.FindString("seed"));
++
++  const base::DictValue after = service_->GenerateRandomFingerprintSeed();
++
++  EXPECT_TRUE(after.FindBool("ok").value_or(false));
++  ASSERT_TRUE(after.FindString("seed"));
++  EXPECT_NE(*before.FindString("seed"), *after.FindString("seed"));
++  ASSERT_TRUE(after.FindString("mode"));
++  EXPECT_EQ("random", *after.FindString("mode"));
++}
++
++TEST_F(PersonaServiceTest, AutomationCanOnlyRemainEnabledForRandomSeeds) {
++  const base::DictValue random = service_->SetFingerprintAutomation(true, true);
++  EXPECT_TRUE(random.FindBool("ok").value_or(false));
++  EXPECT_TRUE(random.FindBool("clearOnExit").value_or(false));
++  EXPECT_TRUE(random.FindBool("rotateDaily").value_or(false));
++
++  constexpr char kSeed[] =
++      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
++  ASSERT_TRUE(service_->SetFixedFingerprintSeed(kSeed).FindBool("ok").value_or(false));
++  const base::DictValue fixed = service_->SetFingerprintAutomation(true, true);
++  EXPECT_TRUE(fixed.FindBool("ok").value_or(false));
++  EXPECT_FALSE(fixed.FindBool("clearOnExit").value_or(true));
++  EXPECT_FALSE(fixed.FindBool("rotateDaily").value_or(true));
++}
++
+ }  // namespace
+ 
+ }  // namespace helium_persona
+--- a/chrome/browser/resources/settings/BUILD.gn
++++ b/chrome/browser/resources/settings/BUILD.gn
+@@ -142,6 +142,7 @@ build_webui("build") {
+     "privacy_page/privacy_guide/privacy_guide_safe_browsing_fragment.ts",
+     "privacy_page/privacy_guide/privacy_guide_welcome_fragment.ts",
+     "privacy_page/privacy_guide/step_indicator.ts",
++    "privacy_page/fingerprint_page.ts",
+     "privacy_page/persona_page.ts",
+     "privacy_page/privacy_page.ts",
+     "privacy_page/privacy_page_index.ts",
+@@ -398,6 +399,7 @@ build_webui("build") {
+       "people_page/import_data_browser_proxy.ts",
+       "people_page/manage_profile_browser_proxy.ts",
+       "privacy_page/changelog_proxy.ts",
++      "privacy_page/fingerprint_browser_proxy.ts",
+       "privacy_page/persona_browser_proxy.ts",
+       "privacy_page/persona_config.ts",
+       "system_page/system_page_browser_proxy.ts",
+--- a/chrome/browser/resources/settings/lazy_load.ts
++++ b/chrome/browser/resources/settings/lazy_load.ts
+@@ -22,6 +22,7 @@ import './clear_browsing_data_dialog/cle
+ import './clear_browsing_data_dialog/clear_browsing_data_time_picker.js';
+ import './glic_page/glic_login_permissions_page.js';
+ import './privacy_page/cookies_page.js';
++import './privacy_page/fingerprint_page.js';
+ import './privacy_page/persona_page.js';
+ import './privacy_page/privacy_guide/privacy_guide_dialog.js';
+ import './privacy_page/privacy_guide/privacy_guide_page.js';
+@@ -246,6 +247,7 @@ export {SettingsSyncEncryptionOptionsEle
+ export {SettingsSyncPageElement} from './people_page/sync_page.js';
+ export {NetworkPredictionOptions} from './performance_page/constants.js';
+ export {SettingsCookiesPageElement} from './privacy_page/cookies_page.js';
++export {SettingsFingerprintPageElement} from './privacy_page/fingerprint_page.js';
+ export {SettingsPersonaPageElement} from './privacy_page/persona_page.js';
+ export {SettingsDoNotTrackToggleElement} from './privacy_page/do_not_track_toggle.js';
+ export {SettingsPersonalizationOptionsElement} from './privacy_page/personalization_options.js';
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/fingerprint_browser_proxy.ts
+@@ -0,0 +1,52 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++import {sendWithPromise} from 'chrome://resources/js/cr.js';
++
++export interface FingerprintSettings {
++  ok: boolean;
++  seed: string;
++  mode: 'fixed'|'random';
++  clearOnExit: boolean;
++  rotateDaily: boolean;
++  lastChanged: string;
++  generation: string;
++  error?: string;
++}
++
++export interface FingerprintBrowserProxy {
++  getFingerprintSettings(): Promise<FingerprintSettings>;
++  setFixedFingerprintSeed(seed: string): Promise<FingerprintSettings>;
++  generateRandomFingerprintSeed(): Promise<FingerprintSettings>;
++  setFingerprintAutomation(
++      clearOnExit: boolean, rotateDaily: boolean): Promise<FingerprintSettings>;
++}
++
++let instance: FingerprintBrowserProxy|null = null;
++
++export class FingerprintBrowserProxyImpl implements FingerprintBrowserProxy {
++  getFingerprintSettings() {
++    return sendWithPromise<FingerprintSettings>('getFingerprintSettings');
++  }
++
++  setFixedFingerprintSeed(seed: string) {
++    return sendWithPromise<FingerprintSettings>('setFixedFingerprintSeed', seed);
++  }
++
++  generateRandomFingerprintSeed() {
++    return sendWithPromise<FingerprintSettings>('generateRandomFingerprintSeed');
++  }
++
++  setFingerprintAutomation(clearOnExit: boolean, rotateDaily: boolean) {
++    return sendWithPromise<FingerprintSettings>(
++        'setFingerprintAutomation', clearOnExit, rotateDaily);
++  }
++
++  static getInstance(): FingerprintBrowserProxy {
++    return instance || (instance = new FingerprintBrowserProxyImpl());
++  }
++
++  static setInstance(proxy: FingerprintBrowserProxy) {
++    instance = proxy;
++  }
++}
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/fingerprint_page.html
+@@ -0,0 +1,133 @@
++<!-- Copyright 2026 The Helium Authors -->
++<!-- You can use, redistribute, and/or modify this source code under -->
++<!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
++<style include="cr-shared-style settings-shared">
++  .section {
++    border-top: var(--cr-separator-line);
++    margin-top: 20px;
++    padding-top: 16px;
++  }
++
++  .section:first-of-type {
++    border-top: none;
++    margin-top: 0;
++    padding-top: 0;
++  }
++
++  .section-header {
++    margin-bottom: 12px;
++  }
++
++  .section-header h3 {
++    margin: 0;
++  }
++
++  .secondary {
++    color: var(--cr-secondary-text-color);
++  }
++
++  .error {
++    color: var(--cr-error-text-color);
++    margin-bottom: 12px;
++  }
++
++  .seed-input {
++    font-family: monospace;
++    width: 100%;
++  }
++
++  .seed-actions {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++    margin-top: 12px;
++  }
++
++  .metadata {
++    display: grid;
++    gap: 8px;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    margin-top: 12px;
++  }
++
++  .toggle-row {
++    align-items: center;
++    display: flex;
++    justify-content: space-between;
++    min-height: 48px;
++  }
++
++  @media (max-width: 600px) {
++    .metadata {
++      grid-template-columns: 1fr;
++    }
++  }
++</style>
++
++<settings-subpage page-title="$i18n{fingerprintTitle}"
++    route-path$="[[routePath]]">
++  <template is="dom-if" if="[[isUnavailable_(settings_.error)]]">
++    <div class="error" role="alert">$i18n{fingerprintUnavailable}</div>
++  </template>
++  <div class="section">
++    <div class="section-header">
++      <h3>$i18n{fingerprintCurrentSeedTitle}</h3>
++      <div class="secondary">$i18n{fingerprintCurrentSeedDescription}</div>
++    </div>
++    <cr-input class="seed-input" label="$i18n{fingerprintSeedLabel}"
++        value="[[settings_.seed]]" readonly>
++    </cr-input>
++    <div class="metadata">
++      <div>
++        <div class="secondary">$i18n{fingerprintGenerationLabel}</div>
++        <div>[[settings_.generation]]</div>
++      </div>
++      <div>
++        <div class="secondary">$i18n{fingerprintLastChangedLabel}</div>
++        <div>[[settings_.lastChanged]]</div>
++      </div>
++    </div>
++  </div>
++
++  <div class="section">
++    <div class="section-header">
++      <h3>$i18n{fingerprintModeTitle}</h3>
++      <div class="secondary">$i18n{fingerprintModeDescription}</div>
++    </div>
++    <cr-input class="seed-input" label="$i18n{fingerprintFixedSeedLabel}"
++        value="{{fixedSeed_}}" invalid="[[hasError_(settings_.error)]]"
++        error-message="$i18n{fingerprintFixedSeedInvalid}">
++    </cr-input>
++    <div class="seed-actions">
++      <cr-button on-click="onApplyFixedSeedClick_">
++        $i18n{fingerprintUseFixedSeed}
++      </cr-button>
++      <cr-button on-click="onGenerateRandomSeedClick_">
++        $i18n{fingerprintGenerateRandomSeed}
++      </cr-button>
++    </div>
++  </div>
++
++  <div class="section">
++    <div class="section-header">
++      <h3>$i18n{fingerprintAutomationTitle}</h3>
++      <div class="secondary">$i18n{fingerprintAutomationDescription}</div>
++    </div>
++    <div class="toggle-row">
++      <div>$i18n{fingerprintClearOnExit}</div>
++      <cr-toggle aria-label="$i18n{fingerprintClearOnExit}"
++          checked="[[settings_.clearOnExit]]"
++          disabled="[[isFixedMode_(settings_.mode)]]"
++          on-change="onClearOnExitChange_">
++      </cr-toggle>
++    </div>
++    <div class="toggle-row">
++      <div>$i18n{fingerprintRotateDaily}</div>
++      <cr-toggle aria-label="$i18n{fingerprintRotateDaily}"
++          checked="[[settings_.rotateDaily]]"
++          disabled="[[isFixedMode_(settings_.mode)]]"
++          on-change="onRotateDailyChange_">
++      </cr-toggle>
++    </div>
++  </div>
++</settings-subpage>
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/fingerprint_page.ts
+@@ -0,0 +1,109 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++import '../settings_page/settings_subpage.js';
++import 'chrome://resources/cr_elements/cr_button/cr_button.js';
++import 'chrome://resources/cr_elements/cr_input/cr_input.js';
++import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
++
++import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
++import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
++
++import type {
++  FingerprintBrowserProxy,
++  FingerprintSettings,
++} from './fingerprint_browser_proxy.js';
++import {FingerprintBrowserProxyImpl} from './fingerprint_browser_proxy.js';
++import {getTemplate} from './fingerprint_page.html.js';
++
++const EMPTY_SETTINGS: FingerprintSettings = {
++  ok: false,
++  seed: '',
++  mode: 'random',
++  clearOnExit: false,
++  rotateDaily: false,
++  lastChanged: '',
++  generation: '0',
++};
++
++export class SettingsFingerprintPageElement extends I18nMixin(PolymerElement) {
++  static get is() {
++    return 'settings-fingerprint-page';
++  }
++
++  static get template() {
++    return getTemplate();
++  }
++
++  static get properties() {
++    return {
++      routePath: String,
++      settings_: {type: Object, value: () => ({...EMPTY_SETTINGS})},
++      fixedSeed_: {type: String, value: ''},
++    };
++  }
++
++  declare routePath: string;
++  private declare settings_: FingerprintSettings;
++  private declare fixedSeed_: string;
++  private proxy_: FingerprintBrowserProxy =
++      FingerprintBrowserProxyImpl.getInstance();
++
++  override connectedCallback() {
++    super.connectedCallback();
++    void this.loadSettings_();
++  }
++
++  private async loadSettings_() {
++    this.applySettings_(await this.proxy_.getFingerprintSettings());
++  }
++
++  private async onApplyFixedSeedClick_() {
++    this.applySettings_(
++        await this.proxy_.setFixedFingerprintSeed(this.fixedSeed_.trim()));
++  }
++
++  private async onGenerateRandomSeedClick_() {
++    this.applySettings_(await this.proxy_.generateRandomFingerprintSeed());
++  }
++
++  private async onClearOnExitChange_(event: Event) {
++    const clearOnExit = (event.target as HTMLInputElement).checked;
++    this.applySettings_(await this.proxy_.setFingerprintAutomation(
++        clearOnExit, this.settings_.rotateDaily));
++  }
++
++  private async onRotateDailyChange_(event: Event) {
++    const rotateDaily = (event.target as HTMLInputElement).checked;
++    this.applySettings_(await this.proxy_.setFingerprintAutomation(
++        this.settings_.clearOnExit, rotateDaily));
++  }
++
++  private applySettings_(settings: FingerprintSettings) {
++    this.settings_ = settings;
++    if (settings.mode === 'fixed') {
++      this.fixedSeed_ = settings.seed;
++    }
++  }
++
++  private isFixedMode_(mode: string) {
++    return mode === 'fixed';
++  }
++
++  private hasError_(error?: string) {
++    return error === 'invalid';
++  }
++
++  private isUnavailable_(error?: string) {
++    return error === 'unavailable';
++  }
++}
++
++declare global {
++  interface HTMLElementTagNameMap {
++    'settings-fingerprint-page': SettingsFingerprintPageElement;
++  }
++}
++
++customElements.define(
++    SettingsFingerprintPageElement.is, SettingsFingerprintPageElement);
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
+@@ -56,6 +56,11 @@
+         sub-label="$i18n{personaDescription}"
+         on-click="onPersonaPageClick_"
+         role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
++    <cr-link-row id="fingerprintLinkRow" start-icon="privacy:shield"
++        class="hr" label="$i18n{fingerprintTitle}"
++        sub-label="$i18n{fingerprintDescription}"
++        on-click="onFingerprintPageClick_"
++        role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
+     <cr-toast id="deleteBrowsingDataToast" duration="5000">
+       <div>[[dbdDeletionConfirmationToastLabel_]]</div>
+     </cr-toast>
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
+@@ -175,6 +175,11 @@ export class SettingsPrivacyPageElement
+     Router.getInstance().navigateTo(routes.PERSONA);
+   }
+ 
++  private onFingerprintPageClick_() {
++    this.interactedWithPage_();
++    Router.getInstance().navigateTo(routes.FINGERPRINT);
++  }
++
+   private onSecurityPageClick_() {
+     this.interactedWithPage_();
+     this.metricsBrowserProxy_.recordAction(
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
+@@ -85,6 +85,14 @@
+   <!-- Keep entries below sorted based on the route name. -->
+ 
+   <template is="dom-if" if="[[renderView_(
++      routes_.FINGERPRINT, currentRoute, inSearchMode)]]">
++    <settings-fingerprint-page slot="view" id="fingerprint"
++        data-parent-view-id="privacy" prefs="{{prefs}}"
++        route-path$="[[routes_.FINGERPRINT.path]]">
++    </settings-fingerprint-page>
++  </template>
++
++  <template is="dom-if" if="[[renderView_(
+       routes_.PERSONA, currentRoute, inSearchMode)]]">
+     <settings-persona-page slot="view" id="persona"
+         data-parent-view-id="privacy" prefs="{{prefs}}"
+--- a/chrome/browser/resources/settings/route.ts
++++ b/chrome/browser/resources/settings/route.ts
+@@ -29,6 +29,7 @@ function addPrivacyChildRoutes(r: Partia
+   if (loadTimeData.getBoolean('showPrivacyGuide')) {
+     r.PRIVACY_GUIDE = r.PRIVACY.createChild('guide');
+   }
++  r.FINGERPRINT = r.PRIVACY.createChild('fingerprint');
+   r.PERSONA = r.PRIVACY.createChild('persona');
+   r.SITE_SETTINGS = r.PRIVACY.createChild('/content');
+   r.SECURITY = r.PRIVACY.createChild('/security');
+--- a/chrome/browser/resources/settings/router.ts
++++ b/chrome/browser/resources/settings/router.ts
+@@ -30,6 +30,7 @@ export interface SettingsRoutes {
+   DEFAULT_BROWSER: Route;
+   DOWNLOADS: Route;
+   EDIT_DICTIONARY: Route;
++  FINGERPRINT: Route;
+   FONTS: Route;
+   GEMINI: Route;
+   GEMINI_LOGIN: Route;
+--- a/chrome/browser/ui/webui/settings/persona_handler.cc
++++ b/chrome/browser/ui/webui/settings/persona_handler.cc
+@@ -72,6 +72,22 @@ void PersonaHandler::RegisterMessages()
+       base::BindRepeating(&PersonaHandler::HandleRefreshFingerprints,
+                           base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
++      "getFingerprintSettings",
++      base::BindRepeating(&PersonaHandler::HandleGetFingerprintSettings,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setFixedFingerprintSeed",
++      base::BindRepeating(&PersonaHandler::HandleSetFixedFingerprintSeed,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "generateRandomFingerprintSeed",
++      base::BindRepeating(&PersonaHandler::HandleGenerateRandomFingerprintSeed,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setFingerprintAutomation",
++      base::BindRepeating(&PersonaHandler::HandleSetFingerprintAutomation,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
+       "rotatePersonaIdentity",
+       base::BindRepeating(&PersonaHandler::HandleRotatePersonaIdentity,
+                           base::Unretained(this)));
+@@ -212,6 +228,51 @@ void PersonaHandler::HandleRefreshFinger
+   ResolveJavascriptCallback(callback_id, service->GetPersonaState());
+ }
+ 
++void PersonaHandler::HandleGetFingerprintSettings(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(1U, args.size());
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(args[0], service->GetFingerprintSettings());
++}
++
++void PersonaHandler::HandleSetFixedFingerprintSeed(
++    const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(2U, args.size());
++  CHECK(args[1].is_string());
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(args[0],
++                            service->SetFixedFingerprintSeed(args[1].GetString()));
++}
++
++void PersonaHandler::HandleGenerateRandomFingerprintSeed(
++    const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(1U, args.size());
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(args[0], service->GenerateRandomFingerprintSeed());
++}
++
++void PersonaHandler::HandleSetFingerprintAutomation(
++    const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(3U, args.size());
++  CHECK(args[1].is_bool());
++  CHECK(args[2].is_bool());
++
++  helium_persona::PersonaService* service = GetPersonaService(profile_);
++  CHECK(service);
++  ResolveJavascriptCallback(
++      args[0], service->SetFingerprintAutomation(args[1].GetBool(),
++                                                  args[2].GetBool()));
++}
++
+ void PersonaHandler::HandleRotatePersonaIdentity(
+     const base::ListValue& args) {
+   AllowJavascript();
+--- a/chrome/browser/ui/webui/settings/persona_handler.h
++++ b/chrome/browser/ui/webui/settings/persona_handler.h
+@@ -33,6 +33,10 @@ class PersonaHandler : public SettingsPa
+   void HandleGetLaunchSelectionMode(const base::ListValue& args);
+   void HandleSetLaunchSelectionMode(const base::ListValue& args);
+   void HandleRefreshFingerprints(const base::ListValue& args);
++  void HandleGetFingerprintSettings(const base::ListValue& args);
++  void HandleSetFixedFingerprintSeed(const base::ListValue& args);
++  void HandleGenerateRandomFingerprintSeed(const base::ListValue& args);
++  void HandleSetFingerprintAutomation(const base::ListValue& args);
+   void HandleRotatePersonaIdentity(const base::ListValue& args);
+   void OnRotatePersonaIdentityFinished(std::string callback_id,
+                                        base::DictValue response);
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -2253,6 +2253,36 @@ void AddPrivacyStrings(content::WebUIDat
+         IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL},
+       {"heliumOriginOverrideInvalidOrigin",
+         IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN},
++      {"fingerprintTitle", IDS_SETTINGS_FINGERPRINT_TITLE},
++      {"fingerprintDescription", IDS_SETTINGS_FINGERPRINT_DESCRIPTION},
++      {"fingerprintCurrentSeedTitle",
++       IDS_SETTINGS_FINGERPRINT_CURRENT_SEED_TITLE},
++      {"fingerprintCurrentSeedDescription",
++       IDS_SETTINGS_FINGERPRINT_CURRENT_SEED_DESCRIPTION},
++      {"fingerprintSeedLabel", IDS_SETTINGS_FINGERPRINT_SEED_LABEL},
++      {"fingerprintGenerationLabel",
++       IDS_SETTINGS_FINGERPRINT_GENERATION_LABEL},
++      {"fingerprintLastChangedLabel",
++       IDS_SETTINGS_FINGERPRINT_LAST_CHANGED_LABEL},
++      {"fingerprintModeTitle", IDS_SETTINGS_FINGERPRINT_MODE_TITLE},
++      {"fingerprintModeDescription",
++       IDS_SETTINGS_FINGERPRINT_MODE_DESCRIPTION},
++      {"fingerprintFixedSeedLabel",
++       IDS_SETTINGS_FINGERPRINT_FIXED_SEED_LABEL},
++      {"fingerprintFixedSeedInvalid",
++       IDS_SETTINGS_FINGERPRINT_FIXED_SEED_INVALID},
++      {"fingerprintUseFixedSeed",
++       IDS_SETTINGS_FINGERPRINT_USE_FIXED_SEED},
++      {"fingerprintGenerateRandomSeed",
++       IDS_SETTINGS_FINGERPRINT_GENERATE_RANDOM_SEED},
++      {"fingerprintAutomationTitle",
++       IDS_SETTINGS_FINGERPRINT_AUTOMATION_TITLE},
++      {"fingerprintAutomationDescription",
++       IDS_SETTINGS_FINGERPRINT_AUTOMATION_DESCRIPTION},
++      {"fingerprintClearOnExit",
++       IDS_SETTINGS_FINGERPRINT_CLEAR_ON_EXIT},
++      {"fingerprintRotateDaily", IDS_SETTINGS_FINGERPRINT_ROTATE_DAILY},
++      {"fingerprintUnavailable", IDS_SETTINGS_FINGERPRINT_UNAVAILABLE},
+       {"personaTitle", IDS_SETTINGS_PERSONA_TITLE},
+       {"personaDescription", IDS_SETTINGS_PERSONA_DESCRIPTION},
+       {"personaImport", IDS_SETTINGS_PERSONA_IMPORT},

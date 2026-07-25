@@ -1,0 +1,341 @@
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_pref_names.h
+@@ -0,0 +1,16 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_HELIUM_PERSONA_PERSONA_PREF_NAMES_H_
++#define CHROME_BROWSER_HELIUM_PERSONA_PERSONA_PREF_NAMES_H_
++
++namespace helium_persona::prefs {
++inline constexpr char kState[] = "helium.persona.state";
++inline constexpr char kFingerprintProfileSalt[] =
++    "helium.persona.fingerprint_profile_salt";
++inline constexpr char kFingerprintRotationEpoch[] =
++    "helium.persona.fingerprint_rotation_epoch";
++}  // namespace helium_persona::prefs
++
++#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_PREF_NAMES_H_
+--- a/chrome/browser/net/profile_network_context_service.cc
++++ b/chrome/browser/net/profile_network_context_service.cc
+@@ -22,6 +22,7 @@
+ #include "base/metrics/field_trial_params.h"
+ #include "base/notreached.h"
+ #include "base/strings/strcat.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_split.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/string_view_util.h"
+@@ -36,6 +37,7 @@
+ #include "chrome/browser/content_settings/cookie_settings_factory.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/domain_reliability/service_factory.h"
++#include "chrome/browser/helium_persona/persona_pref_names.h"
+ #include "chrome/browser/first_party_sets/first_party_sets_policy_service.h"
+ #include "chrome/browser/first_party_sets/first_party_sets_policy_service_factory.h"
+ #include "chrome/browser/net/system_network_context_manager.h"
+@@ -83,6 +85,7 @@
+ #include "content/public/browser/storage_partition.h"
+ #include "content/public/common/url_constants.h"
+ #include "crypto/crypto_buildflags.h"
++#include "crypto/hash.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "net/base/features.h"
+ #include "net/cert/asn1_util.h"
+@@ -518,6 +521,14 @@ ProfileNetworkContextService::ProfileNet
+   HostContentSettingsMapFactory::GetForProfile(profile_)->AddObserver(this);
+ 
+   pref_change_registrar_.Init(profile_prefs);
++  for (const char* pref_name : {helium_persona::prefs::kState,
++                                helium_persona::prefs::kFingerprintProfileSalt,
++                                helium_persona::prefs::kFingerprintRotationEpoch}) {
++    pref_change_registrar_.Add(
++        pref_name,
++        base::BindRepeating(&ProfileNetworkContextService::UpdateNetworkPersona,
++                            base::Unretained(this)));
++  }
+ 
+   // When any of the following CT preferences change, we schedule an update
+   // to aggregate the actual update using a |ct_policy_update_timer_|.
+@@ -575,11 +586,59 @@ ProfileNetworkContextService::ProfileNet
+       base::BindRepeating(&ProfileNetworkContextService::
+                               UpdateCorsNonWildcardRequestHeadersSupport,
+                           base::Unretained(this)));
+-
+ }
+ 
+ ProfileNetworkContextService::~ProfileNetworkContextService() = default;
+ 
++network::mojom::NetworkPersonaConfigPtr
++ProfileNetworkContextService::CreateNetworkPersonaConfig() const {
++  const base::DictValue& state =
++      profile_->GetPrefs()->GetDict(helium_persona::prefs::kState);
++  const std::string* active_id = state.FindString("activePersonaId");
++  const base::ListValue* personas = state.FindList("personas");
++  const base::DictValue* active_persona = nullptr;
++  if (active_id && personas) {
++    for (const base::Value& value : *personas) {
++      if (!value.is_dict()) {
++        continue;
++      }
++      const std::string* id = value.GetDict().FindString("id");
++      if (id && *id == *active_id) {
++        active_persona = &value.GetDict();
++        break;
++      }
++    }
++  }
++  if (!active_persona ||
++      !active_persona->FindBool("enabled").value_or(false)) {
++    return nullptr;
++  }
++  const std::string& salt = profile_->GetPrefs()->GetString(
++      helium_persona::prefs::kFingerprintProfileSalt);
++  if (salt.empty()) {
++    return nullptr;
++  }
++  const base::DictValue& rotation = profile_->GetPrefs()->GetDict(
++      helium_persona::prefs::kFingerprintRotationEpoch);
++  auto config = network::mojom::NetworkPersonaConfig::New();
++  if (const std::string* generation =
++          rotation.FindString("globalGeneration")) {
++    base::StringToUint64(*generation, &config->generation);
++  }
++  config->template_id = 0;
++  const auto seed = crypto::hash::Sha256(salt + "\n" + *active_id);
++  config->deterministic_seed.assign(seed.begin(), seed.end());
++  return config;
++}
++
++void ProfileNetworkContextService::UpdateNetworkPersona() {
++  profile_->ForEachLoadedStoragePartition(
++      [&](content::StoragePartition* storage_partition) {
++        storage_partition->GetNetworkContext()->UpdateNetworkPersona(
++            CreateNetworkPersonaConfig(), base::DoNothing());
++      });
++}
++
+ void ProfileNetworkContextService::ConfigureNetworkContextParams(
+     bool in_memory,
+     const base::FilePath& relative_partition_path,
+@@ -1332,6 +1391,8 @@ void ProfileNetworkContextService::Confi
+   g_browser_process->system_network_context_manager()
+       ->ConfigureDefaultNetworkContextParams(network_context_params);
+ 
++  network_context_params->network_persona_config = CreateNetworkPersonaConfig();
++
+   network_context_params->accept_language = ComputeAcceptLanguage();
+   network_context_params->enable_referrers = enable_referrers_.GetValue();
+ 
+--- a/chrome/browser/net/profile_network_context_service.h
++++ b/chrome/browser/net/profile_network_context_service.h
+@@ -230,6 +230,8 @@ class ProfileNetworkContextService
+       network::mojom::NetworkContextParams* network_context_params,
+       cert_verifier::mojom::CertVerifierCreationParams*
+           cert_verifier_creation_params);
++  network::mojom::NetworkPersonaConfigPtr CreateNetworkPersonaConfig() const;
++  void UpdateNetworkPersona();
+ 
+   // Returns the path for a given storage partition.
+   base::FilePath GetPartitionPath(
+--- a/chrome/browser/net/profile_network_context_service_browsertest.cc
++++ b/chrome/browser/net/profile_network_context_service_browsertest.cc
+@@ -33,6 +33,8 @@
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/net/profile_network_context_service_factory.h"
++#include "chrome/browser/helium_persona/persona_service.h"
++#include "chrome/browser/helium_persona/persona_service_factory.h"
+ #include "chrome/browser/net/profile_network_context_service_test_utils.h"
+ #include "chrome/browser/net/system_network_context_manager.h"
+ #include "chrome/browser/policy/chrome_browser_policy_connector.h"
+@@ -201,6 +203,33 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkCon
+   CheckDiskCacheSizeHistogramRecorded();
+ }
+ 
++IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest,
++                       InitializesNetworkPersonaConfig) {
++  auto* persona_service =
++      helium_persona::PersonaServiceFactory::GetForProfile(
++          browser()->profile());
++  ASSERT_TRUE(persona_service);
++  base::DictValue create_response =
++      persona_service->CreatePersonaProfile("Network test");
++  const std::string* persona_id = create_response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(persona_service->SetActivePersona(*persona_id)
++                  .FindBool("ok")
++                  .value_or(false));
++
++  ProfileNetworkContextService* service =
++      ProfileNetworkContextServiceFactory::GetForContext(browser()->profile());
++  network::mojom::NetworkContextParams params;
++  cert_verifier::mojom::CertVerifierCreationParams cert_params;
++  service->ConfigureNetworkContextParams(
++      /*in_memory=*/false, base::FilePath(), &params, &cert_params);
++
++  ASSERT_TRUE(params.network_persona_config);
++  EXPECT_EQ(32u, params.network_persona_config->deterministic_seed.size());
++  EXPECT_EQ(persona_service->GetActiveSnapshot().fingerprint_generation,
++            params.network_persona_config->generation);
++}
++
+ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest, CacheSize) {
+   // We don't have a great way of directly checking that the disk cache has the
+   // correct max size, but we can make sure that we set up our network context
+--- a/chrome/browser/ui/webui/settings/persona_handler.cc
++++ b/chrome/browser/ui/webui/settings/persona_handler.cc
+@@ -4,19 +4,13 @@
+ #include "chrome/browser/ui/webui/settings/persona_handler.h"
+ 
+ #include <string>
+-#include <utility>
+-#include <vector>
+ 
+ #include "base/check.h"
+ #include "base/functional/bind.h"
+-#include "base/strings/string_number_conversions.h"
+ #include "base/values.h"
+ #include "chrome/browser/helium_persona/persona_service.h"
+ #include "chrome/browser/helium_persona/persona_service_factory.h"
+-#include "chrome/browser/profiles/profile.h"
+-#include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/web_ui.h"
+-#include "services/network/public/mojom/network_context.mojom.h"
+ 
+ namespace settings {
+ 
+@@ -208,19 +202,6 @@ void PersonaHandler::HandleRefreshFinger
+   CHECK(service);
+   service->RefreshFingerprint(
+       helium_persona::FingerprintRefreshScope::kProfile, std::string());
+-  const blink::HeliumPersonaSnapshot snapshot = service->GetActiveSnapshot();
+-  std::vector<uint8_t> deterministic_seed;
+-  if (base::HexStringToBytes(snapshot.fingerprint_profile_salt,
+-                             &deterministic_seed) &&
+-      deterministic_seed.size() == 32u) {
+-    auto config = network::mojom::NetworkPersonaConfig::New();
+-    config->generation = snapshot.fingerprint_generation;
+-    config->template_id = 0;
+-    config->deterministic_seed = std::move(deterministic_seed);
+-    profile_->GetDefaultStoragePartition()
+-        ->GetNetworkContext()
+-        ->UpdateNetworkPersona(std::move(config), base::DoNothing());
+-  }
+   ResolveJavascriptCallback(callback_id, service->GetPersonaState());
+ }
+ 
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -1867,16 +1867,13 @@ void NetworkContext::CloseAllConnections
+ void NetworkContext::UpdateNetworkPersona(
+     mojom::NetworkPersonaConfigPtr config,
+     UpdateNetworkPersonaCallback callback) {
+-  if (!config) {
+-    std::move(callback).Run(false);
+-    return;
+-  }
+-
+-  std::optional<net::NetworkPersonaConfig> net_config =
+-      ToNetNetworkPersonaConfig(*config);
+-  if (!net_config) {
+-    std::move(callback).Run(false);
+-    return;
++  std::optional<net::NetworkPersonaConfig> net_config;
++  if (config) {
++    net_config = ToNetNetworkPersonaConfig(*config);
++    if (!net_config) {
++      std::move(callback).Run(false);
++      return;
++    }
+   }
+ 
+   net::HttpNetworkSession* http_session =
+@@ -3130,6 +3127,17 @@ URLRequestContextOwner NetworkContext::M
+   session_params.key_auth_cache_server_entries_by_network_anonymization_key =
+       params_->split_auth_cache_by_network_anonymization_key;
+ 
++  if (params_->network_persona_config) {
++    std::optional<net::NetworkPersonaConfig> network_persona_config =
++        ToNetNetworkPersonaConfig(*params_->network_persona_config);
++    if (network_persona_config) {
++      session_params.network_persona_config =
++          std::move(network_persona_config);
++    } else {
++      LOG(ERROR) << "Ignoring invalid initial network persona config";
++    }
++  }
++
+   builder.set_http_network_session_params(session_params);
+   builder.set_quic_context(std::move(quic_context));
+ 
+--- a/services/network/public/mojom/network_context.mojom
++++ b/services/network/public/mojom/network_context.mojom
+@@ -341,6 +341,10 @@ struct NetworkPersonaConfig {
+ 
+ // Parameters for constructing a network context.
+ struct NetworkContextParams {
++  // Initial profile-scoped network identity. Null selects Chromium's native
++  // identity.
++  NetworkPersonaConfig? network_persona_config;
++
+   // The user agent string.
+   string user_agent;
+ 
+@@ -1289,7 +1293,8 @@ interface NetworkContext {
+   // Installs a new profile-scoped network identity. A changed identity closes
+   // all existing connections and clears cached TLS sessions before returning.
+   // The deterministic seed must contain exactly 32 bytes.
+-  UpdateNetworkPersona(NetworkPersonaConfig config) => (bool accepted);
++  // A null config restores Chromium's native network identity.
++  UpdateNetworkPersona(NetworkPersonaConfig? config) => (bool accepted);
+ 
+   // Close all idle connections for the HTTP network session used by
+   // this context.
+--- a/services/network/test/test_network_context.h
++++ b/services/network/test/test_network_context.h
+@@ -153,7 +153,7 @@ class TestNetworkContext : public mojom:
+   void UpdateNetworkPersona(
+       mojom::NetworkPersonaConfigPtr config,
+       UpdateNetworkPersonaCallback callback) override {
+-    std::move(callback).Run(config &&
++    std::move(callback).Run(!config ||
+                             config->deterministic_seed.size() == 32u);
+   }
+   void CloseIdleConnections(CloseIdleConnectionsCallback callback) override {}
+--- a/services/network/network_context_unittest.cc
++++ b/services/network/network_context_unittest.cc
+@@ -810,6 +810,32 @@ TEST_F(NetworkContextTest, UpdateNetwork
+                                         invalid_seed_rejected.GetCallback());
+   EXPECT_FALSE(invalid_seed_rejected.Get());
+   EXPECT_EQ(7u, session->params().network_persona_config->generation);
++
++  base::test::TestFuture<bool> restored;
++  network_context->UpdateNetworkPersona(nullptr, restored.GetCallback());
++  EXPECT_TRUE(restored.Get());
++  EXPECT_FALSE(session->params().network_persona_config);
++}
++
++TEST_F(NetworkContextTest, InitialNetworkPersonaPrecedesSessionConstruction) {
++  mojom::NetworkContextParamsPtr params =
++      CreateNetworkContextParamsForTesting();
++  params->network_persona_config = mojom::NetworkPersonaConfig::New();
++  params->network_persona_config->generation = 11;
++  params->network_persona_config->template_id = 0;
++  params->network_persona_config->deterministic_seed.assign(32, 0x6b);
++
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(std::move(params));
++  const net::HttpNetworkSessionParams& session_params =
++      network_context->url_request_context()
++          ->http_transaction_factory()
++          ->GetSession()
++          ->params();
++  ASSERT_TRUE(session_params.network_persona_config);
++  EXPECT_EQ(11u, session_params.network_persona_config->generation);
++  EXPECT_EQ(0x6b,
++            session_params.network_persona_config->deterministic_seed[0]);
+ }
+ 
+ class NetworkContextTestWithMockTime : public NetworkContextTest {

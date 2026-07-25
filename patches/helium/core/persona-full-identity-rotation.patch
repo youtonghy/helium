@@ -1,0 +1,1189 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -1808,6 +1808,27 @@
+     <message name="IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED" desc="Status text after fingerprint tokens are refreshed">
+       Fingerprints refreshed. Reload open tabs for tokens to take effect.
+     </message>
++    <message name="IDS_SETTINGS_PERSONA_ROTATE_IDENTITY" desc="Button label to rotate the complete browser and network identity">
++      Rotate complete identity
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_TITLE" desc="Title of the complete persona identity rotation confirmation dialog">
++      Rotate complete identity?
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY" desc="Explanation shown before rotating the complete browser and network identity">
++      This switches the browser version, user agent, client hints, platform, TLS, HTTP/2, and HTTP/3 identity together. Open tabs in this profile will reload after the network stack accepts the new identity.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_CONFIRM" desc="Confirmation button for complete persona identity rotation">
++      Rotate and reload
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE" desc="Status shown when there are not enough verified complete identity templates to rotate">
++      Complete identity rotation requires at least two verified browser identity templates. Fingerprint refresh remains available and keeps the current browser version and platform.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_FAILED" desc="Error shown when complete persona identity rotation fails">
++      Complete identity rotation failed. Tabs were not reloaded.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_IDENTITY_ROTATED" desc="Status shown after the complete identity and network stack were rotated">
++      Complete identity rotated. Reloading open tabs.
++    </message>
+     <message name="IDS_SETTINGS_PERSONA_SECTION_PRESETS" desc="Section title for persona quick presets">
+       Quick presets
+     </message>
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -796,6 +796,7 @@ static_library("browser") {
+     "//chrome/browser/gpu:impl",
+     "//chrome/browser/hang_monitor",
+     "//chrome/browser/heavy_ad_intervention",
++    "//chrome/browser/helium_persona:identity_template",
+     "//chrome/browser/history",
+     "//chrome/browser/history_clusters",
+     "//chrome/browser/history_clusters:impl",
+--- /dev/null
++++ b/chrome/browser/helium_persona/BUILD.gn
+@@ -0,0 +1,11 @@
++# Copyright 2026 The Helium Authors
++# You can use, redistribute, and/or modify this source code under
++# the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++source_set("identity_template") {
++  sources = [
++    "persona_identity_template.cc",
++    "persona_identity_template.h",
++  ]
++  deps = [ "//base" ]
++}
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_identity_template.cc
+@@ -0,0 +1,101 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/helium_persona/persona_identity_template.h"
++
++#include <algorithm>
++#include <array>
++
++namespace helium_persona {
++namespace {
++
++constexpr std::array<uint32_t, 2> kChromium149MacArmNetworkVariants = {
++    149001,
++    149002,
++};
++
++constexpr std::array<PersonaIdentityTemplate, 1> kIdentityTemplates = {{
++    {
++        .id = kChromium149MacArmIdentityTemplateId,
++        .chrome_major = 149,
++        .os = "macOS",
++        .user_agent =
++            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
++            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 "
++            "Safari/537.36",
++        .navigator_platform = "MacIntel",
++        .ua_ch_platform = "macOS",
++        .ua_ch_platform_version = "14.5.0",
++        .ua_ch_full_version = "149.0.7827.114",
++        .architecture = "arm",
++        .bitness = "64",
++        .ua_ch_mobile = false,
++        .ua_ch_wow64 = false,
++        .network_variant_ids = kChromium149MacArmNetworkVariants,
++    },
++}};
++
++}  // namespace
++
++const PersonaIdentityTemplate* FindPersonaIdentityTemplate(uint32_t id) {
++  auto it = std::ranges::find(kIdentityTemplates, id,
++                              &PersonaIdentityTemplate::id);
++  return it == kIdentityTemplates.end() ? nullptr : &*it;
++}
++
++std::vector<uint32_t> GetRotatablePersonaIdentityTemplateIds() {
++  std::vector<uint32_t> ids;
++  ids.reserve(kIdentityTemplates.size());
++  for (const PersonaIdentityTemplate& identity : kIdentityTemplates) {
++    ids.push_back(identity.id);
++  }
++  return ids;
++}
++
++const PersonaIdentityTemplate* MatchPersonaIdentityTemplate(
++    std::string_view user_agent,
++    std::string_view os,
++    std::string_view ua_ch_platform,
++    std::string_view ua_ch_platform_version,
++    std::string_view ua_ch_full_version,
++    std::string_view architecture,
++    std::string_view bitness,
++    bool ua_ch_mobile,
++    bool ua_ch_wow64) {
++  for (const PersonaIdentityTemplate& identity : kIdentityTemplates) {
++    if (user_agent == identity.user_agent && os == identity.os &&
++        ua_ch_platform == identity.ua_ch_platform &&
++        ua_ch_platform_version == identity.ua_ch_platform_version &&
++        ua_ch_full_version == identity.ua_ch_full_version &&
++        architecture == identity.architecture && bitness == identity.bitness &&
++        ua_ch_mobile == identity.ua_ch_mobile &&
++        ua_ch_wow64 == identity.ua_ch_wow64) {
++      return &identity;
++    }
++  }
++  return nullptr;
++}
++
++uint32_t SelectNetworkVariant(const PersonaIdentityTemplate& identity,
++                              uint64_t generation) {
++  if (identity.network_variant_ids.empty()) {
++    return 0;
++  }
++  return identity.network_variant_ids[generation %
++                                      identity.network_variant_ids.size()];
++}
++
++uint32_t SelectNextPersonaIdentityTemplateId(base::span<const uint32_t> ids,
++                                             uint32_t current_id) {
++  if (ids.empty()) {
++    return 0;
++  }
++  auto it = std::ranges::find(ids, current_id);
++  if (it == ids.end() || ++it == ids.end()) {
++    return ids.front();
++  }
++  return *it;
++}
++
++}  // namespace helium_persona
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_identity_template.h
+@@ -0,0 +1,53 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_HELIUM_PERSONA_PERSONA_IDENTITY_TEMPLATE_H_
++#define CHROME_BROWSER_HELIUM_PERSONA_PERSONA_IDENTITY_TEMPLATE_H_
++
++#include <cstdint>
++#include <string_view>
++#include <vector>
++
++#include "base/containers/span.h"
++
++namespace helium_persona {
++
++inline constexpr uint32_t kChromium149MacArmIdentityTemplateId = 149000;
++
++struct PersonaIdentityTemplate {
++  uint32_t id;
++  int chrome_major;
++  std::string_view os;
++  std::string_view user_agent;
++  std::string_view navigator_platform;
++  std::string_view ua_ch_platform;
++  std::string_view ua_ch_platform_version;
++  std::string_view ua_ch_full_version;
++  std::string_view architecture;
++  std::string_view bitness;
++  bool ua_ch_mobile;
++  bool ua_ch_wow64;
++  base::span<const uint32_t> network_variant_ids;
++};
++
++const PersonaIdentityTemplate* FindPersonaIdentityTemplate(uint32_t id);
++std::vector<uint32_t> GetRotatablePersonaIdentityTemplateIds();
++const PersonaIdentityTemplate* MatchPersonaIdentityTemplate(
++    std::string_view user_agent,
++    std::string_view os,
++    std::string_view ua_ch_platform,
++    std::string_view ua_ch_platform_version,
++    std::string_view ua_ch_full_version,
++    std::string_view architecture,
++    std::string_view bitness,
++    bool ua_ch_mobile,
++    bool ua_ch_wow64);
++uint32_t SelectNetworkVariant(const PersonaIdentityTemplate& identity,
++                              uint64_t generation);
++uint32_t SelectNextPersonaIdentityTemplateId(base::span<const uint32_t> ids,
++                                             uint32_t current_id);
++
++}  // namespace helium_persona
++
++#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_IDENTITY_TEMPLATE_H_
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_identity_template_unittest.cc
+@@ -0,0 +1,53 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/helium_persona/persona_identity_template.h"
++
++#include <array>
++
++#include "net/base/network_persona_template.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace helium_persona {
++
++TEST(PersonaIdentityTemplateTest, CapturedVariantsShareOneIdentity) {
++  const PersonaIdentityTemplate* identity =
++      FindPersonaIdentityTemplate(kChromium149MacArmIdentityTemplateId);
++  ASSERT_TRUE(identity);
++  EXPECT_EQ(149, identity->chrome_major);
++  EXPECT_EQ("macOS", identity->ua_ch_platform);
++  EXPECT_EQ("arm", identity->architecture);
++  EXPECT_EQ("64", identity->bitness);
++  ASSERT_EQ(2u, identity->network_variant_ids.size());
++  EXPECT_EQ(net::kChromium149DefaultTemplateId,
++            identity->network_variant_ids[0]);
++  EXPECT_EQ(net::kChromium149MldsaTemplateId,
++            identity->network_variant_ids[1]);
++
++  EXPECT_EQ(std::vector<uint32_t>({kChromium149MacArmIdentityTemplateId}),
++            GetRotatablePersonaIdentityTemplateIds());
++}
++
++TEST(PersonaIdentityTemplateTest, SelectsNetworkVariantByGeneration) {
++  const PersonaIdentityTemplate* identity =
++      FindPersonaIdentityTemplate(kChromium149MacArmIdentityTemplateId);
++  ASSERT_TRUE(identity);
++  EXPECT_EQ(net::kChromium149DefaultTemplateId,
++            SelectNetworkVariant(*identity, 0));
++  EXPECT_EQ(net::kChromium149MldsaTemplateId,
++            SelectNetworkVariant(*identity, 1));
++  EXPECT_EQ(net::kChromium149DefaultTemplateId,
++            SelectNetworkVariant(*identity, 2));
++}
++
++TEST(PersonaIdentityTemplateTest, SelectNextDoesNotDependOnCatalogSize) {
++  constexpr std::array<uint32_t, 3> kIds = {10, 20, 30};
++  EXPECT_EQ(20u, SelectNextPersonaIdentityTemplateId(kIds, 10));
++  EXPECT_EQ(10u, SelectNextPersonaIdentityTemplateId(kIds, 30));
++  EXPECT_EQ(10u, SelectNextPersonaIdentityTemplateId(kIds, 999));
++  EXPECT_EQ(0u, SelectNextPersonaIdentityTemplateId(base::span<const uint32_t>(),
++                                                    10));
++}
++
++}  // namespace helium_persona
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -16,6 +16,7 @@
+ #include "base/strings/string_util.h"
+ #include "base/time/time.h"
+ #include "base/uuid.h"
++#include "chrome/browser/helium_persona/persona_identity_template.h"
+ #include "components/helium_persona/persona_snapshot.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+@@ -40,8 +41,6 @@ constexpr char kPersonaImportSchema[] =
+ constexpr char kLaunchSelectionModeAlwaysAsk[] = "always_ask";
+ constexpr char kLaunchSelectionModeUseLast[] = "use_last";
+ constexpr char kFingerprintRotationScopeSiteProfile[] = "site_profile";
+-constexpr char kFingerprintRotationScopeProfile[] = "profile";
+-constexpr char kFingerprintRotationScopeGlobal[] = "global";
+ constexpr int kDefaultFingerprintRotationIntervalDays = 14;
+ constexpr char kPersonaChromeMajorVersion[] = "149";
+ constexpr char kPersonaChromeFullVersion[] = "149.0.7827.114";
+@@ -1398,6 +1397,70 @@ void PersonaService::RefreshFingerprint(
+                   std::move(rotation_epoch));
+ }
+ 
++base::DictValue PersonaService::RotateIdentity() {
++  base::DictValue state = ReadState();
++  const std::vector<uint32_t> ids = GetRotatablePersonaIdentityTemplateIds();
++  if (!prefs_ || ids.size() < 2u) {
++    return MakeResponse(
++        false, std::move(state),
++        base::DictValue().Set("identityRotation", "unavailable"));
++  }
++
++  const blink::HeliumPersonaSnapshot snapshot = GetActiveSnapshot();
++  const uint32_t current_id = GetActiveIdentityTemplateId();
++  const PersonaIdentityTemplate* current =
++      current_id ? FindPersonaIdentityTemplate(current_id)
++                 : MatchPersonaIdentityTemplate(
++                       snapshot.user_agent, snapshot.os,
++                       snapshot.ua_ch_platform,
++                       snapshot.ua_ch_platform_version,
++                       snapshot.ua_ch_full_version,
++                       snapshot.ua_ch_architecture, snapshot.ua_ch_bitness,
++                       snapshot.ua_ch_mobile, snapshot.ua_ch_wow64);
++  if (current && snapshot.platform != current->navigator_platform) {
++    current = nullptr;
++  }
++  if (!snapshot.enabled || !current) {
++    return MakeResponse(
++        false, std::move(state),
++        base::DictValue().Set("identityRotation", "unavailable"));
++  }
++
++  const uint32_t next_id = SelectNextPersonaIdentityTemplateId(ids, current->id);
++  if (!next_id || next_id == current->id ||
++      !FindPersonaIdentityTemplate(next_id)) {
++    return MakeResponse(
++        false, std::move(state),
++        base::DictValue().Set("identityRotation", "unavailable"));
++  }
++
++  base::DictValue rotation_epoch =
++      prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  rotation_epoch.Set("global", MakeIsoTimestamp());
++  rotation_epoch.Set(
++      "globalGeneration",
++      base::NumberToString(NextGeneration(
++          ReadGeneration(rotation_epoch.Find("globalGeneration")))));
++  rotation_epoch.Set("identityTemplateId", static_cast<int>(next_id));
++  prefs_->SetDict(kPersonaFingerprintRotationEpochPref,
++                  std::move(rotation_epoch));
++  return MakeResponse(true, ReadState());
++}
++
++bool PersonaService::CanRotateIdentity() const {
++  return GetRotatablePersonaIdentityTemplateIds().size() > 1u;
++}
++
++uint32_t PersonaService::GetActiveIdentityTemplateId() const {
++  if (!prefs_) {
++    return 0;
++  }
++  const std::optional<int> id =
++      prefs_->GetDict(kPersonaFingerprintRotationEpochPref)
++          .FindInt("identityTemplateId");
++  return id && *id > 0 ? static_cast<uint32_t>(*id) : 0;
++}
++
+ blink::HeliumPersonaSnapshot PersonaService::GetActiveSnapshot() const {
+   base::DictValue state = ReadState();
+   const base::DictValue* persona =
+@@ -1712,6 +1775,25 @@ blink::HeliumPersonaSnapshot PersonaServ
+     }
+   }
+ 
++  const uint32_t identity_id = GetActiveIdentityTemplateId();
++  if (identity_id) {
++    const PersonaIdentityTemplate* identity =
++        FindPersonaIdentityTemplate(identity_id);
++    if (!identity) {
++      return blink::HeliumPersonaSnapshot();
++    }
++    snapshot.os = identity->os;
++    snapshot.user_agent = identity->user_agent;
++    snapshot.platform = identity->navigator_platform;
++    snapshot.ua_ch_platform = identity->ua_ch_platform;
++    snapshot.ua_ch_platform_version = identity->ua_ch_platform_version;
++    snapshot.ua_ch_full_version = identity->ua_ch_full_version;
++    snapshot.ua_ch_architecture = identity->architecture;
++    snapshot.ua_ch_bitness = identity->bitness;
++    snapshot.ua_ch_mobile = identity->ua_ch_mobile;
++    snapshot.ua_ch_wow64 = identity->ua_ch_wow64;
++  }
++
+   return snapshot;
+ }
+ 
+@@ -1780,6 +1862,9 @@ base::DictValue PersonaService::ReadStat
+             FindPersonaInList(personas, last_used_id) ? last_used_id
+                                                      : kDefaultPersonaId);
+   state.Set("launchSelectionMode", GetLaunchSelectionMode());
++  state.Set("activeIdentityTemplateId",
++            static_cast<int>(GetActiveIdentityTemplateId()));
++  state.Set("identityRotationAvailable", CanRotateIdentity());
+   return state;
+ }
+ 
+--- a/chrome/browser/helium_persona/persona_service.h
++++ b/chrome/browser/helium_persona/persona_service.h
+@@ -56,6 +56,9 @@ class PersonaService : public KeyedServi
+   void SetLaunchSelectionMode(const std::string& mode);
+   void RefreshFingerprint(FingerprintRefreshScope scope,
+                           const std::string& site_origin_or_empty);
++  base::DictValue RotateIdentity();
++  bool CanRotateIdentity() const;
++  uint32_t GetActiveIdentityTemplateId() const;
+   blink::HeliumPersonaSnapshot GetActiveSnapshot() const;
+   PersonaResolution ResolveActivePersona() const;
+ 
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -10,6 +10,7 @@
+ #include <string>
+ 
+ #include "base/values.h"
++#include "chrome/browser/helium_persona/persona_identity_template.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+@@ -21,6 +22,8 @@ constexpr char kPersonaStatePref[] = "he
+ constexpr char kPersonaLastUsedIdPref[] = "helium.persona.last_used_id";
+ constexpr char kPersonaFingerprintProfileSaltPref[] =
+     "helium.persona.fingerprint_profile_salt";
++constexpr char kPersonaFingerprintRotationEpochPref[] =
++    "helium.persona.fingerprint_rotation_epoch";
+ constexpr char kDefaultPersonaId[] = "default";
+ 
+ const base::DictValue* FindPersona(const base::ListValue* personas,
+@@ -575,6 +578,77 @@ TEST_F(PersonaServiceTest,
+             prefs_.GetString(kPersonaFingerprintProfileSaltPref));
+ }
+ 
++TEST_F(PersonaServiceTest, ProfileRefreshPreservesIdentityTemplate) {
++  base::DictValue rotation;
++  rotation.Set("identityTemplateId",
++               static_cast<int>(kChromium149MacArmIdentityTemplateId));
++  prefs_.SetDict(kPersonaFingerprintRotationEpochPref, rotation.Clone());
++
++  service_->RefreshFingerprint(FingerprintRefreshScope::kProfile,
++                               std::string());
++
++  EXPECT_EQ(static_cast<int>(kChromium149MacArmIdentityTemplateId),
++            prefs_.GetDict(kPersonaFingerprintRotationEpochPref)
++                .FindInt("identityTemplateId")
++                .value_or(0));
++}
++
++TEST_F(PersonaServiceTest, IdentityRotationUnavailableDoesNotMutatePrefs) {
++  base::DictValue rotation;
++  rotation.Set("global", "2026-01-02T03:04:05.000Z");
++  rotation.Set("globalGeneration", "7");
++  prefs_.SetDict(kPersonaFingerprintRotationEpochPref, rotation.Clone());
++
++  EXPECT_FALSE(service_->CanRotateIdentity());
++  base::DictValue response = service_->RotateIdentity();
++
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  EXPECT_EQ("unavailable", *response.FindDict("fieldErrors")
++                                ->FindString("identityRotation"));
++  EXPECT_EQ(rotation,
++            prefs_.GetDict(kPersonaFingerprintRotationEpochPref));
++  EXPECT_EQ(0u, service_->GetActiveIdentityTemplateId());
++}
++
++TEST_F(PersonaServiceTest, IdentityTemplateAtomicallyOverlaysSnapshot) {
++  base::DictValue response = service_->ClonePresetIntoProfile("us-west-macos");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(
++      service_->SetActivePersona(*persona_id).FindBool("ok").value_or(false));
++  prefs_.SetDict(kPersonaFingerprintRotationEpochPref,
++                 base::DictValue().Set(
++                     "identityTemplateId",
++                     static_cast<int>(kChromium149MacArmIdentityTemplateId)));
++
++  const PersonaIdentityTemplate* identity =
++      FindPersonaIdentityTemplate(kChromium149MacArmIdentityTemplateId);
++  ASSERT_TRUE(identity);
++  const blink::HeliumPersonaSnapshot snapshot = service_->GetActiveSnapshot();
++  EXPECT_EQ(identity->os, snapshot.os);
++  EXPECT_EQ(identity->user_agent, snapshot.user_agent);
++  EXPECT_EQ(identity->navigator_platform, snapshot.platform);
++  EXPECT_EQ(identity->ua_ch_platform, snapshot.ua_ch_platform);
++  EXPECT_EQ(identity->ua_ch_platform_version,
++            snapshot.ua_ch_platform_version);
++  EXPECT_EQ(identity->ua_ch_full_version, snapshot.ua_ch_full_version);
++  EXPECT_EQ(identity->architecture, snapshot.ua_ch_architecture);
++  EXPECT_EQ(identity->bitness, snapshot.ua_ch_bitness);
++}
++
++TEST_F(PersonaServiceTest, UnknownIdentityTemplateFailsClosed) {
++  base::DictValue response = service_->ClonePresetIntoProfile("us-west-macos");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(
++      service_->SetActivePersona(*persona_id).FindBool("ok").value_or(false));
++  prefs_.SetDict(kPersonaFingerprintRotationEpochPref,
++                 base::DictValue().Set("identityTemplateId", 999999));
++
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaUnavailable,
++            service_->ResolveActivePersona().status);
++}
++
+ TEST_F(PersonaServiceTest, SiteRefreshIncrementsOnlyMatchingSiteGeneration) {
+   base::DictValue create_response = service_->CreatePersonaProfile("Work");
+   const std::string* persona_id = create_response.FindString("personaId");
+--- a/chrome/browser/net/BUILD.gn
++++ b/chrome/browser/net/BUILD.gn
+@@ -162,6 +162,7 @@ source_set("impl") {
+     "//chrome/browser/content_settings:content_settings_factory",
+     "//chrome/browser/domain_reliability",
+     "//chrome/browser/first_party_sets",
++    "//chrome/browser/helium_persona:identity_template",
+     "//chrome/browser/policy:path_parser",
+     "//chrome/browser/prefs:util",
+     "//chrome/browser/preloading/prefetch/no_state_prefetch",
+--- a/chrome/browser/net/profile_network_context_service.cc
++++ b/chrome/browser/net/profile_network_context_service.cc
+@@ -10,6 +10,7 @@
+ #include <vector>
+ 
+ #include "base/base64.h"
++#include "base/barrier_callback.h"
+ #include "base/check_op.h"
+ #include "base/command_line.h"
+ #include "base/containers/span.h"
+@@ -39,6 +40,7 @@
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/domain_reliability/service_factory.h"
+ #include "chrome/browser/helium_persona/persona_pref_names.h"
++#include "chrome/browser/helium_persona/persona_identity_template.h"
+ #include "chrome/browser/first_party_sets/first_party_sets_policy_service.h"
+ #include "chrome/browser/first_party_sets/first_party_sets_policy_service_factory.h"
+ #include "chrome/browser/net/system_network_context_manager.h"
+@@ -601,12 +603,10 @@ ProfileNetworkContextService::CreateNetw
+   const base::DictValue* active_persona = nullptr;
+   if (active_id && personas) {
+     for (const base::Value& value : *personas) {
+-      if (!value.is_dict()) {
+-        continue;
+-      }
+-      const std::string* id = value.GetDict().FindString("id");
++      const base::DictValue* persona = value.GetIfDict();
++      const std::string* id = persona ? persona->FindString("id") : nullptr;
+       if (id && *id == *active_id) {
+-        active_persona = &value.GetDict();
++        active_persona = persona;
+         break;
+       }
+     }
+@@ -615,36 +615,87 @@ ProfileNetworkContextService::CreateNetw
+       !active_persona->FindBool("enabled").value_or(false)) {
+     return nullptr;
+   }
++
++  const base::DictValue& rotation = profile_->GetPrefs()->GetDict(
++      helium_persona::prefs::kFingerprintRotationEpoch);
++  const int stored_identity_id =
++      rotation.FindInt("identityTemplateId").value_or(0);
++  const helium_persona::PersonaIdentityTemplate* identity =
++      stored_identity_id > 0
++          ? helium_persona::FindPersonaIdentityTemplate(
++                static_cast<uint32_t>(stored_identity_id))
++          : nullptr;
++  if (!identity) {
++    const base::DictValue* ua_ch = active_persona->FindDict("uaCh");
++    if (stored_identity_id > 0 || !ua_ch) {
++      return nullptr;
++    }
++    const auto find_string = [](const base::DictValue& dict,
++                                std::string_view key) -> std::string_view {
++      const std::string* value = dict.FindString(key);
++      return value ? *value : std::string_view();
++    };
++    identity = helium_persona::MatchPersonaIdentityTemplate(
++        find_string(*active_persona, "userAgent"),
++        find_string(*active_persona, "platform"),
++        find_string(*ua_ch, "platform"), find_string(*ua_ch, "platformVersion"),
++        find_string(*ua_ch, "fullVersion"),
++        find_string(*ua_ch, "architecture"), find_string(*ua_ch, "bitness"),
++        ua_ch->FindBool("mobile").value_or(false),
++        ua_ch->FindBool("wow64").value_or(false));
++  }
+   const std::string& salt = profile_->GetPrefs()->GetString(
+       helium_persona::prefs::kFingerprintProfileSalt);
+-  if (salt.empty()) {
++  if (!identity || salt.empty() || !active_id) {
+     return nullptr;
+   }
+-  const base::DictValue& rotation = profile_->GetPrefs()->GetDict(
+-      helium_persona::prefs::kFingerprintRotationEpoch);
++
+   auto config = network::mojom::NetworkPersonaConfig::New();
+   if (const std::string* generation =
+           rotation.FindString("globalGeneration")) {
+     base::StringToUint64(*generation, &config->generation);
+   }
+-  const std::vector<uint32_t> template_ids =
+-      net::GetCompatibleNetworkPersonaTemplateIds(149);
+-  if (template_ids.empty()) {
++  config->template_id =
++      helium_persona::SelectNetworkVariant(*identity, config->generation);
++  if (!config->template_id) {
+     return nullptr;
+   }
+-  config->template_id =
+-      template_ids[config->generation % template_ids.size()];
+-  const auto seed = crypto::hash::Sha256(salt + "\n" + *active_id);
++  const auto seed = crypto::hash::Sha256(
++      salt + "\n" + *active_id + "\n" +
++      base::NumberToString(identity->id));
+   config->deterministic_seed.assign(seed.begin(), seed.end());
+   return config;
+ }
+ 
+ void ProfileNetworkContextService::UpdateNetworkPersona() {
++  ApplyNetworkPersonaConfig(base::DoNothing());
++}
++
++void ProfileNetworkContextService::ApplyNetworkPersonaConfig(
++    NetworkPersonaUpdateCallback callback) {
++  std::vector<content::StoragePartition*> partitions;
+   profile_->ForEachLoadedStoragePartition(
+       [&](content::StoragePartition* storage_partition) {
+-        storage_partition->GetNetworkContext()->UpdateNetworkPersona(
+-            CreateNetworkPersonaConfig(), base::DoNothing());
++        partitions.push_back(storage_partition);
+       });
++  if (partitions.empty()) {
++    std::move(callback).Run(true);
++    return;
++  }
++
++  auto barrier = base::BarrierCallback<bool>(
++      partitions.size(),
++      base::BindOnce(
++          [](NetworkPersonaUpdateCallback callback,
++             const std::vector<bool>& results) {
++            std::move(callback).Run(
++                std::ranges::all_of(results, std::identity()));
++          },
++          std::move(callback)));
++  for (content::StoragePartition* partition : partitions) {
++    partition->GetNetworkContext()->UpdateNetworkPersona(
++        CreateNetworkPersonaConfig(), barrier);
++  }
+ }
+ 
+ void ProfileNetworkContextService::ConfigureNetworkContextParams(
+@@ -775,7 +826,7 @@ void ProfileNetworkContextService::Updat
+       false;
+ 
+   profile_->ForEachLoadedStoragePartition(
+-      [allowed](content::StoragePartition* storage_partition) {
++      [](content::StoragePartition* storage_partition) {
+         storage_partition->GetNetworkContext()->SetDohFallbackUpgradeAllowed(
+             allowed);
+       });
+--- a/chrome/browser/net/profile_network_context_service.h
++++ b/chrome/browser/net/profile_network_context_service.h
+@@ -133,6 +133,9 @@ class ProfileNetworkContextService
+ 
+   static void SetDiscardDomainReliabilityUploadsForTesting(bool value);
+ 
++  using NetworkPersonaUpdateCallback = base::OnceCallback<void(bool)>;
++  void ApplyNetworkPersonaConfig(NetworkPersonaUpdateCallback callback);
++
+   void set_client_cert_store_factory_for_testing(
+       base::RepeatingCallback<std::unique_ptr<net::ClientCertStore>()>
+           factory) {
+--- a/chrome/browser/net/profile_network_context_service_browsertest.cc
++++ b/chrome/browser/net/profile_network_context_service_browsertest.cc
+@@ -26,6 +26,7 @@
+ #include "base/test/bind.h"
+ #include "base/test/metrics/histogram_tester.h"
+ #include "base/test/scoped_feature_list.h"
++#include "base/test/test_future.h"
+ #include "base/threading/platform_thread.h"  // For |Sleep()|.
+ #include "base/threading/thread_restrictions.h"
+ #include "build/build_config.h"
+@@ -35,6 +36,7 @@
+ #include "chrome/browser/net/profile_network_context_service_factory.h"
+ #include "chrome/browser/helium_persona/persona_service.h"
+ #include "chrome/browser/helium_persona/persona_service_factory.h"
++#include "chrome/browser/helium_persona/persona_identity_template.h"
+ #include "chrome/browser/net/profile_network_context_service_test_utils.h"
+ #include "chrome/browser/net/system_network_context_manager.h"
+ #include "chrome/browser/policy/chrome_browser_policy_connector.h"
+@@ -78,6 +80,7 @@
+ #include "content/public/test/browser_test_utils.h"
+ #include "content/public/test/simple_url_loader_test_helper.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
++#include "net/base/network_persona_template.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "mojo/public/cpp/system/data_pipe_utils.h"
+ #include "net/base/features.h"
+@@ -228,6 +231,45 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkCon
+   EXPECT_EQ(32u, params.network_persona_config->deterministic_seed.size());
+   EXPECT_EQ(persona_service->GetActiveSnapshot().fingerprint_generation,
+             params.network_persona_config->generation);
++  EXPECT_EQ(net::kChromium149DefaultTemplateId,
++            params.network_persona_config->template_id);
++
++  persona_service->RefreshFingerprint(
++      helium_persona::FingerprintRefreshScope::kProfile, std::string());
++  network::mojom::NetworkContextParams refreshed_params;
++  service->ConfigureNetworkContextParams(
++      /*in_memory=*/false, base::FilePath(), &refreshed_params, &cert_params);
++  ASSERT_TRUE(refreshed_params.network_persona_config);
++  EXPECT_EQ(net::kChromium149MldsaTemplateId,
++            refreshed_params.network_persona_config->template_id);
++
++  base::test::TestFuture<bool> update_future;
++  service->ApplyNetworkPersonaConfig(update_future.GetCallback());
++  EXPECT_TRUE(update_future.Get());
++}
++
++IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest,
++                       DoesNotApplyMacNetworkTemplateToWindowsPersona) {
++  auto* persona_service =
++      helium_persona::PersonaServiceFactory::GetForProfile(
++          browser()->profile());
++  ASSERT_TRUE(persona_service);
++  base::DictValue response =
++      persona_service->ClonePresetIntoProfile("hk-windows");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(persona_service->SetActivePersona(*persona_id)
++                  .FindBool("ok")
++                  .value_or(false));
++
++  ProfileNetworkContextService* service =
++      ProfileNetworkContextServiceFactory::GetForContext(browser()->profile());
++  network::mojom::NetworkContextParams params;
++  cert_verifier::mojom::CertVerifierCreationParams cert_params;
++  service->ConfigureNetworkContextParams(
++      /*in_memory=*/false, base::FilePath(), &params, &cert_params);
++
++  EXPECT_FALSE(params.network_persona_config);
+ }
+ 
+ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest, CacheSize) {
+--- a/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+@@ -37,6 +37,7 @@ export interface PersonaBrowserProxy {
+   getLaunchSelectionMode(): Promise<string>;
+   setLaunchSelectionMode(mode: string): Promise<string>;
+   refreshFingerprints(): Promise<PersonaState>;
++  rotatePersonaIdentity(): Promise<PersonaPageResponse>;
+ }
+ 
+ let instance: PersonaBrowserProxy|null = null;
+@@ -78,6 +79,9 @@ export class PersonaBrowserProxyImpl imp
+   refreshFingerprints() {
+     return sendWithPromise<PersonaState>('refreshFingerprints');
+   }
++  rotatePersonaIdentity() {
++    return sendWithPromise<PersonaPageResponse>('rotatePersonaIdentity');
++  }
+   static getInstance(): PersonaBrowserProxy {
+     return instance || (instance = new PersonaBrowserProxyImpl());
+   }
+--- a/chrome/browser/resources/settings/privacy_page/persona_config.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
+@@ -120,6 +120,8 @@ export interface PersonaState {
+   presets: PersonaRecord[];
+   lastUsedPersonaId?: string;
+   launchSelectionMode?: string;
++  activeIdentityTemplateId?: number;
++  identityRotationAvailable?: boolean;
+ }
+ 
+ export interface PersonaImportBundle {
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -308,7 +308,32 @@
+           disabled="[[pending_]]">
+         $i18n{personaRefreshFingerprints}
+       </cr-button>
++      <cr-button on-click="onRotateIdentityClick_"
++          disabled="[[identityRotationDisabled_]]">
++        $i18n{personaRotateIdentity}
++      </cr-button>
++    </div>
++    <div class="profile-card-meta" hidden="[[identityRotationAvailable_]]">
++      $i18n{personaIdentityRotationUnavailable}
+     </div>
++    <template is="dom-if" if="[[showIdentityRotationDialog_]]"
++        on-dom-change="onIdentityRotationDialogDomChange_" restamp>
++      <cr-dialog id="identityRotationDialog" close-text="$i18n{close}"
++          on-cancel="onIdentityRotationCancel_">
++        <div slot="title">$i18n{personaRotateIdentityDialogTitle}</div>
++        <div slot="body">$i18n{personaRotateIdentityDialogBody}</div>
++        <div slot="button-container">
++          <cr-button class="cancel-button"
++              on-click="onIdentityRotationCancel_">
++            $i18n{cancel}
++          </cr-button>
++          <cr-button class="action-button"
++              on-click="onIdentityRotationConfirm_" disabled="[[pending_]]">
++            $i18n{personaRotateIdentityConfirm}
++          </cr-button>
++        </div>
++      </cr-dialog>
++    </template>
+   </div>
+ 
+   <div class="section">
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -4,6 +4,7 @@
+ import '../controls/settings_toggle_button.js';
+ import '../settings_page/settings_subpage.js';
+ import 'chrome://resources/cr_elements/cr_button/cr_button.js';
++import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+ import 'chrome://resources/cr_elements/cr_input/cr_input.js';
+ import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
+ import 'chrome://resources/cr_elements/policy/cr_tooltip_icon.js';
+@@ -427,6 +428,12 @@ export class SettingsPersonaPageElement
+       fontAliasesText_: String,
+       hasUnsavedChanges_: {type: Boolean, value: false},
+       pending_: {type: Boolean, value: false},
++      identityRotationAvailable_: {type: Boolean, value: false},
++      identityRotationDisabled_: {
++        type: Boolean,
++        computed: 'computeIdentityRotationDisabled_(pending_, identityRotationAvailable_)',
++      },
++      showIdentityRotationDialog_: {type: Boolean, value: false},
+     };
+   }
+ 
+@@ -452,6 +459,9 @@ export class SettingsPersonaPageElement
+   declare private fontAliasesText_: string;
+   declare private hasUnsavedChanges_: boolean;
+   declare private pending_: boolean;
++  declare private identityRotationAvailable_: boolean;
++  declare private identityRotationDisabled_: boolean;
++  declare private showIdentityRotationDialog_: boolean;
+ 
+   override connectedCallback() {
+     super.connectedCallback();
+@@ -490,6 +500,8 @@ export class SettingsPersonaPageElement
+         state.launchSelectionMode || profilesResponse?.launchSelectionMode ||
+         this.launchSelectionMode_;
+     this.persistedLaunchSelectionMode_ = this.launchSelectionMode_;
++    this.identityRotationAvailable_ =
++        state.identityRotationAvailable === true;
+ 
+     const targetProfileId =
+         this.selectedProfileId_ || this.activePersonaId_ || this.lastUsedPersonaId_;
+@@ -820,6 +832,51 @@ export class SettingsPersonaPageElement
+     this.importStatusIsError_ = false;
+   }
+ 
++  private computeIdentityRotationDisabled_(
++      pending: boolean, available: boolean): boolean {
++    return pending || !available;
++  }
++
++  private onRotateIdentityClick_() {
++    if (!this.identityRotationAvailable_ || this.pending_) {
++      return;
++    }
++    this.showIdentityRotationDialog_ = true;
++  }
++
++  private onIdentityRotationDialogDomChange_() {
++    if (this.showIdentityRotationDialog_) {
++      this.shadowRoot!
++          .querySelector<HTMLDialogElement>('#identityRotationDialog')!
++          .showModal();
++    }
++  }
++
++  private closeIdentityRotationDialog_() {
++    this.shadowRoot!
++        .querySelector<HTMLDialogElement>('#identityRotationDialog')!
++        .close();
++    this.showIdentityRotationDialog_ = false;
++  }
++
++  private onIdentityRotationCancel_() {
++    this.closeIdentityRotationDialog_();
++  }
++
++  private async onIdentityRotationConfirm_() {
++    this.closeIdentityRotationDialog_();
++    await this.runPersonaMutation_(
++        () => PersonaBrowserProxyImpl.getInstance().rotatePersonaIdentity(),
++        () => {
++          this.importStatus_ = this.i18n('personaIdentityRotated');
++          this.importStatusIsError_ = false;
++        },
++        () => {
++          this.importStatus_ = this.i18n('personaIdentityRotationFailed');
++          this.importStatusIsError_ = true;
++        });
++  }
++
+   private syncTextFieldsFromPersona_() {
+     const fonts = this.editablePersona_?.fonts || {};
+     const families = Array.isArray(fonts.families) ? fonts.families : [];
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1317,6 +1317,8 @@ static_library("ui") {
+       "focus_tab_after_navigation_helper.h",
+       "intent_picker_tab_helper.cc",
+       "intent_picker_tab_helper.h",
++      "persona_tab_reloader.cc",
++      "persona_tab_reloader.h",
+       "sad_tab.cc",
+       "sad_tab.h",
+       "sad_tab_controller.cc",
+--- /dev/null
++++ b/chrome/browser/ui/persona_tab_reloader.cc
+@@ -0,0 +1,44 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/persona_tab_reloader.h"
++
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "content/public/browser/reload_type.h"
++#include "content/public/browser/web_contents.h"
++
++namespace helium_persona {
++
++size_t ReloadPersonaTabs(Profile* profile) {
++  ProfileBrowserCollection* collection =
++      ProfileBrowserCollection::GetForProfile(profile);
++  if (!collection) {
++    return 0;
++  }
++
++  size_t reload_count = 0;
++  collection->ForEach([&](BrowserWindowInterface* browser_interface) {
++    Browser* browser = browser_interface->GetBrowserForMigrationOnly();
++    if (!browser) {
++      return true;
++    }
++    TabStripModel* tab_strip_model = browser->tab_strip_model();
++    for (int index = 0; index < tab_strip_model->count(); ++index) {
++      content::WebContents* contents = tab_strip_model->GetWebContentsAt(index);
++      if (!contents) {
++        continue;
++      }
++      contents->GetController().Reload(content::ReloadType::NORMAL, true);
++      ++reload_count;
++    }
++    return true;
++  });
++  return reload_count;
++}
++
++}  // namespace helium_persona
+--- /dev/null
++++ b/chrome/browser/ui/persona_tab_reloader.h
+@@ -0,0 +1,18 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_PERSONA_TAB_RELOADER_H_
++#define CHROME_BROWSER_UI_PERSONA_TAB_RELOADER_H_
++
++#include <cstddef>
++
++class Profile;
++
++namespace helium_persona {
++
++size_t ReloadPersonaTabs(Profile* profile);
++
++}  // namespace helium_persona
++
++#endif  // CHROME_BROWSER_UI_PERSONA_TAB_RELOADER_H_
+--- a/chrome/browser/ui/views/persona/persona_indicator_menu_model.cc
++++ b/chrome/browser/ui/views/persona/persona_indicator_menu_model.cc
+@@ -10,12 +10,8 @@
+ #include "chrome/browser/helium_persona/persona_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser.h"
+-#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+-#include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+ #include "chrome/browser/ui/chrome_pages.h"
+-#include "chrome/browser/ui/tabs/tab_strip_model.h"
+-#include "content/public/browser/web_contents.h"
+-#include "content/public/browser/reload_type.h"
++#include "chrome/browser/ui/persona_tab_reloader.h"
+ 
+ namespace {
+ 
+@@ -93,27 +89,9 @@ void PersonaIndicatorMenuModel::SetActiv
+     return;
+   }
+ 
+-  service->SetActivePersona(persona_id);
+-
+-  if (auto* collection = ProfileBrowserCollection::GetForProfile(
+-          browser_->profile())) {
+-    collection->ForEach([](BrowserWindowInterface* browser_interface) {
+-      auto* browser = browser_interface->GetBrowserForMigrationOnly();
+-      if (!browser) {
+-        return true;
+-      }
+-
+-      TabStripModel* tab_strip_model = browser->tab_strip_model();
+-      for (int index = 0; index < tab_strip_model->count(); ++index) {
+-        content::WebContents* contents =
+-            tab_strip_model->GetWebContentsAt(index);
+-        if (!contents) {
+-          continue;
+-        }
+-        contents->GetController().Reload(content::ReloadType::NORMAL, true);
+-      }
+-      return true;
+-    });
++  base::DictValue response = service->SetActivePersona(persona_id);
++  if (response.FindBool("ok").value_or(false)) {
++    helium_persona::ReloadPersonaTabs(browser_->profile());
+   }
+ }
+ 
+--- a/chrome/browser/ui/webui/settings/persona_handler.cc
++++ b/chrome/browser/ui/webui/settings/persona_handler.cc
+@@ -7,9 +7,14 @@
+ 
+ #include "base/check.h"
+ #include "base/functional/bind.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "base/values.h"
+ #include "chrome/browser/helium_persona/persona_service.h"
+ #include "chrome/browser/helium_persona/persona_service_factory.h"
++#include "chrome/browser/net/profile_network_context_service.h"
++#include "chrome/browser/net/profile_network_context_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/persona_tab_reloader.h"
+ #include "content/public/browser/web_ui.h"
+ 
+ namespace settings {
+@@ -70,11 +75,17 @@ void PersonaHandler::RegisterMessages()
+       "refreshFingerprints",
+       base::BindRepeating(&PersonaHandler::HandleRefreshFingerprints,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "rotatePersonaIdentity",
++      base::BindRepeating(&PersonaHandler::HandleRotatePersonaIdentity,
++                          base::Unretained(this)));
+ }
+ 
+ void PersonaHandler::OnJavascriptAllowed() {}
+ 
+-void PersonaHandler::OnJavascriptDisallowed() {}
++void PersonaHandler::OnJavascriptDisallowed() {
++  weak_ptr_factory_.InvalidateWeakPtrs();
++}
+ 
+ void PersonaHandler::HandleGetPersonaState(const base::ListValue& args) {
+   AllowJavascript();
+@@ -205,4 +216,50 @@ void PersonaHandler::HandleRefreshFinger
+   ResolveJavascriptCallback(callback_id, service->GetPersonaState());
+ }
+ 
++void PersonaHandler::HandleRotatePersonaIdentity(
++    const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(1U, args.size());
++  CHECK(args[0].is_string());
++  std::string callback_id = args[0].GetString();
++
++  helium_persona::PersonaService* persona_service =
++      GetPersonaService(profile_);
++  CHECK(persona_service);
++  base::DictValue response = persona_service->RotateIdentity();
++  if (!response.FindBool("ok").value_or(false)) {
++    ResolveJavascriptCallback(base::Value(callback_id), response);
++    return;
++  }
++
++  ProfileNetworkContextService* network_service =
++      ProfileNetworkContextServiceFactory::GetForContext(profile_);
++  CHECK(network_service);
++  network_service->ApplyNetworkPersonaConfig(base::BindOnce(
++      &PersonaHandler::OnRotatePersonaIdentityNetworkApplied,
++      weak_ptr_factory_.GetWeakPtr(), std::move(callback_id),
++      std::move(response)));
++}
++
++void PersonaHandler::OnRotatePersonaIdentityNetworkApplied(
++    std::string callback_id,
++    base::DictValue response,
++    bool accepted) {
++  if (!accepted) {
++    response.Set("ok", false);
++    response.EnsureDict("fieldErrors")
++        ->Set("identityRotation", "networkUpdateFailed");
++    ResolveJavascriptCallback(base::Value(callback_id), response);
++    return;
++  }
++
++  ResolveJavascriptCallback(base::Value(callback_id), response.Clone());
++  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(
++                     [](Profile* profile) {
++                       helium_persona::ReloadPersonaTabs(profile);
++                     },
++                     profile_.get()));
++}
++
+ }  // namespace settings
+--- a/chrome/browser/ui/webui/settings/persona_handler.h
++++ b/chrome/browser/ui/webui/settings/persona_handler.h
+@@ -5,6 +5,8 @@
+ #define CHROME_BROWSER_UI_WEBUI_SETTINGS_PERSONA_HANDLER_H_
+ 
+ #include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/values.h"
+ #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
+ 
+ class Profile;
+@@ -31,8 +33,13 @@ class PersonaHandler : public SettingsPa
+   void HandleGetLaunchSelectionMode(const base::ListValue& args);
+   void HandleSetLaunchSelectionMode(const base::ListValue& args);
+   void HandleRefreshFingerprints(const base::ListValue& args);
++  void HandleRotatePersonaIdentity(const base::ListValue& args);
++  void OnRotatePersonaIdentityNetworkApplied(std::string callback_id,
++                                             base::DictValue response,
++                                             bool accepted);
+ 
+   raw_ptr<Profile> profile_;
++  base::WeakPtrFactory<PersonaHandler> weak_ptr_factory_{this};
+ };
+ 
+ }  // namespace settings
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -2276,6 +2276,18 @@ void AddPrivacyStrings(content::WebUIDat
+       {"personaRefreshFingerprints", IDS_SETTINGS_PERSONA_REFRESH_FINGERPRINTS},
+       {"personaFingerprintsRefreshed",
+         IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED},
++      {"personaRotateIdentity", IDS_SETTINGS_PERSONA_ROTATE_IDENTITY},
++      {"personaRotateIdentityDialogTitle",
++       IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_TITLE},
++      {"personaRotateIdentityDialogBody",
++       IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY},
++      {"personaRotateIdentityConfirm",
++       IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_CONFIRM},
++      {"personaIdentityRotationUnavailable",
++       IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE},
++      {"personaIdentityRotationFailed",
++       IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_FAILED},
++      {"personaIdentityRotated", IDS_SETTINGS_PERSONA_IDENTITY_ROTATED},
+       {"personaSectionPresets", IDS_SETTINGS_PERSONA_SECTION_PRESETS},
+       {"personaSectionPresetsDesc", IDS_SETTINGS_PERSONA_SECTION_PRESETS_DESC},
+       {"personaPresetLabel", IDS_SETTINGS_PERSONA_PRESET_LABEL},
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -176,6 +176,7 @@ static_library("test_support") {
+     "//chrome/browser/bookmarks",
+     "//chrome/browser/bookmarks:test_support",
+     "//chrome/browser/component_updater",
++    "//chrome/browser/helium_persona:identity_template",
+     "//chrome/browser/lifetime",
+     "//chrome/browser/omnibox",
+     "//chrome/browser/password_manager",
+@@ -6657,8 +6658,6 @@ test("unit_tests") {
+     "../browser/download/download_target_determiner_unittest.cc",
+     "../browser/download/download_ui_controller_unittest.cc",
+     "../browser/download/offline_item_utils_unittest.cc",
+-    "../browser/helium_persona/persona_runtime_override_unittest.cc",
+-    "../browser/helium_persona/persona_service_unittest.cc",
+     "../browser/enterprise/connectors/interstitials/enterprise_page_unittest.cc",
+     "../browser/enterprise/encryption/cache_encryption_provider_impl_unittest.cc",
+     "../browser/enterprise/identifiers/profile_id_service_factory_unittest.cc",
+@@ -6677,6 +6676,9 @@ test("unit_tests") {
+     "../browser/file_select_helper_unittest.cc",
+     "../browser/font_family_cache_unittest.cc",
+     "../browser/font_pref_change_notifier_unittest.cc",
++    "../browser/helium_persona/persona_identity_template_unittest.cc",
++    "../browser/helium_persona/persona_runtime_override_unittest.cc",
++    "../browser/helium_persona/persona_service_unittest.cc",
+     "../browser/idle/idle_detection_permission_context_unittest.cc",
+     "../browser/logging_chrome_unittest.cc",
+     "../browser/media/autoplay_policy_status_observer_unittest.cc",

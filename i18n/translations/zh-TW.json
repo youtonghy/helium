@@ -260,9 +260,49 @@
     "message": "重新整理指紋"
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_REFRESH_SITE_FINGERPRINTS",
+    "source": "Refresh fingerprints for this site",
+    "message": "為此網站重新整理指紋"
+  },
+  {
     "name": "IDS_SETTINGS_PERSONA_FINGERPRINTS_REFRESHED",
     "source": "Fingerprints refreshed. Reload open tabs for tokens to take effect.",
     "message": "已重新整理指紋。請重新載入已開啟的分頁，讓權杖生效。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY",
+    "source": "Rotate complete identity",
+    "message": "輪換完整身分"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_TITLE",
+    "source": "Rotate complete identity?",
+    "message": "要輪換完整身分嗎？"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches the browser version, user agent, client hints, platform, TLS, HTTP/2, and HTTP/3 identity together. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "這會一併切換瀏覽器版本、使用者代理程式、用戶端提示、平台、TLS、HTTP/2 和 HTTP/3 身分。網路堆疊接受新身分後，系統會重新載入此設定檔中已開啟的分頁。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_CONFIRM",
+    "source": "Rotate and reload",
+    "message": "輪換並重新載入"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "Complete identity rotation requires at least two verified browser identity templates. Fingerprint refresh remains available and keeps the current browser version and platform.",
+    "message": "完整身分輪換至少需要兩個經過驗證的瀏覽器身分範本。指紋重新整理功能仍可使用，且會保留目前的瀏覽器版本和平台。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_FAILED",
+    "source": "Complete identity rotation failed. Tabs were not reloaded.",
+    "message": "完整身分輪換失敗。未重新載入分頁。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATED",
+    "source": "Complete identity rotated. Reloading open tabs.",
+    "message": "完整身分已輪換。正在重新載入已開啟的分頁。"
   },
   {
     "name": "IDS_SETTINGS_PERSONA_SECTION_PRESETS",
@@ -1143,5 +1183,15 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_PRIVATE_STATE_TOKENS_TOOLTIP",
     "source": "Controls supported Persona-gated Private State Token operations. Other Privacy Sandbox controls may also apply.",
     "message": "控制支援且由 Persona 閘門管理的 Private State Token 作業。其他 Privacy Sandbox 控制項也可能適用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_LABEL",
+    "source": "Allow WebRTC",
+    "message": "允许 WebRTC"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_TOOLTIP",
+    "source": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls.",
+    "message": "关闭时（默认）会阻止 RTCPeerConnection，避免网站通过 WebRTC ICE 获取本地网络信息。仅在需要浏览器通话时开启。"
   }
 ]

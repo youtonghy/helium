@@ -230,7 +230,15 @@ def run_quick(args, files):
         run_yapf_dry_run(args.python)
 
 
-def unpack_source_tree(args, source_tree):
+def source_download_inputs(*, include_macos):
+    """Return the manifests needed for a root or merged source baseline."""
+    inputs = ['downloads.ini']
+    if include_macos:
+        inputs.extend(['deps.ini', 'platform/macos/downloads.ini'])
+    return inputs
+
+
+def unpack_source_tree(args, source_tree, *, include_macos=False):
     """Delete and unpack a disposable Chromium source tree."""
     shutil.rmtree(source_tree, ignore_errors=True)
     source_tree.parent.mkdir(parents=True, exist_ok=True)
@@ -239,7 +247,7 @@ def unpack_source_tree(args, source_tree):
         './utils/downloads.py',
         'unpack',
         '-i',
-        'downloads.ini',
+        *source_download_inputs(include_macos=include_macos),
         '-c',
         'chromium_download_cache',
         source_tree,
@@ -326,8 +334,10 @@ def run_export_hotfix(args):
         args.python, './utils/patches.py', 'merge', staged_merged, staged_queue,
         ROOT / 'platform' / 'macos' / 'patches'
     ])
+    merged_source = context.session_dir / 'merged-validation-src'
+    unpack_source_tree(args, merged_source, include_macos=True)
     run([
-        args.python, './devutils/validate_patches.py', '-l', chromium_src, '-p', staged_merged,
+        args.python, './devutils/validate_patches.py', '-l', merged_source, '-p', staged_merged,
         '-s', staged_merged / 'series', '-v'
     ])
 

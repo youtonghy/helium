@@ -2214,6 +2214,174 @@
     "message": "Nitrous defaults"
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label to rotate the complete browser and network identity",
+    "message": "Rotate complete identity"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_TITLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Title of the complete persona identity rotation confirmation dialog",
+    "message": "Rotate complete identity?"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Explanation shown before rotating the complete browser and network identity",
+    "message": "This switches the browser version, user agent, client hints, platform, TLS, HTTP/2, and HTTP/3 identity together. Open tabs in this profile will reload after the network stack accepts the new identity."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_CONFIRM",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Confirmation button for complete persona identity rotation",
+    "message": "Rotate and reload"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status shown when there are not enough verified complete identity templates to rotate",
+    "message": "Complete identity rotation requires at least two verified browser identity templates. Fingerprint refresh remains available and keeps the current browser version and platform."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_FAILED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Error shown when complete persona identity rotation fails",
+    "message": "Complete identity rotation failed. Tabs were not reloaded."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status shown after the complete identity and network stack were rotated",
+    "message": "Complete identity rotated. Reloading open tabs."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REFRESH_SITE_FINGERPRINTS",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Menu item to refresh persona fingerprint tokens for the active site",
+    "message": "Refresh fingerprints for this site"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_TITLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Name of the page used to manage fingerprint seed settings",
+    "message": "Fingerprints"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Description of the fingerprint settings page",
+    "message": "Manage fingerprint seeds and automatic rotation"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_CURRENT_SEED_TITLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Section title for the effective fingerprint seed",
+    "message": "Current fingerprint seed"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_CURRENT_SEED_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Description of the effective fingerprint seed",
+    "message": "This seed determines the stable fingerprint noise for this profile."
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_SEED_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the displayed fingerprint seed",
+    "message": "Seed"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_GENERATION_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the fingerprint generation number",
+    "message": "Generation"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_LAST_CHANGED_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the last fingerprint seed change time",
+    "message": "Last changed"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_MODE_TITLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Section title for fingerprint seed mode",
+    "message": "Seed mode"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_MODE_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Description of fixed and random fingerprint seed modes",
+    "message": "Use a fixed seed for repeatable fingerprints, or let Nitrous generate a random seed."
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_FIXED_SEED_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the fixed fingerprint seed input",
+    "message": "Fixed seed"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_FIXED_SEED_INVALID",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Validation error for a malformed fixed fingerprint seed",
+    "message": "Enter 64 hexadecimal characters."
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_USE_FIXED_SEED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label that applies the entered fixed seed",
+    "message": "Use fixed seed"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_GENERATE_RANDOM_SEED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button label that generates a new random fingerprint seed",
+    "message": "Generate random seed"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_AUTOMATION_TITLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Section title for automatic fingerprint seed policies",
+    "message": "Automatic management"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_AUTOMATION_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Description of automatic fingerprint seed policies",
+    "message": "Automatic options are available only while random seed mode is active."
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_CLEAR_ON_EXIT",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the automatic clear-on-exit fingerprint setting",
+    "message": "Clear random fingerprint on exit"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_ROTATE_DAILY",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the automatic daily fingerprint setting",
+    "message": "Change random fingerprint daily"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_UNAVAILABLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status shown when fingerprint settings cannot be read for the current profile",
+    "message": "Fingerprint settings are unavailable for this profile."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label for the persona WebRTC gate",
+    "message": "Allow WebRTC"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona WebRTC gate",
+    "message": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls."
+  },
+  {
     "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
     "source": "chrome/app/generated_resources.grd",
     "context": "The name of the macOS system Translate command in the content area context menu",

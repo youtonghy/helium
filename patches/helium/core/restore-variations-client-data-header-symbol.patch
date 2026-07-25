@@ -1,0 +1,33 @@
+--- a/components/variations/net/variations_http_headers.cc
++++ b/components/variations/net/variations_http_headers.cc
+@@ -32,6 +32,11 @@
+ 
+ namespace variations {
+ 
++// Restored after ungoogled-chromium removed the definition while leaving the
++// extern declaration and remaining call sites (and unit tests) that still
++// reference the symbol. Header name matches Chromium historical value.
++const char kClientDataHeader[] = "X-Client-Data";
++
+ namespace {
+ 
+ // The result of checking whether a request to a URL should have variations
+--- a/content/browser/helium_noise/noise_token_data.h
++++ b/content/browser/helium_noise/noise_token_data.h
+@@ -7,6 +7,7 @@
+ 
+ #include <optional>
+ 
++#include "content/common/content_export.h"
+ #include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/common/helium_noise/noise_token.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+@@ -16,7 +17,7 @@
+ 
+ class BrowserContext;
+ 
+-class HeliumNoiseTokenData {
++class CONTENT_EXPORT HeliumNoiseTokenData {
+  public:
+   static blink::HeliumNoiseTokenMap GetTokens(
+       BrowserContext* browser_context,

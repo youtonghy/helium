@@ -1,0 +1,29 @@
+--- a/content/browser/renderer_host/render_frame_host_impl.cc
++++ b/content/browser/renderer_host/render_frame_host_impl.cc
+@@ -14848,6 +14848,10 @@
+ void RenderFrameHostImpl::BindTrustTokenQueryAnswerer(
+     mojo::PendingReceiver<network::mojom::TrustTokenQueryAnswerer> receiver) {
+   if (!HeliumPersonaAllowsPrivateStateTokens(this)) {
++    // Intentionally drop the receiver. Blink binds a disconnect handler that
++    // rejects every pending hasPrivateToken/hasRedemptionRecord resolver
++    // (Document::TrustTokenQueryAnswererConnectionError), so this is safe
++    // unlike WebOTP's pre-fix Receive path.
+     return;
+   }
+ 
+--- a/third_party/blink/renderer/modules/handwriting/handwriting_recognition_service.cc
++++ b/third_party/blink/renderer/modules/handwriting/handwriting_recognition_service.cc
+@@ -205,11 +205,11 @@
+     exception_state.ThrowDOMException(
+         DOMExceptionCode::kNotAllowedError,
+         "Handwriting recognition is disabled by the active persona.");
+-    return ScriptPromise<IDLNullable<HandwritingRecognizerQueryResult>>();
++    return EmptyPromise();
+   }
+ 
+   if (!BootstrapMojoConnectionIfNeeded(script_state, exception_state)) {
+-    return ScriptPromise<IDLNullable<HandwritingRecognizerQueryResult>>();
++    return EmptyPromise();
+   }
+ 
+   auto* resolver = MakeGarbageCollected<
