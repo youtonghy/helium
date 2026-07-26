@@ -1,4 +1,4 @@
-# Based on Python package versions in Debian bookworm
+# Mostly based on Python package versions in Debian bookworm
 # https://packages.debian.org/bookworm/python/
 astroid==2.14.2 # via pylint
 pylint==2.16.2
@@ -7,4 +7,6 @@ pytest==7.2.1
 httplib2==0.20.4
 requests==2.28.1
 pillow==11.3.0
-yapf==0.32.0
+# Newer than bookworm's 0.32.0: that release imports lib2to3, which was
+# removed in Python 3.12, and it formats dict unpacking the opposite way.
+yapf==0.43.0
