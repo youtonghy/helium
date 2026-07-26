@@ -48,12 +48,46 @@ compile evidence separately. Without a targeted or actual build, say that
 compilation was not verified. A full cold build is required only when requested
 or when the task must prove the complete artifact builds.
 
+## CI equivalence boundary
+
+A local pass predicts a CI pass only for checks the repository controls. Four
+kinds of drift have each turned a local green into a red CI job:
+
+| Drift | Symptom | Guard |
+|-------|---------|-------|
+| Tool versions | yapf/pylint disagree between local and pinned | `--ci-env`, drift warning |
+| System binaries | local has `quilt`, CI did not | `.ci_system_packages.txt` check |
+| Empty scope | committed change means no diff, so nothing runs | `--require-checks` |
+| Stale source tree | reused `chromium_src` predates a new dependency | freshness check |
+
+Outside that boundary: runner image changes and the archive-retrieval fallback
+to `clone.py` depend on upstream availability and cannot be reproduced locally.
+CI remains the backstop for those.
+
 ## Default
 
 From repository root:
 
 ```bash
 python3 .codex/skills/nitrous-validate/scripts/run_validation.py
+```
+
+Auto-scope compares against the upstream merge-base, so committed work stays in
+scope until CI has seen it. Passing `--changed-from HEAD` on a clean tree
+validates nothing; the runner says `SKIPPED`, and that is not a pass.
+
+Exact CI parity, in a cached venv built from `.cirrus_requirements.txt` with the
+`.python-version` interpreter:
+
+```bash
+python3 .codex/skills/nitrous-validate/scripts/run_validation.py --ci-env
+```
+
+Report every failure in one run instead of stopping at the first, which is how
+CI's fail-fast hides later steps:
+
+```bash
+python3 .codex/skills/nitrous-validate/scripts/run_validation.py --keep-going
 ```
 
 Optional Python versions:

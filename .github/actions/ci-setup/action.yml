@@ -14,8 +14,12 @@ runs:
     - name: Install runner packages
       shell: bash
       run: |
+        # Package list lives in .ci_system_packages.txt so that local
+        # CI-equivalent validation can check for the same binaries.
+        packages="$(sed -e 's/#.*//' -e '/^\s*$/d' .ci_system_packages.txt | awk '{print $1}')"
+        echo "Installing: ${packages}"
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends xz-utils patch curl git quilt
+        sudo apt-get install -y --no-install-recommends ${packages}
 
     - name: Install Python dependencies
       shell: bash

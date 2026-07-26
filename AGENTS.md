@@ -62,6 +62,9 @@ python3 devutils/agent_patch_guard.py --mode hot-add --file chrome/browser/yyy.c
 python3 devutils/syntax_check.py [-o build/src/out/Default] FILE...
 python3 devutils/build_targets.py [--from-failed] [target...]
 
+# 与 CI 精确一致的本地校验（pin 版本 venv；一轮报全部失败）
+python3 .codex/skills/nitrous-validate/scripts/run_validation.py --ci-env --keep-going
+
 # staging / replay / root+macOS 验证后自动发布新栈顶 patch
 python3 devutils/agent_patch_guard.py --mode export-hotfix
 
@@ -96,6 +99,21 @@ he auto-package
 
 - 准备生成依赖后仍失败，才按源码编译错误处理。若 Ninja target 自身失败，报告最早的真实构建错误；不要用后续缺文件错误覆盖它。
 - Chromium 源码任务的交付说明必须分开列出 `pre-build` 与编译证据。没有运行定向 target/build 时，只能声明 validation 通过，不能声明编译通过。冷树不要求无条件全量构建，但用户要求构建、打包或证明可编译时，必须运行相关 target 或实际构建。
+
+## 本地与 CI 的等价边界
+
+本地通过能预测 CI 通过，**仅限仓库自身可控的检查**。以下四类漂移都曾把本地绿变成 CI 红，现已各有机制兜住：
+
+| 漂移 | 症状 | 机制 |
+|------|------|------|
+| 工具版本 | 本地与 pin 的 yapf/pylint 判断相反 | `--ci-env` 建 pin venv；版本不一致时告警 |
+| 系统二进制 | 本地有 `quilt`，CI 没装 | `.ci_system_packages.txt` 单一来源，两侧校验 |
+| 空 scope | 改动已 commit → diff 为空 → 零检查却报成功 | 默认 diff base 改为 upstream merge-base；门禁加 `--require-checks` |
+| 源码树过期 | 复用的 `chromium_src` 缺新增依赖 | `--with-source` 前校验 manifest 组件齐备 |
+
+边界之外（CI 兜底，本地无法复现）：runner 镜像漂移、`Retrieve Chromium source archive` 回退 `clone.py` 的路径。
+
+改 `devutils` / `utils` 且本地版本与 pin 不一致时，用 `--ci-env` 取得精确一致；`--keep-going` 一轮列出全部失败，避免被 CI 的 fail-fast 逐个掩盖。
 
 环境变量优先 `NITROUS_*`，回退 `HELIUM_*`（`NITROUS_SRC_DIR` / `NITROUS_OUT_DIR` / `NITROUS_BUILD_ROOT` / `NITROUS_MERGED_PATCHES_DIR` / `NITROUS_QUILT_SRC` 等）。
 
