@@ -77,6 +77,8 @@ PRUNING_EXCLUDE_PATTERNS = [
     'third_party/ublock/lib/lz4/lz4-block-codec.wasm',
     'third_party/ublock/lib/publicsuffixlist/wasm/publicsuffixlist.wasm',
     'third_party/ublock/web_accessible_resources/noop-1s.mp4',
+    # Exclusions for Nitrous bundled fonts
+    'third_party/nitrous_fonts/*/*.otf',
     # Exclusions for Helium onboarding
     'components/helium_onboarding/node_modules/@esbuild/*/bin/esbuild',
     'components/helium_onboarding/node_modules/@esbuild/*/esbuild.exe',
