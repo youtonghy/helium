@@ -2382,6 +2382,186 @@
     "message": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls."
   },
   {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_TITLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Name of the page used to configure the proxy route",
+    "message": "Proxy"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Description of the proxy settings page",
+    "message": "Route all traffic through an HTTP or SOCKS5 proxy"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_ROUTE_TITLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Heading of the section that configures the proxy server",
+    "message": "Proxy server"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_ROUTE_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Explains that all traffic uses the proxy and that traffic stops if the proxy is unreachable",
+    "message": "When enabled, all traffic for this profile goes through the proxy. If the proxy cannot be reached, traffic stops rather than falling back to a direct connection."
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_MODE_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label of the proxy protocol selector",
+    "message": "Protocol"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_MODE_OFF",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Proxy protocol option that disables the proxy",
+    "message": "Off"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_MODE_HTTP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Proxy protocol option for HTTP",
+    "message": "HTTP"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_MODE_HTTPS",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Proxy protocol option for HTTPS",
+    "message": "HTTPS"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_MODE_SOCKS5",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Proxy protocol option for SOCKS5",
+    "message": "SOCKS5"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_HOST_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label of the proxy host input",
+    "message": "Host"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_PORT_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label of the proxy port input",
+    "message": "Port"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_USERNAME_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label of the proxy username input",
+    "message": "Username (optional)"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_PASSWORD_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label of the proxy password input",
+    "message": "Password (optional)"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_PASSWORD_STORED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Placeholder shown when a password is already stored and is left unchanged",
+    "message": "Saved. Leave blank to keep."
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_SAVE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button that saves the proxy configuration",
+    "message": "Save"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_TEST_CONNECTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button that checks whether the proxy server can be reached",
+    "message": "Test connection"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_TEST_RUNNING",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status shown while the proxy reachability check runs",
+    "message": "Checking…"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_TEST_SUCCEEDED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status shown when the proxy server was reached",
+    "message": "Proxy server reachable"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_TEST_FAILED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status shown when the proxy server could not be reached",
+    "message": "Proxy server could not be reached"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_INVALID_CONFIG",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Error shown when the entered proxy settings are not usable",
+    "message": "Enter a valid host and a port between 1 and 65535."
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_SUBVERTED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Warning shown when the proxy route is enforced but no longer in effect, so requests are blocked",
+    "message": "The proxy route is no longer in effect, so requests are being blocked. An extension or a policy may have changed the proxy settings."
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_TITLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Heading of the section covering the browser's own network traffic",
+    "message": "Browser traffic"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Explains that the browser's own requests are shared across profiles and stop when the proxy is down",
+    "message": "Requests the browser makes on its own, such as updates and Safe Browsing, are not tied to a profile. Sending them through this proxy applies to the whole browser, and they stop while the proxy is unreachable."
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_TOGGLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Toggle that routes the browser's own traffic through the proxy",
+    "message": "Also use this proxy for browser traffic"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_TITLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Heading of the section listing settings forced while the proxy is on",
+    "message": "Enforced while the proxy is on"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Explains that some settings are forced to prevent traffic escaping the proxy, and are restored afterwards",
+    "message": "These settings would let traffic leave outside the proxy, so they are turned off automatically. Your own choices are kept and restored when the proxy is switched off."
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_DOH",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Locked setting: secure DNS",
+    "message": "Secure DNS, which resolves names outside the proxy"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_WEBRTC",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Locked setting: WebRTC",
+    "message": "WebRTC connections that do not go through a proxy"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_PREFETCH",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Locked setting: preloading and DNS prefetch",
+    "message": "Preloading and DNS prefetching"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_QUIC",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Locked setting: QUIC",
+    "message": "QUIC, which cannot traverse a proxy"
+  },
+  {
     "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
     "source": "chrome/app/generated_resources.grd",
     "context": "The name of the macOS system Translate command in the content area context menu",

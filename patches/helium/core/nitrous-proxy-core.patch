@@ -1,0 +1,3119 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -1742,6 +1742,96 @@
+     <message name="IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN" desc="Validation error shown when the custom Nitrous services origin is invalid.">
+       Invalid origin
+     </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_TITLE" desc="Name of the page used to configure the proxy route">
++      Proxy
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_DESCRIPTION" desc="Description of the proxy settings page">
++      Route all traffic through an HTTP or SOCKS5 proxy
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_ROUTE_TITLE" desc="Heading of the section that configures the proxy server">
++      Proxy server
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_ROUTE_DESCRIPTION" desc="Explains that all traffic uses the proxy and that traffic stops if the proxy is unreachable">
++      When enabled, all traffic for this profile goes through the proxy. If the proxy cannot be reached, traffic stops rather than falling back to a direct connection.
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_MODE_LABEL" desc="Label of the proxy protocol selector">
++      Protocol
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_MODE_OFF" desc="Proxy protocol option that disables the proxy">
++      Off
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_MODE_HTTP" desc="Proxy protocol option for HTTP">
++      HTTP
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_MODE_HTTPS" desc="Proxy protocol option for HTTPS">
++      HTTPS
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_MODE_SOCKS5" desc="Proxy protocol option for SOCKS5">
++      SOCKS5
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_HOST_LABEL" desc="Label of the proxy host input">
++      Host
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_PORT_LABEL" desc="Label of the proxy port input">
++      Port
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_USERNAME_LABEL" desc="Label of the proxy username input">
++      Username (optional)
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_PASSWORD_LABEL" desc="Label of the proxy password input">
++      Password (optional)
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_PASSWORD_STORED" desc="Placeholder shown when a password is already stored and is left unchanged">
++      Saved. Leave blank to keep.
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_SAVE" desc="Button that saves the proxy configuration">
++      Save
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_TEST_CONNECTION" desc="Button that checks whether the proxy server can be reached">
++      Test connection
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_TEST_RUNNING" desc="Status shown while the proxy reachability check runs">
++      Checking…
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_TEST_SUCCEEDED" desc="Status shown when the proxy server was reached">
++      Proxy server reachable
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_TEST_FAILED" desc="Status shown when the proxy server could not be reached">
++      Proxy server could not be reached
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_INVALID_CONFIG" desc="Error shown when the entered proxy settings are not usable">
++      Enter a valid host and a port between 1 and 65535.
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_SUBVERTED" desc="Warning shown when the proxy route is enforced but no longer in effect, so requests are blocked">
++      The proxy route is no longer in effect, so requests are being blocked. An extension or a policy may have changed the proxy settings.
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_TITLE" desc="Heading of the section covering the browser's own network traffic">
++      Browser traffic
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_DESCRIPTION" desc="Explains that the browser's own requests are shared across profiles and stop when the proxy is down">
++      Requests the browser makes on its own, such as updates and Safe Browsing, are not tied to a profile. Sending them through this proxy applies to the whole browser, and they stop while the proxy is unreachable.
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_TOGGLE" desc="Toggle that routes the browser's own traffic through the proxy">
++      Also use this proxy for browser traffic
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_LOCKED_TITLE" desc="Heading of the section listing settings forced while the proxy is on">
++      Enforced while the proxy is on
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_LOCKED_DESCRIPTION" desc="Explains that some settings are forced to prevent traffic escaping the proxy, and are restored afterwards">
++      These settings would let traffic leave outside the proxy, so they are turned off automatically. Your own choices are kept and restored when the proxy is switched off.
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_LOCKED_DOH" desc="Locked setting: secure DNS">
++      Secure DNS, which resolves names outside the proxy
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_LOCKED_WEBRTC" desc="Locked setting: WebRTC">
++      WebRTC connections that do not go through a proxy
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_LOCKED_PREFETCH" desc="Locked setting: preloading and DNS prefetch">
++      Preloading and DNS prefetching
++    </message>
++    <message name="IDS_SETTINGS_NITROUS_PROXY_LOCKED_QUIC" desc="Locked setting: QUIC">
++      QUIC, which cannot traverse a proxy
++    </message>
+     <message name="IDS_SETTINGS_FINGERPRINT_TITLE" desc="Name of the page used to manage fingerprint seed settings">
+       Fingerprints
+     </message>
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -264,6 +264,15 @@ static_library("browser") {
+     "memory_details.h",
+     "net_benchmarking.cc",
+     "net_benchmarking.h",
++    "nitrous_proxy/nitrous_proxy_enforcement.cc",
++    "nitrous_proxy/nitrous_proxy_enforcement.h",
++    "nitrous_proxy/nitrous_proxy_pref_names.h",
++    "nitrous_proxy/nitrous_proxy_service.cc",
++    "nitrous_proxy/nitrous_proxy_service.h",
++    "nitrous_proxy/nitrous_proxy_service_factory.cc",
++    "nitrous_proxy/nitrous_proxy_service_factory.h",
++    "nitrous_proxy/nitrous_proxy_system_config.cc",
++    "nitrous_proxy/nitrous_proxy_system_config.h",
+     "platform_util_internal.cc",
+     "platform_util_internal.h",
+     "process_resource_usage.cc",
+--- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
++++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+@@ -20,6 +20,7 @@
+ #include "chrome/browser/glic/glic_navigation_throttle.h"
+ #include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/helium_persona/persona_runtime_override.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_enforcement.h"
+ #include "chrome/browser/interstitials/enterprise_util.h"
+ #include "chrome/browser/lookalikes/lookalike_url_navigation_throttle.h"
+ #include "chrome/browser/omnibox/geolocation_navigation_throttle.h"
+@@ -72,6 +73,7 @@
+ #include "components/user_prefs/user_prefs.h"
+ #include "content/public/browser/navigation_handle.h"
+ #include "content/public/browser/navigation_throttle.h"
++#include "net/base/net_errors.h"
+ #include "content/public/browser/navigation_throttle_registry.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/content_switches.h"
+@@ -191,6 +193,38 @@
+ 
+ namespace {
+ 
++// Blocks navigations when an enforced proxy route is not actually in effect.
++// The net stack already fails closed for a single-server route (ProxyList
++// leaves no DIRECT fallback), so this covers the remaining case: the native
++// proxy pref having been taken over by an extension or a policy.
++class NitrousProxyFailClosedNavigationThrottle
++    : public content::NavigationThrottle {
++ public:
++  explicit NitrousProxyFailClosedNavigationThrottle(
++      content::NavigationThrottleRegistry& registry)
++      : content::NavigationThrottle(registry) {}
++
++  ThrottleCheckResult WillStartRequest() override { return CheckRoute(); }
++  ThrottleCheckResult WillRedirectRequest() override { return CheckRoute(); }
++  const char* GetNameForLogging() override {
++    return "NitrousProxyFailClosedNavigationThrottle";
++  }
++
++ private:
++  ThrottleCheckResult CheckRoute() {
++    const GURL& url = navigation_handle()->GetURL();
++    if (!url.SchemeIsHTTPOrHTTPS()) {
++      return PROCEED;
++    }
++    content::BrowserContext* browser_context =
++        navigation_handle()->GetWebContents()->GetBrowserContext();
++    return nitrous_proxy::IsRouteSubvertedForBrowserContext(browser_context)
++               ? ThrottleCheckResult(BLOCK_REQUEST,
++                                     net::ERR_MANDATORY_PROXY_CONFIGURATION_FAILED)
++               : PROCEED;
++  }
++};
++
+ class PersonaFailClosedNavigationThrottle
+     : public content::NavigationThrottle {
+  public:
+@@ -316,6 +350,8 @@ void CreateAndAddChromeThrottlesForNavig
+     content::NavigationThrottleRegistry& registry) {
+   content::NavigationHandle& handle = registry.GetNavigationHandle();
+   registry.AddThrottle(
++      std::make_unique<NitrousProxyFailClosedNavigationThrottle>(registry));
++  registry.AddThrottle(
+       std::make_unique<PersonaFailClosedNavigationThrottle>(registry));
+   if (handle.IsInMainFrame()) {
+     // MetricsNavigationThrottle requires that it runs before
+--- a/chrome/browser/net/profile_network_context_service.cc
++++ b/chrome/browser/net/profile_network_context_service.cc
+@@ -41,6 +41,8 @@
+ #include "chrome/browser/domain_reliability/service_factory.h"
+ #include "chrome/browser/helium_persona/persona_pref_names.h"
+ #include "chrome/browser/helium_persona/persona_identity_template.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service_factory.h"
+ #include "chrome/browser/first_party_sets/first_party_sets_policy_service.h"
+ #include "chrome/browser/first_party_sets/first_party_sets_policy_service_factory.h"
+ #include "chrome/browser/net/system_network_context_manager.h"
+@@ -699,6 +701,26 @@ void ProfileNetworkContextService::Apply
+   ApplyNetworkPersonaConfig(CreateNetworkPersonaConfig(), std::move(callback));
+ }
+ 
++void ProfileNetworkContextService::ApplySocksCredentials() {
++  network::mojom::SocksCredentialsPtr credentials;
++  if (nitrous_proxy::NitrousProxyService* service =
++          nitrous_proxy::NitrousProxyServiceFactory::GetForProfileIfExists(
++              profile_)) {
++    const nitrous_proxy::ProxyConfig config = service->GetConfig();
++    if (config.mode == nitrous_proxy::ProxyMode::kSocks5 &&
++        !config.username.empty()) {
++      credentials = network::mojom::SocksCredentials::New(config.username,
++                                                          config.password);
++    }
++  }
++
++  profile_->ForEachLoadedStoragePartition(
++      [&](content::StoragePartition* storage_partition) {
++        storage_partition->GetNetworkContext()->UpdateSocksCredentials(
++            credentials ? credentials.Clone() : nullptr, base::DoNothing());
++      });
++}
++
+ void ProfileNetworkContextService::ApplyNetworkPersonaIdentity(
+     uint32_t identity_template_id,
+     uint64_t generation,
+@@ -1622,6 +1644,21 @@ void ProfileNetworkContextService::Confi
+ 
+   proxy_config_monitor_->AddToNetworkContextParams(network_context_params);
+ 
++  // SOCKS5 authenticates inside its own handshake, so the credentials have to
++  // reach the network service with the context rather than through the HTTP
++  // auth cache.
++  if (nitrous_proxy::NitrousProxyService* nitrous_proxy_service =
++          nitrous_proxy::NitrousProxyServiceFactory::GetForProfileIfExists(
++              profile_)) {
++    const nitrous_proxy::ProxyConfig config = nitrous_proxy_service->GetConfig();
++    if (config.mode == nitrous_proxy::ProxyMode::kSocks5 &&
++        !config.username.empty()) {
++      network_context_params->socks_credentials =
++          network::mojom::SocksCredentials::New(config.username,
++                                                config.password);
++    }
++  }
++
+   network_context_params->enable_certificate_reporting = true;
+ 
+     network_context_params->sct_auditing_mode =
+--- a/chrome/browser/net/stub_resolver_config_reader.cc
++++ b/chrome/browser/net/stub_resolver_config_reader.cc
+@@ -24,6 +24,7 @@
+ #include "chrome/browser/net/default_dns_over_https_config_source.h"
+ #include "chrome/browser/net/dns_over_https_config_source.h"
+ #include "chrome/browser/net/secure_dns_config.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_enforcement.h"
+ #include "chrome/browser/net/secure_dns_util.h"
+ #include "chrome/browser/policy/chrome_browser_policy_connector.h"
+ #include "chrome/common/chrome_features.h"
+@@ -348,7 +349,13 @@ SecureDnsConfig StubResolverConfigReader
+   SecureDnsConfig::ManagementMode forced_management_mode =
+       SecureDnsConfig::ManagementMode::kNoOverride;
+   bool is_managed = GetDnsOverHttpsConfigSource()->IsConfigManaged();
+-  if (!is_managed && ShouldDisableDohForManaged()) {
++  if (nitrous_proxy::IsRouteEnforcedForAnyProfile()) {
++    // DoH requests carry LOAD_BYPASS_PROXY, so they would leave the machine
++    // outside an enforced proxy route and expose the real IP to the DoH
++    // resolver. This config is global (local state), so a single enforced
++    // profile disables DoH browser-wide.
++    secure_dns_mode = net::SecureDnsMode::kOff;
++  } else if (!is_managed && ShouldDisableDohForManaged()) {
+     secure_dns_mode = net::SecureDnsMode::kOff;
+     forced_management_mode = SecureDnsConfig::ManagementMode::kDisabledManaged;
+   } else {
+--- /dev/null
++++ b/chrome/browser/nitrous_proxy/nitrous_proxy_enforcement.cc
+@@ -0,0 +1,59 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_enforcement.h"
++
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_manager.h"
++#include "content/public/browser/browser_context.h"
++
++namespace nitrous_proxy {
++
++bool IsRouteEnforcedForProfile(Profile* profile) {
++  if (!profile) {
++    return false;
++  }
++  // Deliberately non-creating: these helpers are called from pref read points
++  // that can run while a profile is still being initialized.
++  NitrousProxyService* service =
++      NitrousProxyServiceFactory::GetForProfileIfExists(profile);
++  return service && service->IsRouteEnforced();
++}
++
++bool IsRouteEnforcedForBrowserContext(content::BrowserContext* context) {
++  if (!context) {
++    return false;
++  }
++  return IsRouteEnforcedForProfile(Profile::FromBrowserContext(context));
++}
++
++bool IsRouteSubvertedForBrowserContext(content::BrowserContext* context) {
++  if (!context) {
++    return false;
++  }
++  Profile* profile = Profile::FromBrowserContext(context);
++  if (!profile) {
++    return false;
++  }
++  NitrousProxyService* service =
++      NitrousProxyServiceFactory::GetForProfileIfExists(profile);
++  return service && service->IsRouteSubverted();
++}
++
++bool IsRouteEnforcedForAnyProfile() {
++  if (!g_browser_process || !g_browser_process->profile_manager()) {
++    return false;
++  }
++  for (Profile* profile :
++       g_browser_process->profile_manager()->GetLoadedProfiles()) {
++    if (IsRouteEnforcedForProfile(profile)) {
++      return true;
++    }
++  }
++  return false;
++}
++
++}  // namespace nitrous_proxy
+--- /dev/null
++++ b/chrome/browser/nitrous_proxy/nitrous_proxy_enforcement.h
+@@ -0,0 +1,31 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_ENFORCEMENT_H_
++#define CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_ENFORCEMENT_H_
++
++class PrefService;
++class Profile;
++namespace content {
++class BrowserContext;
++}
++
++namespace nitrous_proxy {
++
++// True when `profile` routes through an enforced proxy, meaning traffic must
++// never reach the network outside that route.
++bool IsRouteEnforcedForProfile(Profile* profile);
++bool IsRouteEnforcedForBrowserContext(content::BrowserContext* context);
++
++// True when any loaded profile enforces a route. Needed for the settings that
++// Chromium only exposes globally (DNS-over-HTTPS lives in local state), where
++// a single enforced profile has to win over the others.
++bool IsRouteEnforcedForAnyProfile();
++
++// True when `context` has an enforced route that is no longer actually in
++// effect. Requests must be blocked in that state.
++bool IsRouteSubvertedForBrowserContext(content::BrowserContext* context);
++
++}  // namespace nitrous_proxy
++
++#endif  // CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_ENFORCEMENT_H_
+--- /dev/null
++++ b/chrome/browser/nitrous_proxy/nitrous_proxy_pref_names.h
+@@ -0,0 +1,24 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_PREF_NAMES_H_
++#define CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_PREF_NAMES_H_
++
++namespace nitrous_proxy::prefs {
++
++// Profile-scoped source of truth for the Nitrous proxy route. The native
++// `proxy` pref is derived from these values; it is never authoritative.
++inline constexpr char kMode[] = "nitrous.proxy.mode";
++inline constexpr char kHost[] = "nitrous.proxy.host";
++inline constexpr char kPort[] = "nitrous.proxy.port";
++inline constexpr char kUsername[] = "nitrous.proxy.username";
++// Ciphertext produced by os_crypt_async, base64 encoded for JSON storage.
++inline constexpr char kPasswordEncrypted[] = "nitrous.proxy.password_encrypted";
++
++// When true the route is mandatory: traffic must never fall back to a direct
++// connection, even if the upstream proxy is unreachable.
++inline constexpr char kEnforce[] = "nitrous.proxy.enforce";
++
++}  // namespace nitrous_proxy::prefs
++
++#endif  // CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_PREF_NAMES_H_
+--- /dev/null
++++ b/chrome/browser/nitrous_proxy/nitrous_proxy_service.cc
+@@ -0,0 +1,311 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service.h"
++
++#include <string>
++#include <utility>
++
++#include "base/base64.h"
++#include "base/functional/bind.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
++#include "base/strings/stringprintf.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_pref_names.h"
++#include "chrome/browser/net/profile_network_context_service.h"
++#include "chrome/browser/net/profile_network_context_service_factory.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_system_config.h"
++#include "chrome/browser/profiles/profile.h"
++#include "components/os_crypt/async/browser/os_crypt_async.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_service.h"
++#include "components/proxy_config/proxy_config_dictionary.h"
++#include "components/proxy_config/proxy_config_pref_names.h"
++
++namespace nitrous_proxy {
++
++namespace {
++
++constexpr char kModeOff[] = "off";
++constexpr char kModeHttp[] = "http";
++constexpr char kModeHttps[] = "https";
++constexpr char kModeSocks5[] = "socks5";
++
++constexpr int kMinPort = 1;
++constexpr int kMaxPort = 65535;
++
++}  // namespace
++
++ProxyMode ProxyModeFromString(const std::string& value) {
++  if (value == kModeHttp) {
++    return ProxyMode::kHttp;
++  }
++  if (value == kModeHttps) {
++    return ProxyMode::kHttps;
++  }
++  if (value == kModeSocks5) {
++    return ProxyMode::kSocks5;
++  }
++  return ProxyMode::kOff;
++}
++
++const char* ProxyModeToString(ProxyMode mode) {
++  switch (mode) {
++    case ProxyMode::kHttp:
++      return kModeHttp;
++    case ProxyMode::kHttps:
++      return kModeHttps;
++    case ProxyMode::kSocks5:
++      return kModeSocks5;
++    case ProxyMode::kOff:
++      return kModeOff;
++  }
++}
++
++bool ProxyConfig::IsValid() const {
++  if (!is_enabled()) {
++    return true;
++  }
++  if (host.empty() || host != base::TrimWhitespaceASCII(host, base::TRIM_ALL)) {
++    return false;
++  }
++  // A host containing these would let a crafted value escape into the proxy
++  // rules string and add extra servers or scheme mappings.
++  if (host.find_first_of(":;=/ \t") != std::string::npos) {
++    return false;
++  }
++  return port >= kMinPort && port <= kMaxPort;
++}
++
++std::string ProxyConfig::ToProxyUri() const {
++  if (!IsValid() || !is_enabled()) {
++    return std::string();
++  }
++  return base::StringPrintf("%s://%s:%d", ProxyModeToString(mode), host.c_str(),
++                            port);
++}
++
++NitrousProxyService::NitrousProxyService(PrefService* prefs, Profile* profile)
++    : prefs_(prefs), profile_(profile) {
++  if (g_browser_process && g_browser_process->os_crypt_async()) {
++    g_browser_process->os_crypt_async()->GetInstance(
++        base::BindOnce(&NitrousProxyService::OnEncryptorReady,
++                       weak_ptr_factory_.GetWeakPtr()));
++  }
++  // Re-derive the native pref on startup so a route configured in a previous
++  // session is in force before any request is issued.
++  SyncNativeProxyPref();
++}
++
++NitrousProxyService::~NitrousProxyService() = default;
++
++void NitrousProxyService::RegisterProfilePrefs(
++    user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterStringPref(prefs::kMode, kModeOff);
++  registry->RegisterStringPref(prefs::kHost, std::string());
++  registry->RegisterIntegerPref(prefs::kPort, 0);
++  registry->RegisterStringPref(prefs::kUsername, std::string());
++  registry->RegisterStringPref(prefs::kPasswordEncrypted, std::string());
++  registry->RegisterBooleanPref(prefs::kEnforce, true);
++}
++
++ProxyConfig NitrousProxyService::GetConfig() const {
++  ProxyConfig config;
++  config.mode = ProxyModeFromString(prefs_->GetString(prefs::kMode));
++  config.host = prefs_->GetString(prefs::kHost);
++  config.port = prefs_->GetInteger(prefs::kPort);
++  config.username = prefs_->GetString(prefs::kUsername);
++  config.enforce = prefs_->GetBoolean(prefs::kEnforce);
++  if (pending_password_) {
++    config.password = *pending_password_;
++  } else {
++    config.password =
++        DecryptPassword(prefs_->GetString(prefs::kPasswordEncrypted));
++  }
++  return config;
++}
++
++bool NitrousProxyService::SetConfig(const ProxyConfig& config) {
++  if (!config.IsValid()) {
++    return false;
++  }
++
++  prefs_->SetString(prefs::kMode, ProxyModeToString(config.mode));
++  prefs_->SetString(prefs::kHost, config.host);
++  prefs_->SetInteger(prefs::kPort, config.port);
++  prefs_->SetString(prefs::kUsername, config.username);
++  prefs_->SetBoolean(prefs::kEnforce, config.enforce);
++
++  if (config.password.empty()) {
++    prefs_->SetString(prefs::kPasswordEncrypted, std::string());
++    pending_password_.reset();
++  } else if (std::optional<std::string> encrypted =
++                 EncryptPassword(config.password)) {
++    prefs_->SetString(prefs::kPasswordEncrypted, *encrypted);
++    pending_password_.reset();
++  } else {
++    // No encryptor yet. Keep the secret in memory for this session rather than
++    // persisting it in the clear; it is re-encrypted once the key arrives.
++    pending_password_ = config.password;
++  }
++
++  SyncNativeProxyPref();
++  SyncSystemRoute();
++  // The proxy pref reaches the network context on its own, but credentials are
++  // cached per session, so they have to be pushed explicitly. Without this a
++  // password change would appear to apply while authentication still used the
++  // old value.
++  if (profile_) {
++    if (ProfileNetworkContextService* network_service =
++            ProfileNetworkContextServiceFactory::GetForContext(profile_)) {
++      network_service->ApplySocksCredentials();
++    }
++  }
++  return true;
++}
++
++base::DictValue NitrousProxyService::GetConfigForUi() const {
++  const ProxyConfig config = GetConfig();
++  base::DictValue result;
++  result.Set("mode", ProxyModeToString(config.mode));
++  result.Set("host", config.host);
++  result.Set("port", config.port);
++  result.Set("username", config.username);
++  result.Set("hasPassword", !config.password.empty());
++  result.Set("enforce", config.enforce);
++  return result;
++}
++
++base::DictValue NitrousProxyService::SetConfigFromUi(
++    const base::DictValue& payload) {
++  ProxyConfig config = GetConfig();
++  if (const std::string* mode = payload.FindString("mode")) {
++    config.mode = ProxyModeFromString(*mode);
++  }
++  if (const std::string* host = payload.FindString("host")) {
++    config.host = *host;
++  }
++  if (std::optional<int> port = payload.FindInt("port")) {
++    config.port = *port;
++  }
++  if (const std::string* username = payload.FindString("username")) {
++    config.username = *username;
++  }
++  // Absent password means "keep the stored one"; explicit empty clears it.
++  if (const std::string* password = payload.FindString("password")) {
++    config.password = *password;
++  }
++  if (std::optional<bool> enforce = payload.FindBool("enforce")) {
++    config.enforce = *enforce;
++  }
++
++  base::DictValue result;
++  if (!SetConfig(config)) {
++    result.Set("success", false);
++    result.Set("error", "invalid_config");
++    return result;
++  }
++  result.Set("success", true);
++  result.Set("config", GetConfigForUi());
++  return result;
++}
++
++bool NitrousProxyService::IsRouteEnforced() const {
++  const ProxyConfig config = GetConfig();
++  return config.is_enabled() && config.enforce;
++}
++
++bool NitrousProxyService::IsRouteSubverted() const {
++  const ProxyConfig config = GetConfig();
++  if (!config.is_enabled() || !config.enforce) {
++    return false;
++  }
++  if (!config.IsValid()) {
++    // Enforced but unusable: nothing can be routed, so treat it as subverted
++    // rather than letting requests find another way out.
++    return true;
++  }
++
++  const ProxyConfigDictionary dict(
++      prefs_->GetDict(proxy_config::prefs::kProxy).Clone());
++  ProxyPrefs::ProxyMode mode = ProxyPrefs::MODE_DIRECT;
++  if (!dict.GetMode(&mode) || mode != ProxyPrefs::MODE_FIXED_SERVERS) {
++    return true;
++  }
++  std::string servers;
++  if (!dict.GetProxyServer(&servers)) {
++    return true;
++  }
++  // The pref must still name exactly the route we derived. Anything else, an
++  // added fallback or a different upstream, is a way out we did not authorize.
++  return servers != config.ToProxyUri();
++}
++
++void NitrousProxyService::Shutdown() {
++  weak_ptr_factory_.InvalidateWeakPtrs();
++}
++
++void NitrousProxyService::OnEncryptorReady(
++    os_crypt_async::Encryptor encryptor) {
++  encryptor_ = std::move(encryptor);
++  if (!pending_password_) {
++    return;
++  }
++  if (std::optional<std::string> encrypted =
++          EncryptPassword(*pending_password_)) {
++    prefs_->SetString(prefs::kPasswordEncrypted, *encrypted);
++    pending_password_.reset();
++  }
++}
++
++void NitrousProxyService::SyncNativeProxyPref() {
++  const ProxyConfig config = GetConfig();
++  if (!config.is_enabled() || !config.IsValid()) {
++    prefs_->SetDict(proxy_config::prefs::kProxy,
++                    ProxyConfigDictionary::CreateDirect());
++    return;
++  }
++  // Empty bypass list: only net's implicit localhost/link-local rules apply.
++  prefs_->SetDict(proxy_config::prefs::kProxy,
++                  ProxyConfigDictionary::CreateFixedServers(
++                      config.ToProxyUri(), /*bypass_list=*/std::string()));
++}
++
++void NitrousProxyService::SyncSystemRoute() {
++  // Whether this profile now enforces a route decides what system traffic is
++  // allowed to do, so the local-state route is re-derived on every change.
++  if (g_browser_process) {
++    SyncSystemProxyPref(g_browser_process->local_state());
++  }
++}
++
++std::optional<std::string> NitrousProxyService::EncryptPassword(
++    const std::string& plaintext) const {
++  if (!encryptor_ || plaintext.empty()) {
++    return std::nullopt;
++  }
++  std::string ciphertext;
++  if (!encryptor_->EncryptString(plaintext, &ciphertext)) {
++    return std::nullopt;
++  }
++  return base::Base64Encode(ciphertext);
++}
++
++std::string NitrousProxyService::DecryptPassword(
++    const std::string& stored) const {
++  if (!encryptor_ || stored.empty()) {
++    return std::string();
++  }
++  std::string ciphertext;
++  if (!base::Base64Decode(stored, &ciphertext)) {
++    return std::string();
++  }
++  std::string plaintext;
++  if (!encryptor_->DecryptString(ciphertext, &plaintext)) {
++    return std::string();
++  }
++  return plaintext;
++}
++
++}  // namespace nitrous_proxy
+--- /dev/null
++++ b/chrome/browser/nitrous_proxy/nitrous_proxy_service.h
+@@ -0,0 +1,114 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_SERVICE_H_
++#define CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_SERVICE_H_
++
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/values.h"
++#include "components/keyed_service/core/keyed_service.h"
++#include "components/os_crypt/async/common/encryptor.h"
++
++class PrefService;
++class Profile;
++namespace user_prefs {
++class PrefRegistrySyncable;
++}
++
++namespace nitrous_proxy {
++
++enum class ProxyMode {
++  kOff,
++  kHttp,
++  kHttps,
++  kSocks5,
++};
++
++// Parses/serializes the wire name used by prefs and the settings UI.
++ProxyMode ProxyModeFromString(const std::string& value);
++const char* ProxyModeToString(ProxyMode mode);
++
++struct ProxyConfig {
++  ProxyMode mode = ProxyMode::kOff;
++  std::string host;
++  int port = 0;
++  std::string username;
++  std::string password;
++  bool enforce = true;
++
++  bool is_enabled() const { return mode != ProxyMode::kOff; }
++  // True when the route is enabled and every field needed to reach the
++  // upstream is present and in range.
++  bool IsValid() const;
++  // "socks5://host:port" style URI with no url-scheme prefix, so that
++  // net::ProxyConfig::ProxyRules parses it as a single PROXY_LIST that applies
++  // to every URL scheme. A per-scheme spec would silently fall back to DIRECT
++  // for unlisted schemes.
++  std::string ToProxyUri() const;
++};
++
++// Owns the profile's Nitrous proxy configuration and keeps the native
++// `proxy` pref in sync with it.
++class NitrousProxyService : public KeyedService {
++ public:
++  NitrousProxyService(PrefService* prefs, Profile* profile);
++  ~NitrousProxyService() override;
++
++  NitrousProxyService(const NitrousProxyService&) = delete;
++  NitrousProxyService& operator=(const NitrousProxyService&) = delete;
++
++  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
++
++  // Reads the stored config. `password` is only populated once the encryptor
++  // is available; callers that need it must handle the empty case.
++  ProxyConfig GetConfig() const;
++
++  // Validates and persists `config`, then re-derives the native proxy pref.
++  // Returns false without writing anything when the config is invalid, so a
++  // malformed edit can never downgrade an enforced route to DIRECT.
++  bool SetConfig(const ProxyConfig& config);
++
++  // Settings-UI facing wrappers. The password is never sent back to the UI;
++  // `hasPassword` reports whether one is stored.
++  base::DictValue GetConfigForUi() const;
++  base::DictValue SetConfigFromUi(const base::DictValue& payload);
++
++  // True when traffic must not fall back to a direct connection. Used by the
++  // leak-sealing and kill-switch layers.
++  bool IsRouteEnforced() const;
++
++  // True when an enforced route is configured but the effective native proxy
++  // pref no longer describes it, which happens when an extension or a policy
++  // takes over `proxy`. Traffic in that state would leave outside the route,
++  // so the kill switch must block it.
++  bool IsRouteSubverted() const;
++
++  void Shutdown() override;
++
++ private:
++  void OnEncryptorReady(os_crypt_async::Encryptor encryptor);
++  // Mirrors the current config into `proxy_config::prefs::kProxy`.
++  void SyncNativeProxyPref();
++  // Re-derives the local-state route, whose sentinel depends on whether any
++  // profile enforces a route.
++  void SyncSystemRoute();
++  std::optional<std::string> EncryptPassword(const std::string& plaintext) const;
++  std::string DecryptPassword(const std::string& stored) const;
++
++  raw_ptr<PrefService> prefs_;
++  raw_ptr<Profile> profile_;
++  std::optional<os_crypt_async::Encryptor> encryptor_;
++  // Held until the encryptor arrives, so a password set during startup is not
++  // lost and is not written out in the clear.
++  std::optional<std::string> pending_password_;
++  base::WeakPtrFactory<NitrousProxyService> weak_ptr_factory_{this};
++};
++
++}  // namespace nitrous_proxy
++
++#endif  // CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_SERVICE_H_
+--- /dev/null
++++ b/chrome/browser/nitrous_proxy/nitrous_proxy_service_factory.cc
+@@ -0,0 +1,54 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service_factory.h"
++
++#include "base/no_destructor.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_selections.h"
++#include "content/public/browser/browser_context.h"
++
++namespace nitrous_proxy {
++
++NitrousProxyService* NitrousProxyServiceFactory::GetForProfile(
++    Profile* profile) {
++  return static_cast<NitrousProxyService*>(
++      GetInstance()->GetServiceForBrowserContext(profile, true));
++}
++
++NitrousProxyService* NitrousProxyServiceFactory::GetForProfileIfExists(
++    Profile* profile) {
++  return static_cast<NitrousProxyService*>(
++      GetInstance()->GetServiceForBrowserContext(profile, false));
++}
++
++NitrousProxyServiceFactory* NitrousProxyServiceFactory::GetInstance() {
++  static base::NoDestructor<NitrousProxyServiceFactory> instance;
++  return instance.get();
++}
++
++NitrousProxyServiceFactory::NitrousProxyServiceFactory()
++    : ProfileKeyedServiceFactory(
++          "NitrousProxyService",
++          ProfileSelections::Builder()
++              .WithRegular(ProfileSelection::kOriginalOnly)
++              .WithGuest(ProfileSelection::kOriginalOnly)
++              .Build()) {}
++
++NitrousProxyServiceFactory::~NitrousProxyServiceFactory() = default;
++
++std::unique_ptr<KeyedService>
++NitrousProxyServiceFactory::BuildServiceInstanceForBrowserContext(
++    content::BrowserContext* context) const {
++  Profile* profile = Profile::FromBrowserContext(context);
++  return std::make_unique<NitrousProxyService>(profile->GetPrefs(), profile);
++}
++
++bool NitrousProxyServiceFactory::ServiceIsCreatedWithBrowserContext() const {
++  // The stored route must be re-applied to the native proxy pref before the
++  // profile issues any request, so the service cannot be lazily created.
++  return true;
++}
++
++}  // namespace nitrous_proxy
+--- /dev/null
++++ b/chrome/browser/nitrous_proxy/nitrous_proxy_service_factory.h
+@@ -0,0 +1,46 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_SERVICE_FACTORY_H_
++#define CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_SERVICE_FACTORY_H_
++
++#include <memory>
++
++#include "base/no_destructor.h"
++#include "chrome/browser/profiles/profile_keyed_service_factory.h"
++
++class Profile;
++namespace content {
++class BrowserContext;
++}
++
++namespace nitrous_proxy {
++class NitrousProxyService;
++
++class NitrousProxyServiceFactory : public ProfileKeyedServiceFactory {
++ public:
++  static NitrousProxyService* GetForProfile(Profile* profile);
++  // Returns null instead of constructing the service. Used by callers that run
++  // while profiles are still initializing, so that reading the enforcement
++  // state cannot re-enter service creation.
++  static NitrousProxyService* GetForProfileIfExists(Profile* profile);
++  static NitrousProxyServiceFactory* GetInstance();
++
++  NitrousProxyServiceFactory(const NitrousProxyServiceFactory&) = delete;
++  NitrousProxyServiceFactory& operator=(const NitrousProxyServiceFactory&) =
++      delete;
++
++ private:
++  friend base::NoDestructor<NitrousProxyServiceFactory>;
++
++  NitrousProxyServiceFactory();
++  ~NitrousProxyServiceFactory() override;
++
++  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
++      content::BrowserContext* context) const override;
++  bool ServiceIsCreatedWithBrowserContext() const override;
++};
++
++}  // namespace nitrous_proxy
++
++#endif  // CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_SERVICE_FACTORY_H_
+--- /dev/null
++++ b/chrome/browser/nitrous_proxy/nitrous_proxy_service_unittest.cc
+@@ -0,0 +1,264 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service.h"
++
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_pref_names.h"
++
++#include <memory>
++#include <string>
++
++#include "components/prefs/pref_service.h"
++#include "components/proxy_config/proxy_config_dictionary.h"
++#include "components/proxy_config/proxy_config_pref_names.h"
++#include "components/proxy_config/proxy_prefs.h"
++#include "components/sync_preferences/testing_pref_service_syncable.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace nitrous_proxy {
++
++namespace {
++
++class NitrousProxyServiceTest : public testing::Test {
++ protected:
++  void SetUp() override {
++    NitrousProxyService::RegisterProfilePrefs(prefs_.registry());
++    // Normally registered by PrefProxyConfigTrackerImpl; the service derives
++    // this pref, so the test registry needs it too.
++    prefs_.registry()->RegisterDictionaryPref(proxy_config::prefs::kProxy);
++    service_ = std::make_unique<NitrousProxyService>(&prefs_, nullptr);
++  }
++
++  ProxyConfig MakeValidConfig() const {
++    ProxyConfig config;
++    config.mode = ProxyMode::kSocks5;
++    config.host = "proxy.example";
++    config.port = 1080;
++    config.enforce = true;
++    return config;
++  }
++
++  ProxyPrefs::ProxyMode NativeMode() const {
++    const ProxyConfigDictionary dict(
++        prefs_.GetDict(proxy_config::prefs::kProxy).Clone());
++    ProxyPrefs::ProxyMode mode = ProxyPrefs::MODE_SYSTEM;
++    EXPECT_TRUE(dict.GetMode(&mode));
++    return mode;
++  }
++
++  std::string NativeServers() const {
++    const ProxyConfigDictionary dict(
++        prefs_.GetDict(proxy_config::prefs::kProxy).Clone());
++    std::string servers;
++    if (!dict.GetProxyServer(&servers)) {
++      return std::string();
++    }
++    return servers;
++  }
++
++  sync_preferences::TestingPrefServiceSyncable prefs_;
++  std::unique_ptr<NitrousProxyService> service_;
++};
++
++TEST_F(NitrousProxyServiceTest, DefaultsToDirect) {
++  EXPECT_FALSE(service_->GetConfig().is_enabled());
++  EXPECT_FALSE(service_->IsRouteEnforced());
++  EXPECT_EQ(ProxyPrefs::MODE_DIRECT, NativeMode());
++}
++
++// The derived spec must be a single bare URI. A per-scheme spec would let any
++// unlisted scheme fall back to a direct connection.
++TEST_F(NitrousProxyServiceTest, DerivesBareUriCoveringAllSchemes) {
++  ASSERT_TRUE(service_->SetConfig(MakeValidConfig()));
++
++  EXPECT_EQ(ProxyPrefs::MODE_FIXED_SERVERS, NativeMode());
++  EXPECT_EQ("socks5://proxy.example:1080", NativeServers());
++  EXPECT_EQ(std::string::npos, NativeServers().find('='));
++}
++
++TEST_F(NitrousProxyServiceTest, EachModeMapsToItsScheme) {
++  ProxyConfig config = MakeValidConfig();
++  config.mode = ProxyMode::kHttp;
++  ASSERT_TRUE(service_->SetConfig(config));
++  EXPECT_EQ("http://proxy.example:1080", NativeServers());
++
++  config.mode = ProxyMode::kHttps;
++  ASSERT_TRUE(service_->SetConfig(config));
++  EXPECT_EQ("https://proxy.example:1080", NativeServers());
++}
++
++TEST_F(NitrousProxyServiceTest, DisablingRestoresDirect) {
++  ASSERT_TRUE(service_->SetConfig(MakeValidConfig()));
++  ASSERT_EQ(ProxyPrefs::MODE_FIXED_SERVERS, NativeMode());
++
++  ProxyConfig off;
++  off.mode = ProxyMode::kOff;
++  ASSERT_TRUE(service_->SetConfig(off));
++  EXPECT_EQ(ProxyPrefs::MODE_DIRECT, NativeMode());
++  EXPECT_FALSE(service_->IsRouteEnforced());
++}
++
++// An invalid edit must be rejected outright rather than partially written,
++// otherwise an enforced route could be downgraded to a direct connection.
++TEST_F(NitrousProxyServiceTest, RejectsInvalidConfigWithoutWriting) {
++  ASSERT_TRUE(service_->SetConfig(MakeValidConfig()));
++
++  ProxyConfig empty_host = MakeValidConfig();
++  empty_host.host.clear();
++  EXPECT_FALSE(service_->SetConfig(empty_host));
++
++  ProxyConfig bad_port = MakeValidConfig();
++  bad_port.port = 0;
++  EXPECT_FALSE(service_->SetConfig(bad_port));
++
++  bad_port.port = 65536;
++  EXPECT_FALSE(service_->SetConfig(bad_port));
++
++  // The previously accepted route is still in force.
++  EXPECT_EQ("socks5://proxy.example:1080", NativeServers());
++  EXPECT_TRUE(service_->IsRouteEnforced());
++}
++
++// A host carrying separator characters could otherwise inject extra servers or
++// scheme mappings into the proxy rules string.
++TEST_F(NitrousProxyServiceTest, RejectsHostWithRuleSeparators) {
++  for (const char* host : {"a;b", "a=b", "a b", "a/b", "host:1080"}) {
++    ProxyConfig config = MakeValidConfig();
++    config.host = host;
++    EXPECT_FALSE(service_->SetConfig(config)) << host;
++  }
++}
++
++TEST_F(NitrousProxyServiceTest, EnforceFlagIsIndependentOfBeingEnabled) {
++  ProxyConfig config = MakeValidConfig();
++  config.enforce = false;
++  ASSERT_TRUE(service_->SetConfig(config));
++
++  EXPECT_TRUE(service_->GetConfig().is_enabled());
++  EXPECT_FALSE(service_->IsRouteEnforced());
++  EXPECT_FALSE(service_->IsRouteSubverted());
++}
++
++TEST_F(NitrousProxyServiceTest, NotSubvertedWhileNativePrefMatches) {
++  ASSERT_TRUE(service_->SetConfig(MakeValidConfig()));
++  EXPECT_FALSE(service_->IsRouteSubverted());
++}
++
++// Simulates an extension or policy taking over the native pref.
++TEST_F(NitrousProxyServiceTest, SubvertedWhenNativePrefIsOverridden) {
++  ASSERT_TRUE(service_->SetConfig(MakeValidConfig()));
++
++  prefs_.SetDict(proxy_config::prefs::kProxy,
++                 ProxyConfigDictionary::CreateDirect());
++  EXPECT_TRUE(service_->IsRouteSubverted());
++
++  prefs_.SetDict(proxy_config::prefs::kProxy,
++                 ProxyConfigDictionary::CreateFixedServers(
++                     "socks5://elsewhere.example:1080", std::string()));
++  EXPECT_TRUE(service_->IsRouteSubverted());
++
++  // An added fallback is also a way out we did not authorize.
++  prefs_.SetDict(proxy_config::prefs::kProxy,
++                 ProxyConfigDictionary::CreateFixedServers(
++                     "socks5://proxy.example:1080,direct://", std::string()));
++  EXPECT_TRUE(service_->IsRouteSubverted());
++}
++
++TEST_F(NitrousProxyServiceTest, NotSubvertedWhenRouteIsNotEnforced) {
++  ProxyConfig config = MakeValidConfig();
++  config.enforce = false;
++  ASSERT_TRUE(service_->SetConfig(config));
++
++  prefs_.SetDict(proxy_config::prefs::kProxy,
++                 ProxyConfigDictionary::CreateDirect());
++  EXPECT_FALSE(service_->IsRouteSubverted());
++}
++
++// Without an encryptor the password must stay in memory for the session rather
++// than being persisted in the clear.
++TEST_F(NitrousProxyServiceTest, PasswordIsNotPersistedInPlaintext) {
++  ProxyConfig config = MakeValidConfig();
++  config.username = "user";
++  config.password = "secret";
++  ASSERT_TRUE(service_->SetConfig(config));
++
++  EXPECT_EQ("secret", service_->GetConfig().password);
++  EXPECT_EQ(std::string(),
++            prefs_.GetString(prefs::kPasswordEncrypted));
++}
++
++TEST_F(NitrousProxyServiceTest, ClearingPasswordClearsStoredValue) {
++  ProxyConfig config = MakeValidConfig();
++  config.password = "secret";
++  ASSERT_TRUE(service_->SetConfig(config));
++  ASSERT_EQ("secret", service_->GetConfig().password);
++
++  config.password.clear();
++  ASSERT_TRUE(service_->SetConfig(config));
++  EXPECT_EQ(std::string(), service_->GetConfig().password);
++}
++
++TEST_F(NitrousProxyServiceTest, UiPayloadOmitsPasswordButReportsPresence) {
++  ProxyConfig config = MakeValidConfig();
++  config.username = "user";
++  config.password = "secret";
++  ASSERT_TRUE(service_->SetConfig(config));
++
++  const base::DictValue ui = service_->GetConfigForUi();
++  EXPECT_EQ("socks5", *ui.FindString("mode"));
++  EXPECT_EQ("proxy.example", *ui.FindString("host"));
++  EXPECT_EQ(1080, ui.FindInt("port"));
++  EXPECT_EQ("user", *ui.FindString("username"));
++  EXPECT_TRUE(ui.FindBool("hasPassword").value_or(false));
++  EXPECT_FALSE(ui.contains("password"));
++}
++
++// An absent password field means "keep the stored one"; the UI never echoes it
++// back, so treating absence as a clear would silently drop the credential.
++TEST_F(NitrousProxyServiceTest, UiUpdateWithoutPasswordKeepsStoredOne) {
++  ProxyConfig config = MakeValidConfig();
++  config.username = "user";
++  config.password = "secret";
++  ASSERT_TRUE(service_->SetConfig(config));
++
++  base::DictValue payload;
++  payload.Set("mode", "socks5");
++  payload.Set("host", "other.example");
++  payload.Set("port", 9050);
++  payload.Set("username", "user");
++  payload.Set("enforce", true);
++
++  const base::DictValue result = service_->SetConfigFromUi(payload);
++  ASSERT_TRUE(result.FindBool("success").value_or(false));
++  EXPECT_EQ("secret", service_->GetConfig().password);
++  EXPECT_EQ("socks5://other.example:9050", NativeServers());
++}
++
++TEST_F(NitrousProxyServiceTest, UiUpdateReportsInvalidConfig) {
++  base::DictValue payload;
++  payload.Set("mode", "socks5");
++  payload.Set("host", "");
++  payload.Set("port", 1080);
++
++  const base::DictValue result = service_->SetConfigFromUi(payload);
++  EXPECT_FALSE(result.FindBool("success").value_or(true));
++  EXPECT_EQ("invalid_config", *result.FindString("error"));
++}
++
++TEST_F(NitrousProxyServiceTest, ConfigSurvivesServiceRestart) {
++  ASSERT_TRUE(service_->SetConfig(MakeValidConfig()));
++
++  // A fresh service over the same prefs must re-apply the route, so that a
++  // route configured in a previous session is in force before any request.
++  prefs_.SetDict(proxy_config::prefs::kProxy,
++                 ProxyConfigDictionary::CreateDirect());
++  service_ = std::make_unique<NitrousProxyService>(&prefs_, nullptr);
++
++  EXPECT_EQ("socks5://proxy.example:1080", NativeServers());
++  EXPECT_TRUE(service_->IsRouteEnforced());
++}
++
++}  // namespace
++
++}  // namespace nitrous_proxy
+--- /dev/null
++++ b/chrome/browser/nitrous_proxy/nitrous_proxy_system_config.cc
+@@ -0,0 +1,98 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_system_config.h"
++
++#include <string>
++
++#include "base/strings/stringprintf.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_enforcement.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service.h"
++#include "components/prefs/pref_registry_simple.h"
++#include "components/prefs/pref_service.h"
++#include "components/proxy_config/proxy_config_dictionary.h"
++#include "components/proxy_config/proxy_config_pref_names.h"
++
++namespace nitrous_proxy {
++
++namespace {
++
++// Loopback with a port that nothing listens on. Used as the sentinel route so
++// that browser-originated traffic fails instead of going out directly while a
++// profile route is enforced. Port 1 is privileged, so this cannot collide with
++// a user-run service by accident.
++constexpr char kUnreachableSentinelUri[] = "socks5://127.0.0.1:1";
++
++}  // namespace
++
++void RegisterSystemProxyLocalStatePrefs(PrefRegistrySimple* registry) {
++  registry->RegisterBooleanPref(system_prefs::kEnabled, false);
++  registry->RegisterStringPref(system_prefs::kMode, "off");
++  registry->RegisterStringPref(system_prefs::kHost, std::string());
++  registry->RegisterIntegerPref(system_prefs::kPort, 0);
++  registry->RegisterStringPref(system_prefs::kSourceProfile, std::string());
++}
++
++void SyncSystemProxyPref(PrefService* local_state) {
++  if (!local_state) {
++    return;
++  }
++
++  if (local_state->GetBoolean(system_prefs::kEnabled)) {
++    ProxyConfig config;
++    config.mode = ProxyModeFromString(local_state->GetString(system_prefs::kMode));
++    config.host = local_state->GetString(system_prefs::kHost);
++    config.port = local_state->GetInteger(system_prefs::kPort);
++    if (config.is_enabled() && config.IsValid()) {
++      local_state->SetDict(proxy_config::prefs::kProxy,
++                           ProxyConfigDictionary::CreateFixedServers(
++                               config.ToProxyUri(),
++                               /*bypass_list=*/std::string()));
++      return;
++    }
++    // Enabled but unusable: fall through to the sentinel rather than direct.
++  }
++
++  if (IsRouteEnforcedForAnyProfile()) {
++    local_state->SetDict(proxy_config::prefs::kProxy,
++                         ProxyConfigDictionary::CreateFixedServers(
++                             kUnreachableSentinelUri,
++                             /*bypass_list=*/std::string()));
++    return;
++  }
++
++  local_state->SetDict(proxy_config::prefs::kProxy,
++                       ProxyConfigDictionary::CreateDirect());
++}
++
++void SetSystemProxyFromConfig(PrefService* local_state,
++                              const ProxyConfig& config,
++                              const std::string& source_profile) {
++  if (!local_state) {
++    return;
++  }
++  if (!config.is_enabled() || !config.IsValid()) {
++    ClearSystemProxy(local_state);
++    return;
++  }
++  local_state->SetBoolean(system_prefs::kEnabled, true);
++  local_state->SetString(system_prefs::kMode, ProxyModeToString(config.mode));
++  local_state->SetString(system_prefs::kHost, config.host);
++  local_state->SetInteger(system_prefs::kPort, config.port);
++  local_state->SetString(system_prefs::kSourceProfile, source_profile);
++  SyncSystemProxyPref(local_state);
++}
++
++void ClearSystemProxy(PrefService* local_state) {
++  if (!local_state) {
++    return;
++  }
++  local_state->SetBoolean(system_prefs::kEnabled, false);
++  local_state->SetString(system_prefs::kMode, "off");
++  local_state->SetString(system_prefs::kHost, std::string());
++  local_state->SetInteger(system_prefs::kPort, 0);
++  local_state->SetString(system_prefs::kSourceProfile, std::string());
++  SyncSystemProxyPref(local_state);
++}
++
++}  // namespace nitrous_proxy
+--- /dev/null
++++ b/chrome/browser/nitrous_proxy/nitrous_proxy_system_config.h
+@@ -0,0 +1,51 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_SYSTEM_CONFIG_H_
++#define CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_SYSTEM_CONFIG_H_
++
++#include <string>
++
++class PrefRegistrySimple;
++class PrefService;
++
++namespace nitrous_proxy {
++
++struct ProxyConfig;
++
++namespace system_prefs {
++
++// Local-state route used for traffic the browser issues on its own behalf
++// (component updates, Safe Browsing, network time, crash upload). These are
++// served by the system NetworkContext, which reads local state and therefore
++// cannot follow a per-profile route.
++inline constexpr char kEnabled[] = "nitrous.proxy.system.enabled";
++inline constexpr char kMode[] = "nitrous.proxy.system.mode";
++inline constexpr char kHost[] = "nitrous.proxy.system.host";
++inline constexpr char kPort[] = "nitrous.proxy.system.port";
++// Name of the profile the route was copied from, for display only.
++inline constexpr char kSourceProfile[] = "nitrous.proxy.system.source_profile";
++
++}  // namespace system_prefs
++
++void RegisterSystemProxyLocalStatePrefs(PrefRegistrySimple* registry);
++
++// Re-derives the local-state `proxy` pref from the stored system route.
++//
++// When no system route is set but some profile enforces one, system traffic is
++// pointed at an unreachable address instead of being left direct. Leaving it
++// direct would send browser-originated requests from the real IP, which is
++// exactly the leak an enforced route is meant to prevent.
++void SyncSystemProxyPref(PrefService* local_state);
++
++// Copies `config` into the local-state route. `source_profile` is recorded so
++// the settings page can say which profile the system route came from.
++void SetSystemProxyFromConfig(PrefService* local_state,
++                              const ProxyConfig& config,
++                              const std::string& source_profile);
++
++void ClearSystemProxy(PrefService* local_state);
++
++}  // namespace nitrous_proxy
++
++#endif  // CHROME_BROWSER_NITROUS_PROXY_NITROUS_PROXY_SYSTEM_CONFIG_H_
+--- a/chrome/browser/predictors/loading_predictor_config.cc
++++ b/chrome/browser/predictors/loading_predictor_config.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/predictors/loading_predictor_config.h"
+ 
+ #include "base/metrics/field_trial_params.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_enforcement.h"
+ #include "chrome/browser/predictors/predictors_features.h"
+ #include "chrome/browser/preloading/preloading_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -18,6 +19,13 @@ bool IsLoadingPredictorEnabled(Profile*
+ }
+ 
+ bool IsPreconnectAllowed(Profile* profile) {
++  // Preresolve issues a host resolution through the network context, which is
++  // not routed through the proxy. Under an enforced Nitrous route that would
++  // disclose browsing to the local resolver even though the traffic itself is
++  // proxied, so speculative resolution is switched off entirely.
++  if (nitrous_proxy::IsRouteEnforcedForProfile(profile)) {
++    return false;
++  }
+   // Checks that the preconnect is allowed by user settings.
+   return profile && profile->GetPrefs() &&
+          (prefetch::IsSomePreloadingEnabled(*profile->GetPrefs()) ==
+--- a/chrome/browser/predictors/network_hints_handler_impl.cc
++++ b/chrome/browser/predictors/network_hints_handler_impl.cc
+@@ -7,6 +7,7 @@
+ #include <optional>
+ 
+ #include "base/memory/ptr_util.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_enforcement.h"
+ #include "chrome/browser/predictors/loading_predictor.h"
+ #include "chrome/browser/predictors/loading_predictor_factory.h"
+ #include "chrome/browser/predictors/predictors_traffic_annotations.h"
+@@ -55,6 +56,14 @@ void NetworkHintsHandlerImpl::PrefetchDN
+   if (!render_frame_host)
+     return;
+ 
++  // Renderer-driven dns-prefetch hints resolve locally and would sidestep an
++  // enforced route. Checked here rather than when this handler is built,
++  // because the route can be turned on while a frame is already live.
++  if (nitrous_proxy::IsRouteEnforcedForBrowserContext(
++          render_frame_host->GetBrowserContext())) {
++    return;
++  }
++
+   std::vector<GURL> gurls;
+   for (const auto& url : urls) {
+     gurls.emplace_back(url.GetURL());
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -36,6 +36,8 @@
+ #include "chrome/browser/glic/suggestions/contextual_cueing_prefs.h"
+ #include "chrome/browser/gpu/gpu_mode_manager.h"
+ #include "chrome/browser/helium_persona/persona_service.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_system_config.h"
+ #include "chrome/browser/lifetime/browser_shutdown.h"
+ #include "chrome/browser/login_detection/login_detection_prefs.h"
+ #include "chrome/browser/media/media_engagement_service.h"
+@@ -1444,6 +1446,7 @@ void RegisterLocalState(PrefRegistrySimp
+   metrics::MetricsReportingChoiceService::RegisterPrefs(registry);
+   metrics::TabStatsTracker::RegisterPrefs(registry);
+   network_time::NetworkTimeTracker::RegisterPrefs(registry);
++  nitrous_proxy::RegisterSystemProxyLocalStatePrefs(registry);
+   omnibox::RegisterLocalStatePrefs(registry);
+   optimization_guide::prefs::RegisterLocalStatePrefs(registry);
+   optimization_guide::model_execution::prefs::RegisterLocalStatePrefs(registry);
+@@ -1757,6 +1760,7 @@ void RegisterProfilePrefs(user_prefs::Pr
+   glic::prefs::RegisterProfilePrefs(registry);
+   glic::contextual_cueing::prefs::RegisterProfilePrefs(registry);
+   helium_persona::PersonaService::RegisterProfilePrefs(registry);
++  nitrous_proxy::NitrousProxyService::RegisterProfilePrefs(registry);
+   permissions::PermissionHatsTriggerHelper::RegisterProfilePrefs(registry);
+   history_clusters::prefs::RegisterProfilePrefs(registry);
+   HostContentSettingsMap::RegisterProfilePrefs(registry);
+--- a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
++++ b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
+@@ -165,6 +165,7 @@
+ #include "chrome/browser/password_manager/factories/field_info_manager_factory.h"
+ #include "chrome/browser/password_manager/factories/password_manager_settings_service_factory.h"
+ #include "chrome/browser/helium_persona/persona_service_factory.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service_factory.h"
+ #include "chrome/browser/password_manager/factories/password_reuse_manager_factory.h"
+ #include "chrome/browser/password_manager/factories/profile_password_store_factory.h"
+ #include "chrome/browser/password_manager/password_change_service_factory.h"
+@@ -1213,6 +1214,7 @@ void ChromeBrowserMainExtraPartsProfiles
+     BUILDFLAG(IS_CHROMEOS)
+   PasswordManagerBlocklistPolicyFactory::GetInstance();
+   helium_persona::PersonaServiceFactory::GetInstance();
++  nitrous_proxy::NitrousProxyServiceFactory::GetInstance();
+ #endif
+   PasswordManagerSettingsServiceFactory::GetInstance();
+   PasswordReuseManagerFactory::GetInstance();
+--- a/chrome/browser/renderer_preferences_util.cc
++++ b/chrome/browser/renderer_preferences_util.cc
+@@ -15,6 +15,7 @@
+ #include "build/build_config.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/net/convert_explicitly_allowed_network_ports_pref.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_enforcement.h"
+ #include "content/public/browser/reduce_accept_language_utils.h"
+ #if BUILDFLAG(IS_CHROMEOS)
+ #include "chrome/browser/ash/login/demo_mode/demo_session.h"
+@@ -182,6 +183,17 @@ void UpdateFromSystemSettings(blink::Ren
+     prefs->webrtc_ip_handling_urls.push_back(
+         {pattern, blink::ToWebRTCIPHandlingPolicy(*handling)});
+   }
++
++  // An enforced Nitrous proxy route must not be bypassed by WebRTC's UDP
++  // paths, which do not traverse an HTTP or SOCKS proxy. This overrides at the
++  // read point so the user's own preference is left untouched and comes back
++  // as soon as the route is disabled. The per-URL overrides are dropped too:
++  // any one of them could otherwise re-widen the policy for a site.
++  if (nitrous_proxy::IsRouteEnforcedForProfile(profile)) {
++    prefs->webrtc_ip_handling_policy =
++        blink::ToWebRTCIPHandlingPolicy(blink::kWebRTCIPHandlingDisableNonProxiedUdp);
++    prefs->webrtc_ip_handling_urls.clear();
++  }
+   if (pref_service->IsManagedPreference(
+           prefs::kWebRTCPostQuantumKeyAgreement)) {
+     prefs->webrtc_post_quantum_key_agreement =
+--- a/chrome/browser/resources/settings/BUILD.gn
++++ b/chrome/browser/resources/settings/BUILD.gn
+@@ -143,6 +143,7 @@ build_webui("build") {
+     "privacy_page/privacy_guide/privacy_guide_welcome_fragment.ts",
+     "privacy_page/privacy_guide/step_indicator.ts",
+     "privacy_page/fingerprint_page.ts",
++    "privacy_page/nitrous_proxy_page.ts",
+     "privacy_page/persona_page.ts",
+     "privacy_page/privacy_page.ts",
+     "privacy_page/privacy_page_index.ts",
+@@ -400,6 +401,7 @@ build_webui("build") {
+       "people_page/manage_profile_browser_proxy.ts",
+       "privacy_page/changelog_proxy.ts",
+       "privacy_page/fingerprint_browser_proxy.ts",
++      "privacy_page/nitrous_proxy_browser_proxy.ts",
+       "privacy_page/persona_browser_proxy.ts",
+       "privacy_page/persona_config.ts",
+       "system_page/system_page_browser_proxy.ts",
+--- a/chrome/browser/resources/settings/lazy_load.ts
++++ b/chrome/browser/resources/settings/lazy_load.ts
+@@ -23,6 +23,7 @@ import './clear_browsing_data_dialog/cle
+ import './glic_page/glic_login_permissions_page.js';
+ import './privacy_page/cookies_page.js';
+ import './privacy_page/fingerprint_page.js';
++import './privacy_page/nitrous_proxy_page.js';
+ import './privacy_page/persona_page.js';
+ import './privacy_page/privacy_guide/privacy_guide_dialog.js';
+ import './privacy_page/privacy_guide/privacy_guide_page.js';
+@@ -248,6 +249,7 @@ export {SettingsSyncPageElement} from '.
+ export {NetworkPredictionOptions} from './performance_page/constants.js';
+ export {SettingsCookiesPageElement} from './privacy_page/cookies_page.js';
+ export {SettingsFingerprintPageElement} from './privacy_page/fingerprint_page.js';
++export {SettingsNitrousProxyPageElement} from './privacy_page/nitrous_proxy_page.js';
+ export {SettingsPersonaPageElement} from './privacy_page/persona_page.js';
+ export {SettingsDoNotTrackToggleElement} from './privacy_page/do_not_track_toggle.js';
+ export {SettingsPersonalizationOptionsElement} from './privacy_page/personalization_options.js';
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/nitrous_proxy_browser_proxy.ts
+@@ -0,0 +1,84 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++import {sendWithPromise} from 'chrome://resources/js/cr.js';
++
++export type NitrousProxyMode = 'off'|'http'|'https'|'socks5';
++
++export interface NitrousProxyConfig {
++  mode: NitrousProxyMode;
++  host: string;
++  port: number;
++  username: string;
++  // The stored password is never sent to the UI; this only reports whether one
++  // exists.
++  hasPassword: boolean;
++  enforce: boolean;
++}
++
++export interface NitrousProxyState {
++  config: NitrousProxyConfig;
++  // True when the route is enforced but no longer actually in effect, which
++  // means requests are being blocked.
++  subverted: boolean;
++  // Whether the route is also applied to browser-originated traffic.
++  systemRouteEnabled: boolean;
++  systemRouteSourceProfile: string;
++}
++
++export interface NitrousProxyUpdate {
++  mode?: NitrousProxyMode;
++  host?: string;
++  port?: number;
++  username?: string;
++  // Omit to keep the stored password; pass an empty string to clear it.
++  password?: string;
++  enforce?: boolean;
++}
++
++export interface NitrousProxyResult {
++  success: boolean;
++  error?: string;
++  config?: NitrousProxyConfig;
++}
++
++export interface NitrousProxyTestResult {
++  success: boolean;
++  error?: string;
++}
++
++export interface NitrousProxyBrowserProxy {
++  getProxyState(): Promise<NitrousProxyState>;
++  setProxyConfig(update: NitrousProxyUpdate): Promise<NitrousProxyResult>;
++  setSystemRouteEnabled(enabled: boolean): Promise<NitrousProxyState>;
++  testProxyConnection(): Promise<NitrousProxyTestResult>;
++}
++
++let instance: NitrousProxyBrowserProxy|null = null;
++
++export class NitrousProxyBrowserProxyImpl implements NitrousProxyBrowserProxy {
++  getProxyState() {
++    return sendWithPromise<NitrousProxyState>('getNitrousProxyState');
++  }
++
++  setProxyConfig(update: NitrousProxyUpdate) {
++    return sendWithPromise<NitrousProxyResult>('setNitrousProxyConfig', update);
++  }
++
++  setSystemRouteEnabled(enabled: boolean) {
++    return sendWithPromise<NitrousProxyState>(
++        'setNitrousProxySystemRoute', enabled);
++  }
++
++  testProxyConnection() {
++    return sendWithPromise<NitrousProxyTestResult>('testNitrousProxyConnection');
++  }
++
++  static getInstance(): NitrousProxyBrowserProxy {
++    return instance || (instance = new NitrousProxyBrowserProxyImpl());
++  }
++
++  static setInstance(proxy: NitrousProxyBrowserProxy) {
++    instance = proxy;
++  }
++}
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/nitrous_proxy_page.html
+@@ -0,0 +1,171 @@
++<!-- Copyright 2026 The Helium Authors -->
++<!-- You can use, redistribute, and/or modify this source code under -->
++<!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
++<style include="cr-shared-style settings-shared">
++  .section {
++    border-top: var(--cr-separator-line);
++    margin-top: 20px;
++    padding-top: 16px;
++  }
++
++  .section:first-of-type {
++    border-top: none;
++    margin-top: 0;
++    padding-top: 0;
++  }
++
++  .section-header {
++    margin-bottom: 12px;
++  }
++
++  .section-header h3 {
++    margin: 0;
++  }
++
++  .secondary {
++    color: var(--cr-secondary-text-color);
++  }
++
++  .error {
++    color: var(--cr-error-text-color);
++    margin-bottom: 12px;
++  }
++
++  .status {
++    margin-top: 12px;
++  }
++
++  .field {
++    width: 100%;
++  }
++
++  .endpoint {
++    display: grid;
++    gap: 8px;
++    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
++    margin-top: 12px;
++  }
++
++  .credentials {
++    display: grid;
++    gap: 8px;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    margin-top: 12px;
++  }
++
++  .actions {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++    margin-top: 12px;
++  }
++
++  .toggle-row {
++    align-items: center;
++    display: flex;
++    justify-content: space-between;
++    min-height: 48px;
++  }
++
++  .locked-list {
++    margin: 8px 0 0;
++    padding-inline-start: 20px;
++  }
++
++  @media (max-width: 600px) {
++    .endpoint,
++    .credentials {
++      grid-template-columns: 1fr;
++    }
++  }
++</style>
++
++<settings-subpage page-title="$i18n{nitrousProxyTitle}"
++    route-path$="[[routePath]]">
++  <template is="dom-if" if="[[state_.subverted]]">
++    <div class="error" role="alert">$i18n{nitrousProxySubverted}</div>
++  </template>
++
++  <div class="section">
++    <div class="section-header">
++      <h3>$i18n{nitrousProxyRouteTitle}</h3>
++      <div class="secondary">$i18n{nitrousProxyRouteDescription}</div>
++    </div>
++    <select class="md-select" aria-label="$i18n{nitrousProxyModeLabel}"
++        value="[[editableMode_]]" on-change="onModeChange_">
++      <option value="off">$i18n{nitrousProxyModeOff}</option>
++      <option value="http">$i18n{nitrousProxyModeHttp}</option>
++      <option value="https">$i18n{nitrousProxyModeHttps}</option>
++      <option value="socks5">$i18n{nitrousProxyModeSocks5}</option>
++    </select>
++
++    <template is="dom-if" if="[[isEnabled_(editableMode_)]]">
++      <div class="endpoint">
++        <cr-input class="field" label="$i18n{nitrousProxyHostLabel}"
++            value="{{editableHost_}}">
++        </cr-input>
++        <cr-input class="field" type="number" min="1" max="65535"
++            label="$i18n{nitrousProxyPortLabel}" value="{{editablePort_}}">
++        </cr-input>
++      </div>
++
++      <template is="dom-if" if="[[supportsAuth_(editableMode_)]]">
++        <div class="credentials">
++          <cr-input class="field" label="$i18n{nitrousProxyUsernameLabel}"
++              value="{{editableUsername_}}">
++          </cr-input>
++          <cr-input class="field" type="password"
++              label="$i18n{nitrousProxyPasswordLabel}"
++              placeholder="[[passwordPlaceholder_(state_.config.hasPassword)]]"
++              value="{{editablePassword_}}">
++          </cr-input>
++        </div>
++      </template>
++    </template>
++
++    <template is="dom-if" if="[[errorMessage_]]">
++      <div class="error status" role="alert">[[errorMessage_]]</div>
++    </template>
++
++    <div class="actions">
++      <cr-button on-click="onSaveClick_">
++        $i18n{nitrousProxySave}
++      </cr-button>
++      <cr-button on-click="onTestConnectionClick_"
++          disabled="[[!isEnabled_(editableMode_)]]">
++        $i18n{nitrousProxyTestConnection}
++      </cr-button>
++    </div>
++    <template is="dom-if" if="[[testResultMessage_]]">
++      <div class="secondary status" role="status">[[testResultMessage_]]</div>
++    </template>
++  </div>
++
++  <div class="section">
++    <div class="section-header">
++      <h3>$i18n{nitrousProxyBrowserTrafficTitle}</h3>
++      <div class="secondary">$i18n{nitrousProxyBrowserTrafficDescription}</div>
++    </div>
++    <div class="toggle-row">
++      <div>$i18n{nitrousProxyBrowserTrafficToggle}</div>
++      <cr-toggle aria-label="$i18n{nitrousProxyBrowserTrafficToggle}"
++          checked="[[state_.systemRouteEnabled]]"
++          disabled="[[!isEnabled_(editableMode_)]]"
++          on-change="onSystemRouteChange_">
++      </cr-toggle>
++    </div>
++  </div>
++
++  <div class="section">
++    <div class="section-header">
++      <h3>$i18n{nitrousProxyLockedTitle}</h3>
++      <div class="secondary">$i18n{nitrousProxyLockedDescription}</div>
++    </div>
++    <ul class="locked-list secondary">
++      <li>$i18n{nitrousProxyLockedDoh}</li>
++      <li>$i18n{nitrousProxyLockedWebrtc}</li>
++      <li>$i18n{nitrousProxyLockedPrefetch}</li>
++      <li>$i18n{nitrousProxyLockedQuic}</li>
++    </ul>
++  </div>
++</settings-subpage>
+--- /dev/null
++++ b/chrome/browser/resources/settings/privacy_page/nitrous_proxy_page.ts
+@@ -0,0 +1,150 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++import '../settings_page/settings_subpage.js';
++import 'chrome://resources/cr_elements/cr_button/cr_button.js';
++import 'chrome://resources/cr_elements/cr_input/cr_input.js';
++import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
++
++import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
++import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
++
++import type {
++  NitrousProxyBrowserProxy,
++  NitrousProxyMode,
++  NitrousProxyState,
++} from './nitrous_proxy_browser_proxy.js';
++import {NitrousProxyBrowserProxyImpl} from './nitrous_proxy_browser_proxy.js';
++import {getTemplate} from './nitrous_proxy_page.html.js';
++
++const EMPTY_STATE: NitrousProxyState = {
++  config: {
++    mode: 'off',
++    host: '',
++    port: 0,
++    username: '',
++    hasPassword: false,
++    enforce: true,
++  },
++  subverted: false,
++  systemRouteEnabled: false,
++  systemRouteSourceProfile: '',
++};
++
++export class SettingsNitrousProxyPageElement extends I18nMixin(PolymerElement) {
++  static get is() {
++    return 'settings-nitrous-proxy-page';
++  }
++
++  static get template() {
++    return getTemplate();
++  }
++
++  static get properties() {
++    return {
++      routePath: String,
++      state_: {type: Object, value: () => structuredClone(EMPTY_STATE)},
++      editableMode_: {type: String, value: 'off'},
++      editableHost_: {type: String, value: ''},
++      editablePort_: {type: String, value: ''},
++      editableUsername_: {type: String, value: ''},
++      // Left empty on load, since the stored password is never sent to the UI.
++      // Staying empty means "keep the stored one".
++      editablePassword_: {type: String, value: ''},
++      errorMessage_: {type: String, value: ''},
++      testResultMessage_: {type: String, value: ''},
++    };
++  }
++
++  declare routePath: string;
++  private declare state_: NitrousProxyState;
++  private declare editableMode_: NitrousProxyMode;
++  private declare editableHost_: string;
++  private declare editablePort_: string;
++  private declare editableUsername_: string;
++  private declare editablePassword_: string;
++  private declare errorMessage_: string;
++  private declare testResultMessage_: string;
++  private proxy_: NitrousProxyBrowserProxy =
++      NitrousProxyBrowserProxyImpl.getInstance();
++
++  override connectedCallback() {
++    super.connectedCallback();
++    void this.loadState_();
++  }
++
++  private async loadState_() {
++    this.applyState_(await this.proxy_.getProxyState());
++  }
++
++  private async onSaveClick_() {
++    this.errorMessage_ = '';
++    this.testResultMessage_ = '';
++
++    const port = Number.parseInt(this.editablePort_, 10);
++    const result = await this.proxy_.setProxyConfig({
++      mode: this.editableMode_,
++      host: this.editableHost_.trim(),
++      port: Number.isNaN(port) ? 0 : port,
++      username: this.editableUsername_.trim(),
++      // Only sent when the user typed something, so an untouched field keeps
++      // the stored password instead of clearing it.
++      ...(this.editablePassword_ ? {password: this.editablePassword_} : {}),
++      enforce: this.state_.config.enforce,
++    });
++
++    if (!result.success) {
++      this.errorMessage_ = this.i18n('nitrousProxyInvalidConfig');
++      return;
++    }
++    this.editablePassword_ = '';
++    await this.loadState_();
++  }
++
++  private async onSystemRouteChange_(event: Event) {
++    const enabled = (event.target as HTMLInputElement).checked;
++    this.applyState_(await this.proxy_.setSystemRouteEnabled(enabled));
++  }
++
++  private async onTestConnectionClick_() {
++    this.testResultMessage_ = this.i18n('nitrousProxyTestRunning');
++    const result = await this.proxy_.testProxyConnection();
++    this.testResultMessage_ = result.success ?
++        this.i18n('nitrousProxyTestSucceeded') :
++        this.i18n('nitrousProxyTestFailed');
++  }
++
++  private onModeChange_(event: Event) {
++    this.editableMode_ = (event.target as HTMLSelectElement).value as
++        NitrousProxyMode;
++  }
++
++  private applyState_(state: NitrousProxyState) {
++    this.state_ = state;
++    this.editableMode_ = state.config.mode;
++    this.editableHost_ = state.config.host;
++    this.editablePort_ = state.config.port ? String(state.config.port) : '';
++    this.editableUsername_ = state.config.username;
++  }
++
++  private isEnabled_(mode: string) {
++    return mode !== 'off';
++  }
++
++  private supportsAuth_(mode: string) {
++    return mode !== 'off';
++  }
++
++  private passwordPlaceholder_(hasPassword: boolean) {
++    return hasPassword ? this.i18n('nitrousProxyPasswordStored') : '';
++  }
++}
++
++declare global {
++  interface HTMLElementTagNameMap {
++    'settings-nitrous-proxy-page': SettingsNitrousProxyPageElement;
++  }
++}
++
++customElements.define(
++    SettingsNitrousProxyPageElement.is, SettingsNitrousProxyPageElement);
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
+@@ -61,6 +61,11 @@
+         sub-label="$i18n{fingerprintDescription}"
+         on-click="onFingerprintPageClick_"
+         role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
++    <cr-link-row id="nitrousProxyLinkRow" start-icon="privacy:shield"
++        class="hr" label="$i18n{nitrousProxyTitle}"
++        sub-label="$i18n{nitrousProxyDescription}"
++        on-click="onNitrousProxyPageClick_"
++        role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
+     <cr-toast id="deleteBrowsingDataToast" duration="5000">
+       <div>[[dbdDeletionConfirmationToastLabel_]]</div>
+     </cr-toast>
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
+@@ -180,6 +180,11 @@ export class SettingsPrivacyPageElement
+     Router.getInstance().navigateTo(routes.FINGERPRINT);
+   }
+ 
++  private onNitrousProxyPageClick_() {
++    this.interactedWithPage_();
++    Router.getInstance().navigateTo(routes.NITROUS_PROXY);
++  }
++
+   private onSecurityPageClick_() {
+     this.interactedWithPage_();
+     this.metricsBrowserProxy_.recordAction(
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page_index.html
+@@ -93,6 +93,14 @@
+   </template>
+ 
+   <template is="dom-if" if="[[renderView_(
++      routes_.NITROUS_PROXY, currentRoute, inSearchMode)]]">
++    <settings-nitrous-proxy-page slot="view" id="nitrousProxy"
++        data-parent-view-id="privacy" prefs="{{prefs}}"
++        route-path$="[[routes_.NITROUS_PROXY.path]]">
++    </settings-nitrous-proxy-page>
++  </template>
++
++  <template is="dom-if" if="[[renderView_(
+       routes_.PERSONA, currentRoute, inSearchMode)]]">
+     <settings-persona-page slot="view" id="persona"
+         data-parent-view-id="privacy" prefs="{{prefs}}"
+--- a/chrome/browser/resources/settings/route.ts
++++ b/chrome/browser/resources/settings/route.ts
+@@ -30,6 +30,7 @@ function addPrivacyChildRoutes(r: Partia
+     r.PRIVACY_GUIDE = r.PRIVACY.createChild('guide');
+   }
+   r.FINGERPRINT = r.PRIVACY.createChild('fingerprint');
++  r.NITROUS_PROXY = r.PRIVACY.createChild('proxy');
+   r.PERSONA = r.PRIVACY.createChild('persona');
+   r.SITE_SETTINGS = r.PRIVACY.createChild('/content');
+   r.SECURITY = r.PRIVACY.createChild('/security');
+--- a/chrome/browser/resources/settings/router.ts
++++ b/chrome/browser/resources/settings/router.ts
+@@ -39,6 +39,7 @@ export interface SettingsRoutes {
+   HISTORY_SEARCH: Route;
+   LANGUAGES: Route;
+   MANAGE_PROFILE: Route;
++  NITROUS_PROXY: Route;
+   OFFER_WRITING_HELP: Route;
+   ON_STARTUP: Route;
+   PASSKEYS: Route;
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1491,6 +1491,8 @@ static_library("ui") {
+       "webui/settings/on_startup_handler.h",
+       "webui/settings/password_manager_handler.cc",
+       "webui/settings/password_manager_handler.h",
++      "webui/settings/nitrous_proxy_handler.cc",
++      "webui/settings/nitrous_proxy_handler.h",
+       "webui/settings/persona_handler.cc",
+       "webui/settings/persona_handler.h",
+       "webui/settings/people_handler.cc",
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/nitrous_proxy_handler.cc
+@@ -0,0 +1,238 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#include "chrome/browser/ui/webui/settings/nitrous_proxy_handler.h"
++
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_service_factory.h"
++#include "chrome/browser/nitrous_proxy/nitrous_proxy_system_config.h"
++#include "chrome/browser/profiles/profile.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/storage_partition.h"
++#include "net/base/host_port_pair.h"
++#include "net/traffic_annotation/network_traffic_annotation.h"
++#include "services/network/public/mojom/network_context.mojom.h"
++
++namespace settings {
++
++namespace {
++
++nitrous_proxy::NitrousProxyService* GetProxyService(Profile* profile) {
++  return nitrous_proxy::NitrousProxyServiceFactory::GetForProfile(profile);
++}
++
++constexpr net::NetworkTrafficAnnotationTag kProxyTestTrafficAnnotation =
++    net::DefineNetworkTrafficAnnotation("nitrous_proxy_reachability_test", R"(
++        semantics {
++          sender: "Nitrous Proxy Settings"
++          description:
++            "Opens a TCP connection to the proxy server the user configured, "
++            "to report whether that server is reachable."
++          trigger: "User activates the proxy connection test in settings."
++          data: "None. The connection is opened and immediately closed."
++          destination: OTHER
++          destination_other:
++            "The proxy server entered by the user in settings."
++        }
++        policy {
++          cookies_allowed: NO
++          setting: "Only performed on explicit user request."
++          policy_exception_justification: "Not implemented."
++        })");
++
++}  // namespace
++
++NitrousProxyHandler::NitrousProxyHandler(Profile* profile)
++    : profile_(profile) {}
++
++NitrousProxyHandler::~NitrousProxyHandler() = default;
++
++void NitrousProxyHandler::RegisterMessages() {
++  web_ui()->RegisterMessageCallback(
++      "getNitrousProxyState",
++      base::BindRepeating(&NitrousProxyHandler::HandleGetProxyState,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setNitrousProxyConfig",
++      base::BindRepeating(&NitrousProxyHandler::HandleSetProxyConfig,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setNitrousProxySystemRoute",
++      base::BindRepeating(&NitrousProxyHandler::HandleSetSystemRoute,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "testNitrousProxyConnection",
++      base::BindRepeating(&NitrousProxyHandler::HandleTestConnection,
++                          base::Unretained(this)));
++}
++
++void NitrousProxyHandler::OnJavascriptAllowed() {}
++
++void NitrousProxyHandler::OnJavascriptDisallowed() {
++  // Drop any in-flight reachability test; its callback must not outlive the
++  // page that asked for it.
++  weak_ptr_factory_.InvalidateWeakPtrs();
++  host_resolver_.reset();
++  test_socket_.reset();
++}
++
++base::DictValue NitrousProxyHandler::BuildState() const {
++  nitrous_proxy::NitrousProxyService* service = GetProxyService(profile_);
++  CHECK(service);
++
++  base::DictValue state;
++  state.Set("config", service->GetConfigForUi());
++  state.Set("subverted", service->IsRouteSubverted());
++
++  PrefService* local_state =
++      g_browser_process ? g_browser_process->local_state() : nullptr;
++  state.Set("systemRouteEnabled",
++            local_state && local_state->GetBoolean(
++                               nitrous_proxy::system_prefs::kEnabled));
++  state.Set("systemRouteSourceProfile",
++            local_state ? local_state->GetString(
++                              nitrous_proxy::system_prefs::kSourceProfile)
++                        : std::string());
++  return state;
++}
++
++void NitrousProxyHandler::HandleGetProxyState(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(1U, args.size());
++  ResolveJavascriptCallback(args[0], BuildState());
++}
++
++void NitrousProxyHandler::HandleSetProxyConfig(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(2U, args.size());
++  CHECK(args[1].is_dict());
++
++  nitrous_proxy::NitrousProxyService* service = GetProxyService(profile_);
++  CHECK(service);
++
++  base::DictValue result = service->SetConfigFromUi(args[1].GetDict());
++  // Keep the system route in step with the profile route it was copied from.
++  if (result.FindBool("success").value_or(false) && g_browser_process &&
++      g_browser_process->local_state() &&
++      g_browser_process->local_state()->GetBoolean(
++          nitrous_proxy::system_prefs::kEnabled)) {
++    nitrous_proxy::SetSystemProxyFromConfig(
++        g_browser_process->local_state(), service->GetConfig(),
++        profile_->GetProfileUserName());
++  }
++  ResolveJavascriptCallback(args[0], std::move(result));
++}
++
++void NitrousProxyHandler::HandleSetSystemRoute(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(2U, args.size());
++  CHECK(args[1].is_bool());
++
++  nitrous_proxy::NitrousProxyService* service = GetProxyService(profile_);
++  CHECK(service);
++
++  PrefService* local_state =
++      g_browser_process ? g_browser_process->local_state() : nullptr;
++  if (local_state) {
++    if (args[1].GetBool()) {
++      nitrous_proxy::SetSystemProxyFromConfig(local_state, service->GetConfig(),
++                                              profile_->GetProfileUserName());
++    } else {
++      nitrous_proxy::ClearSystemProxy(local_state);
++    }
++  }
++  ResolveJavascriptCallback(args[0], BuildState());
++}
++
++void NitrousProxyHandler::HandleTestConnection(const base::ListValue& args) {
++  AllowJavascript();
++  CHECK_EQ(1U, args.size());
++  CHECK(args[0].is_string());
++  const std::string callback_id = args[0].GetString();
++
++  nitrous_proxy::NitrousProxyService* service = GetProxyService(profile_);
++  CHECK(service);
++  const nitrous_proxy::ProxyConfig config = service->GetConfig();
++  if (!config.is_enabled() || !config.IsValid()) {
++    ResolveTestResult(callback_id, false, "invalid_config");
++    return;
++  }
++
++  network::mojom::NetworkContext* network_context =
++      profile_->GetDefaultStoragePartition()->GetNetworkContext();
++  if (!network_context) {
++    ResolveTestResult(callback_id, false, "unavailable");
++    return;
++  }
++
++  host_resolver_ = network::SimpleHostResolver::Create(network_context);
++  auto parameters = network::mojom::ResolveHostParameters::New();
++  // The proxy endpoint itself must be resolved locally; it is the one host that
++  // cannot be resolved through the proxy.
++  parameters->dns_query_type = net::DnsQueryType::UNSPECIFIED;
++  host_resolver_->ResolveHost(
++      network::mojom::HostResolverHost::NewHostPortPair(
++          net::HostPortPair(config.host, config.port)),
++      net::NetworkAnonymizationKey(), std::move(parameters),
++      base::BindOnce(&NitrousProxyHandler::OnTestHostResolved,
++                     weak_ptr_factory_.GetWeakPtr(), callback_id));
++}
++
++void NitrousProxyHandler::OnTestHostResolved(
++    std::string callback_id,
++    int result,
++    const net::ResolveErrorInfo& resolve_error_info,
++    const net::AddressList& resolved_addresses,
++    const net::HostResolverEndpointResults& alternative_endpoints) {
++  if (result != net::OK || resolved_addresses.empty()) {
++    ResolveTestResult(callback_id, false, "resolve_failed");
++    return;
++  }
++
++  network::mojom::NetworkContext* network_context =
++      profile_->GetDefaultStoragePartition()->GetNetworkContext();
++  if (!network_context) {
++    ResolveTestResult(callback_id, false, "unavailable");
++    return;
++  }
++
++  test_socket_.reset();
++  network_context->CreateTCPConnectedSocket(
++      /*local_addr=*/std::nullopt, resolved_addresses,
++      /*tcp_connected_socket_options=*/nullptr,
++      net::MutableNetworkTrafficAnnotationTag(kProxyTestTrafficAnnotation),
++      test_socket_.BindNewPipeAndPassReceiver(),
++      /*observer=*/mojo::NullRemote(),
++      base::BindOnce(&NitrousProxyHandler::OnTestSocketConnected,
++                     weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
++}
++
++void NitrousProxyHandler::OnTestSocketConnected(
++    std::string callback_id,
++    int result,
++    const std::optional<net::IPEndPoint>& local_addr,
++    const std::optional<net::IPEndPoint>& peer_addr,
++    mojo::ScopedDataPipeConsumerHandle receive_stream,
++    mojo::ScopedDataPipeProducerHandle send_stream) {
++  // The connection is only used to prove reachability, so it is dropped here.
++  test_socket_.reset();
++  ResolveTestResult(callback_id, result == net::OK,
++                    result == net::OK ? std::string() : "connect_failed");
++}
++
++void NitrousProxyHandler::ResolveTestResult(const std::string& callback_id,
++                                           bool success,
++                                           const std::string& error) {
++  base::DictValue result;
++  result.Set("success", success);
++  if (!error.empty()) {
++    result.Set("error", error);
++  }
++  ResolveJavascriptCallback(base::Value(callback_id), result);
++}
++
++}  // namespace settings
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/nitrous_proxy_handler.h
+@@ -0,0 +1,71 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++#ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_NITROUS_PROXY_HANDLER_H_
++#define CHROME_BROWSER_UI_WEBUI_SETTINGS_NITROUS_PROXY_HANDLER_H_
++
++#include <memory>
++#include <string>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/values.h"
++#include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "net/base/address_list.h"
++#include "net/dns/public/resolve_error_info.h"
++#include "services/network/public/cpp/simple_host_resolver.h"
++#include "services/network/public/mojom/host_resolver.mojom.h"
++#include "services/network/public/mojom/tcp_socket.mojom.h"
++
++class Profile;
++
++namespace settings {
++
++class NitrousProxyHandler : public SettingsPageUIHandler {
++ public:
++  explicit NitrousProxyHandler(Profile* profile);
++  ~NitrousProxyHandler() override;
++
++  NitrousProxyHandler(const NitrousProxyHandler&) = delete;
++  NitrousProxyHandler& operator=(const NitrousProxyHandler&) = delete;
++
++  void RegisterMessages() override;
++  void OnJavascriptAllowed() override;
++  void OnJavascriptDisallowed() override;
++
++ private:
++  void HandleGetProxyState(const base::ListValue& args);
++  void HandleSetProxyConfig(const base::ListValue& args);
++  void HandleSetSystemRoute(const base::ListValue& args);
++  void HandleTestConnection(const base::ListValue& args);
++
++  // Reachability check against the configured proxy endpoint. Only the user's
++  // own proxy is contacted; no third-party host is involved.
++  void OnTestHostResolved(
++      std::string callback_id,
++      int result,
++      const net::ResolveErrorInfo& resolve_error_info,
++      const net::AddressList& resolved_addresses,
++      const net::HostResolverEndpointResults& alternative_endpoints);
++  void OnTestSocketConnected(std::string callback_id,
++                             int result,
++                             const std::optional<net::IPEndPoint>& local_addr,
++                             const std::optional<net::IPEndPoint>& peer_addr,
++                             mojo::ScopedDataPipeConsumerHandle receive_stream,
++                             mojo::ScopedDataPipeProducerHandle send_stream);
++  void ResolveTestResult(const std::string& callback_id,
++                         bool success,
++                         const std::string& error);
++
++  base::DictValue BuildState() const;
++
++  raw_ptr<Profile> profile_;
++  std::unique_ptr<network::SimpleHostResolver> host_resolver_;
++  mojo::Remote<network::mojom::TCPConnectedSocket> test_socket_;
++  base::WeakPtrFactory<NitrousProxyHandler> weak_ptr_factory_{this};
++};
++
++}  // namespace settings
++
++#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_NITROUS_PROXY_HANDLER_H_
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -2253,6 +2253,44 @@ void AddPrivacyStrings(content::WebUIDat
+         IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL},
+       {"heliumOriginOverrideInvalidOrigin",
+         IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN},
++      {"nitrousProxyTitle", IDS_SETTINGS_NITROUS_PROXY_TITLE},
++      {"nitrousProxyDescription", IDS_SETTINGS_NITROUS_PROXY_DESCRIPTION},
++      {"nitrousProxyRouteTitle", IDS_SETTINGS_NITROUS_PROXY_ROUTE_TITLE},
++      {"nitrousProxyRouteDescription",
++       IDS_SETTINGS_NITROUS_PROXY_ROUTE_DESCRIPTION},
++      {"nitrousProxyModeLabel", IDS_SETTINGS_NITROUS_PROXY_MODE_LABEL},
++      {"nitrousProxyModeOff", IDS_SETTINGS_NITROUS_PROXY_MODE_OFF},
++      {"nitrousProxyModeHttp", IDS_SETTINGS_NITROUS_PROXY_MODE_HTTP},
++      {"nitrousProxyModeHttps", IDS_SETTINGS_NITROUS_PROXY_MODE_HTTPS},
++      {"nitrousProxyModeSocks5", IDS_SETTINGS_NITROUS_PROXY_MODE_SOCKS5},
++      {"nitrousProxyHostLabel", IDS_SETTINGS_NITROUS_PROXY_HOST_LABEL},
++      {"nitrousProxyPortLabel", IDS_SETTINGS_NITROUS_PROXY_PORT_LABEL},
++      {"nitrousProxyUsernameLabel", IDS_SETTINGS_NITROUS_PROXY_USERNAME_LABEL},
++      {"nitrousProxyPasswordLabel", IDS_SETTINGS_NITROUS_PROXY_PASSWORD_LABEL},
++      {"nitrousProxyPasswordStored",
++       IDS_SETTINGS_NITROUS_PROXY_PASSWORD_STORED},
++      {"nitrousProxySave", IDS_SETTINGS_NITROUS_PROXY_SAVE},
++      {"nitrousProxyTestConnection",
++       IDS_SETTINGS_NITROUS_PROXY_TEST_CONNECTION},
++      {"nitrousProxyTestRunning", IDS_SETTINGS_NITROUS_PROXY_TEST_RUNNING},
++      {"nitrousProxyTestSucceeded", IDS_SETTINGS_NITROUS_PROXY_TEST_SUCCEEDED},
++      {"nitrousProxyTestFailed", IDS_SETTINGS_NITROUS_PROXY_TEST_FAILED},
++      {"nitrousProxyInvalidConfig", IDS_SETTINGS_NITROUS_PROXY_INVALID_CONFIG},
++      {"nitrousProxySubverted", IDS_SETTINGS_NITROUS_PROXY_SUBVERTED},
++      {"nitrousProxyBrowserTrafficTitle",
++       IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_TITLE},
++      {"nitrousProxyBrowserTrafficDescription",
++       IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_DESCRIPTION},
++      {"nitrousProxyBrowserTrafficToggle",
++       IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_TOGGLE},
++      {"nitrousProxyLockedTitle", IDS_SETTINGS_NITROUS_PROXY_LOCKED_TITLE},
++      {"nitrousProxyLockedDescription",
++       IDS_SETTINGS_NITROUS_PROXY_LOCKED_DESCRIPTION},
++      {"nitrousProxyLockedDoh", IDS_SETTINGS_NITROUS_PROXY_LOCKED_DOH},
++      {"nitrousProxyLockedWebrtc", IDS_SETTINGS_NITROUS_PROXY_LOCKED_WEBRTC},
++      {"nitrousProxyLockedPrefetch",
++       IDS_SETTINGS_NITROUS_PROXY_LOCKED_PREFETCH},
++      {"nitrousProxyLockedQuic", IDS_SETTINGS_NITROUS_PROXY_LOCKED_QUIC},
+       {"fingerprintTitle", IDS_SETTINGS_FINGERPRINT_TITLE},
+       {"fingerprintDescription", IDS_SETTINGS_FINGERPRINT_DESCRIPTION},
+       {"fingerprintCurrentSeedTitle",
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -72,6 +72,7 @@
+ #include "chrome/browser/ui/webui/settings/metrics_reporting_handler.h"
+ #include "chrome/browser/ui/webui/settings/on_startup_handler.h"
+ #include "chrome/browser/ui/webui/settings/password_manager_handler.h"
++#include "chrome/browser/ui/webui/settings/nitrous_proxy_handler.h"
+ #include "chrome/browser/ui/webui/settings/persona_handler.h"
+ #include "chrome/browser/ui/webui/settings/people_handler.h"
+ #include "chrome/browser/ui/webui/settings/performance_handler.h"
+@@ -274,6 +275,7 @@ SettingsUI::SettingsUI(content::WebUI* w
+   AddSettingsPageUIHandler(std::make_unique<ProtocolHandlersHandler>(profile));
+   AddSettingsPageUIHandler(std::make_unique<PrivacySandboxHandler>());
+   AddSettingsPageUIHandler(std::make_unique<PersonaHandler>(profile));
++  AddSettingsPageUIHandler(std::make_unique<NitrousProxyHandler>(profile));
+   AddSettingsPageUIHandler(std::make_unique<SearchEnginesHandler>(profile));
+   AddSettingsPageUIHandler(
+       std::make_unique<HeliumServicesSchemaHandler>(profile));
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -6679,6 +6679,7 @@ test("unit_tests") {
+     "../browser/helium_persona/persona_identity_template_unittest.cc",
+     "../browser/helium_persona/persona_runtime_override_unittest.cc",
+     "../browser/helium_persona/persona_service_unittest.cc",
++    "../browser/nitrous_proxy/nitrous_proxy_service_unittest.cc",
+     "../browser/idle/idle_detection_permission_context_unittest.cc",
+     "../browser/logging_chrome_unittest.cc",
+     "../browser/media/autoplay_policy_status_observer_unittest.cc",
+--- a/net/BUILD.gn
++++ b/net/BUILD.gn
+@@ -262,6 +262,7 @@ component("net") {
+     "base/network_isolation_partition.cc",
+     "base/network_isolation_partition.h",
+     "base/network_persona_config.h",
++    "base/socks_credentials.h",
+     "base/network_persona_template.cc",
+     "base/network_persona_template.h",
+     "base/parse_number.cc",
+--- /dev/null
++++ b/net/base/socks_credentials.h
+@@ -0,0 +1,39 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef NET_BASE_SOCKS_CREDENTIALS_H_
++#define NET_BASE_SOCKS_CREDENTIALS_H_
++
++#include <string>
++
++#include "net/base/net_export.h"
++
++namespace net {
++
++// Username/password for SOCKS5 authentication (RFC 1929).
++//
++// SOCKS5 authenticates during its own handshake rather than through an HTTP
++// challenge, so these credentials cannot live in HttpAuthCache: that cache
++// DCHECKs that the scheme is http/https/ws/wss. They are instead carried on
++// CommonConnectJobParams for the lifetime of the session.
++//
++// RFC 1929 length-prefixes both fields with a single byte, so neither may
++// exceed 255 bytes.
++struct NET_EXPORT SocksCredentials {
++  static constexpr size_t kMaxFieldLength = 255;
++
++  std::string username;
++  std::string password;
++
++  bool IsValid() const {
++    return !username.empty() && username.size() <= kMaxFieldLength &&
++           password.size() <= kMaxFieldLength;
++  }
++
++  bool operator==(const SocksCredentials&) const = default;
++};
++
++}  // namespace net
++
++#endif  // NET_BASE_SOCKS_CREDENTIALS_H_
+--- a/net/http/http_network_session.cc
++++ b/net/http/http_network_session.cc
+@@ -378,6 +378,22 @@ void HttpNetworkSession::CloseIdleConnec
+   spdy_session_pool_.CloseCurrentIdleSessions(net_log_reason_utf8);
+ }
+ 
++void HttpNetworkSession::ApplySocksCredentials(SocksCredentials credentials) {
++  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
++  if (params_.socks_credentials == credentials) {
++    return;
++  }
++
++  params_.socks_credentials = credentials;
++  normal_socket_pool_manager_->UpdateSocksCredentials(credentials);
++  websocket_socket_pool_manager_->UpdateSocksCredentials(
++      std::move(credentials));
++
++  // Existing connections were authenticated with the previous credentials.
++  // Close them so subsequent requests re-handshake with the new ones.
++  CloseAllConnections(ERR_ABORTED, "SOCKS credentials changed");
++}
++
+ void HttpNetworkSession::ApplyNetworkPersonaConfig(
+     std::optional<NetworkPersonaConfig> config) {
+   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+@@ -481,6 +497,7 @@ CommonConnectJobParams HttpNetworkSessio
+       &params_.ignore_certificate_errors, &params_.enable_early_data);
+   common_connect_job_params.network_persona_config =
+       params_.network_persona_config;
++  common_connect_job_params.socks_credentials = params_.socks_credentials;
+   return common_connect_job_params;
+ }
+ 
+--- a/net/http/http_network_session.h
++++ b/net/http/http_network_session.h
+@@ -26,6 +26,7 @@
+ #include "net/base/host_port_pair.h"
+ #include "net/base/net_export.h"
+ #include "net/base/network_persona_config.h"
++#include "net/base/socks_credentials.h"
+ #include "net/http/http_auth_cache.h"
+ #include "net/http/http_stream_factory.h"
+ #include "net/net_buildflags.h"
+@@ -168,6 +169,9 @@ struct NET_EXPORT HttpNetworkSessionPara
+   // The selected profile-scoped network identity. Null preserves Chromium's
+   // native wire behavior.
+   std::optional<NetworkPersonaConfig> network_persona_config;
++
++  // Credentials used when a SOCKS5 proxy requests username/password auth.
++  SocksCredentials socks_credentials;
+ };
+ 
+ // Structure with pointers to the dependencies of the HttpNetworkSession.
+@@ -309,6 +313,9 @@ class NET_EXPORT HttpNetworkSession : pu
+ 
+   // Closes resources owned by the previous generation before publishing the
+   // new identity for subsequent connections.
++  // Replaces the SOCKS5 credentials and drops existing connections, which were
++  // established with the previous ones.
++  void ApplySocksCredentials(SocksCredentials credentials);
+   void ApplyNetworkPersonaConfig(
+       std::optional<NetworkPersonaConfig> config);
+ 
+--- a/net/socket/client_socket_pool_manager.h
++++ b/net/socket/client_socket_pool_manager.h
+@@ -69,6 +69,9 @@ class NET_EXPORT_PRIVATE ClientSocketPoo
+   virtual void CloseIdleSockets(const char* net_log_reason_utf8) = 0;
+   virtual void UpdateNetworkPersonaConfig(
+       std::optional<NetworkPersonaConfig> config) = 0;
++  // CommonConnectJobParams is copied into each pool manager, so updated SOCKS
++  // credentials have to be pushed into those copies to reach new connections.
++  virtual void UpdateSocksCredentials(SocksCredentials credentials) = 0;
+ 
+   // Returns the socket pool for the specified ProxyChain (Which may be
+   // ProxyChain::Direct()).
+--- a/net/socket/client_socket_pool_manager_impl.cc
++++ b/net/socket/client_socket_pool_manager_impl.cc
+@@ -67,6 +67,13 @@ void ClientSocketPoolManagerImpl::Update
+       std::move(config);
+ }
+ 
++void ClientSocketPoolManagerImpl::UpdateSocksCredentials(
++    SocksCredentials credentials) {
++  common_connect_job_params_.socks_credentials = credentials;
++  websocket_common_connect_job_params_.socks_credentials =
++      std::move(credentials);
++}
++
+ ClientSocketPool* ClientSocketPoolManagerImpl::GetSocketPool(
+     const ProxyChain& proxy_chain) {
+   SocketPoolMap::const_iterator it = socket_pools_.find(proxy_chain);
+--- a/net/socket/client_socket_pool_manager_impl.h
++++ b/net/socket/client_socket_pool_manager_impl.h
+@@ -44,6 +44,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoo
+   void FlushSocketPoolsWithError(int net_error,
+                                  const char* net_log_reason_utf8) override;
+   void CloseIdleSockets(const char* net_log_reason_utf8) override;
++  void UpdateSocksCredentials(SocksCredentials credentials) override;
+   void UpdateNetworkPersonaConfig(
+       std::optional<NetworkPersonaConfig> config) override;
+ 
+--- a/net/socket/connect_job.h
++++ b/net/socket/connect_job.h
+@@ -22,6 +22,7 @@
+ #include "net/base/load_timing_info.h"
+ #include "net/base/net_export.h"
+ #include "net/base/request_priority.h"
++#include "net/base/socks_credentials.h"
+ #include "net/dns/public/host_resolver_results.h"
+ #include "net/dns/public/resolution_details.h"
+ #include "net/dns/public/resolve_error_info.h"
+@@ -114,6 +115,11 @@ struct NET_EXPORT_PRIVATE CommonConnectJ
+   raw_ptr<const bool> ignore_certificate_errors;
+   raw_ptr<const bool> enable_early_data;
+   std::optional<NetworkPersonaConfig> network_persona_config;
++
++  // Credentials for SOCKS5 username/password authentication. Assigned after
++  // construction, like `network_persona_config`, so that the many existing
++  // CommonConnectJobParams construction sites stay untouched.
++  SocksCredentials socks_credentials;
+ };
+ 
+ // When a host resolution completes, OnHostResolutionCallback() is invoked. If
+--- a/net/socket/mock_client_socket_pool_manager.cc
++++ b/net/socket/mock_client_socket_pool_manager.cc
+@@ -35,6 +35,8 @@ void MockClientSocketPoolManager::CloseI
+ void MockClientSocketPoolManager::UpdateNetworkPersonaConfig(
+     std::optional<NetworkPersonaConfig>) {}
+ 
++void MockClientSocketPoolManager::UpdateSocksCredentials(SocksCredentials) {}
++
+ ClientSocketPool* MockClientSocketPoolManager::GetSocketPool(
+     const ProxyChain& proxy_chain) {
+   ClientSocketPoolMap::const_iterator it = socket_pools_.find(proxy_chain);
+--- a/net/socket/mock_client_socket_pool_manager.h
++++ b/net/socket/mock_client_socket_pool_manager.h
+@@ -37,6 +37,7 @@ class MockClientSocketPoolManager : publ
+   void CloseIdleSockets(const char* net_log_reason_utf8) override;
+   void UpdateNetworkPersonaConfig(
+       std::optional<NetworkPersonaConfig> config) override;
++  void UpdateSocksCredentials(SocksCredentials credentials) override;
+   ClientSocketPool* GetSocketPool(const ProxyChain& proxy_chain) override;
+   base::Value SocketPoolInfoToValue() const override;
+ 
+--- a/net/socket/socks5_client_socket.cc
++++ b/net/socket/socks5_client_socket.cc
+@@ -8,6 +8,7 @@
+ 
+ #include <array>
+ #include <utility>
++#include <vector>
+ 
+ #include "base/compiler_specific.h"
+ #include "base/format_macros.h"
+@@ -26,11 +27,16 @@
+ namespace net {
+ 
+ const unsigned int SOCKS5ClientSocket::kGreetReadHeaderSize = 2;
++// RFC 1929 reply: version byte plus status byte.
++const unsigned int SOCKS5ClientSocket::kAuthReadHeaderSize = 2;
+ const unsigned int SOCKS5ClientSocket::kWriteHeaderSize = 10;
+ const unsigned int SOCKS5ClientSocket::kReadHeaderSize = 5;
+ const uint8_t SOCKS5ClientSocket::kSOCKS5Version = 0x05;
+ const uint8_t SOCKS5ClientSocket::kTunnelCommand = 0x01;
+ const uint8_t SOCKS5ClientSocket::kNullByte = 0x00;
++const uint8_t SOCKS5ClientSocket::kAuthMethodNone = 0x00;
++const uint8_t SOCKS5ClientSocket::kAuthMethodUserPass = 0x02;
++const uint8_t SOCKS5ClientSocket::kAuthSubnegotiationVersion = 0x01;
+ 
+ static_assert(sizeof(struct in_addr) == 4, "incorrect system size of IPv4");
+ static_assert(sizeof(struct in6_addr) == 16, "incorrect system size of IPv6");
+@@ -38,11 +44,13 @@ static_assert(sizeof(struct in6_addr) ==
+ SOCKS5ClientSocket::SOCKS5ClientSocket(
+     std::unique_ptr<StreamSocket> transport_socket,
+     const HostPortPair& destination,
+-    const NetworkTrafficAnnotationTag& traffic_annotation)
++    const NetworkTrafficAnnotationTag& traffic_annotation,
++    const SocksCredentials& credentials)
+     : io_callback_(base::BindRepeating(&SOCKS5ClientSocket::OnIOComplete,
+                                        base::Unretained(this))),
+       transport_socket_(std::move(transport_socket)),
+       destination_(destination),
++      credentials_(credentials),
+       net_log_(transport_socket_->NetLog()),
+       traffic_annotation_(traffic_annotation) {}
+ 
+@@ -224,6 +232,20 @@ int SOCKS5ClientSocket::DoLoop(int last_
+         net_log_.EndEventWithNetErrorCode(NetLogEventType::SOCKS5_GREET_READ,
+                                           rv);
+         break;
++      case STATE_AUTH_WRITE:
++        DCHECK_EQ(OK, rv);
++        rv = DoAuthWrite();
++        break;
++      case STATE_AUTH_WRITE_COMPLETE:
++        rv = DoAuthWriteComplete(rv);
++        break;
++      case STATE_AUTH_READ:
++        DCHECK_EQ(OK, rv);
++        rv = DoAuthRead();
++        break;
++      case STATE_AUTH_READ_COMPLETE:
++        rv = DoAuthReadComplete(rv);
++        break;
+       case STATE_HANDSHAKE_WRITE:
+         DCHECK_EQ(OK, rv);
+         net_log_.BeginEvent(NetLogEventType::SOCKS5_HANDSHAKE_WRITE);
+@@ -253,6 +275,11 @@ int SOCKS5ClientSocket::DoLoop(int last_
+ 
+ static constexpr std::array<uint8_t, 3> kSOCKS5GreetWriteData{
+     0x05, 0x01, 0x00};  // no authentication
++// Offered when credentials are configured: no-auth and username/password. The
++// proxy picks one; no-auth is still offered so a proxy that does not want
++// credentials keeps working.
++static constexpr std::array<uint8_t, 4> kSOCKS5GreetWriteDataWithAuth{
++    0x05, 0x02, 0x00, 0x02};
+ 
+ int SOCKS5ClientSocket::DoGreetWrite() {
+   // Since we only have 1 byte to send the hostname length in, if the
+@@ -264,7 +291,10 @@ int SOCKS5ClientSocket::DoGreetWrite() {
+ 
+   if (!write_buf_) {
+     auto greet_buffer =
+-        base::MakeRefCounted<WrappedIOBuffer>(kSOCKS5GreetWriteData);
++        credentials_.IsValid()
++            ? base::MakeRefCounted<WrappedIOBuffer>(
++                  kSOCKS5GreetWriteDataWithAuth)
++            : base::MakeRefCounted<WrappedIOBuffer>(kSOCKS5GreetWriteData);
+     write_buf_ = base::MakeRefCounted<DrainableIOBuffer>(
+         std::move(greet_buffer), greet_buffer->size());
+   }
+@@ -323,9 +353,110 @@ int SOCKS5ClientSocket::DoGreetReadCompl
+                                    "version", read_data[0]);
+     return ERR_SOCKS_CONNECTION_FAILED;
+   }
+-  if (read_data[1] != 0x00) {
++  const uint8_t selected_method = read_data[1];
++  if (selected_method == kAuthMethodUserPass && credentials_.IsValid()) {
++    read_buf_.reset();
++    write_buf_.reset();
++    next_state_ = STATE_AUTH_WRITE;
++    return OK;
++  }
++  // Anything other than the method we can satisfy is a failure, including
++  // 0xFF ("no acceptable methods") and a request for credentials we do not
++  // have. Falling through would leak the connection out unauthenticated.
++  if (selected_method != kAuthMethodNone) {
++    net_log_.AddEventWithIntParams(NetLogEventType::SOCKS_UNEXPECTED_AUTH,
++                                   "method", selected_method);
++    return ERR_SOCKS_CONNECTION_FAILED;
++  }
++
++  read_buf_.reset();
++  next_state_ = STATE_HANDSHAKE_WRITE;
++  return OK;
++}
++
++scoped_refptr<DrainableIOBuffer> SOCKS5ClientSocket::BuildAuthWriteBuffer()
++    const {
++  // RFC 1929: VER | ULEN | UNAME | PLEN | PASSWD
++  std::vector<uint8_t> request;
++  request.reserve(3 + credentials_.username.size() +
++                  credentials_.password.size());
++  request.push_back(kAuthSubnegotiationVersion);
++  request.push_back(static_cast<uint8_t>(credentials_.username.size()));
++  request.insert(request.end(), credentials_.username.begin(),
++                 credentials_.username.end());
++  request.push_back(static_cast<uint8_t>(credentials_.password.size()));
++  request.insert(request.end(), credentials_.password.begin(),
++                 credentials_.password.end());
++
++  auto buffer = base::MakeRefCounted<VectorIOBuffer>(std::move(request));
++  return base::MakeRefCounted<DrainableIOBuffer>(buffer, buffer->size());
++}
++
++int SOCKS5ClientSocket::DoAuthWrite() {
++  if (!write_buf_) {
++    write_buf_ = BuildAuthWriteBuffer();
++  }
++
++  next_state_ = STATE_AUTH_WRITE_COMPLETE;
++  return transport_socket_->Write(write_buf_.get(),
++                                  write_buf_->BytesRemaining(), io_callback_,
++                                  traffic_annotation_);
++}
++
++int SOCKS5ClientSocket::DoAuthWriteComplete(int result) {
++  if (result < 0) {
++    return result;
++  }
++
++  write_buf_->DidConsume(result);
++  if (write_buf_->BytesRemaining() > 0) {
++    next_state_ = STATE_AUTH_WRITE;
++    return OK;
++  }
++
++  write_buf_.reset();
++  next_state_ = STATE_AUTH_READ;
++  return OK;
++}
++
++int SOCKS5ClientSocket::DoAuthRead() {
++  if (!read_buf_) {
++    read_buf_ = base::MakeRefCounted<GrowableIOBuffer>();
++    read_buf_->SetCapacity(kAuthReadHeaderSize);
++  }
++
++  next_state_ = STATE_AUTH_READ_COMPLETE;
++  return transport_socket_->Read(read_buf_.get(), read_buf_->RemainingCapacity(),
++                                 io_callback_);
++}
++
++int SOCKS5ClientSocket::DoAuthReadComplete(int result) {
++  if (result < 0) {
++    return result;
++  }
++
++  if (result == 0) {
++    net_log_.AddEvent(
++        NetLogEventType::SOCKS_UNEXPECTEDLY_CLOSED_DURING_GREETING);
++    return ERR_SOCKS_CONNECTION_FAILED;
++  }
++
++  read_buf_->set_offset(read_buf_->offset() + result);
++  if (read_buf_->RemainingCapacity() > 0) {
++    next_state_ = STATE_AUTH_READ;
++    return OK;
++  }
++
++  base::span<uint8_t> read_data = read_buf_->span_before_offset();
++  if (read_data[0] != kAuthSubnegotiationVersion) {
++    net_log_.AddEventWithIntParams(NetLogEventType::SOCKS_UNEXPECTED_VERSION,
++                                   "version", read_data[0]);
++    return ERR_SOCKS_CONNECTION_FAILED;
++  }
++  // Any non-zero status means the credentials were rejected. Fail closed.
++  if (read_data[1] != kNullByte) {
+     net_log_.AddEventWithIntParams(NetLogEventType::SOCKS_UNEXPECTED_AUTH,
+-                                   "method", read_data[1]);
++                                   "status", read_data[1]);
+     return ERR_SOCKS_CONNECTION_FAILED;
+   }
+ 
+--- a/net/socket/socks5_client_socket.h
++++ b/net/socket/socks5_client_socket.h
+@@ -18,6 +18,7 @@
+ #include "net/base/host_port_pair.h"
+ #include "net/base/net_errors.h"
+ #include "net/base/net_export.h"
++#include "net/base/socks_credentials.h"
+ #include "net/log/net_log_with_source.h"
+ #include "net/socket/stream_socket.h"
+ #include "net/traffic_annotation/network_traffic_annotation.h"
+@@ -28,7 +29,7 @@ class DrainableIOBuffer;
+ class GrowableIOBuffer;
+ 
+ // This StreamSocket is used to setup a SOCKSv5 handshake with a socks proxy.
+-// Currently no SOCKSv5 authentication is supported.
++// Supports no-authentication and username/password authentication (RFC 1929).
+ class NET_EXPORT_PRIVATE SOCKS5ClientSocket : public StreamSocket {
+  public:
+   // |destination| contains the hostname and port to which the socket above will
+@@ -37,9 +38,13 @@ class NET_EXPORT_PRIVATE SOCKS5ClientSoc
+   // Although SOCKS 5 supports 3 different modes of addressing, we will
+   // always pass it a hostname. This means the DNS resolving is done
+   // proxy side.
++  //
++  // If |credentials| is valid, username/password authentication is offered
++  // alongside no-authentication and used when the proxy selects it.
+   SOCKS5ClientSocket(std::unique_ptr<StreamSocket> transport_socket,
+                      const HostPortPair& destination,
+-                     const NetworkTrafficAnnotationTag& traffic_annotation);
++                     const NetworkTrafficAnnotationTag& traffic_annotation,
++                     const SocksCredentials& credentials = SocksCredentials());
+ 
+   SOCKS5ClientSocket(const SOCKS5ClientSocket&) = delete;
+   SOCKS5ClientSocket& operator=(const SOCKS5ClientSocket&) = delete;
+@@ -82,6 +87,10 @@ class NET_EXPORT_PRIVATE SOCKS5ClientSoc
+     STATE_GREET_WRITE_COMPLETE,
+     STATE_GREET_READ,
+     STATE_GREET_READ_COMPLETE,
++    STATE_AUTH_WRITE,
++    STATE_AUTH_WRITE_COMPLETE,
++    STATE_AUTH_READ,
++    STATE_AUTH_READ_COMPLETE,
+     STATE_HANDSHAKE_WRITE,
+     STATE_HANDSHAKE_WRITE_COMPLETE,
+     STATE_HANDSHAKE_READ,
+@@ -97,11 +106,15 @@ class NET_EXPORT_PRIVATE SOCKS5ClientSoc
+   };
+ 
+   static const unsigned int kGreetReadHeaderSize;
++  static const unsigned int kAuthReadHeaderSize;
+   static const unsigned int kWriteHeaderSize;
+   static const unsigned int kReadHeaderSize;
+   static const uint8_t kSOCKS5Version;
+   static const uint8_t kTunnelCommand;
+   static const uint8_t kNullByte;
++  static const uint8_t kAuthMethodNone;
++  static const uint8_t kAuthMethodUserPass;
++  static const uint8_t kAuthSubnegotiationVersion;
+ 
+   void DoCallback(int result);
+   void OnIOComplete(int result);
+@@ -116,9 +129,15 @@ class NET_EXPORT_PRIVATE SOCKS5ClientSoc
+   int DoGreetReadComplete(int result);
+   int DoGreetWrite();
+   int DoGreetWriteComplete(int result);
++  int DoAuthWrite();
++  int DoAuthWriteComplete(int result);
++  int DoAuthRead();
++  int DoAuthReadComplete(int result);
+ 
+   // Creates a DrainableIOBuffer containing the SOCKS handshake.
+   scoped_refptr<DrainableIOBuffer> BuildHandshakeWriteBuffer() const;
++  // Creates the RFC 1929 username/password sub-negotiation request.
++  scoped_refptr<DrainableIOBuffer> BuildAuthWriteBuffer() const;
+ 
+   CompletionRepeatingCallback io_callback_;
+ 
+@@ -144,6 +163,7 @@ class NET_EXPORT_PRIVATE SOCKS5ClientSoc
+   bool was_ever_used_ = false;
+ 
+   const HostPortPair destination_;
++  const SocksCredentials credentials_;
+ 
+   NetLogWithSource net_log_;
+ 
+--- a/net/socket/socks5_client_socket_unittest.cc
++++ b/net/socket/socks5_client_socket_unittest.cc
+@@ -73,6 +73,9 @@ class SOCKS5ClientSocketTest : public Pl
+   raw_ptr<StreamSocket> tcp_sock_;
+   TestCompletionCallback callback_;
+   std::unique_ptr<SocketDataProvider> data_;
++  // Applied by BuildMockSocket(). Empty by default, so existing tests keep
++  // exercising the no-authentication path.
++  SocksCredentials credentials_;
+ };
+ 
+ SOCKS5ClientSocketTest::SOCKS5ClientSocketTest() {}
+@@ -106,9 +109,102 @@ std::unique_ptr<SOCKS5ClientSocket> SOCK
+ 
+   // The SOCKS5ClientSocket takes ownership of |tcp_sock_|, but keep a
+   // non-owning pointer to it.
+-  return std::make_unique<SOCKS5ClientSocket>(std::move(tcp_sock),
+-                                              HostPortPair(hostname, port),
+-                                              TRAFFIC_ANNOTATION_FOR_TESTS);
++  return std::make_unique<SOCKS5ClientSocket>(
++      std::move(tcp_sock), HostPortPair(hostname, port),
++      TRAFFIC_ANNOTATION_FOR_TESTS, credentials_);
++}
++
++// RFC 1929 greeting offering both no-auth and username/password.
++constexpr char kGreetWithAuthRequest[] = {0x05, 0x02, 0x00, 0x02};
++// Proxy selects username/password.
++constexpr char kGreetSelectUserPass[] = {0x05, 0x02};
++// Sub-negotiation for user "user" / password "pw".
++constexpr char kAuthRequest[] = {0x01, 0x04, 'u', 's', 'e',
++                                 'r',  0x02, 'p', 'w'};
++constexpr char kAuthSuccess[] = {0x01, 0x00};
++constexpr char kAuthFailure[] = {0x01, 0x01};
++
++constexpr char kConnectRequest[] = {
++    0x05, 0x01, 0x00, 0x03, 0x09, 'l', 'o', 'c',
++    'a',  'l',  'h',  'o',  's',  't', 0x00, 0x50,
++};
++
++TEST_F(SOCKS5ClientSocketTest, AuthenticatedHandshakeSucceeds) {
++  credentials_.username = "user";
++  credentials_.password = "pw";
++
++  MockWrite data_writes[] = {
++      MockWrite(ASYNC, base::as_byte_span(kGreetWithAuthRequest)),
++      MockWrite(ASYNC, base::as_byte_span(kAuthRequest)),
++      MockWrite(ASYNC, base::as_byte_span(kConnectRequest))};
++  MockRead data_reads[] = {
++      MockRead(ASYNC, base::as_byte_span(kGreetSelectUserPass)),
++      MockRead(ASYNC, base::as_byte_span(kAuthSuccess)),
++      MockRead(ASYNC, kSOCKS5OkResponse)};
++
++  user_sock_ = BuildMockSocket(data_reads, data_writes, "localhost", 80,
++                               NetLog::Get());
++  int rv = user_sock_->Connect(callback_.callback());
++  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
++  rv = callback_.WaitForResult();
++  EXPECT_THAT(rv, IsOk());
++  EXPECT_TRUE(user_sock_->IsConnected());
++}
++
++// A rejected password must fail rather than fall through to the tunnel.
++TEST_F(SOCKS5ClientSocketTest, AuthenticationFailureFailsClosed) {
++  credentials_.username = "user";
++  credentials_.password = "pw";
++
++  MockWrite data_writes[] = {
++      MockWrite(ASYNC, base::as_byte_span(kGreetWithAuthRequest)),
++      MockWrite(ASYNC, base::as_byte_span(kAuthRequest))};
++  MockRead data_reads[] = {
++      MockRead(ASYNC, base::as_byte_span(kGreetSelectUserPass)),
++      MockRead(ASYNC, base::as_byte_span(kAuthFailure))};
++
++  user_sock_ = BuildMockSocket(data_reads, data_writes, "localhost", 80,
++                               NetLog::Get());
++  int rv = user_sock_->Connect(callback_.callback());
++  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
++  EXPECT_THAT(callback_.WaitForResult(),
++              IsError(ERR_SOCKS_CONNECTION_FAILED));
++  EXPECT_FALSE(user_sock_->IsConnected());
++}
++
++// A proxy demanding credentials we do not have must fail, not connect
++// unauthenticated.
++TEST_F(SOCKS5ClientSocketTest, AuthRequestedWithoutCredentialsFails) {
++  MockWrite data_writes[] = {MockWrite(ASYNC, kSOCKS5GreetRequest)};
++  MockRead data_reads[] = {
++      MockRead(ASYNC, base::as_byte_span(kGreetSelectUserPass))};
++
++  user_sock_ = BuildMockSocket(data_reads, data_writes, "localhost", 80,
++                               NetLog::Get());
++  int rv = user_sock_->Connect(callback_.callback());
++  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
++  EXPECT_THAT(callback_.WaitForResult(),
++              IsError(ERR_SOCKS_CONNECTION_FAILED));
++  EXPECT_FALSE(user_sock_->IsConnected());
++}
++
++// With credentials configured, a proxy that picks no-auth is still fine.
++TEST_F(SOCKS5ClientSocketTest, CredentialsOfferedButProxySelectsNoAuth) {
++  credentials_.username = "user";
++  credentials_.password = "pw";
++
++  MockWrite data_writes[] = {
++      MockWrite(ASYNC, base::as_byte_span(kGreetWithAuthRequest)),
++      MockWrite(ASYNC, base::as_byte_span(kConnectRequest))};
++  MockRead data_reads[] = {MockRead(ASYNC, kSOCKS5GreetResponse),
++                           MockRead(ASYNC, kSOCKS5OkResponse)};
++
++  user_sock_ = BuildMockSocket(data_reads, data_writes, "localhost", 80,
++                               NetLog::Get());
++  int rv = user_sock_->Connect(callback_.callback());
++  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
++  EXPECT_THAT(callback_.WaitForResult(), IsOk());
++  EXPECT_TRUE(user_sock_->IsConnected());
+ }
+ 
+ // Tests a complete SOCKS5 handshake and the disconnection.
+--- a/net/socket/socks_connect_job.cc
++++ b/net/socket/socks_connect_job.cc
+@@ -178,7 +178,8 @@ int SOCKSConnectJob::DoSOCKSConnect() {
+   if (socks_params_->is_socks_v5()) {
+     socket_ = std::make_unique<SOCKS5ClientSocket>(
+         transport_connect_job_->PassSocket(), socks_params_->destination(),
+-        socks_params_->traffic_annotation());
++        socks_params_->traffic_annotation(),
++        common_connect_job_params()->socks_credentials);
+   } else {
+     auto socks_socket = std::make_unique<SOCKSClientSocket>(
+         transport_connect_job_->PassSocket(), socks_params_->destination(),
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -70,6 +70,7 @@
+ #include "net/base/network_delegate.h"
+ #include "net/base/network_isolation_key.h"
+ #include "net/base/network_persona_config.h"
++#include "net/base/socks_credentials.h"
+ #include "net/base/network_persona_template.h"
+ #include "net/base/port_util.h"
+ #include "net/base/reconnect_notifier.h"
+@@ -1890,6 +1891,26 @@ void NetworkContext::UpdateNetworkPerson
+   std::move(callback).Run(true);
+ }
+ 
++void NetworkContext::UpdateSocksCredentials(
++    mojom::SocksCredentialsPtr credentials,
++    UpdateSocksCredentialsCallback callback) {
++  net::SocksCredentials net_credentials;
++  if (credentials) {
++    net_credentials.username = credentials->username;
++    net_credentials.password = credentials->password;
++    if (!net_credentials.IsValid()) {
++      std::move(callback).Run(false);
++      return;
++    }
++  }
++
++  net::HttpNetworkSession* http_session =
++      url_request_context_->http_transaction_factory()->GetSession();
++  DCHECK(http_session);
++  http_session->ApplySocksCredentials(std::move(net_credentials));
++  std::move(callback).Run(true);
++}
++
+ void NetworkContext::CloseIdleConnections(
+     CloseIdleConnectionsCallback callback) {
+   net::HttpNetworkSession* http_session =
+@@ -3140,6 +3161,19 @@ URLRequestContextOwner NetworkContext::M
+     }
+   }
+ 
++  if (params_->socks_credentials) {
++    net::SocksCredentials socks_credentials;
++    socks_credentials.username = params_->socks_credentials->username;
++    socks_credentials.password = params_->socks_credentials->password;
++    if (socks_credentials.IsValid()) {
++      session_params.socks_credentials = std::move(socks_credentials);
++    } else {
++      // Rejected rather than truncated: a silently shortened password would
++      // fail authentication in a way that looks like a server problem.
++      LOG(ERROR) << "Ignoring invalid SOCKS5 credentials";
++    }
++  }
++
+   builder.set_http_network_session_params(session_params);
+   builder.set_quic_context(std::move(quic_context));
+ 
+--- a/services/network/network_context.h
++++ b/services/network/network_context.h
+@@ -329,6 +329,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE)
+   void UpdateNetworkPersona(
+       mojom::NetworkPersonaConfigPtr config,
+       UpdateNetworkPersonaCallback callback) override;
++  void UpdateSocksCredentials(
++      mojom::SocksCredentialsPtr credentials,
++      UpdateSocksCredentialsCallback callback) override;
+   void CloseIdleConnections(CloseIdleConnectionsCallback callback) override;
+   void SetNetworkConditions(
+       const base::UnguessableToken& throttling_profile_id,
+--- a/services/network/public/mojom/network_context.mojom
++++ b/services/network/public/mojom/network_context.mojom
+@@ -339,12 +339,24 @@ struct NetworkPersonaConfig {
+   array<uint8> deterministic_seed;
+ };
+ 
++// Username/password for SOCKS5 authentication (RFC 1929). Both fields are
++// length-prefixed with a single byte on the wire, so neither may exceed 255
++// bytes; over-long values are rejected rather than truncated.
++struct SocksCredentials {
++  string username;
++  string password;
++};
++
+ // Parameters for constructing a network context.
+ struct NetworkContextParams {
+   // Initial profile-scoped network identity. Null selects Chromium's native
+   // identity.
+   NetworkPersonaConfig? network_persona_config;
+ 
++  // Credentials offered when a SOCKS5 proxy asks for username/password
++  // authentication (RFC 1929). Null means only no-auth is offered.
++  SocksCredentials? socks_credentials;
++
+   // The user agent string.
+   string user_agent;
+ 
+@@ -1296,6 +1308,11 @@ interface NetworkContext {
+   // A null config restores Chromium's native network identity.
+   UpdateNetworkPersona(NetworkPersonaConfig? config) => (bool accepted);
+ 
++  // Replaces the SOCKS5 credentials used for new connections. Existing
++  // connections are closed, since they were authenticated with the previous
++  // credentials. A null value offers only no-authentication.
++  UpdateSocksCredentials(SocksCredentials? credentials) => (bool accepted);
++
+   // Close all idle connections for the HTTP network session used by
+   // this context.
+   CloseIdleConnections() => ();
+--- a/chrome/browser/net/profile_network_context_service.h
++++ b/chrome/browser/net/profile_network_context_service.h
+@@ -137,6 +137,9 @@ class ProfileNetworkContextService
+ 
+   using NetworkPersonaUpdateCallback = base::OnceCallback<void(bool)>;
+   void ApplyNetworkPersonaConfig(NetworkPersonaUpdateCallback callback);
++  // Pushes the profile's current SOCKS5 credentials to every loaded storage
++  // partition, so a credential change takes effect without a restart.
++  void ApplySocksCredentials();
+   void ApplyNetworkPersonaIdentity(uint32_t identity_template_id,
+                                    uint64_t generation,
+                                    NetworkPersonaUpdateCallback callback);
