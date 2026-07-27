@@ -94,6 +94,20 @@ def changed_files(ref):
     return sorted(path for path in files if path)
 
 
+def default_changed_from():
+    """Pick a diff base that keeps committed-but-unpushed work in scope.
+
+    Defaulting to HEAD makes an already committed change look like an empty
+    diff, so the guard would scope itself down to nothing and pass without
+    inspecting the very files it is gating.
+    """
+    for upstream in ('@{upstream}', 'origin/main'):
+        merge_base = git_lines(['merge-base', upstream, 'HEAD'])
+        if merge_base:
+            return merge_base[0]
+    return 'HEAD'
+
+
 def print_changed(files):
     """Print the change set used for scoped guard decisions."""
     if not files:
@@ -224,7 +238,7 @@ def run_quick(args, files):
     preflight(files)
     run([
         args.python, '.codex/skills/nitrous-validate/scripts/run_validation.py', '--changed-from',
-        args.changed_from
+        args.changed_from, '--keep-going'
     ])
     if touches_code_dirs(files):
         run_yapf_dry_run(args.python)
@@ -272,6 +286,8 @@ def run_patch_source(args, files):
         'chromium_src',
         '--changed-from',
         args.changed_from,
+        '--keep-going',
+        '--require-checks',
     ])
 
 
@@ -413,11 +429,17 @@ def main():
                         dest='files',
                         default=[],
                         help='Chromium source path for --mode hot-start/hot-add. Repeatable.')
-    parser.add_argument('--changed-from', default='HEAD', help='Git ref used for scoped changes.')
+    parser.add_argument('--changed-from',
+                        help='Git ref used for scoped changes. Defaults to the merge-base with '
+                        'the upstream branch so committed work stays in scope.')
     parser.add_argument('--python', default=sys.executable, help='Python executable to use.')
     args = parser.parse_args()
 
     validate_mode_arguments(parser, args)
+
+    if not args.changed_from:
+        args.changed_from = default_changed_from()
+    print(f'Scoped change diff base: {args.changed_from}', flush=True)
 
     files = changed_files(args.changed_from)
     print_changed(files)

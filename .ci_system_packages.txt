@@ -1,0 +1,11 @@
+# System packages installed on CI runners, and the binary each one must provide.
+# Format: <apt-package> <binary>
+#
+# Single source of truth: .github/actions/ci-setup/action.yml installs the
+# package column, and local CI-equivalent validation checks the binary column.
+# Add a row here when a check or test starts shelling out to a new program.
+xz-utils xz
+patch patch
+curl curl
+git git
+quilt quilt
