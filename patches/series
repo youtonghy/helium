@@ -208,3 +208,4 @@ helium/core/persona-device-pack-webrtc-gate.patch
 helium/core/persona-desktop-network-identities.patch
 helium/core/persona-desktop-network-reference-captures.patch
 helium/core/enable-vertical-tabs.patch
+helium/core/nitrous-proxy-core.patch
