@@ -505,6 +505,46 @@
     "message": "Подменяет имя адаптера, сообщаемое WebGPU. Используйте краткое имя устройства из того же семейства, что и рендерер GPU."
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_LABEL",
+    "source": "WebGPU architecture",
+    "message": "Архитектура WebGPU"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_TOOLTIP",
+    "source": "Overrides GPUAdapterInfo.architecture. Leave empty to hide the real GPU architecture.",
+    "message": "Заменяет GPUAdapterInfo.architecture. Оставьте поле пустым, чтобы скрыть реальную архитектуру GPU."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_LABEL",
+    "source": "WebGPU device ID",
+    "message": "Идентификатор устройства WebGPU"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_TOOLTIP",
+    "source": "Overrides the vendor-specific GPUAdapterInfo.device identifier. This is usually a hexadecimal device ID, not a device name.",
+    "message": "Заменяет идентификатор GPUAdapterInfo.device, заданный производителем. Обычно это шестнадцатеричный идентификатор устройства, а не его название."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_LABEL",
+    "source": "WebGPU description",
+    "message": "Описание WebGPU"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_TOOLTIP",
+    "source": "Overrides the human-readable GPUAdapterInfo.description.",
+    "message": "Заменяет удобочитаемое значение GPUAdapterInfo.description."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_LABEL",
+    "source": "WebGPU driver",
+    "message": "Драйвер WebGPU"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_TOOLTIP",
+    "source": "Overrides the WebGPU developer driver string. Leave empty to hide the real driver.",
+    "message": "Заменяет строку драйвера WebGPU для разработчиков. Оставьте поле пустым, чтобы скрыть реальный драйвер."
+  },
+  {
     "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL",
     "source": "Hardware concurrency",
     "message": "Аппаратная параллельность"
@@ -1193,5 +1233,175 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_TOOLTIP",
     "source": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls.",
     "message": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_LABEL",
+    "source": "Hide WebDriver flag",
+    "message": "Скрыть флаг WebDriver"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_TOOLTIP",
+    "source": "Controls whether navigator.webdriver reports automation. When on (default), automation is hidden from sites that probe for it.",
+    "message": "Управляет тем, сообщает ли navigator.webdriver об автоматизации. При включении (по умолчанию) автоматизация скрыта от сайтов, которые её проверяют."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_LABEL",
+    "source": "Do Not Track",
+    "message": "Не отслеживать"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_TOOLTIP",
+    "source": "Sends the DNT: 1 header and reports navigator.doNotTrack. Note: modern Nitrous removed DNT UI, so enabling it is itself a detectable signal.",
+    "message": "Отправляет заголовок DNT: 1 и сообщает navigator.doNotTrack. Примечание: современный Nitrous удалил интерфейс DNT, поэтому его включение само по себе является обнаружимым признаком."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_LABEL",
+    "source": "Geolocation override",
+    "message": "Переопределение геолокации"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_TOOLTIP",
+    "source": "Replaces the reported device position with fixed coordinates. When on, latitude, longitude and accuracy below are served to sites.",
+    "message": "Заменяет сообщаемое положение устройства фиксированными координатами. При включении сайтам передаются указанные ниже широта, долгота и точность."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_LABEL",
+    "source": "Latitude",
+    "message": "Широта"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_TOOLTIP",
+    "source": "Latitude in decimal degrees, from -90 to +90. Must be consistent with the persona timezone and proxy location.",
+    "message": "Широта в десятичных градусах, от -90 до +90. Должна соответствовать часовому поясу и расположению прокси персонажа."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_LABEL",
+    "source": "Longitude",
+    "message": "Долгота"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_TOOLTIP",
+    "source": "Longitude in decimal degrees, from -180 to +180. Must be consistent with the persona timezone and proxy location.",
+    "message": "Долгота в десятичных градусах, от -180 до +180. Должна соответствовать часовому поясу и расположению прокси персонажа."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_LABEL",
+    "source": "Accuracy (m)",
+    "message": "Точность (м)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_TOOLTIP",
+    "source": "Horizontal position accuracy in meters. Small values (10–100) imply GPS; larger values (1000+) imply IP geolocation.",
+    "message": "Горизонтальная точность положения в метрах. Малые значения (10–100) указывают на GPS, большие (1000+) — на IP-геолокацию."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_LABEL",
+    "source": "Audio input devices",
+    "message": "Устройства ввода звука"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_TOOLTIP",
+    "source": "Number of microphones reported by enumerateDevices(). 0 hides input devices.",
+    "message": "Количество микрофонов, сообщаемых enumerateDevices(). 0 скрывает устройства ввода."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_LABEL",
+    "source": "Video input devices",
+    "message": "Устройства ввода видео"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_TOOLTIP",
+    "source": "Number of cameras reported by enumerateDevices(). 0 hides input devices.",
+    "message": "Количество камер, сообщаемых enumerateDevices(). 0 скрывает устройства ввода."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_LABEL",
+    "source": "Audio output devices",
+    "message": "Устройства вывода звука"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_TOOLTIP",
+    "source": "Number of speakers reported by enumerateDevices(). 0 hides output devices.",
+    "message": "Количество динамиков, сообщаемых enumerateDevices(). 0 скрывает устройства вывода."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_LABEL",
+    "source": "Device labels",
+    "message": "Имена устройств"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_TOOLTIP",
+    "source": "Comma-separated labels for the fake devices. When set, labels are assigned to the reported devices in order; leave empty for generic labels.",
+    "message": "Имена поддельных устройств через запятую. При задании назначаются по порядку сообщаемым устройствам; пусто — общие имена."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_LABEL",
+    "source": "Speech voices",
+    "message": "Голоса синтеза речи"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP",
+    "source": "Comma-separated list of speechSynthesis voices as name|lang|uri. When set, getVoices() returns these instead of the platform voices; leave empty for the real voice list.",
+    "message": "Список голосов speechSynthesis через запятую в формате имя|язык|uri. При задании getVoices() возвращает эти голоса; пусто — реальный список."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_LABEL",
+    "source": "WebRTC mode",
+    "message": "Режим WebRTC"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_TOOLTIP",
+    "source": "Disabled blocks RTCPeerConnection entirely. Real leaves the IP handling policy unchanged. Altered forces the non-proxied-UDP policy so host candidates do not leak the local network.",
+    "message": "Отключено полностью блокирует RTCPeerConnection. Реальный оставляет политику обработки IP без изменений. Изменённый принудительно включает политику не-проксированного UDP, чтобы host-кандидаты не раскрывали локальную сеть."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_LABEL",
+    "source": "Client rect noise",
+    "message": "Шум клиентских прямоугольников"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_TOOLTIP",
+    "source": "When enabled, Element.getClientRects() and getBoundingClientRect() receive small deterministic noise tied to this persona.",
+    "message": "При включении Element.getClientRects() и getBoundingClientRect() получают детерминированный шум, привязанный к этому persona."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_LABEL",
+    "source": "Effective connection type",
+    "message": "Эффективный тип соединения"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_TOOLTIP",
+    "source": "Overrides navigator.connection.effectiveType, one of slow-2g, 2g, 3g, 4g.",
+    "message": "Переопределяет navigator.connection.effectiveType (slow-2g, 2g, 3g, 4g)."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_RTT_LABEL",
+    "source": "Round-trip time (ms)",
+    "message": "Время обхода (мс)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_RTT_TOOLTIP",
+    "source": "Overrides navigator.connection.rtt in milliseconds. Keep consistent with the effective connection type.",
+    "message": "Переопределяет navigator.connection.rtt в миллисекундах. Должно соответствовать эффективному типу соединения."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_LABEL",
+    "source": "Downlink (Mbps)",
+    "message": "Скорость загрузки (Мбит/с)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_TOOLTIP",
+    "source": "Overrides navigator.connection.downlink in megabits per second. Keep consistent with the effective connection type.",
+    "message": "Переопределяет navigator.connection.downlink в мегабитах в секунду. Должно соответствовать эффективному типу соединения."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_LABEL",
+    "source": "Save-Data",
+    "message": "Режим экономии данных"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_TOOLTIP",
+    "source": "Overrides navigator.connection.saveData, reporting data-saver mode to sites.",
+    "message": "Переопределяет navigator.connection.saveData, сообщая сайтам о режиме экономии данных."
   }
 ]

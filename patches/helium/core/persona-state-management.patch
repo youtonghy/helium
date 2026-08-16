@@ -180,7 +180,7 @@
 +#endif
 --- /dev/null
 +++ b/components/helium_persona/persona_snapshot.cc
-@@ -0,0 +1,436 @@
+@@ -0,0 +1,522 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -195,6 +195,7 @@
 +#include <string_view>
 +#include <tuple>
 +
++#include "base/strings/string_util.h"
 +#include "third_party/icu/source/common/unicode/unistr.h"
 +#include "third_party/icu/source/i18n/unicode/timezone.h"
 +
@@ -343,6 +344,30 @@
 +  }
 +}
 +
++void ValidateSpeechVoices(const base::DictValue& advanced,
++                          base::DictValue* errors) {
++  const base::ListValue* voices = advanced.FindList("speechVoices");
++  if (!voices) {
++    return;
++  }
++  for (const auto& item : *voices) {
++    if (!item.is_dict()) {
++      errors->Set("advanced.speechVoices", "invalid_element");
++      return;
++    }
++    const base::DictValue& voice = item.GetDict();
++    if (!HasNonEmptyString(voice, "name")) {
++      errors->Set("advanced.speechVoices", "invalid_element");
++      return;
++    }
++    if (const std::string* lang = voice.FindString("lang");
++        lang && !lang->empty() && !base::IsStringASCII(*lang)) {
++      errors->Set("advanced.speechVoices.lang", "invalid_value");
++      return;
++    }
++  }
++}
++
 +std::optional<double> GetNumber(const base::Value* value) {
 +  if (!value) {
 +    return std::nullopt;
@@ -463,12 +488,13 @@
 +  const base::DictValue* advanced =
 +      ValidateDictField(value, "advanced", "advanced", true, &errors);
 +  if (advanced) {
-+    constexpr std::array<std::string_view, 30> kAdvancedBooleanFields = {
++    constexpr std::array<std::string_view, 33> kAdvancedBooleanFields = {
 +        "clientHintsEnabled",
 +        "canvasNoise",
 +        "audioNoise",
 +        "hardwareNoise",
 +        "fontMetricNoise",
++        "clientRectNoise",
 +        "allowBackgroundSync",
 +        "allowContacts",
 +        "allowLocalFonts",
@@ -494,6 +520,8 @@
 +        "allowHandwritingRecognition",
 +        "allowWebNn",
 +        "allowPrivateStateTokens",
++        "webdriverEnabled",
++        "doNotTrackEnabled",
 +    };
 +    ValidateBooleanFields(*advanced, kAdvancedBooleanFields, "advanced.",
 +                          &errors);
@@ -514,6 +542,21 @@
 +                     "advanced.fingerprintRotation.rotationIntervalDays", 1,
 +                     3650, true, &errors);
 +    }
++    ValidateNumber(*advanced, "geolocationLatitude",
++                   "advanced.geolocationLatitude", -90.0, 90.0, false,
++                   &errors);
++    ValidateNumber(*advanced, "geolocationLongitude",
++                   "advanced.geolocationLongitude", -180.0, 180.0, false,
++                   &errors);
++    ValidateNumber(*advanced, "geolocationAccuracy",
++                   "advanced.geolocationAccuracy", 0.0, 100000.0, false,
++                   &errors);
++    ValidateSpeechVoices(*advanced, &errors);
++    if (const std::string* webrtc_mode = advanced->FindString("webrtcMode");
++        webrtc_mode && *webrtc_mode != "real" &&
++        *webrtc_mode != "altered" && *webrtc_mode != "disabled") {
++      errors.Set("advanced.webrtcMode", "invalid_value");
++    }
 +  }
 +
 +  constexpr std::array<std::string_view, 7> kOptionalDictFields = {
@@ -527,6 +570,24 @@
 +    constexpr std::array<std::string_view, 4> kGpuStringFields = {
 +        "vendor", "renderer", "webgpuAdapter", "driver"};
 +    ValidateStringFields(*gpu, kGpuStringFields, "gpu.", &errors);
++    if (const base::DictValue* webgl_profile =
++            gpu->FindDict("webglProfile")) {
++      ValidateNumber(*webgl_profile, "maxCombinedTextureImageUnits",
++                     "gpu.webglProfile.maxCombinedTextureImageUnits", 0.0,
++                     1024.0, true, &errors);
++    }
++    if (const base::DictValue* webgl2_profile =
++            gpu->FindDict("webgl2Profile")) {
++      ValidateNumber(*webgl2_profile, "uniformBufferOffsetAlignment",
++                     "gpu.webgl2Profile.uniformBufferOffsetAlignment", 0.0,
++                     1024.0, true, &errors);
++    }
++    if (const base::DictValue* webgpu_profile =
++            gpu->FindDict("webgpuProfile")) {
++      ValidateNumber(*webgpu_profile, "maxComputeInvocationsPerWorkgroup",
++                     "gpu.webgpuProfile.maxComputeInvocationsPerWorkgroup",
++                     0.0, 4096.0, true, &errors);
++    }
 +  }
 +  if (const base::DictValue* hardware = value.FindDict("hardware")) {
 +    constexpr std::array<std::string_view, 1> kHardwareBooleanFields = {
@@ -540,7 +601,14 @@
 +    constexpr std::array<std::string_view, 1> kScreenBooleanFields = {
 +        "reducedMotion"};
 +    ValidateStringFields(*screen, kScreenStringFields, "screen.", &errors);
-+    ValidateBooleanFields(*screen, kScreenBooleanFields, "screen.", &errors);
++    ValidateBooleanFields(*screen, kScreenBooleanFields, "screen.",
++                          &errors);
++    if (const base::Value* monochrome = screen->Find("monochromeDepth");
++        monochrome &&
++        (!monochrome->is_int() || monochrome->GetInt() < 0 ||
++         monochrome->GetInt() > 32)) {
++      errors.Set("screen.monochromeDepth", "invalid_value");
++    }
 +  }
 +  if (const base::DictValue* fonts = value.FindDict("fonts")) {
 +    constexpr std::array<std::string_view, 2> kFontStringFields = {"id",
@@ -568,12 +636,19 @@
 +                          &errors);
 +  }
 +  if (const base::DictValue* network = value.FindDict("network")) {
-+    constexpr std::array<std::string_view, 1> kNetworkStringFields = {"type"};
++    constexpr std::array<std::string_view, 2> kNetworkStringFields = {
++        "type", "effectiveType"};
 +    constexpr std::array<std::string_view, 2> kNetworkBooleanFields = {
 +        "saveData", "online"};
 +    ValidateStringFields(*network, kNetworkStringFields, "network.", &errors);
 +    ValidateBooleanFields(*network, kNetworkBooleanFields, "network.",
 +                          &errors);
++    if (const std::string* effective_type = network->FindString("effectiveType");
++        effective_type && *effective_type != "slow-2g" &&
++        *effective_type != "2g" && *effective_type != "3g" &&
++        *effective_type != "4g") {
++      errors.Set("network.effectiveType", "invalid_value");
++    }
 +  }
 +
 +  constexpr std::array<std::tuple<std::string_view, double, double, bool>, 3>
@@ -602,15 +677,26 @@
 +      std::tuple{"deviceScaleFactor", 0.25, 8.0, false},
 +  };
 +  ValidateNumericGroup(value, "screen", kScreenFields, &errors);
-+  constexpr std::array<std::tuple<std::string_view, double, double, bool>, 2>
++  constexpr std::array<std::tuple<std::string_view, double, double, bool>, 5>
 +      kMediaFields = {
 +      std::tuple{"audioBaseLatency", 0.0, 10.0, false},
 +      std::tuple{"audioOutputLatency", 0.0, 10.0, false},
++      std::tuple{"audioInputCount", 0.0, 16.0, true},
++      std::tuple{"videoInputCount", 0.0, 16.0, true},
++      std::tuple{"audioOutputCount", 0.0, 16.0, true},
++      std::tuple{"videoFrameRate", 0.0, 240.0, true},
 +  };
 +  ValidateNumericGroup(value, "mediaDevices", kMediaFields, &errors);
-+  constexpr std::array<std::tuple<std::string_view, double, double, bool>, 1>
++  if (const base::DictValue* media_devices =
++          value.FindDict("mediaDevices")) {
++    ValidateStringList(*media_devices, "labels", "mediaDevices.labels", false,
++                       &errors);
++  }
++  constexpr std::array<std::tuple<std::string_view, double, double, bool>, 3>
 +      kNetworkFields = {
 +      std::tuple{"downlinkMax", 0.0, 100000.0, false},
++      std::tuple{"downlink", 0.0, 100000.0, false},
++      std::tuple{"rtt", 0.0, 10000.0, true},
 +  };
 +  ValidateNumericGroup(value, "network", kNetworkFields, &errors);
 +  return errors;
@@ -619,7 +705,7 @@
 +}  // namespace helium_persona
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,166 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -640,6 +726,14 @@
 +struct HeliumPersonaFingerprintRotationEpoch {
 +  std::string scope_key;
 +  std::string epoch;
++};
++
++struct HeliumPersonaSpeechVoice {
++  std::string name;
++  std::string lang;
++  std::string uri;
++  bool local_service = false;
++  bool is_default = false;
 +};
 +
 +inline std::string ResolveHeliumPersonaBrandFullVersion(
@@ -668,6 +762,10 @@
 +  bool allow_gamepads = true;
 +  bool allow_clipboard = true;
 +  bool allow_geolocation = false;
++  bool geolocation_enabled = false;
++  double geolocation_latitude = 0.0;
++  double geolocation_longitude = 0.0;
++  double geolocation_accuracy = 0.0;
 +  bool allow_notifications = false;
 +  bool allow_midi = false;
 +  bool allow_idle_detection = false;
@@ -686,6 +784,8 @@
 +  bool allow_handwriting_recognition = false;
 +  bool allow_web_nn = false;
 +  bool allow_private_state_tokens = false;
++  bool webdriver_enabled = true;
++  bool do_not_track_enabled = false;
 +  bool ua_ch_mobile = false;
 +  bool ua_ch_wow64 = false;
 +  bool passthrough = false;
@@ -693,6 +793,7 @@
 +  bool audio_noise = false;
 +  bool hardware_noise = false;
 +  bool font_metric_noise = false;
++  bool client_rect_noise = false;
 +  bool font_antialiasing = false;
 +  bool font_subpixel_rendering = false;
 +  bool font_lcd_text = false;
@@ -726,6 +827,12 @@
 +  std::string fingerprint_rotation_scope;
 +  std::string fingerprint_rotation_global_epoch;
 +  std::string network_type;
++  std::string network_effective_type = "4g";
++  int network_rtt = 50;
++  double network_downlink = 10.0;
++  double network_downlink_max = 0.0;
++  bool network_save_data = false;
++  bool network_online = true;
 +  int hardware_concurrency = 0;
 +  int device_memory = 0;
 +  int max_touch_points = 0;
@@ -745,6 +852,12 @@
 +  double audio_base_latency = 0.0;
 +  double audio_output_latency = 0.0;
 +  double network_downlink_max = 0.0;
++  int media_devices_audio_input_count = 1;
++  int media_devices_video_input_count = 1;
++  int media_devices_audio_output_count = 1;
++  std::vector<std::string> media_device_labels;
++  std::vector<HeliumPersonaSpeechVoice> speech_voices;
++  std::string webrtc_mode = "real";
 +  std::vector<std::string> ua_ch_form_factors;
 +  std::vector<std::string> navigator_languages;
 +  std::vector<std::string> font_families;
@@ -761,7 +874,7 @@
 +#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
-@@ -0,0 +1,579 @@
+@@ -0,0 +1,687 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -859,6 +972,25 @@
 +    return data.allow_geolocation;
 +  }
 +
++  static bool geolocation_enabled(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.geolocation_enabled;
++  }
++
++  static double geolocation_latitude(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.geolocation_latitude;
++  }
++
++  static double geolocation_longitude(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.geolocation_longitude;
++  }
++
++  static double geolocation_accuracy(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.geolocation_accuracy;
++  }
++
 +  static bool allow_notifications(const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.allow_notifications;
 +  }
@@ -939,6 +1071,15 @@
 +    return data.allow_private_state_tokens;
 +  }
 +
++  static bool webdriver_enabled(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.webdriver_enabled;
++  }
++
++  static bool do_not_track_enabled(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.do_not_track_enabled;
++  }
++
 +  static bool ua_ch_mobile(const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.ua_ch_mobile;
 +  }
@@ -965,6 +1106,10 @@
 +
 +  static bool font_metric_noise(const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.font_metric_noise;
++  }
++
++  static bool client_rect_noise(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.client_rect_noise;
 +  }
 +
 +  static bool font_antialiasing(const ::blink::HeliumPersonaSnapshot& data) {
@@ -1125,6 +1270,30 @@
 +    return data.network_type;
 +  }
 +
++  static const std::string& network_effective_type(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.network_effective_type;
++  }
++
++  static int network_rtt(const ::blink::HeliumPersonaSnapshot& data) {
++    return data.network_rtt;
++  }
++
++  static double network_downlink(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.network_downlink;
++  }
++
++  static bool network_save_data(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.network_save_data;
++  }
++
++  static bool network_online(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.network_online;
++  }
++
 +  static int hardware_concurrency(
 +      const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.hardware_concurrency;
@@ -1202,6 +1371,36 @@
 +    return data.audio_output_latency;
 +  }
 +
++  static int media_devices_audio_input_count(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.media_devices_audio_input_count;
++  }
++
++  static int media_devices_video_input_count(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.media_devices_video_input_count;
++  }
++
++  static int media_devices_audio_output_count(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.media_devices_audio_output_count;
++  }
++
++  static const std::vector<std::string>& media_device_labels(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.media_device_labels;
++  }
++
++  static const std::vector<::blink::HeliumPersonaSpeechVoice>& speech_voices(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.speech_voices;
++  }
++
++  static const std::string& webrtc_mode(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.webrtc_mode;
++  }
++
 +  static double network_downlink_max(
 +      const ::blink::HeliumPersonaSnapshot& data) {
 +    return data.network_downlink_max;
@@ -1249,6 +1448,10 @@
 +    out->allow_gamepads = data.allow_gamepads();
 +    out->allow_clipboard = data.allow_clipboard();
 +    out->allow_geolocation = data.allow_geolocation();
++    out->geolocation_enabled = data.geolocation_enabled();
++    out->geolocation_latitude = data.geolocation_latitude();
++    out->geolocation_longitude = data.geolocation_longitude();
++    out->geolocation_accuracy = data.geolocation_accuracy();
 +    out->allow_notifications = data.allow_notifications();
 +    out->allow_midi = data.allow_midi();
 +    out->allow_idle_detection = data.allow_idle_detection();
@@ -1268,6 +1471,8 @@
 +        data.allow_handwriting_recognition();
 +    out->allow_web_nn = data.allow_web_nn();
 +    out->allow_private_state_tokens = data.allow_private_state_tokens();
++    out->webdriver_enabled = data.webdriver_enabled();
++    out->do_not_track_enabled = data.do_not_track_enabled();
 +    out->ua_ch_mobile = data.ua_ch_mobile();
 +    out->ua_ch_wow64 = data.ua_ch_wow64();
 +    out->passthrough = data.passthrough();
@@ -1275,6 +1480,7 @@
 +    out->audio_noise = data.audio_noise();
 +    out->hardware_noise = data.hardware_noise();
 +    out->font_metric_noise = data.font_metric_noise();
++    out->client_rect_noise = data.client_rect_noise();
 +    out->font_antialiasing = data.font_antialiasing();
 +    out->font_subpixel_rendering = data.font_subpixel_rendering();
 +    out->font_lcd_text = data.font_lcd_text();
@@ -1298,6 +1504,17 @@
 +    out->audio_base_latency = data.audio_base_latency();
 +    out->audio_output_latency = data.audio_output_latency();
 +    out->network_downlink_max = data.network_downlink_max();
++    out->network_effective_type = data.network_effective_type();
++    out->network_rtt = data.network_rtt();
++    out->network_downlink = data.network_downlink();
++    out->network_save_data = data.network_save_data();
++    out->network_online = data.network_online();
++    out->media_devices_audio_input_count =
++        data.media_devices_audio_input_count();
++    out->media_devices_video_input_count =
++        data.media_devices_video_input_count();
++    out->media_devices_audio_output_count =
++        data.media_devices_audio_output_count();
 +    return data.ReadUserAgent(&out->user_agent) &&
 +           data.ReadId(&out->id) && data.ReadName(&out->name) &&
 +           data.ReadDevice(&out->device) && data.ReadOs(&out->os) &&
@@ -1328,11 +1545,15 @@
 +           data.ReadFingerprintRotationGlobalEpoch(
 +               &out->fingerprint_rotation_global_epoch) &&
 +           data.ReadNetworkType(&out->network_type) &&
++           data.ReadNetworkEffectiveType(&out->network_effective_type) &&
 +           data.ReadUaChFormFactors(&out->ua_ch_form_factors) &&
 +           data.ReadNavigatorLanguages(&out->navigator_languages) &&
 +           data.ReadFontFamilies(&out->font_families) &&
 +           data.ReadFontAliases(&out->font_aliases) &&
 +           data.ReadUaChBrands(&out->ua_ch_brands) &&
++           data.ReadMediaDeviceLabels(&out->media_device_labels) &&
++           data.ReadSpeechVoices(&out->speech_voices) &&
++           data.ReadWebrtcMode(&out->webrtc_mode) &&
 +           data.ReadFingerprintRotationSiteEpochs(
 +               &out->fingerprint_rotation_site_epochs);
 +  }
@@ -1343,7 +1564,7 @@
 +#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_MOJOM_TRAITS_H_
 --- /dev/null
 +++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,136 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -1359,6 +1580,14 @@
 +  string epoch;
 +};
 +
++struct HeliumPersonaSpeechVoice {
++  string name;
++  string lang;
++  string uri;
++  bool local_service;
++  bool is_default;
++};
++
 +struct HeliumPersonaSnapshot {
 +  bool enabled;
 +  bool client_hints_enabled;
@@ -1369,6 +1598,10 @@
 +  bool allow_gamepads;
 +  bool allow_clipboard;
 +  bool allow_geolocation;
++  bool geolocation_enabled;
++  double geolocation_latitude;
++  double geolocation_longitude;
++  double geolocation_accuracy;
 +  bool allow_notifications;
 +  bool allow_midi;
 +  bool allow_idle_detection;
@@ -1387,6 +1620,8 @@
 +  bool allow_handwriting_recognition;
 +  bool allow_web_nn;
 +  bool allow_private_state_tokens;
++  bool webdriver_enabled;
++  bool do_not_track_enabled;
 +  bool ua_ch_mobile;
 +  bool ua_ch_wow64;
 +  bool passthrough;
@@ -1394,6 +1629,7 @@
 +  bool audio_noise;
 +  bool hardware_noise;
 +  bool font_metric_noise;
++  bool client_rect_noise;
 +  bool font_antialiasing;
 +  bool font_subpixel_rendering;
 +  bool font_lcd_text;
@@ -1427,6 +1663,12 @@
 +  string fingerprint_rotation_scope;
 +  string fingerprint_rotation_global_epoch;
 +  string network_type;
++  string network_effective_type;
++  int32 network_rtt;
++  double network_downlink;
++  double network_downlink_max;
++  bool network_save_data;
++  bool network_online;
 +  int32 hardware_concurrency;
 +  int32 device_memory;
 +  int32 max_touch_points;
@@ -1446,6 +1688,12 @@
 +  double audio_base_latency;
 +  double audio_output_latency;
 +  double network_downlink_max;
++  int32 media_devices_audio_input_count;
++  int32 media_devices_video_input_count;
++  int32 media_devices_audio_output_count;
++  array<string> media_device_labels;
++  array<HeliumPersonaSpeechVoice> speech_voices;
++  string webrtc_mode;
 +  array<string> ua_ch_form_factors;
 +  array<string> navigator_languages;
 +  array<string> font_families;
@@ -1518,7 +1766,7 @@
 +#endif  // CHROME_BROWSER_HELIUM_PERSONA_PERSONA_SERVICE_H_
 --- /dev/null
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -0,0 +1,1736 @@
+@@ -0,0 +1,1879 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -1679,6 +1927,15 @@
 +      .Set("allowHandwritingRecognition", false)
 +      .Set("allowWebNn", false)
 +      .Set("allowPrivateStateTokens", false)
++      .Set("webdriverEnabled", true)
++      .Set("doNotTrackEnabled", false)
++      .Set("geolocationEnabled", false)
++      .Set("geolocationLatitude", 37.7749)
++      .Set("geolocationLongitude", -122.4194)
++      .Set("geolocationAccuracy", 20.0)
++      .Set("speechVoices", base::ListValue())
++      .Set("webrtcMode", "real")
++      .Set("clientRectNoise", false)
 +      .Set("fingerprintRotation", MakeFingerprintRotationDefaults());
 +}
 +
@@ -1790,12 +2047,19 @@
 +  media_devices.Set("audioBaseLatency", audio_base_latency);
 +  media_devices.Set("audioOutputLatency", audio_base_latency * 2);
 +  media_devices.Set("voiceIsolation", platform == "macOS");
++  media_devices.Set("audioInputCount", 1);
++  media_devices.Set("videoInputCount", 1);
++  media_devices.Set("audioOutputCount", 1);
++  media_devices.Set("labels", base::ListValue());
 +
 +  base::DictValue network;
 +  network.Set("type", network_type);
 +  network.Set("downlinkMax", network_downlink_max);
 +  network.Set("saveData", false);
 +  network.Set("online", true);
++  network.Set("effectiveType", "4g");
++  network.Set("rtt", 50);
++  network.Set("downlink", 10.0);
 +
 +  return base::DictValue()
 +      .Set("id", id)
@@ -2287,6 +2551,18 @@
 +    media_devices->Set("audioOutputLatency",
 +                       platform == "macOS" ? 0.02 : 0.04);
 +  }
++  if (!media_devices->FindInt("audioInputCount")) {
++    media_devices->Set("audioInputCount", 1);
++  }
++  if (!media_devices->FindInt("videoInputCount")) {
++    media_devices->Set("videoInputCount", 1);
++  }
++  if (!media_devices->FindInt("audioOutputCount")) {
++    media_devices->Set("audioOutputCount", 1);
++  }
++  if (!media_devices->FindList("labels")) {
++    media_devices->Set("labels", base::ListValue());
++  }
 +
 +  base::DictValue* network = persona.EnsureDict("network");
 +  if (!network->FindString("type")) {
@@ -2294,6 +2570,15 @@
 +  }
 +  if (!network->FindDouble("downlinkMax")) {
 +    network->Set("downlinkMax", 25.0);
++  }
++  if (!network->FindString("effectiveType")) {
++    network->Set("effectiveType", "4g");
++  }
++  if (!network->FindInt("rtt")) {
++    network->Set("rtt", 50);
++  }
++  if (!network->FindDouble("downlink")) {
++    network->Set("downlink", 10.0);
 +  }
 +
 +  base::DictValue* advanced = persona.EnsureDict("advanced");
@@ -2323,6 +2608,9 @@
 +  }
 +  if (!advanced->FindBool("fontMetricNoise").has_value()) {
 +    advanced->Set("fontMetricNoise", false);
++  }
++  if (!advanced->FindBool("clientRectNoise").has_value()) {
++    advanced->Set("clientRectNoise", false);
 +  }
 +  if (!advanced->FindBool("allowGamepads").has_value()) {
 +    advanced->Set("allowGamepads", true);
@@ -2386,6 +2674,30 @@
 +  }
 +  if (!advanced->FindBool("allowPrivateStateTokens").has_value()) {
 +    advanced->Set("allowPrivateStateTokens", false);
++  }
++  if (!advanced->FindBool("webdriverEnabled").has_value()) {
++    advanced->Set("webdriverEnabled", true);
++  }
++  if (!advanced->FindBool("doNotTrackEnabled").has_value()) {
++    advanced->Set("doNotTrackEnabled", false);
++  }
++  if (!advanced->FindBool("geolocationEnabled").has_value()) {
++    advanced->Set("geolocationEnabled", false);
++  }
++  if (!advanced->FindDouble("geolocationLatitude")) {
++    advanced->Set("geolocationLatitude", 37.7749);
++  }
++  if (!advanced->FindDouble("geolocationLongitude")) {
++    advanced->Set("geolocationLongitude", -122.4194);
++  }
++  if (!advanced->FindDouble("geolocationAccuracy")) {
++    advanced->Set("geolocationAccuracy", 20.0);
++  }
++  if (!advanced->FindList("speechVoices")) {
++    advanced->Set("speechVoices", base::ListValue());
++  }
++  if (!advanced->FindString("webrtcMode")) {
++    advanced->Set("webrtcMode", "real");
 +  }
 +  base::DictValue* fingerprint_rotation =
 +      advanced->EnsureDict("fingerprintRotation");
@@ -2960,6 +3272,18 @@
 +      FindNestedBool(*persona, "advanced", "allowClipboard").value_or(true);
 +  snapshot.allow_geolocation =
 +      FindNestedBool(*persona, "advanced", "allowGeolocation").value_or(false);
++  snapshot.geolocation_enabled =
++      FindNestedBool(*persona, "advanced", "geolocationEnabled")
++          .value_or(false);
++  snapshot.geolocation_latitude =
++      FindNestedDouble(*persona, "advanced", "geolocationLatitude")
++          .value_or(0.0);
++  snapshot.geolocation_longitude =
++      FindNestedDouble(*persona, "advanced", "geolocationLongitude")
++          .value_or(0.0);
++  snapshot.geolocation_accuracy =
++      FindNestedDouble(*persona, "advanced", "geolocationAccuracy")
++          .value_or(0.0);
 +  snapshot.allow_notifications =
 +      FindNestedBool(*persona, "advanced", "allowNotifications")
 +          .value_or(false);
@@ -3006,6 +3330,11 @@
 +  snapshot.allow_private_state_tokens =
 +      FindNestedBool(*persona, "advanced", "allowPrivateStateTokens")
 +          .value_or(false);
++  snapshot.webdriver_enabled =
++      FindNestedBool(*persona, "advanced", "webdriverEnabled").value_or(true);
++  snapshot.do_not_track_enabled =
++      FindNestedBool(*persona, "advanced", "doNotTrackEnabled")
++          .value_or(false);
 +  snapshot.canvas_noise =
 +      FindNestedBool(*persona, "advanced", "canvasNoise").value_or(true);
 +  snapshot.audio_noise =
@@ -3014,6 +3343,8 @@
 +      FindNestedBool(*persona, "advanced", "hardwareNoise").value_or(true);
 +  snapshot.font_metric_noise =
 +      FindNestedBool(*persona, "advanced", "fontMetricNoise").value_or(false);
++  snapshot.client_rect_noise =
++      FindNestedBool(*persona, "advanced", "clientRectNoise").value_or(false);
 +  snapshot.ua_ch_mobile =
 +      FindNestedBool(*persona, "uaCh", "mobile").value_or(false);
 +  snapshot.ua_ch_wow64 =
@@ -3152,11 +3483,71 @@
 +  snapshot.audio_output_latency =
 +      FindNestedDouble(*persona, "mediaDevices", "audioOutputLatency")
 +          .value_or(0.0);
++  snapshot.media_devices_audio_input_count =
++      FindNestedInt(*persona, "mediaDevices", "audioInputCount").value_or(1);
++  snapshot.media_devices_video_input_count =
++      FindNestedInt(*persona, "mediaDevices", "videoInputCount").value_or(1);
++  snapshot.media_devices_audio_output_count =
++      FindNestedInt(*persona, "mediaDevices", "audioOutputCount").value_or(1);
++  if (const base::ListValue* device_labels =
++          persona.FindDict("mediaDevices")
++              ? persona.FindDict("mediaDevices")->FindList("labels")
++              : nullptr) {
++    for (const auto& value : *device_labels) {
++      if (value.is_string()) {
++        snapshot.media_device_labels.push_back(value.GetString());
++      }
++    }
++  }
++  if (const base::ListValue* speech_voices =
++          persona.FindDict("advanced")
++              ? persona.FindDict("advanced")->FindList("speechVoices")
++              : nullptr) {
++    for (const auto& value : *speech_voices) {
++      if (!value.is_dict()) {
++        continue;
++      }
++      const base::DictValue& voice_dict = value.GetDict();
++      const std::string* name = voice_dict.FindString("name");
++      const std::string* lang = voice_dict.FindString("lang");
++      const std::string* uri = voice_dict.FindString("uri");
++      if (!name || name->empty()) {
++        continue;
++      }
++      HeliumPersonaSpeechVoice voice;
++      voice.name = *name;
++      voice.lang = lang ? *lang : "";
++      voice.uri = uri ? *uri : "";
++      voice.local_service =
++          voice_dict.FindBool("localService").value_or(false);
++      voice.is_default = voice_dict.FindBool("default").value_or(false);
++      snapshot.speech_voices.push_back(std::move(voice));
++    }
++  }
++  if (const std::string* webrtc_mode =
++          FindNestedString(*persona, "advanced", "webrtcMode");
++      webrtc_mode) {
++    snapshot.webrtc_mode = *webrtc_mode;
++  } else {
++    snapshot.webrtc_mode = "real";
++  }
 +  if (const std::string* value = FindNestedString(*persona, "network", "type")) {
 +    snapshot.network_type = *value;
 +  }
 +  snapshot.network_downlink_max =
 +      FindNestedDouble(*persona, "network", "downlinkMax").value_or(0.0);
++  snapshot.network_effective_type =
++      FindNestedString(*persona, "network", "effectiveType")
++          ? *FindNestedString(*persona, "network", "effectiveType")
++          : "4g";
++  snapshot.network_rtt =
++      FindNestedInt(*persona, "network", "rtt").value_or(50);
++  snapshot.network_downlink =
++      FindNestedDouble(*persona, "network", "downlink").value_or(10.0);
++  snapshot.network_save_data =
++      FindNestedBool(*persona, "network", "saveData").value_or(false);
++  snapshot.network_online =
++      FindNestedBool(*persona, "network", "online").value_or(true);
 +
 +  const base::DictValue* ua_ch = persona->FindDict("uaCh");
 +  const base::ListValue* form_factors =

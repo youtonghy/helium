@@ -193,7 +193,17 @@
    if (detach_reason == blink::DetachReason::kNavigation) {
      if (navigation_client_impl_) {
        navigation_client_impl_->ResetWithoutCancelling();
-@@ -4796,6 +4834,9 @@ blink::WebEncryptedMediaClient* RenderFr
+@@ -4510,7 +4548,8 @@ void RenderFrameImpl::FinalizeRequestInt
+     blink::WebURLRequest& request,
+     bool for_outermost_main_frame,
+     ui::PageTransition transition_type) {
+-  if (GetWebView()->GetRendererPreferences().enable_do_not_track) {
++  if ((persona_snapshot_.IsEnabled() && persona_snapshot_.do_not_track_enabled) ||
++      GetWebView()->GetRendererPreferences().enable_do_not_track) {
+     request.SetHttpHeaderField(
+         blink::WebString::FromUtf8(blink::kDoNotTrackHeader), "1");
+   }
+@@ -4796,6 +4835,9 @@ blink::WebEncryptedMediaClient* RenderFr
  }
  
  blink::WebString RenderFrameImpl::UserAgentOverride() {
@@ -203,7 +213,7 @@
    if (ShouldUseUserAgentOverride()) {
      return WebString::FromUtf8(GetWebView()
                                     ->GetRendererPreferences()
-@@ -4807,6 +4848,12 @@ blink::WebString RenderFrameImpl::UserAg
+@@ -4807,6 +4849,12 @@ blink::WebString RenderFrameImpl::UserAg
  
  std::optional<blink::UserAgentMetadata>
  RenderFrameImpl::UserAgentMetadataOverride() {
@@ -216,7 +226,7 @@
    if (ShouldUseUserAgentOverride()) {
      return GetWebView()
          ->GetRendererPreferences()
-@@ -5297,6 +5344,13 @@ void RenderFrameImpl::PrepareFrameForCom
+@@ -5297,6 +5345,13 @@ void RenderFrameImpl::PrepareFrameForCom
      const GURL& url,
      const blink::mojom::CommitNavigationParams& commit_params) {
    is_requesting_navigation_ = false;
@@ -373,6 +383,19 @@
    // Do not change without good cause. History:
    // https://code.google.com/p/chromium/issues/detail?id=276813
    // https://www.w3.org/Bugs/Public/show_bug.cgi?id=27786
+@@ -98,6 +126,12 @@ bool Navigator::cookieEnabled() const {
+ }
+ 
+ bool Navigator::webdriver() const {
++  // Persona: when webdriver hiding is enabled (default), never report
++  // automation so sites probing navigator.webdriver see a plain browser.
++  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(DomWindow());
++      snapshot && snapshot->webdriver_enabled) {
++    return false;
++  }
+   if (RuntimeEnabledFeatures::AutomationControlledEnabled())
+     return true;
+ 
 --- a/third_party/blink/renderer/core/frame/local_dom_window.cc
 +++ b/third_party/blink/renderer/core/frame/local_dom_window.cc
 @@ -40,8 +40,11 @@
@@ -849,6 +872,63 @@
    if (RuntimeEnabledFeatures::NetInfoConstantTypeEnabled()) {
      return std::numeric_limits<double>::infinity();
    }
+@@ -111,6 +176,20 @@ double NetworkInformation::downlinkMax()
+ }
+ 
+ V8EffectiveConnectionType NetworkInformation::effectiveType() {
++  if (const HeliumPersonaSnapshot* snapshot =
++          GetPersonaSnapshot(GetExecutionContext());
++      snapshot && !snapshot->network_effective_type.empty()) {
++    const std::string& type = snapshot->network_effective_type;
++    V8EffectiveConnectionType::Enum value = V8EffectiveConnectionType::Enum::k4G;
++    if (type == "slow-2g") {
++      value = V8EffectiveConnectionType::Enum::kSlow2G;
++    } else if (type == "2g") {
++      value = V8EffectiveConnectionType::Enum::k2G;
++    } else if (type == "3g") {
++      value = V8EffectiveConnectionType::Enum::k3G;
++    }
++    return V8EffectiveConnectionType(value);
++  }
+   MaybeShowWebHoldbackConsoleMsg();
+   std::optional<WebEffectiveConnectionType> override_ect =
+       GetNetworkStateNotifier().GetWebHoldbackEffectiveType();
+@@ -132,6 +211,11 @@ V8EffectiveConnectionType NetworkInforma
+ }
+ 
+ uint32_t NetworkInformation::rtt() {
++  if (const HeliumPersonaSnapshot* snapshot =
++          GetPersonaSnapshot(GetExecutionContext());
++      snapshot && snapshot->network_rtt >= 0) {
++    return static_cast<uint32_t>(snapshot->network_rtt);
++  }
+   MaybeShowWebHoldbackConsoleMsg();
+   std::optional<base::TimeDelta> override_rtt =
+       GetNetworkStateNotifier().GetWebHoldbackHttpRtt();
+@@ -148,6 +232,11 @@ uint32_t NetworkInformation::rtt() {
+ }
+ 
+ double NetworkInformation::downlink() {
++  if (const HeliumPersonaSnapshot* snapshot =
++          GetPersonaSnapshot(GetExecutionContext());
++      snapshot && snapshot->network_downlink > 0.0) {
++    return snapshot->network_downlink;
++  }
+   MaybeShowWebHoldbackConsoleMsg();
+   std::optional<double> override_downlink_mbps =
+       GetNetworkStateNotifier().GetWebHoldbackDownlinkThroughputMbps();
+@@ -165,6 +254,11 @@ double NetworkInformation::downlink() {
+ }
+ 
+ bool NetworkInformation::saveData() const {
++  if (const HeliumPersonaSnapshot* snapshot =
++          GetPersonaSnapshot(GetExecutionContext());
++      snapshot) {
++    return snapshot->network_save_data;
++  }
+   bool save_data =
+       IsObserving() ? save_data_ : GetNetworkStateNotifier().SaveDataEnabled();
+ 
 --- a/third_party/blink/renderer/modules/webaudio/audio_context.cc
 +++ b/third_party/blink/renderer/modules/webaudio/audio_context.cc
 @@ -19,11 +19,14 @@
@@ -1264,3 +1344,46 @@
 +}
 +
 +}  // namespace blink
+--- a/third_party/blink/renderer/modules/donottrack/navigator_do_not_track.cc
++++ b/third_party/blink/renderer/modules/donottrack/navigator_do_not_track.cc
+@@ -30,6 +30,9 @@
+ 
+ #include "third_party/blink/renderer/modules/donottrack/navigator_do_not_track.h"
+ 
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++#include "third_party/blink/public/web/web_local_frame.h"
++#include "third_party/blink/public/web/web_local_frame_client.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/frame/local_frame_client.h"
+@@ -38,8 +41,30 @@
+ namespace blink {
+ namespace NavigatorDoNotTrack {
+ 
++namespace {
++
++const HeliumPersonaSnapshot* GetPersonaSnapshot(LocalDOMWindow* window) {
++  if (!window || !window->GetFrame() || !window->GetFrame()->Client() ||
++      !window->GetFrame()->Client()->GetWebFrame() ||
++      !window->GetFrame()->Client()->GetWebFrame()->Client()) {
++    return nullptr;
++  }
++  const HeliumPersonaSnapshot& snapshot =
++      window->GetFrame()->Client()->GetWebFrame()->Client()
++          ->GetHeliumPersonaSnapshot();
++  return snapshot.IsEnabled() ? &snapshot : nullptr;
++}
++
++}  // namespace
++
+ String doNotTrack(Navigator& navigator) {
+   LocalDOMWindow* window = navigator.DomWindow();
++  // Persona: when DNT is enabled, report "1" so navigator.doNotTrack and the
++  // DNT: 1 header stay consistent for sites probing tracking preferences.
++  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(window);
++      snapshot && snapshot->do_not_track_enabled) {
++    return "1";
++  }
+   return window ? window->GetFrame()->Client()->DoNotTrackValue() : String();
+ }
+ 

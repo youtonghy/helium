@@ -1,0 +1,11 @@
+--- a/chrome/browser/resources/settings/privacy_page/persona_config.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
+@@ -330,7 +330,7 @@ const SCRIPT_FONTS: Record<string, Recor
+  * alone is correct. An en-US persona must not advertise CJK faces.
+  */
+ export function resolveFontScript(locale: string): string {
+-  const parts = String(locale || '').toLowerCase().split(/[-_]/).filter(
++  const parts = (locale || '').toLowerCase().split(/[-_]/).filter(
+       part => part.length > 0);
+   if (parts.length === 0) {
+     return '';

@@ -1,0 +1,864 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -2090,11 +2090,29 @@
+     <message name="IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_TOOLTIP" desc="Help text for the persona GPU renderer field">
+       Overrides the WebGL UNMASKED_RENDERER_WEBGL string (usually an ANGLE adapter description). Must look native to the chosen OS.
+     </message>
+-    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_LABEL" desc="Label for the persona WebGPU adapter field">
+-      WebGPU adapter
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_LABEL" desc="Label for the persona WebGPU architecture field">
++      WebGPU architecture
+     </message>
+-    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_TOOLTIP" desc="Help text for the persona WebGPU adapter field">
+-      Overrides the adapter name reported by WebGPU. Use a short device name that matches the GPU renderer family.
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_TOOLTIP" desc="Help text for the persona WebGPU architecture field">
++      Overrides GPUAdapterInfo.architecture. Leave empty to hide the real GPU architecture.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_LABEL" desc="Label for the persona WebGPU device identifier field">
++      WebGPU device ID
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_TOOLTIP" desc="Help text for the persona WebGPU device identifier field">
++      Overrides the vendor-specific GPUAdapterInfo.device identifier. This is usually a hexadecimal device ID, not a device name.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_LABEL" desc="Label for the persona WebGPU description field">
++      WebGPU description
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_TOOLTIP" desc="Help text for the persona WebGPU description field">
++      Overrides the human-readable GPUAdapterInfo.description.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_LABEL" desc="Label for the persona WebGPU driver field">
++      WebGPU driver
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_TOOLTIP" desc="Help text for the persona WebGPU driver field">
++      Overrides the WebGPU developer driver string. Leave empty to hide the real driver.
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL" desc="Label for the persona hardware concurrency field">
+       Hardware concurrency
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -571,6 +571,10 @@ base::DictValue MakePreset(std::string_v
+   gpu.Set("vendor", gpu_vendor);
+   gpu.Set("renderer", gpu_renderer);
+   gpu.Set("webgpuAdapter", webgpu_adapter);
++  gpu.Set("webgpuArchitecture", "");
++  gpu.Set("webgpuDevice", "");
++  gpu.Set("webgpuDescription", webgpu_adapter);
++  gpu.Set("driver", "");
+   gpu.Set("webglProfile",
+           base::DictValue().Set("maxCombinedTextureImageUnits", 192));
+   gpu.Set("webgl2Profile",
+@@ -1036,6 +1040,20 @@ base::DictValue NormalizePersona(const b
+     gpu->Set("webgpuAdapter",
+              platform == "macOS" ? "Apple M2" : "Intel Iris Xe Graphics");
+   }
++  if (!gpu->FindString("webgpuArchitecture")) {
++    gpu->Set("webgpuArchitecture", "");
++  }
++  if (!gpu->FindString("webgpuDevice")) {
++    gpu->Set("webgpuDevice", "");
++  }
++  if (!gpu->FindString("webgpuDescription")) {
++    gpu->Set("webgpuDescription", *gpu->FindString("webgpuAdapter"));
++  }
++  if (!gpu->FindString("driver")) {
++    gpu->Set("driver", "");
++  }
++  // Keep v1 exports useful to versions that only understand webgpuAdapter.
++  gpu->Set("webgpuAdapter", *gpu->FindString("webgpuDescription"));
+ 
+   base::DictValue* hardware = persona.EnsureDict("hardware");
+   if (!hardware->FindInt("hardwareConcurrency")) {
+@@ -2286,6 +2304,18 @@ blink::HeliumPersonaSnapshot PersonaServ
+     snapshot.webgpu_adapter = *value;
+   }
+   if (const std::string* value =
++          FindNestedString(*persona, "gpu", "webgpuArchitecture")) {
++    snapshot.webgpu_architecture = *value;
++  }
++  if (const std::string* value =
++          FindNestedString(*persona, "gpu", "webgpuDevice")) {
++    snapshot.webgpu_device = *value;
++  }
++  if (const std::string* value =
++          FindNestedString(*persona, "gpu", "webgpuDescription")) {
++    snapshot.webgpu_description = *value;
++  }
++  if (const std::string* value =
+           FindNestedString(*persona, "gpu", "driver")) {
+     snapshot.gpu_driver = *value;
+   }
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -416,6 +416,66 @@ TEST_F(PersonaServiceTest, ImportNormali
+   EXPECT_EQ("20030107", *imported->FindString("navigatorProductSub"));
+ }
+ 
++TEST_F(PersonaServiceTest, ImportMigratesLegacyWebGPUAdapterIdentity) {
++  base::DictValue state = service_->GetPersonaState();
++  const base::ListValue* presets = state.FindList("presets");
++  ASSERT_TRUE(presets);
++  ASSERT_FALSE(presets->empty());
++  base::DictValue payload = presets->front().GetDict().Clone();
++  const std::string* payload_id = payload.FindString("id");
++  ASSERT_TRUE(payload_id);
++  const std::string persona_id = *payload_id;
++  base::DictValue* gpu = payload.EnsureDict("gpu");
++  gpu->Set("webgpuAdapter", "Legacy Adapter Name");
++  gpu->Remove("webgpuArchitecture");
++  gpu->Remove("webgpuDevice");
++  gpu->Remove("webgpuDescription");
++  gpu->Remove("driver");
++
++  base::ListValue personas;
++  personas.Append(std::move(payload));
++  base::DictValue bundle;
++  bundle.Set("schema", "helium.persona/v1");
++  bundle.Set("personas", std::move(personas));
++
++  base::DictValue response = service_->ImportPersonas(bundle);
++
++  ASSERT_TRUE(response.FindBool("ok").value_or(false));
++  const base::DictValue* response_state = response.FindDict("state");
++  ASSERT_TRUE(response_state);
++  const base::DictValue* imported =
++      FindPersona(response_state->FindList("personas"), persona_id);
++  ASSERT_TRUE(imported);
++  const base::DictValue* imported_gpu = imported->FindDict("gpu");
++  ASSERT_TRUE(imported_gpu);
++  const std::string* webgpu_description =
++      imported_gpu->FindString("webgpuDescription");
++  const std::string* webgpu_adapter = imported_gpu->FindString("webgpuAdapter");
++  const std::string* webgpu_architecture =
++      imported_gpu->FindString("webgpuArchitecture");
++  const std::string* webgpu_device = imported_gpu->FindString("webgpuDevice");
++  const std::string* driver = imported_gpu->FindString("driver");
++  ASSERT_TRUE(webgpu_description);
++  ASSERT_TRUE(webgpu_adapter);
++  ASSERT_TRUE(webgpu_architecture);
++  ASSERT_TRUE(webgpu_device);
++  ASSERT_TRUE(driver);
++  EXPECT_EQ("Legacy Adapter Name", *webgpu_description);
++  EXPECT_EQ("Legacy Adapter Name", *webgpu_adapter);
++  EXPECT_TRUE(webgpu_architecture->empty());
++  EXPECT_TRUE(webgpu_device->empty());
++  EXPECT_TRUE(driver->empty());
++
++  ASSERT_TRUE(service_->SetActivePersona(persona_id)
++                  .FindBool("ok")
++                  .value_or(false));
++  const blink::HeliumPersonaSnapshot snapshot = service_->GetActiveSnapshot();
++  EXPECT_EQ("Legacy Adapter Name", snapshot.webgpu_description);
++  EXPECT_TRUE(snapshot.webgpu_architecture.empty());
++  EXPECT_TRUE(snapshot.webgpu_device.empty());
++  EXPECT_TRUE(snapshot.gpu_driver.empty());
++}
++
+ TEST_F(PersonaServiceTest, PresetsMatchRuntimeVersionAndPlatformInvariants) {
+   const base::DictValue state = service_->GetPersonaState();
+   const base::ListValue* presets = state.FindList("presets");
+@@ -1126,3 +1186,22 @@ TEST_F(PersonaServiceTest, RejectsIncomp
+   EXPECT_TRUE(errors->FindString("devicePackId"));
+ }
+ 
++TEST_F(PersonaServiceTest, SaveRejectsInvalidWebGPUIdentityType) {
++  base::DictValue create_response = service_->CreatePersonaProfile("WebGPU");
++  const base::DictValue* created_state = create_response.FindDict("state");
++  ASSERT_TRUE(created_state);
++  const base::DictValue* created_persona =
++      FindFirstCustomPersona(created_state->FindList("personas"));
++  ASSERT_TRUE(created_persona);
++
++  base::DictValue payload = created_persona->Clone();
++  payload.EnsureDict("gpu")->Set("webgpuDevice", 1234);
++  base::DictValue response = service_->SavePersona(payload);
++
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  const base::DictValue* errors = response.FindDict("fieldErrors");
++  ASSERT_TRUE(errors);
++  const std::string* error = errors->FindString("gpu.webgpuDevice");
++  ASSERT_TRUE(error);
++  EXPECT_EQ("invalid_type", *error);
++}
+--- a/chrome/browser/resources/settings/privacy_page/persona_config.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
+@@ -95,6 +95,10 @@ export interface PersonaRecord {
+     vendor: string;
+     renderer: string;
+     webgpuAdapter: string;
++    webgpuArchitecture: string;
++    webgpuDevice: string;
++    webgpuDescription: string;
++    driver: string;
+   };
+   hardware: Record<string, unknown>&{
+     hardwareConcurrency: number;
+@@ -432,6 +436,11 @@ export function createPersonaDraft(
+     inputValue: Record<string, any> = {}): PersonaRecord {
+   const input = asObject(inputValue);
+   const inputScreen = asObject(input['screen']);
++  const inputGpu = asObject(input['gpu']);
++  const legacyWebGpuAdapter =
++      typeof inputGpu['webgpuAdapter'] === 'string' ?
++      inputGpu['webgpuAdapter'] :
++      '';
+   const defaults = {
+     id: '',
+     name: '',
+@@ -466,6 +475,10 @@ export function createPersonaDraft(
+       vendor: 'Apple Inc.',
+       renderer: 'ANGLE (Apple, Apple M2, Metal)',
+       webgpuAdapter: 'Apple M2',
++      webgpuArchitecture: '',
++      webgpuDevice: '',
++      webgpuDescription: 'Apple M2',
++      driver: '',
+     },
+     hardware: {
+       hardwareConcurrency: 8,
+@@ -519,6 +532,11 @@ export function createPersonaDraft(
+       screen.outerWidth : screen.width;
+   screen.outerHeight = Object.hasOwn(inputScreen, 'outerHeight') ?
+       screen.outerHeight : screen.height;
++  const gpu = {...defaults.gpu, ...inputGpu};
++  if (!Object.hasOwn(inputGpu, 'webgpuDescription')) {
++    gpu.webgpuDescription = legacyWebGpuAdapter || defaults.gpu.webgpuDescription;
++  }
++  gpu.webgpuAdapter = gpu.webgpuDescription;
+ 
+   const advancedInput = asObject(input['advanced']);
+   return {
+@@ -526,7 +544,7 @@ export function createPersonaDraft(
+     ...input,
+     uaCh: {...defaults.uaCh, ...asObject(input['uaCh'])},
+     region: {...defaults.region, ...asObject(input['region'])},
+-    gpu: {...defaults.gpu, ...asObject(input['gpu'])},
++    gpu,
+     hardware: {...defaults.hardware, ...asObject(input['hardware'])},
+     screen,
+     fonts: {...defaults.fonts, ...asObject(input['fonts'])},
+@@ -558,6 +576,7 @@ export function preparePersonaForSave(
+ 
+   persona.displayName = (persona.displayName || '').trim();
+   persona.name = persona.displayName;
++  persona.gpu.webgpuAdapter = persona.gpu.webgpuDescription;
+   if (!persona.id) {
+     fieldErrors['id'] = 'A saved persona must have an ID.';
+   }
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -731,14 +731,47 @@
+       </div>
+       <div class="field">
+         <div class="field-label">
+-          <span>$i18n{personaFieldWebGpuAdapterLabel}</span>
++          <span>$i18n{personaFieldWebGpuArchitectureLabel}</span>
+           <cr-tooltip-icon icon-class="cr:help-outline"
+               icon-aria-label="$i18n{personaFieldHelp}"
+-              tooltip-text="$i18n{personaFieldWebGpuAdapterTooltip}">
++              tooltip-text="$i18n{personaFieldWebGpuArchitectureTooltip}">
+           </cr-tooltip-icon>
+         </div>
+-        <cr-input aria-label="$i18n{personaFieldWebGpuAdapterLabel}"
+-            value="{{editablePersona_.gpu.webgpuAdapter}}"></cr-input>
++        <cr-input aria-label="$i18n{personaFieldWebGpuArchitectureLabel}"
++            value="{{editablePersona_.gpu.webgpuArchitecture}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldWebGpuDeviceLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldWebGpuDeviceTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldWebGpuDeviceLabel}"
++            value="{{editablePersona_.gpu.webgpuDevice}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldWebGpuDescriptionLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldWebGpuDescriptionTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldWebGpuDescriptionLabel}"
++            value="{{editablePersona_.gpu.webgpuDescription}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldWebGpuDriverLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldWebGpuDriverTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldWebGpuDriverLabel}"
++            value="{{editablePersona_.gpu.driver}}"></cr-input>
+       </div>
+       <div class="field">
+         <div class="field-label">
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -2419,10 +2419,22 @@ void AddPrivacyStrings(content::WebUIDat
+         IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_LABEL},
+       {"personaFieldGpuRendererTooltip",
+         IDS_SETTINGS_PERSONA_FIELD_GPU_RENDERER_TOOLTIP},
+-      {"personaFieldWebGpuAdapterLabel",
+-        IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_LABEL},
+-      {"personaFieldWebGpuAdapterTooltip",
+-        IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ADAPTER_TOOLTIP},
++      {"personaFieldWebGpuArchitectureLabel",
++       IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_LABEL},
++      {"personaFieldWebGpuArchitectureTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_TOOLTIP},
++      {"personaFieldWebGpuDeviceLabel",
++       IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_LABEL},
++      {"personaFieldWebGpuDeviceTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_TOOLTIP},
++      {"personaFieldWebGpuDescriptionLabel",
++       IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_LABEL},
++      {"personaFieldWebGpuDescriptionTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_TOOLTIP},
++      {"personaFieldWebGpuDriverLabel",
++       IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_LABEL},
++      {"personaFieldWebGpuDriverTooltip",
++       IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_TOOLTIP},
+       {"personaFieldHardwareConcurrencyLabel",
+         IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL},
+       {"personaFieldHardwareConcurrencyTooltip",
+--- a/chrome/test/data/webui/settings/persona_config_test.ts
++++ b/chrome/test/data/webui/settings/persona_config_test.ts
+@@ -54,6 +54,8 @@ suite('PersonaConfig', () => {
+       fontAliases: 'sans-serif',
+       uaChBrands: 'Chromium/149, Not/A)Brand/24',
+       uaChFormFactors: 'Desktop',
++      mediaDeviceLabels: '',
++      speechVoices: '',
+     });
+ 
+     assertDeepEquals({}, result.fieldErrors);
+@@ -84,6 +86,8 @@ suite('PersonaConfig', () => {
+       fontAliases: '',
+       uaChBrands: 'Chromium/149, Not/A)Brand/24',
+       uaChFormFactors: 'Desktop',
++      mediaDeviceLabels: '',
++      speechVoices: '',
+     });
+ 
+     assertDeepEquals([
+@@ -114,12 +118,43 @@ suite('PersonaConfig', () => {
+     assertEquals('Intel Inc.', draft.gpu.vendor);
+     assertEquals('string', typeof draft.gpu.renderer);
+     assertNotEquals('', draft.gpu.renderer);
++    assertEquals('', draft.gpu.webgpuArchitecture);
++    assertEquals('', draft.gpu.webgpuDevice);
++    assertEquals('Apple M2', draft.gpu.webgpuDescription);
+     assertEquals(true, draft.advanced.allowGeolocation);
+     assertEquals(true, draft.advanced.clientHintsEnabled);
+     assertEquals(
+         'site_profile', draft.advanced.fingerprintRotation.scope);
+   });
+ 
++  test('migrates and preserves legacy WebGPU adapter descriptions', () => {
++    const draft = createPersonaDraft({
++      gpu: {
++        vendor: 'Intel Inc.',
++        webgpuAdapter: 'Legacy Adapter Name',
++      },
++    });
++
++    assertEquals('Legacy Adapter Name', draft.gpu.webgpuDescription);
++    assertEquals('Legacy Adapter Name', draft.gpu.webgpuAdapter);
++    assertEquals('', draft.gpu.webgpuArchitecture);
++    assertEquals('', draft.gpu.webgpuDevice);
++
++    draft.gpu.webgpuDescription = 'Updated Description';
++    const result = preparePersonaForSave(draft, {
++      fontFamilies: '',
++      fontAliases: '',
++      uaChBrands: 'Chromium/149',
++      uaChFormFactors: 'Desktop',
++      mediaDeviceLabels: '',
++      speechVoices: '',
++    });
++    assertEquals(
++        result.persona.gpu.webgpuDescription,
++        result.persona.gpu.webgpuAdapter);
++    assertEquals('Updated Description', result.persona.gpu.webgpuAdapter);
++  });
++
+   test('accepts legacy arrays and v1 import bundles', () => {
+     const personas = [{id: 'persona-test'}];
+ 
+@@ -156,6 +191,8 @@ suite('PersonaConfig', () => {
+       fontAliases: '',
+       uaChBrands: 'Chromium/149',
+       uaChFormFactors: 'Desktop',
++      mediaDeviceLabels: '',
++      speechVoices: '',
+     });
+ 
+     assertEquals('string', typeof result.fieldErrors['screen.width']);
+@@ -173,6 +210,8 @@ suite('PersonaConfig', () => {
+       fontAliases: '',
+       uaChBrands: 'Chromium/149',
+       uaChFormFactors: 'Desktop',
++      mediaDeviceLabels: '',
++      speechVoices: '',
+     });
+ 
+     assertEquals(
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -443,8 +443,10 @@ base::DictValue GetPersonaFieldErrors(co
+   }
+ 
+   if (const base::DictValue* gpu = value.FindDict("gpu")) {
+-    constexpr std::array<std::string_view, 4> kGpuStringFields = {
+-        "vendor", "renderer", "webgpuAdapter", "driver"};
++    constexpr std::array<std::string_view, 7> kGpuStringFields = {
++        "vendor",             "renderer",        "webgpuAdapter",
++        "webgpuArchitecture", "webgpuDevice",    "webgpuDescription",
++        "driver"};
+     ValidateStringFields(*gpu, kGpuStringFields, "gpu.", &errors);
+     if (const base::DictValue* webgl_profile =
+             gpu->FindDict("webglProfile")) {
+--- a/third_party/blink/common/BUILD.gn
++++ b/third_party/blink/common/BUILD.gn
+@@ -391,6 +391,7 @@ source_set("common_unittests_sources") {
+     "device_memory/approximated_device_memory_unittest.cc",
+     "frame/delegated_capability_request_token_unittest.cc",
+     "frame/user_activation_state_unittest.cc",
++    "helium_persona/persona_snapshot_mojom_traits_unittest.cc",
+     "indexeddb/indexed_db_default_mojom_traits_unittest.cc",
+     "indexeddb/indexeddb_key_unittest.cc",
+     "input/synthetic_web_input_event_builders_unittest.cc",
+@@ -469,6 +470,7 @@ source_set("common_unittests_sources") {
+     "//third_party/blink/public:test_headers",
+     "//third_party/blink/public/common:buildflags",
+     "//third_party/blink/public/common:headers",
++    "//third_party/blink/public/mojom:mojom_core",
+     "//third_party/blink/public/mojom/tokens:tokens_traits_headers",
+     "//third_party/boringssl",
+     "//ui/gfx:test_support",
+--- /dev/null
++++ b/third_party/blink/common/helium_persona/persona_snapshot_mojom_traits_unittest.cc
+@@ -0,0 +1,39 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++
++#include "mojo/public/cpp/test_support/test_utils.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom.h"
++
++namespace blink {
++namespace {
++
++TEST(PersonaSnapshotMojomTraitsTest, RoundTripsWebGPUIdentity) {
++  HeliumPersonaSnapshot input;
++  input.enabled = true;
++  input.gpu_vendor = "persona-vendor";
++  input.webgpu_adapter = "legacy-description";
++  input.webgpu_architecture = "persona-architecture";
++  input.webgpu_device = "0xabcd";
++  input.webgpu_description = "persona-description";
++  input.gpu_driver = "persona-driver";
++
++  HeliumPersonaSnapshot output;
++  ASSERT_TRUE(mojo::test::SerializeAndDeserialize<
++              mojom::HeliumPersonaSnapshot>(input, output));
++
++  EXPECT_TRUE(output.enabled);
++  EXPECT_EQ(input.gpu_vendor, output.gpu_vendor);
++  EXPECT_EQ(input.webgpu_adapter, output.webgpu_adapter);
++  EXPECT_EQ(input.webgpu_architecture, output.webgpu_architecture);
++  EXPECT_EQ(input.webgpu_device, output.webgpu_device);
++  EXPECT_EQ(input.webgpu_description, output.webgpu_description);
++  EXPECT_EQ(input.gpu_driver, output.gpu_driver);
++}
++
++}  // namespace
++}  // namespace blink
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -113,6 +113,9 @@ struct HeliumPersonaSnapshot {
+   std::string gpu_vendor;
+   std::string gpu_renderer;
+   std::string webgpu_adapter;
++  std::string webgpu_architecture;
++  std::string webgpu_device;
++  std::string webgpu_description;
+   std::string gpu_driver;
+   std::string font_pack_id;
+   std::string font_pack_name;
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -387,6 +387,21 @@ struct StructTraits<blink::mojom::Helium
+     return data.webgpu_adapter;
+   }
+ 
++  static const std::string& webgpu_architecture(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.webgpu_architecture;
++  }
++
++  static const std::string& webgpu_device(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.webgpu_device;
++  }
++
++  static const std::string& webgpu_description(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.webgpu_description;
++  }
++
+   static const std::string& gpu_driver(
+       const ::blink::HeliumPersonaSnapshot& data) {
+     return data.gpu_driver;
+@@ -706,6 +721,9 @@ struct StructTraits<blink::mojom::Helium
+            data.ReadGpuVendor(&out->gpu_vendor) &&
+            data.ReadGpuRenderer(&out->gpu_renderer) &&
+            data.ReadWebgpuAdapter(&out->webgpu_adapter) &&
++           data.ReadWebgpuArchitecture(&out->webgpu_architecture) &&
++           data.ReadWebgpuDevice(&out->webgpu_device) &&
++           data.ReadWebgpuDescription(&out->webgpu_description) &&
+            data.ReadGpuDriver(&out->gpu_driver) &&
+            data.ReadFontPackId(&out->font_pack_id) &&
+            data.ReadFontPackName(&out->font_pack_name) &&
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -88,6 +88,9 @@ struct HeliumPersonaSnapshot {
+   string gpu_vendor;
+   string gpu_renderer;
+   string webgpu_adapter;
++  string webgpu_architecture;
++  string webgpu_device;
++  string webgpu_description;
+   string gpu_driver;
+   string font_pack_id;
+   string font_pack_name;
+--- a/third_party/blink/renderer/modules/webgpu/BUILD.gn
++++ b/third_party/blink/renderer/modules/webgpu/BUILD.gn
+@@ -21,6 +21,8 @@ blink_modules_sources("webgpu") {
+     "gpu_adapter.h",
+     "gpu_adapter_info.cc",
+     "gpu_adapter_info.h",
++    "gpu_adapter_info_persona.cc",
++    "gpu_adapter_info_persona.h",
+     "gpu_bind_group.cc",
+     "gpu_bind_group.h",
+     "gpu_bind_group_layout.cc",
+@@ -125,7 +127,10 @@ blink_modules_sources("webgpu") {
+ 
+ source_set("unit_tests") {
+   testonly = true
+-  sources = [ "gpu_context_lost_test.cc" ]
++  sources = [
++    "gpu_adapter_info_persona_test.cc",
++    "gpu_context_lost_test.cc",
++  ]
+ 
+   deps = [
+     "//base/test:test_support",
+--- a/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
++++ b/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
+@@ -9,19 +9,20 @@
+ #include "third_party/blink/public/web/web_local_frame.h"
+ #include "third_party/blink/public/web/web_local_frame_client.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+-#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+-#include "third_party/blink/renderer/core/frame/local_frame.h"
+-#include "third_party/blink/renderer/core/frame/local_frame_client.h"
+-#include "third_party/blink/renderer/core/workers/worker_global_scope.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_device_descriptor.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_queue_descriptor.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_request_adapter_options.h"
+ #include "third_party/blink/renderer/core/dom/dom_exception.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/frame/local_frame_client.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
++#include "third_party/blink/renderer/core/workers/worker_global_scope.h"
+ #include "third_party/blink/renderer/modules/webgpu/dawn_enum_conversions.h"
+ #include "third_party/blink/renderer/modules/webgpu/gpu.h"
+ #include "third_party/blink/renderer/modules/webgpu/gpu_adapter_info.h"
++#include "third_party/blink/renderer/modules/webgpu/gpu_adapter_info_persona.h"
+ #include "third_party/blink/renderer/modules/webgpu/gpu_device.h"
+ #include "third_party/blink/renderer/modules/webgpu/gpu_device_lost_info.h"
+ #include "third_party/blink/renderer/modules/webgpu/gpu_memory_heap_info.h"
+@@ -132,63 +133,68 @@ GPUAdapter::GPUAdapter(
+ GPUAdapterInfo* GPUAdapter::CreateAdapterInfoForAdapter() {
+   bool is_fallback_adapter = adapter_type_ == wgpu::AdapterType::CPU;
+ 
+-  String vendor = vendor_;
+-  String device = device_;
+-  String description = description_;
++  const HeliumPersonaSnapshot* snapshot = nullptr;
+   if (gpu_) {
+     if (ExecutionContext* context = gpu_->GetExecutionContext()) {
+-      const HeliumPersonaSnapshot* snapshot = nullptr;
+       if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
+         if (window->GetFrame() && window->GetFrame()->Client() &&
+             window->GetFrame()->Client()->GetWebFrame() &&
+             window->GetFrame()->Client()->GetWebFrame()->Client()) {
+-          const HeliumPersonaSnapshot& frame_snapshot =
+-              window->GetFrame()->Client()->GetWebFrame()->Client()
+-                  ->GetHeliumPersonaSnapshot();
+-          if (frame_snapshot.IsEnabled()) {
+-            snapshot = &frame_snapshot;
+-          }
++          snapshot =
++              &window->GetFrame()->Client()->GetWebFrame()->Client()
++                   ->GetHeliumPersonaSnapshot();
+         }
+       } else if (auto* worker = DynamicTo<WorkerGlobalScope>(context)) {
+-        const HeliumPersonaSnapshot& worker_snapshot =
+-            worker->GetHeliumPersonaSnapshot();
+-        if (worker_snapshot.IsEnabled()) {
+-          snapshot = &worker_snapshot;
+-        }
+-      }
+-      if (snapshot) {
+-        if (!snapshot->gpu_vendor.empty()) {
+-          vendor = String::FromUtf8(snapshot->gpu_vendor);
+-        }
+-        if (!snapshot->webgpu_adapter.empty()) {
+-          device = String::FromUtf8(snapshot->webgpu_adapter);
+-          description = device;
+-        }
++        snapshot = &worker->GetHeliumPersonaSnapshot();
+       }
+     }
+   }
+ 
++  GPUAdapterInfoPersonaData persona_data = ApplyHeliumPersonaToGPUAdapterInfo(
++      snapshot,
++      {
++          .vendor = vendor_,
++          .architecture = architecture_,
++          .device = device_,
++          .description = description_,
++          .driver = driver_,
++          .backend = FromDawnEnum(backend_type_),
++          .type = FromDawnEnum(adapter_type_),
++          .d3d_shader_model = d3d_shader_model_,
++          .vk_driver_version = vk_driver_version_,
++          .power_preference = FromDawnEnum(power_preference_),
++      });
++
+   GPUAdapterInfo* info;
+   if (RuntimeEnabledFeatures::WebGPUDeveloperFeaturesEnabled()) {
+     // If WebGPU developer features have been enabled then provide all available
+     // adapter info values.
+     info = MakeGarbageCollected<GPUAdapterInfo>(
+-        vendor, architecture_, subgroup_min_size_, subgroup_max_size_,
+-        is_fallback_adapter, device, description, driver_,
+-        FromDawnEnum(backend_type_), FromDawnEnum(adapter_type_),
+-        d3d_shader_model_, vk_driver_version_, FromDawnEnum(power_preference_));
+-
+-    // SAFETY: Required from caller
+-    const auto memory_heaps_span =
+-        UNSAFE_BUFFERS(base::span<const wgpu::MemoryHeapInfo>(
+-            memory_heaps_.heapInfo, memory_heaps_.heapCount));
+-    for (const auto& m : memory_heaps_span) {
+-      info->AppendMemoryHeapInfo(MakeGarbageCollected<GPUMemoryHeapInfo>(m));
++        persona_data.vendor, persona_data.architecture, subgroup_min_size_,
++        subgroup_max_size_, is_fallback_adapter, persona_data.device,
++        persona_data.description, persona_data.driver, persona_data.backend,
++        persona_data.type, persona_data.d3d_shader_model,
++        persona_data.vk_driver_version, persona_data.power_preference);
++
++    if (persona_data.expose_memory_heaps) {
++      // SAFETY: Required from caller
++      const auto memory_heaps_span =
++          UNSAFE_BUFFERS(base::span<const wgpu::MemoryHeapInfo>(
++              memory_heaps_.heapInfo, memory_heaps_.heapCount));
++      for (const auto& m : memory_heaps_span) {
++        info->AppendMemoryHeapInfo(MakeGarbageCollected<GPUMemoryHeapInfo>(m));
++      }
+     }
++  } else if (snapshot && snapshot->IsEnabled()) {
++    info = MakeGarbageCollected<GPUAdapterInfo>(
++        persona_data.vendor, persona_data.architecture, subgroup_min_size_,
++        subgroup_max_size_, is_fallback_adapter, persona_data.device,
++        persona_data.description);
+   } else {
++    // Preserve Chromium's default redaction policy for System Real mode.
+     info = MakeGarbageCollected<GPUAdapterInfo>(
+-        vendor, architecture_, subgroup_min_size_, subgroup_max_size_,
+-        is_fallback_adapter);
++        persona_data.vendor, persona_data.architecture, subgroup_min_size_,
++        subgroup_max_size_, is_fallback_adapter);
+   }
+ 
+   // SAFETY: Required from caller
+--- /dev/null
++++ b/third_party/blink/renderer/modules/webgpu/gpu_adapter_info_persona.cc
+@@ -0,0 +1,35 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "third_party/blink/renderer/modules/webgpu/gpu_adapter_info_persona.h"
++
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++
++namespace blink {
++
++GPUAdapterInfoPersonaData ApplyHeliumPersonaToGPUAdapterInfo(
++    const HeliumPersonaSnapshot* snapshot,
++    GPUAdapterInfoPersonaData data) {
++  if (!snapshot || !snapshot->IsEnabled()) {
++    return data;
++  }
++
++  data.vendor = String::FromUtf8(snapshot->gpu_vendor);
++  data.architecture = String::FromUtf8(snapshot->webgpu_architecture);
++  data.device = String::FromUtf8(snapshot->webgpu_device);
++  data.description = String::FromUtf8(snapshot->webgpu_description);
++  data.driver = String::FromUtf8(snapshot->gpu_driver);
++
++  // Developer diagnostics can reveal the real platform even after the public
++  // identity strings have been replaced. System Real mode retains them.
++  data.backend = String();
++  data.type = String();
++  data.d3d_shader_model = std::nullopt;
++  data.vk_driver_version = std::nullopt;
++  data.power_preference = String();
++  data.expose_memory_heaps = false;
++  return data;
++}
++
++}  // namespace blink
+--- /dev/null
++++ b/third_party/blink/renderer/modules/webgpu/gpu_adapter_info_persona.h
+@@ -0,0 +1,38 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_WEBGPU_GPU_ADAPTER_INFO_PERSONA_H_
++#define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBGPU_GPU_ADAPTER_INFO_PERSONA_H_
++
++#include <cstdint>
++#include <optional>
++
++#include "third_party/blink/renderer/modules/modules_export.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++
++namespace blink {
++
++struct HeliumPersonaSnapshot;
++
++struct MODULES_EXPORT GPUAdapterInfoPersonaData {
++  String vendor;
++  String architecture;
++  String device;
++  String description;
++  String driver;
++  String backend;
++  String type;
++  std::optional<uint32_t> d3d_shader_model;
++  std::optional<uint32_t> vk_driver_version;
++  String power_preference;
++  bool expose_memory_heaps = true;
++};
++
++MODULES_EXPORT GPUAdapterInfoPersonaData ApplyHeliumPersonaToGPUAdapterInfo(
++    const HeliumPersonaSnapshot* snapshot,
++    GPUAdapterInfoPersonaData data);
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_MODULES_WEBGPU_GPU_ADAPTER_INFO_PERSONA_H_
+--- /dev/null
++++ b/third_party/blink/renderer/modules/webgpu/gpu_adapter_info_persona_test.cc
+@@ -0,0 +1,82 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "third_party/blink/renderer/modules/webgpu/gpu_adapter_info_persona.h"
++
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
++
++namespace blink {
++namespace {
++
++GPUAdapterInfoPersonaData MakeRealAdapterInfo() {
++  return {
++      .vendor = "real-vendor",
++      .architecture = "real-architecture",
++      .device = "0x1234",
++      .description = "real-description",
++      .driver = "real-driver",
++      .backend = "Metal",
++      .type = "integrated GPU",
++      .d3d_shader_model = 60,
++      .vk_driver_version = 123,
++      .power_preference = "high-performance",
++  };
++}
++
++TEST(GPUAdapterInfoPersonaTest, LeavesSystemRealDataUnchanged) {
++  GPUAdapterInfoPersonaData data =
++      ApplyHeliumPersonaToGPUAdapterInfo(nullptr, MakeRealAdapterInfo());
++
++  EXPECT_EQ(String("real-vendor"), data.vendor);
++  EXPECT_EQ(String("real-architecture"), data.architecture);
++  EXPECT_EQ(String("0x1234"), data.device);
++  EXPECT_EQ(String("real-driver"), data.driver);
++  EXPECT_EQ(String("Metal"), data.backend);
++  EXPECT_TRUE(data.d3d_shader_model.has_value());
++  EXPECT_TRUE(data.vk_driver_version.has_value());
++  EXPECT_TRUE(data.expose_memory_heaps);
++}
++
++TEST(GPUAdapterInfoPersonaTest, UsesPersonaValuesAndRedactsDiagnostics) {
++  HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  snapshot.gpu_vendor = "persona-vendor";
++  snapshot.webgpu_architecture = "persona-architecture";
++  snapshot.webgpu_device = "0xabcd";
++  snapshot.webgpu_description = "persona-description";
++  snapshot.gpu_driver = "persona-driver";
++
++  GPUAdapterInfoPersonaData data =
++      ApplyHeliumPersonaToGPUAdapterInfo(&snapshot, MakeRealAdapterInfo());
++
++  EXPECT_EQ(String("persona-vendor"), data.vendor);
++  EXPECT_EQ(String("persona-architecture"), data.architecture);
++  EXPECT_EQ(String("0xabcd"), data.device);
++  EXPECT_EQ(String("persona-description"), data.description);
++  EXPECT_EQ(String("persona-driver"), data.driver);
++  EXPECT_TRUE(data.backend.empty());
++  EXPECT_TRUE(data.type.empty());
++  EXPECT_FALSE(data.d3d_shader_model.has_value());
++  EXPECT_FALSE(data.vk_driver_version.has_value());
++  EXPECT_TRUE(data.power_preference.empty());
++  EXPECT_FALSE(data.expose_memory_heaps);
++}
++
++TEST(GPUAdapterInfoPersonaTest, EmptyPersonaValuesDoNotRevealRealData) {
++  HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++
++  GPUAdapterInfoPersonaData data =
++      ApplyHeliumPersonaToGPUAdapterInfo(&snapshot, MakeRealAdapterInfo());
++
++  EXPECT_TRUE(data.vendor.empty());
++  EXPECT_TRUE(data.architecture.empty());
++  EXPECT_TRUE(data.device.empty());
++  EXPECT_TRUE(data.description.empty());
++  EXPECT_TRUE(data.driver.empty());
++}
++
++}  // namespace
++}  // namespace blink

@@ -1,0 +1,60 @@
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -76,6 +76,9 @@
+ #include "content/browser/wake_lock/wake_lock_service_impl.h"
+ #include "content/browser/web_contents/file_chooser_impl.h"
+ #include "content/browser/web_contents/web_contents_impl.h"
++#include "base/time/time.h"
++#include "services/device/public/cpp/geolocation/geoposition.h"
++#include "services/device/public/mojom/geoposition.mojom.h"
+ #include "content/browser/webid/flags.h"
+ #include "content/browser/worker_host/dedicated_worker_host.h"
+ #include "content/browser/worker_host/shared_worker_connector_impl.h"
+@@ -913,6 +916,37 @@ blink::HeliumPersonaSnapshot GetHeliumPe
+       browser_context);
+ }
+ 
++// Binds GeolocationService while applying the persona geolocation override.
++// When the active persona enables geolocation override, the per-WebContents
++// GeolocationContext is given fixed coordinates so every frame of that
++// WebContents reports the persona position instead of the real device fix.
++void BindPersonaGeolocationService(
++    RenderFrameHost* host,
++    mojo::PendingReceiver<blink::mojom::GeolocationService> receiver) {
++  if (host) {
++    blink::HeliumPersonaSnapshot snapshot =
++        GetHeliumPersonaSnapshot(host->GetBrowserContext());
++    if (snapshot.IsEnabled() && snapshot.geolocation_enabled) {
++      WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
++          WebContents::FromRenderFrameHost(host));
++      if (web_contents) {
++        auto position = device::mojom::Geoposition::New();
++        position->latitude = snapshot.geolocation_latitude;
++        position->longitude = snapshot.geolocation_longitude;
++        position->accuracy = snapshot.geolocation_accuracy;
++        position->timestamp = base::Time::Now();
++        if (device::ValidateGeoposition(*position)) {
++          web_contents->GetGeolocationContext()->SetOverride(
++              device::mojom::GeopositionResult::NewPosition(
++                  std::move(position)));
++        }
++      }
++    }
++  }
++  BindRenderFrameHostImpl<&RenderFrameHostImpl::GetGeolocationService>(
++      host, std::move(receiver));
++}
++
+ bool HeliumPersonaAllowsContacts(RenderFrameHost* host) {
+   blink::HeliumPersonaSnapshot snapshot =
+       GetHeliumPersonaSnapshot(host ? host->GetBrowserContext() : nullptr);
+@@ -1080,8 +1114,7 @@ void PopulateBinderMapWithContext(
+ 
+   map->Add<device::mojom::GamepadHapticsManager>(&BindGamepadHapticsManager);
+ 
+-  map->Add<blink::mojom::GeolocationService>(
+-      &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetGeolocationService>);
++  map->Add<blink::mojom::GeolocationService>(&BindPersonaGeolocationService);
+ 
+   map->Add<blink::mojom::IdleManager>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::BindIdleManager>);

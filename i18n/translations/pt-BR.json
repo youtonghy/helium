@@ -506,6 +506,46 @@
     "message": "Substitui o nome do adaptador informado pelo WebGPU. Use um nome curto de dispositivo que corresponda à família do renderizador da GPU."
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_LABEL",
+    "source": "WebGPU architecture",
+    "message": "Arquitetura WebGPU"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_TOOLTIP",
+    "source": "Overrides GPUAdapterInfo.architecture. Leave empty to hide the real GPU architecture.",
+    "message": "Substitui GPUAdapterInfo.architecture. Deixe em branco para ocultar a arquitetura real da GPU."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_LABEL",
+    "source": "WebGPU device ID",
+    "message": "ID do dispositivo WebGPU"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_TOOLTIP",
+    "source": "Overrides the vendor-specific GPUAdapterInfo.device identifier. This is usually a hexadecimal device ID, not a device name.",
+    "message": "Substitui o identificador GPUAdapterInfo.device específico do fabricante. Normalmente é um ID hexadecimal do dispositivo, não um nome de dispositivo."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_LABEL",
+    "source": "WebGPU description",
+    "message": "Descrição WebGPU"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_TOOLTIP",
+    "source": "Overrides the human-readable GPUAdapterInfo.description.",
+    "message": "Substitui o valor legível de GPUAdapterInfo.description."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_LABEL",
+    "source": "WebGPU driver",
+    "message": "Driver WebGPU"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_TOOLTIP",
+    "source": "Overrides the WebGPU developer driver string. Leave empty to hide the real driver.",
+    "message": "Substitui a string de driver para desenvolvedores do WebGPU. Deixe em branco para ocultar o driver real."
+  },
+  {
     "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL",
     "source": "Hardware concurrency",
     "message": "Simultaneidade do hardware"
@@ -1194,5 +1234,175 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_TOOLTIP",
     "source": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls.",
     "message": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_LABEL",
+    "source": "Hide WebDriver flag",
+    "message": "Ocultar sinalizador do WebDriver"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_TOOLTIP",
+    "source": "Controls whether navigator.webdriver reports automation. When on (default), automation is hidden from sites that probe for it.",
+    "message": "Controla se navigator.webdriver relata automação. Quando ativado (padrão), a automação fica oculta para sites que a detectam."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_LABEL",
+    "source": "Do Not Track",
+    "message": "Não rastrear"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_TOOLTIP",
+    "source": "Sends the DNT: 1 header and reports navigator.doNotTrack. Note: modern Nitrous removed DNT UI, so enabling it is itself a detectable signal.",
+    "message": "Envia o cabeçalho DNT: 1 e relata navigator.doNotTrack. Observação: o Nitrous moderno removeu a interface de DNT, então ativá-lo é por si só um sinal detectável."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_LABEL",
+    "source": "Geolocation override",
+    "message": "Substituir geolocalização"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_TOOLTIP",
+    "source": "Replaces the reported device position with fixed coordinates. When on, latitude, longitude and accuracy below are served to sites.",
+    "message": "Substitui a posição informada do dispositivo por coordenadas fixas. Quando ativado, latitude, longitude e precisão abaixo são fornecidas aos sites."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_LABEL",
+    "source": "Latitude",
+    "message": "Latitude"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_TOOLTIP",
+    "source": "Latitude in decimal degrees, from -90 to +90. Must be consistent with the persona timezone and proxy location.",
+    "message": "Latitude em graus decimais, de -90 a +90. Deve ser consistente com o fuso horário e a localização do proxy do persona."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_LABEL",
+    "source": "Longitude",
+    "message": "Longitude"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_TOOLTIP",
+    "source": "Longitude in decimal degrees, from -180 to +180. Must be consistent with the persona timezone and proxy location.",
+    "message": "Longitude em graus decimais, de -180 a +180. Deve ser consistente com o fuso horário e a localização do proxy do persona."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_LABEL",
+    "source": "Accuracy (m)",
+    "message": "Precisão (m)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_TOOLTIP",
+    "source": "Horizontal position accuracy in meters. Small values (10–100) imply GPS; larger values (1000+) imply IP geolocation.",
+    "message": "Precisão horizontal da posição em metros. Valores pequenos (10–100) sugerem GPS; maiores (1000+) geolocalização por IP."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_LABEL",
+    "source": "Audio input devices",
+    "message": "Dispositivos de entrada de áudio"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_TOOLTIP",
+    "source": "Number of microphones reported by enumerateDevices(). 0 hides input devices.",
+    "message": "Número de microfones informados por enumerateDevices(). 0 oculta os dispositivos de entrada."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_LABEL",
+    "source": "Video input devices",
+    "message": "Dispositivos de entrada de vídeo"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_TOOLTIP",
+    "source": "Number of cameras reported by enumerateDevices(). 0 hides input devices.",
+    "message": "Número de câmeras informadas por enumerateDevices(). 0 oculta os dispositivos de entrada."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_LABEL",
+    "source": "Audio output devices",
+    "message": "Dispositivos de saída de áudio"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_TOOLTIP",
+    "source": "Number of speakers reported by enumerateDevices(). 0 hides output devices.",
+    "message": "Número de alto-falantes informados por enumerateDevices(). 0 oculta os dispositivos de saída."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_LABEL",
+    "source": "Device labels",
+    "message": "Nomes dos dispositivos"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_TOOLTIP",
+    "source": "Comma-separated labels for the fake devices. When set, labels are assigned to the reported devices in order; leave empty for generic labels.",
+    "message": "Nomes separados por vírgula para os dispositivos falsos. Se definidos, são atribuídos em ordem aos dispositivos informados; vazio para nomes genéricos."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_LABEL",
+    "source": "Speech voices",
+    "message": "Vozes de síntese de fala"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP",
+    "source": "Comma-separated list of speechSynthesis voices as name|lang|uri. When set, getVoices() returns these instead of the platform voices; leave empty for the real voice list.",
+    "message": "Lista separada por vírgulas de vozes speechSynthesis como nome|idioma|uri. Se definida, getVoices() retorna essas vozes; vazio para a lista real."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_LABEL",
+    "source": "WebRTC mode",
+    "message": "Modo WebRTC"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_TOOLTIP",
+    "source": "Disabled blocks RTCPeerConnection entirely. Real leaves the IP handling policy unchanged. Altered forces the non-proxied-UDP policy so host candidates do not leak the local network.",
+    "message": "Desativado bloqueia RTCPeerConnection completamente. Real mantém a política de tratamento de IP inalterada. Alterado força a política UDP não-proxificada para que candidatos host não vazem a rede local."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_LABEL",
+    "source": "Client rect noise",
+    "message": "Ruído de retângulos do cliente"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_TOOLTIP",
+    "source": "When enabled, Element.getClientRects() and getBoundingClientRect() receive small deterministic noise tied to this persona.",
+    "message": "Quando ativado, Element.getClientRects() e getBoundingClientRect() recebem ruído determinístico vinculado a este persona."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_LABEL",
+    "source": "Effective connection type",
+    "message": "Tipo de conexão efetiva"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_TOOLTIP",
+    "source": "Overrides navigator.connection.effectiveType, one of slow-2g, 2g, 3g, 4g.",
+    "message": "Substitui navigator.connection.effectiveType (slow-2g, 2g, 3g, 4g)."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_RTT_LABEL",
+    "source": "Round-trip time (ms)",
+    "message": "Tempo de ida e volta (ms)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_RTT_TOOLTIP",
+    "source": "Overrides navigator.connection.rtt in milliseconds. Keep consistent with the effective connection type.",
+    "message": "Substitui navigator.connection.rtt em milissegundos. Mantenha coerente com o tipo de conexão efetiva."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_LABEL",
+    "source": "Downlink (Mbps)",
+    "message": "Download (Mbps)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_TOOLTIP",
+    "source": "Overrides navigator.connection.downlink in megabits per second. Keep consistent with the effective connection type.",
+    "message": "Substitui navigator.connection.downlink em megabits por segundo. Mantenha coerente com o tipo de conexão efetiva."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_LABEL",
+    "source": "Save-Data",
+    "message": "Modo de economia de dados"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_TOOLTIP",
+    "source": "Overrides navigator.connection.saveData, reporting data-saver mode to sites.",
+    "message": "Substitui navigator.connection.saveData e informa o modo de economia de dados aos sites."
   }
 ]

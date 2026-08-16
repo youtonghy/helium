@@ -209,3 +209,13 @@ helium/core/persona-desktop-network-identities.patch
 helium/core/persona-desktop-network-reference-captures.patch
 helium/core/enable-vertical-tabs.patch
 helium/core/nitrous-proxy-core.patch
+helium/core/persona-device-memory-cap-and-font-packs.patch
+helium/core/persona-font-pack-eslint-fix.patch
+helium/core/persona-settings-native-layouts.patch
+helium/core/persona-geolocation-override.patch
+helium/core/persona-media-devices-override.patch
+helium/core/persona-webrtc-mode.patch
+helium/core/persona-client-rect-noise.patch
+helium/core/persona-build-fixes.patch
+helium/core/persona-final-compile-fixes.patch
+helium/core/persona-webgpu-adapter-info-coverage.patch

@@ -149,7 +149,7 @@
  std::string GetPersonaIconForPlatform(std::string_view platform) {
    if (platform == "macOS") {
      return "macos";
-@@ -1152,6 +1192,20 @@ PersonaService::PersonaService(PrefServi
+@@ -1216,6 +1256,20 @@ PersonaService::PersonaService(PrefServi
  }
  PersonaService::~PersonaService() = default;
  
@@ -170,7 +170,7 @@
  void PersonaService::RegisterProfilePrefs(
      user_prefs::PrefRegistrySyncable* registry) {
    registry->RegisterDictionaryPref(kPersonaStatePref);
-@@ -1161,6 +1215,14 @@ void PersonaService::RegisterProfilePref
+@@ -1225,6 +1279,14 @@ void PersonaService::RegisterProfilePref
    registry->RegisterStringPref(kPersonaFingerprintProfileSaltPref,
                                 std::string());
    registry->RegisterDictionaryPref(kPersonaFingerprintRotationEpochPref);
@@ -185,7 +185,7 @@
  }
  
  base::DictValue PersonaService::GetPersonaState() const {
-@@ -1468,6 +1530,66 @@ void PersonaService::RefreshFingerprint(
+@@ -1532,6 +1594,66 @@ void PersonaService::RefreshFingerprint(
                    std::move(rotation_epoch));
  }
  
@@ -252,7 +252,7 @@
  void PersonaService::RotateIdentity(IdentityRotationCallback callback) {
    base::DictValue state = ReadState();
    const std::vector<uint32_t> ids = GetRotatablePersonaIdentityTemplateIds();
-@@ -2040,12 +2162,55 @@ std::string PersonaService::GetOrCreateF
+@@ -2183,12 +2305,55 @@ std::string PersonaService::GetOrCreateF
      return "transient-profile";
    }
  

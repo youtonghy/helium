@@ -1,6 +1,6 @@
 --- a/chrome/browser/helium_persona/persona_identity_template.cc
 +++ b/chrome/browser/helium_persona/persona_identity_template.cc
-@@ -36,18 +36,41 @@
+@@ -36,18 +36,41 @@ constexpr std::array<PersonaIdentityTemp
      },
  }};
  
@@ -47,7 +47,7 @@
      ids.push_back(identity.id);
    }
    return ids;
-@@ -63,7 +86,7 @@
+@@ -63,7 +86,7 @@ const PersonaIdentityTemplate* MatchPers
      std::string_view bitness,
      bool ua_ch_mobile,
      bool ua_ch_wow64) {
@@ -58,7 +58,7 @@
          ua_ch_platform_version == identity.ua_ch_platform_version &&
 --- a/chrome/browser/helium_persona/persona_identity_template.h
 +++ b/chrome/browser/helium_persona/persona_identity_template.h
-@@ -31,6 +31,20 @@
+@@ -31,6 +31,20 @@ struct PersonaIdentityTemplate {
    base::span<const uint32_t> network_variant_ids;
  };
  
@@ -81,7 +81,7 @@
  const PersonaIdentityTemplate* MatchPersonaIdentityTemplate(
 --- a/chrome/browser/helium_persona/persona_identity_template_unittest.cc
 +++ b/chrome/browser/helium_persona/persona_identity_template_unittest.cc
-@@ -50,4 +50,23 @@
+@@ -50,4 +50,23 @@ TEST(PersonaIdentityTemplateTest, Select
                                                      10));
  }
  
@@ -126,7 +126,7 @@
  #include "components/helium_persona/persona_snapshot.h"
  #include "components/prefs/pref_service.h"
  #include "components/pref_registry/pref_registry_syncable.h"
-@@ -45,6 +51,55 @@
+@@ -45,6 +51,55 @@ constexpr int kDefaultFingerprintRotatio
  constexpr char kPersonaChromeMajorVersion[] = "149";
  constexpr char kPersonaChromeFullVersion[] = "149.0.7827.114";
  
@@ -182,7 +182,7 @@
  std::string MakeIsoTimestamp(base::Time time = base::Time::Now()) {
    return base::TimeFormatAsIso8601(time);
  }
-@@ -1078,7 +1133,23 @@
+@@ -1142,7 +1197,23 @@ base::DictValue BuildProfilesResponse(co
  
  }  // namespace
  
@@ -207,7 +207,7 @@
  PersonaService::~PersonaService() = default;
  
  void PersonaService::RegisterProfilePrefs(
-@@ -1397,13 +1468,20 @@
+@@ -1461,13 +1532,20 @@ void PersonaService::RefreshFingerprint(
                    std::move(rotation_epoch));
  }
  
@@ -233,7 +233,7 @@
    }
  
    const blink::HeliumPersonaSnapshot snapshot = GetActiveSnapshot();
-@@ -1421,30 +1499,107 @@
+@@ -1485,30 +1563,107 @@ base::DictValue PersonaService::RotateId
      current = nullptr;
    }
    if (!snapshot.enabled || !current) {
@@ -356,7 +356,7 @@
  }
  
  bool PersonaService::CanRotateIdentity() const {
-@@ -1461,6 +1616,12 @@
+@@ -1525,6 +1680,12 @@ uint32_t PersonaService::GetActiveIdenti
    return id && *id > 0 ? static_cast<uint32_t>(*id) : 0;
  }
  
@@ -409,7 +409,7 @@
  enum class FingerprintRefreshScope {
    kProfile,
    kSite,
-@@ -37,7 +54,9 @@
+@@ -37,7 +54,9 @@ struct PersonaResolution {
  
  class PersonaService : public KeyedService {
   public:
@@ -420,7 +420,7 @@
    ~PersonaService() override;
  
    static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
-@@ -56,19 +75,30 @@
+@@ -56,19 +75,30 @@ class PersonaService : public KeyedServi
    void SetLaunchSelectionMode(const std::string& mode);
    void RefreshFingerprint(FingerprintRefreshScope scope,
                            const std::string& site_origin_or_empty);
@@ -454,7 +454,7 @@
  }  // namespace helium_persona
 --- a/chrome/browser/helium_persona/persona_service_factory.cc
 +++ b/chrome/browser/helium_persona/persona_service_factory.cc
-@@ -36,7 +36,7 @@
+@@ -36,7 +36,7 @@ std::unique_ptr<KeyedService>
  PersonaServiceFactory::BuildServiceInstanceForBrowserContext(
      content::BrowserContext* context) const {
    Profile* profile = Profile::FromBrowserContext(context);
@@ -476,7 +476,7 @@
  #include "base/values.h"
  #include "chrome/browser/helium_persona/persona_identity_template.h"
  #include "components/sync_preferences/testing_pref_service_syncable.h"
-@@ -73,6 +76,74 @@
+@@ -73,6 +76,74 @@ class PersonaServiceTest : public testin
    std::unique_ptr<PersonaService> service_;
  };
  
@@ -551,7 +551,7 @@
  TEST_F(PersonaServiceTest, CreateDoesNotActivateAndHasCompleteDefaults) {
    base::DictValue response = service_->CreatePersonaProfile("Work");
  
-@@ -600,7 +671,9 @@
+@@ -600,7 +671,9 @@ TEST_F(PersonaServiceTest, IdentityRotat
    prefs_.SetDict(kPersonaFingerprintRotationEpochPref, rotation.Clone());
  
    EXPECT_FALSE(service_->CanRotateIdentity());
@@ -562,7 +562,7 @@
  
    EXPECT_FALSE(response.FindBool("ok").value_or(true));
    EXPECT_EQ("unavailable", *response.FindDict("fieldErrors")
-@@ -610,6 +683,128 @@
+@@ -610,6 +683,128 @@ TEST_F(PersonaServiceTest, IdentityRotat
    EXPECT_EQ(0u, service_->GetActiveIdentityTemplateId());
  }
  
@@ -701,7 +701,7 @@
  #include "mojo/public/cpp/bindings/pending_remote.h"
  #include "net/base/features.h"
  #include "net/base/network_persona_template.h"
-@@ -595,7 +596,9 @@
+@@ -595,7 +596,9 @@ ProfileNetworkContextService::ProfileNet
  ProfileNetworkContextService::~ProfileNetworkContextService() = default;
  
  network::mojom::NetworkPersonaConfigPtr
@@ -712,7 +712,7 @@
    const base::DictValue& state =
        profile_->GetPrefs()->GetDict(helium_persona::prefs::kState);
    const std::string* active_id = state.FindString("activePersonaId");
-@@ -619,7 +622,8 @@
+@@ -619,7 +622,8 @@ ProfileNetworkContextService::CreateNetw
    const base::DictValue& rotation = profile_->GetPrefs()->GetDict(
        helium_persona::prefs::kFingerprintRotationEpoch);
    const int stored_identity_id =
@@ -722,7 +722,7 @@
    const helium_persona::PersonaIdentityTemplate* identity =
        stored_identity_id > 0
            ? helium_persona::FindPersonaIdentityTemplate(
-@@ -651,9 +655,11 @@
+@@ -651,9 +655,11 @@ ProfileNetworkContextService::CreateNetw
    }
  
    auto config = network::mojom::NetworkPersonaConfig::New();
@@ -737,7 +737,7 @@
    }
    config->template_id =
        helium_persona::SelectNetworkVariant(*identity, config->generation);
-@@ -673,6 +679,25 @@
+@@ -673,6 +679,25 @@ void ProfileNetworkContextService::Updat
  
  void ProfileNetworkContextService::ApplyNetworkPersonaConfig(
      NetworkPersonaUpdateCallback callback) {
@@ -763,7 +763,7 @@
    std::vector<content::StoragePartition*> partitions;
    profile_->ForEachLoadedStoragePartition(
        [&](content::StoragePartition* storage_partition) {
-@@ -694,7 +719,9 @@
+@@ -694,7 +719,9 @@ void ProfileNetworkContextService::Apply
            std::move(callback)));
    for (content::StoragePartition* partition : partitions) {
      partition->GetNetworkContext()->UpdateNetworkPersona(
@@ -786,7 +786,7 @@
  #include <string>
  #include <utility>
  
-@@ -135,6 +137,9 @@
+@@ -135,6 +137,9 @@ class ProfileNetworkContextService
  
    using NetworkPersonaUpdateCallback = base::OnceCallback<void(bool)>;
    void ApplyNetworkPersonaConfig(NetworkPersonaUpdateCallback callback);
@@ -796,7 +796,7 @@
  
    void set_client_cert_store_factory_for_testing(
        base::RepeatingCallback<std::unique_ptr<net::ClientCertStore>()>
-@@ -233,7 +238,11 @@
+@@ -233,7 +238,11 @@ class ProfileNetworkContextService
        network::mojom::NetworkContextParams* network_context_params,
        cert_verifier::mojom::CertVerifierCreationParams*
            cert_verifier_creation_params);
@@ -819,7 +819,7 @@
  #include "chrome/common/chrome_constants.h"
  #include "chrome/common/chrome_features.h"
  #include "chrome/common/chrome_paths.h"
-@@ -246,6 +247,36 @@
+@@ -246,6 +247,36 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkCon
    base::test::TestFuture<bool> update_future;
    service->ApplyNetworkPersonaConfig(update_future.GetCallback());
    EXPECT_TRUE(update_future.Get());
@@ -878,7 +878,7 @@
  #include "content/public/browser/web_contents.h"
  
  namespace helium_persona {
-@@ -41,4 +48,33 @@
+@@ -41,4 +48,33 @@ size_t ReloadPersonaTabs(Profile* profil
    return reload_count;
  }
  
@@ -947,7 +947,7 @@
  #include "content/public/browser/web_ui.h"
  
  namespace settings {
-@@ -226,40 +222,14 @@
+@@ -226,40 +222,14 @@ void PersonaHandler::HandleRotatePersona
    helium_persona::PersonaService* persona_service =
        GetPersonaService(profile_);
    CHECK(persona_service);
@@ -998,7 +998,7 @@
  }  // namespace settings
 --- a/chrome/browser/ui/webui/settings/persona_handler.h
 +++ b/chrome/browser/ui/webui/settings/persona_handler.h
-@@ -34,9 +34,8 @@
+@@ -34,9 +34,8 @@ class PersonaHandler : public SettingsPa
    void HandleSetLaunchSelectionMode(const base::ListValue& args);
    void HandleRefreshFingerprints(const base::ListValue& args);
    void HandleRotatePersonaIdentity(const base::ListValue& args);
@@ -1012,7 +1012,7 @@
    base::WeakPtrFactory<PersonaHandler> weak_ptr_factory_{this};
 --- a/content/browser/worker_host/mock_shared_worker.cc
 +++ b/content/browser/worker_host/mock_shared_worker.cc
-@@ -139,10 +139,10 @@
+@@ -139,10 +139,10 @@ void MockSharedWorkerFactory::CreateShar
      const std::string& user_agent,
      const blink::UserAgentMetadata& ua_metadata,
      const blink::HeliumPersonaSnapshot& persona_snapshot,
@@ -1029,7 +1029,7 @@
      const blink::RendererPreferences& renderer_preferences,
 --- a/content/browser/worker_host/mock_shared_worker.h
 +++ b/content/browser/worker_host/mock_shared_worker.h
-@@ -108,10 +108,10 @@
+@@ -108,10 +108,10 @@ class MockSharedWorkerFactory : public b
        const std::string& user_agent,
        const blink::UserAgentMetadata& ua_metadata,
        const blink::HeliumPersonaSnapshot& persona_snapshot,
@@ -1046,7 +1046,7 @@
        const blink::RendererPreferences& renderer_preferences,
 --- a/content/browser/worker_host/shared_worker_service_impl.cc
 +++ b/content/browser/worker_host/shared_worker_service_impl.cc
-@@ -111,8 +111,13 @@
+@@ -111,8 +111,13 @@ bool SharedWorkerServiceImpl::TerminateW
  }
  
  void SharedWorkerServiceImpl::Shutdown() {
@@ -1063,7 +1063,7 @@
  void SharedWorkerServiceImpl::SetURLLoaderFactoryForTesting(
 --- a/content/browser/worker_host/shared_worker_service_impl.h
 +++ b/content/browser/worker_host/shared_worker_service_impl.h
-@@ -75,6 +75,7 @@
+@@ -75,6 +75,7 @@ class CONTENT_EXPORT SharedWorkerService
                         const blink::StorageKey& storage_key,
                         const blink::mojom::SharedWorkerSameSiteCookies
                             same_site_cookies) override;
@@ -1073,7 +1073,7 @@
    // Uses |url_loader_factory| to load workers' scripts instead of
 --- a/content/browser/worker_host/shared_worker_service_impl_unittest.cc
 +++ b/content/browser/worker_host/shared_worker_service_impl_unittest.cc
-@@ -192,6 +192,16 @@
+@@ -192,6 +192,16 @@ class SharedWorkerServiceImplTest : publ
      return web_contents;
    }
  
@@ -1090,7 +1090,7 @@
   protected:
    SharedWorkerServiceImplTest() : browser_context_(new TestBrowserContext()) {}
  
-@@ -362,6 +372,45 @@
+@@ -362,6 +372,45 @@ TEST_F(SharedWorkerServiceImplTest, Basi
    base::RunLoop().RunUntilIdle();
  }
  
@@ -1138,7 +1138,7 @@
  TEST_F(SharedWorkerServiceImplTest, WebContentsDestroyed) {
 --- a/content/public/browser/shared_worker_service.h
 +++ b/content/public/browser/shared_worker_service.h
-@@ -92,6 +92,9 @@
+@@ -92,6 +92,9 @@ class CONTENT_EXPORT SharedWorkerService
        const blink::StorageKey& storage_key,
        const blink::mojom::SharedWorkerSameSiteCookies same_site_cookies) = 0;
  

@@ -126,7 +126,9 @@ _PERSONA_RUNTIME_HOOK_GROUPS = {
         'GetHardwareNoiseHash',
         'ApplyHardwareFloatNoise',
         'ApplyHardwareIntNoise(precision',
-        'GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT',
+        # GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT intentionally un-noised: real
+        # drivers report exact powers of two (typically 16); a perturbed
+        # fractional value creates a fingerprinting signal instead of hiding one.
     ),
     'audio render noise': (
         'ApplyHeliumAudioNoise',
@@ -261,7 +263,10 @@ _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS = {
     'manual GPU and capability fields': (
         'editablePersona_.gpu.vendor',
         'editablePersona_.gpu.renderer',
-        'editablePersona_.gpu.webgpuAdapter',
+        'editablePersona_.gpu.webgpuArchitecture',
+        'editablePersona_.gpu.webgpuDevice',
+        'editablePersona_.gpu.webgpuDescription',
+        'editablePersona_.gpu.driver',
     ),
     'manual hardware and touch fields': (
         'editablePersona_.hardware.hardwareConcurrency',
@@ -290,14 +295,23 @@ _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS = {
         'editablePersona_.advanced.audioNoise',
         'editablePersona_.advanced.hardwareNoise',
         'editablePersona_.advanced.fontMetricNoise',
+        'editablePersona_.advanced.clientRectNoise',
     ),
     'manual media device fields': (
         'editablePersona_.mediaDevices.audioBaseLatency',
         'editablePersona_.mediaDevices.audioOutputLatency',
+        'editablePersona_.mediaDevices.audioInputCount',
+        'editablePersona_.mediaDevices.videoInputCount',
+        'editablePersona_.mediaDevices.audioOutputCount',
+        'mediaDeviceLabelsText_',
     ),
     'manual network fields': (
         'editablePersona_.network.type',
         'editablePersona_.network.downlinkMax',
+        'editablePersona_.network.effectiveType',
+        'editablePersona_.network.rtt',
+        'editablePersona_.network.downlink',
+        'editablePersona_.network.saveData',
     ),
     'manual client hints and permission gates': (
         'editablePersona_.advanced.clientHintsEnabled',
@@ -326,6 +340,14 @@ _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS = {
         'editablePersona_.advanced.allowHandwritingRecognition',
         'editablePersona_.advanced.allowWebNn',
         'editablePersona_.advanced.allowPrivateStateTokens',
+        'editablePersona_.advanced.webdriverEnabled',
+        'editablePersona_.advanced.doNotTrackEnabled',
+        'editablePersona_.advanced.geolocationEnabled',
+        'editablePersona_.advanced.geolocationLatitude',
+        'editablePersona_.advanced.geolocationLongitude',
+        'editablePersona_.advanced.geolocationAccuracy',
+        'speechVoicesText_',
+        'editablePersona_.advanced.webrtcMode',
     ),
     'manual fingerprint rotation': (
         'editablePersona_.advanced.fingerprintRotation.scope',

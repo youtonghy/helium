@@ -1,6 +1,6 @@
 --- a/chrome/browser/helium_persona/persona_service.cc
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -1689,7 +1689,8 @@
+@@ -1832,7 +1832,8 @@ PersonaResolution PersonaService::Resolv
        FindPersonaInList(raw_state.FindList("personas"), *active_id);
    const std::string* persona_id = persona ? persona->FindString("id") : nullptr;
    if (!persona_id || *persona_id != *active_id ||
@@ -12,7 +12,7 @@
  
 --- a/chrome/browser/helium_persona/persona_service_unittest.cc
 +++ b/chrome/browser/helium_persona/persona_service_unittest.cc
-@@ -205,6 +205,13 @@
+@@ -205,6 +205,13 @@ TEST_F(PersonaServiceTest, SaveRejectsUn
    ASSERT_TRUE(response.FindDict("fieldErrors"));
    EXPECT_TRUE(
        response.FindDict("fieldErrors")->FindString("region.timezone"));
@@ -26,7 +26,7 @@
  }
  
  TEST_F(PersonaServiceTest, ReadStateRefreshesPresetCatalog) {
-@@ -432,6 +439,32 @@
+@@ -432,6 +439,32 @@ TEST_F(PersonaServiceTest, MissingActive
    EXPECT_FALSE(resolution.snapshot.enabled);
  }
  
@@ -61,15 +61,15 @@
    const base::DictValue* created_state = create_response.FindDict("state");
 --- a/components/helium_persona/persona_snapshot.cc
 +++ b/components/helium_persona/persona_snapshot.cc
-@@ -13,6 +13,7 @@
- #include <tuple>
+@@ -14,6 +14,7 @@
  
+ #include "base/strings/string_util.h"
  #include "third_party/icu/source/common/unicode/unistr.h"
 +#include "third_party/icu/source/common/unicode/uloc.h"
  #include "third_party/icu/source/i18n/unicode/timezone.h"
  
  namespace helium_persona {
-@@ -30,6 +31,19 @@
+@@ -31,6 +32,19 @@ bool IsValidTimeZoneId(std::string_view
    return timezone && *timezone != icu::TimeZone::getUnknown();
  }
  
@@ -89,7 +89,7 @@
  bool IsSupportedDeviceMemory(int device_memory) {
    switch (device_memory) {
      case 1:
-@@ -257,6 +271,10 @@
+@@ -282,6 +296,10 @@ base::DictValue GetPersonaFieldErrors(co
          timezone && !timezone->empty() && !IsValidTimeZoneId(*timezone)) {
        errors.Set("region.timezone", "invalid_value");
      }
@@ -110,7 +110,7 @@
  #include "third_party/blink/public/web/web_performance_metrics_for_nested_contexts.h"
  #include "third_party/blink/public/web/web_picture_in_picture_window_options.h"
  #include "third_party/blink/public/web/web_plugin.h"
-@@ -3828,6 +3829,7 @@
+@@ -3830,6 +3831,7 @@ blink::WebFrame* RenderFrameImpl::FindFr
  
  void RenderFrameImpl::WillDetach(blink::DetachReason detach_reason) {
    PersonaTimezoneCoordinator::GetInstance().Clear(this);
@@ -118,7 +118,7 @@
    if (detach_reason == blink::DetachReason::kNavigation) {
      if (navigation_client_impl_) {
        navigation_client_impl_->ResetWithoutCancelling();
-@@ -5363,6 +5365,9 @@
+@@ -5366,6 +5368,9 @@ void RenderFrameImpl::PrepareFrameForCom
    PersonaTimezoneCoordinator::GetInstance().Update(
        this, persona_snapshot_.IsEnabled() ? persona_snapshot_.timezone
                                            : std::string());
@@ -154,7 +154,7 @@
 +#endif  // THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_PERSONA_LOCALE_H_
 --- a/third_party/blink/renderer/core/inspector/build.gni
 +++ b/third_party/blink/renderer/core/inspector/build.gni
-@@ -126,6 +126,8 @@
+@@ -126,6 +126,8 @@ blink_core_sources_inspector = [
    "legacy_dom_snapshot_agent.h",
    "locale_controller.cc",
    "locale_controller.h",
@@ -322,7 +322,7 @@
  #include "third_party/blink/renderer/bindings/core/v8/v8_union_trustedscripturl_usvstring.h"
  #include "third_party/blink/renderer/bindings/core/v8/v8_void_function.h"
  #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
-@@ -175,6 +176,7 @@
+@@ -175,6 +176,7 @@ DOMOrigin* WorkerGlobalScope::GetDOMOrig
  }
  
  WorkerGlobalScope::~WorkerGlobalScope() {
@@ -330,7 +330,7 @@
    DCHECK(!ScriptController());
    InstanceCounters::DecrementCounter(
        InstanceCounters::kWorkerGlobalScopeCounter);
-@@ -727,6 +729,10 @@
+@@ -727,6 +729,10 @@ WorkerGlobalScope::WorkerGlobalScope(
    SetAudioNoiseToken(creation_params->helium_audio_noise_token);
    SetHardwareNoiseToken(creation_params->helium_hardware_noise_token);
    SetFontMetricNoiseToken(creation_params->helium_font_metric_noise_token);

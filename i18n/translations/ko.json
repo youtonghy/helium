@@ -505,6 +505,46 @@
     "message": "WebGPU에서 보고하는 어댑터 이름을 재정의합니다. GPU 렌더러 계열과 일치하는 짧은 기기 이름을 사용하세요."
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_LABEL",
+    "source": "WebGPU architecture",
+    "message": "WebGPU 아키텍처"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_TOOLTIP",
+    "source": "Overrides GPUAdapterInfo.architecture. Leave empty to hide the real GPU architecture.",
+    "message": "GPUAdapterInfo.architecture를 재정의합니다. 비워 두면 실제 GPU 아키텍처가 숨겨집니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_LABEL",
+    "source": "WebGPU device ID",
+    "message": "WebGPU 기기 ID"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_TOOLTIP",
+    "source": "Overrides the vendor-specific GPUAdapterInfo.device identifier. This is usually a hexadecimal device ID, not a device name.",
+    "message": "공급업체별 GPUAdapterInfo.device 식별자를 재정의합니다. 일반적으로 기기 이름이 아니라 16진수 기기 ID입니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_LABEL",
+    "source": "WebGPU description",
+    "message": "WebGPU 설명"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_TOOLTIP",
+    "source": "Overrides the human-readable GPUAdapterInfo.description.",
+    "message": "읽기 쉬운 GPUAdapterInfo.description을 재정의합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_LABEL",
+    "source": "WebGPU driver",
+    "message": "WebGPU 드라이버"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_TOOLTIP",
+    "source": "Overrides the WebGPU developer driver string. Leave empty to hide the real driver.",
+    "message": "WebGPU 개발자 드라이버 문자열을 재정의합니다. 비워 두면 실제 드라이버가 숨겨집니다."
+  },
+  {
     "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL",
     "source": "Hardware concurrency",
     "message": "하드웨어 동시 실행 수"
@@ -1193,5 +1233,175 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_TOOLTIP",
     "source": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls.",
     "message": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_LABEL",
+    "source": "Hide WebDriver flag",
+    "message": "WebDriver 플래그 숨기기"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_TOOLTIP",
+    "source": "Controls whether navigator.webdriver reports automation. When on (default), automation is hidden from sites that probe for it.",
+    "message": "navigator.webdriver가 자동화를 보고할지 제어합니다. 켜면(기본값) 사이트가 탐지할 때 자동화가 보이지 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_LABEL",
+    "source": "Do Not Track",
+    "message": "추적 금지"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_TOOLTIP",
+    "source": "Sends the DNT: 1 header and reports navigator.doNotTrack. Note: modern Nitrous removed DNT UI, so enabling it is itself a detectable signal.",
+    "message": "DNT: 1 헤더를 보내고 navigator.doNotTrack을 보고합니다. 참고: 최신 Nitrous는 DNT UI를 제거했으므로, 이를 켜는 것 자체가 감지 가능한 신호입니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_LABEL",
+    "source": "Geolocation override",
+    "message": "위치 정보 재정의"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_TOOLTIP",
+    "source": "Replaces the reported device position with fixed coordinates. When on, latitude, longitude and accuracy below are served to sites.",
+    "message": "보고되는 기기 위치를 고정 좌표로 대체합니다. 켜면 아래의 위도·경도·정확도가 사이트에 제공됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_LABEL",
+    "source": "Latitude",
+    "message": "위도"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_TOOLTIP",
+    "source": "Latitude in decimal degrees, from -90 to +90. Must be consistent with the persona timezone and proxy location.",
+    "message": "십진법 위도(-90 ~ +90). persona의 시간대 및 프록시 위치와 일치해야 합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_LABEL",
+    "source": "Longitude",
+    "message": "경도"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_TOOLTIP",
+    "source": "Longitude in decimal degrees, from -180 to +180. Must be consistent with the persona timezone and proxy location.",
+    "message": "십진법 경도(-180 ~ +180). persona의 시간대 및 프록시 위치와 일치해야 합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_LABEL",
+    "source": "Accuracy (m)",
+    "message": "정확도(m)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_TOOLTIP",
+    "source": "Horizontal position accuracy in meters. Small values (10–100) imply GPS; larger values (1000+) imply IP geolocation.",
+    "message": "수평 위치 정확도(미터). 작은 값(10–100)은 GPS, 큰 값(1000+)은 IP 위치 추적을 의미합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_LABEL",
+    "source": "Audio input devices",
+    "message": "오디오 입력 장치"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_TOOLTIP",
+    "source": "Number of microphones reported by enumerateDevices(). 0 hides input devices.",
+    "message": "enumerateDevices()가 보고하는 마이크 수. 0이면 입력 장치를 숨깁니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_LABEL",
+    "source": "Video input devices",
+    "message": "비디오 입력 장치"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_TOOLTIP",
+    "source": "Number of cameras reported by enumerateDevices(). 0 hides input devices.",
+    "message": "enumerateDevices()가 보고하는 카메라 수. 0이면 입력 장치를 숨깁니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_LABEL",
+    "source": "Audio output devices",
+    "message": "오디오 출력 장치"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_TOOLTIP",
+    "source": "Number of speakers reported by enumerateDevices(). 0 hides output devices.",
+    "message": "enumerateDevices()가 보고하는 스피커 수. 0이면 출력 장치를 숨깁니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_LABEL",
+    "source": "Device labels",
+    "message": "장치 이름"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_TOOLTIP",
+    "source": "Comma-separated labels for the fake devices. When set, labels are assigned to the reported devices in order; leave empty for generic labels.",
+    "message": "가짜 장치의 쉼표 구분 이름. 설정하면 보고된 장치에 순서대로 할당됩니다. 비우면 일반 이름 사용."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_LABEL",
+    "source": "Speech voices",
+    "message": "음성 합성 음색"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP",
+    "source": "Comma-separated list of speechSynthesis voices as name|lang|uri. When set, getVoices() returns these instead of the platform voices; leave empty for the real voice list.",
+    "message": "speechSynthesis 음색의 쉼표 구분 목록(형식: 이름|언어|uri). 설정하면 getVoices()가 이를 반환합니다. 비우면 실제 음색 사용."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_LABEL",
+    "source": "WebRTC mode",
+    "message": "WebRTC 모드"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_TOOLTIP",
+    "source": "Disabled blocks RTCPeerConnection entirely. Real leaves the IP handling policy unchanged. Altered forces the non-proxied-UDP policy so host candidates do not leak the local network.",
+    "message": "비활성화하면 RTCPeerConnection이 완전히 차단됩니다. 실제 모드는 IP 처리 정책을 변경하지 않습니다. 변경 모드는 비프록시 UDP 정책을 강제하여 호스트 후보가 로컬 네트워크를 노출하지 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_LABEL",
+    "source": "Client rect noise",
+    "message": "클라이언트 사각형 노이즈"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_TOOLTIP",
+    "source": "When enabled, Element.getClientRects() and getBoundingClientRect() receive small deterministic noise tied to this persona.",
+    "message": "켜면 Element.getClientRects() 및 getBoundingClientRect()가 이 persona에 연결된 결정적 미세 노이즈를 받습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_LABEL",
+    "source": "Effective connection type",
+    "message": "유효 연결 유형"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_TOOLTIP",
+    "source": "Overrides navigator.connection.effectiveType, one of slow-2g, 2g, 3g, 4g.",
+    "message": "navigator.connection.effectiveType을 덮어씁니다(slow-2g, 2g, 3g, 4g 중 하나)."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_RTT_LABEL",
+    "source": "Round-trip time (ms)",
+    "message": "왕복 지연(밀리초)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_RTT_TOOLTIP",
+    "source": "Overrides navigator.connection.rtt in milliseconds. Keep consistent with the effective connection type.",
+    "message": "navigator.connection.rtt를 밀리초 단위로 덮어씁니다. 유효 연결 유형과 일치해야 합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_LABEL",
+    "source": "Downlink (Mbps)",
+    "message": "다운링크(Mbps)"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_TOOLTIP",
+    "source": "Overrides navigator.connection.downlink in megabits per second. Keep consistent with the effective connection type.",
+    "message": "navigator.connection.downlink를 메가비트/초로 덮어씁니다. 유효 연결 유형과 일치해야 합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_LABEL",
+    "source": "Save-Data",
+    "message": "데이터 절약 모드"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_TOOLTIP",
+    "source": "Overrides navigator.connection.saveData, reporting data-saver mode to sites.",
+    "message": "navigator.connection.saveData를 덮어써 사이트에 데이터 절약 모드를 보고합니다."
   }
 ]

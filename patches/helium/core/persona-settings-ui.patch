@@ -221,7 +221,7 @@
 +}
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
-@@ -0,0 +1,1169 @@
+@@ -0,0 +1,1362 @@
 +<!-- Copyright 2026 The Helium Authors -->
 +<!-- You can use, redistribute, and/or modify this source code under -->
 +<!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
@@ -1238,6 +1238,56 @@
 +      </div>
 +      <div class="field">
 +        <div class="field-label">
++          <span>$i18n{personaFieldAudioInputCountLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldAudioInputCountTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="0" max="16" step="1"
++            aria-label="$i18n{personaFieldAudioInputCountLabel}"
++            value="{{editablePersona_.mediaDevices.audioInputCount}}">
++        </cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldVideoInputCountLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldVideoInputCountTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="0" max="16" step="1"
++            aria-label="$i18n{personaFieldVideoInputCountLabel}"
++            value="{{editablePersona_.mediaDevices.videoInputCount}}">
++        </cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldAudioOutputCountLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldAudioOutputCountTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="0" max="16" step="1"
++            aria-label="$i18n{personaFieldAudioOutputCountLabel}"
++            value="{{editablePersona_.mediaDevices.audioOutputCount}}">
++        </cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldMediaDeviceLabelsLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldMediaDeviceLabelsTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldMediaDeviceLabelsLabel}"
++            value="{{mediaDeviceLabelsText_}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
 +          <span>$i18n{personaFieldCanvasNoiseLabel}</span>
 +          <cr-tooltip-icon icon-class="cr:help-outline"
 +              icon-aria-label="$i18n{personaFieldHelp}"
@@ -1282,6 +1332,95 @@
 +      </div>
 +      <div class="field">
 +        <div class="field-label">
++          <span>$i18n{personaFieldClientRectNoiseLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldClientRectNoiseTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-toggle aria-label="$i18n{personaFieldClientRectNoiseLabel}"
++            checked="{{editablePersona_.advanced.clientRectNoise}}"></cr-toggle>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldGeolocationOverrideLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldGeolocationOverrideTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-toggle aria-label="$i18n{personaFieldGeolocationOverrideLabel}"
++            checked="{{editablePersona_.advanced.geolocationEnabled}}"></cr-toggle>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldGeolocationLatitudeLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldGeolocationLatitudeTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldGeolocationLatitudeLabel}"
++            type="number"
++            value="{{editablePersona_.advanced.geolocationLatitude}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldGeolocationLongitudeLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldGeolocationLongitudeTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldGeolocationLongitudeLabel}"
++            type="number"
++            value="{{editablePersona_.advanced.geolocationLongitude}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldGeolocationAccuracyLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldGeolocationAccuracyTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldGeolocationAccuracyLabel}"
++            type="number"
++            value="{{editablePersona_.advanced.geolocationAccuracy}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldSpeechVoicesLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldSpeechVoicesTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input aria-label="$i18n{personaFieldSpeechVoicesLabel}"
++            value="{{speechVoicesText_}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldWebrtcModeLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldWebrtcModeTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select class="md-select"
++            value="{{customFieldSelections_.webrtcMode::change}}"
++            aria-label="$i18n{personaFieldWebrtcModeLabel}"
++            data-path="editablePersona_.advanced.webrtcMode"
++            data-option-id="webrtcMode"
++            on-change="onOptionFieldChange_">
++          <template is="dom-repeat" items="[[getFieldOptions_('webrtcMode')]]">
++            <option value="[[item.value]]">[[item.label]]</option>
++          </template>
++          <option value="__custom__">$i18n{personaFieldCustomOption}</option>
++        </select>
++      </div>
++      <div class="field">
++        <div class="field-label">
 +          <span>$i18n{personaFieldNetworkTypeLabel}</span>
 +          <cr-tooltip-icon icon-class="cr:help-outline"
 +              icon-aria-label="$i18n{personaFieldHelp}"
@@ -1318,6 +1457,60 @@
 +        <cr-input type="number" min="0" max="100000" step="0.1"
 +            aria-label="$i18n{personaFieldDownlinkMaxLabel}"
 +            value="{{editablePersona_.network.downlinkMax}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldEffectiveTypeLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldEffectiveTypeTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <select class="md-select"
++            value="{{customFieldSelections_.effectiveType::change}}"
++            aria-label="$i18n{personaFieldEffectiveTypeLabel}"
++            data-path="editablePersona_.network.effectiveType"
++            data-option-id="effectiveType"
++            on-change="onOptionFieldChange_">
++          <template is="dom-repeat" items="[[getFieldOptions_('effectiveType')]]">
++            <option value="[[item.value]]">[[item.label]]</option>
++          </template>
++        </select>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldRttLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldRttTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="0" max="10000" step="1"
++            aria-label="$i18n{personaFieldRttLabel}"
++            value="{{editablePersona_.network.rtt}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldDownlinkLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldDownlinkTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-input type="number" min="0" max="100000" step="0.1"
++            aria-label="$i18n{personaFieldDownlinkLabel}"
++            value="{{editablePersona_.network.downlink}}"></cr-input>
++      </div>
++      <div class="field">
++        <div class="field-label">
++          <span>$i18n{personaFieldSaveDataLabel}</span>
++          <cr-tooltip-icon icon-class="cr:help-outline"
++              icon-aria-label="$i18n{personaFieldHelp}"
++              tooltip-text="$i18n{personaFieldSaveDataTooltip}">
++          </cr-tooltip-icon>
++        </div>
++        <cr-toggle aria-label="$i18n{personaFieldSaveDataLabel}"
++            checked="{{editablePersona_.network.saveData}}"></cr-toggle>
 +      </div>
 +      <h4 class="config-group-title">$i18n{personaSectionRotation}</h4>
 +      <div class="field">
@@ -1393,7 +1586,7 @@
 +</settings-subpage>
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
-@@ -0,0 +1,1095 @@
+@@ -0,0 +1,1144 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -1579,6 +1772,16 @@
 +    labelKey: 'personaFieldAllowPrivateStateTokensLabel',
 +    tooltipKey: 'personaFieldAllowPrivateStateTokensTooltip',
 +  },
++  {
++    path: 'editablePersona_.advanced.webdriverEnabled',
++    labelKey: 'personaFieldWebdriverEnabledLabel',
++    tooltipKey: 'personaFieldWebdriverEnabledTooltip',
++  },
++  {
++    path: 'editablePersona_.advanced.doNotTrackEnabled',
++    labelKey: 'personaFieldDoNotTrackEnabledLabel',
++    tooltipKey: 'personaFieldDoNotTrackEnabledTooltip',
++  },
 +];
 +
 +const PLATFORM_OPTIONS: PersonaFieldOption[] = [
@@ -1713,6 +1916,15 @@
 +    ],
 +  },
 +  {
++    id: 'effectiveType',
++    options: [
++      {label: 'Slow 2G', value: 'slow-2g'},
++      {label: '2G', value: '2g'},
++      {label: '3G', value: '3g'},
++      {label: '4G', value: '4g'},
++    ],
++  },
++  {
 +    id: 'hardwareConcurrency',
 +    options: [
 +      {label: '4', value: '4'},
@@ -1739,6 +1951,14 @@
 +      {label: 'Site and profile', value: 'site_profile'},
 +      {label: 'Profile', value: 'profile'},
 +      {label: 'Global', value: 'global'},
++    ],
++  },
++  {
++    id: 'webrtcMode',
++    options: [
++      {label: 'Disabled', value: 'disabled'},
++      {label: 'Real', value: 'real'},
++      {label: 'Altered (no UDP)', value: 'altered'},
 +    ],
 +  },
 +];
@@ -1821,6 +2041,8 @@
 +      uaChFormFactorsText_: String,
 +      fontFamiliesText_: String,
 +      fontAliasesText_: String,
++      mediaDeviceLabelsText_: String,
++      speechVoicesText_: String,
 +      hasUnsavedChanges_: {type: Boolean, value: false},
 +      pending_: {type: Boolean, value: false},
 +    };
@@ -1846,6 +2068,8 @@
 +  declare private uaChFormFactorsText_: string;
 +  declare private fontFamiliesText_: string;
 +  declare private fontAliasesText_: string;
++  declare private mediaDeviceLabelsText_: string;
++  declare private speechVoicesText_: string;
 +  declare private hasUnsavedChanges_: boolean;
 +  declare private pending_: boolean;
 +
@@ -2235,6 +2459,20 @@
 +        this.editablePersona_.uaCh.formFactors :
 +        [];
 +    this.uaChFormFactorsText_ = formFactors.join(', ');
++    const mediaDevices = this.editablePersona_?.mediaDevices || {};
++    const deviceLabels = Array.isArray(mediaDevices.labels) ?
++        mediaDevices.labels :
++        [];
++    this.mediaDeviceLabelsText_ = deviceLabels.join(', ');
++    const speechVoices = Array.isArray(this.editablePersona_?.advanced?.speechVoices) ?
++        this.editablePersona_.advanced.speechVoices :
++        [];
++    this.speechVoicesText_ =
++        speechVoices
++            .map((item: {name?: string, lang?: string, uri?: string}) =>
++                     [item.name || '', item.lang || '', item.uri || ''].join('|'))
++            .filter((item: string) => item !== '||')
++            .join(', ');
 +  }
 +
 +  private prepareCurrentPersona_(): PersonaRecord|null {
@@ -2248,6 +2486,8 @@
 +      fontAliases: this.fontAliasesText_,
 +      uaChBrands: this.uaChBrandsText_,
 +      uaChFormFactors: this.uaChFormFactorsText_,
++      mediaDeviceLabels: this.mediaDeviceLabelsText_,
++      speechVoices: this.speechVoicesText_,
 +    };
 +    const result = preparePersonaForSave(this.editablePersona_, textFields);
 +    if (Object.keys(result.fieldErrors).length) {
@@ -2392,10 +2632,12 @@
 +      gpuVendor: 'editablePersona_.gpu.vendor',
 +      gpuRenderer: 'editablePersona_.gpu.renderer',
 +      networkType: 'editablePersona_.network.type',
++      effectiveType: 'editablePersona_.network.effectiveType',
 +      hardwareConcurrency: 'editablePersona_.hardware.hardwareConcurrency',
 +      deviceMemory: 'editablePersona_.hardware.deviceMemory',
 +      fingerprintRotationScope:
 +          'editablePersona_.advanced.fingerprintRotation.scope',
++      webrtcMode: 'editablePersona_.advanced.webrtcMode',
 +    };
 +    for (const [optionId, path] of Object.entries(fieldPaths)) {
 +      selections[optionId] = this.getSelectValue_(path, optionId);
@@ -2745,7 +2987,7 @@
 +}  // namespace settings
 --- /dev/null
 +++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
-@@ -0,0 +1,434 @@
+@@ -0,0 +1,506 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -2763,6 +3005,7 @@
 +  audioNoise: boolean;
 +  hardwareNoise: boolean;
 +  fontMetricNoise: boolean;
++  clientRectNoise: boolean;
 +  allowBackgroundSync: boolean;
 +  allowContacts: boolean;
 +  allowLocalFonts: boolean;
@@ -2788,6 +3031,20 @@
 +  allowHandwritingRecognition: boolean;
 +  allowWebNn: boolean;
 +  allowPrivateStateTokens: boolean;
++  webdriverEnabled: boolean;
++  doNotTrackEnabled: boolean;
++  geolocationEnabled: boolean;
++  geolocationLatitude: number;
++  geolocationLongitude: number;
++  geolocationAccuracy: number;
++  speechVoices: Array<Record<string, unknown>>&{
++    name: string;
++    lang: string;
++    uri: string;
++    localService: boolean;
++    default: boolean;
++  };
++  webrtcMode: string;
 +  fingerprintRotation: Record<string, unknown>&{
 +    scope: string;
 +    rotationIntervalDays: number;
@@ -2853,10 +3110,18 @@
 +  mediaDevices: Record<string, unknown>&{
 +    audioBaseLatency: number;
 +    audioOutputLatency: number;
++    audioInputCount: number;
++    videoInputCount: number;
++    audioOutputCount: number;
++    labels: string[];
 +  };
 +  network: Record<string, unknown>&{
 +    type: string;
 +    downlinkMax: number;
++    effectiveType: string;
++    rtt: number;
++    downlink: number;
++    saveData: boolean;
 +  };
 +  advanced: PersonaAdvanced;
 +  [key: string]: unknown;
@@ -2880,6 +3145,8 @@
 +  fontAliases: string;
 +  uaChBrands: string;
 +  uaChFormFactors: string;
++  mediaDeviceLabels: string;
++  speechVoices: string;
 +}
 +
 +export interface PersonaSerializationResult {
@@ -2916,13 +3183,21 @@
 +  {path: 'screen.deviceScaleFactor', integer: false, min: 0.25, max: 8},
 +  {path: 'mediaDevices.audioBaseLatency', integer: false, min: 0, max: 10},
 +  {path: 'mediaDevices.audioOutputLatency', integer: false, min: 0, max: 10},
++  {path: 'mediaDevices.audioInputCount', integer: true, min: 0, max: 16},
++  {path: 'mediaDevices.videoInputCount', integer: true, min: 0, max: 16},
++  {path: 'mediaDevices.audioOutputCount', integer: true, min: 0, max: 16},
 +  {path: 'network.downlinkMax', integer: false, min: 0, max: 100000},
++  {path: 'network.rtt', integer: true, min: 0, max: 10000},
++  {path: 'network.downlink', integer: false, min: 0, max: 100000},
 +  {
 +    path: 'advanced.fingerprintRotation.rotationIntervalDays',
 +    integer: true,
 +    min: 1,
 +    max: 3650,
 +  },
++  {path: 'advanced.geolocationLatitude', integer: false, min: -90, max: 90},
++  {path: 'advanced.geolocationLongitude', integer: false, min: -180, max: 180},
++  {path: 'advanced.geolocationAccuracy', integer: false, min: 0, max: 100000},
 +];
 +
 +const DEFAULT_ADVANCED = {
@@ -2931,6 +3206,7 @@
 +  audioNoise: true,
 +  hardwareNoise: true,
 +  fontMetricNoise: false,
++  clientRectNoise: false,
 +  allowBackgroundSync: false,
 +  allowContacts: false,
 +  allowLocalFonts: false,
@@ -2956,6 +3232,14 @@
 +  allowHandwritingRecognition: false,
 +  allowWebNn: false,
 +  allowPrivateStateTokens: false,
++  webdriverEnabled: true,
++  doNotTrackEnabled: false,
++  geolocationEnabled: false,
++  geolocationLatitude: 37.7749,
++  geolocationLongitude: -122.4194,
++  geolocationAccuracy: 20,
++  speechVoices: [],
++  webrtcMode: 'real',
 +  fingerprintRotation: {
 +    scope: 'site_profile',
 +    rotationIntervalDays: 14,
@@ -2991,6 +3275,25 @@
 +    };
 +  }).filter((entry): entry is PersonaUaChBrand =>
 +      !!entry?.brand && !!entry.version);
++}
++
++function parseSpeechVoices(value: string): Array<Record<string, unknown>>&{
++  name: string;
++  lang: string;
++  uri: string;
++  localService: boolean;
++  default: boolean;
++} {
++  return splitCsv(value).map(entry => {
++    const parts = entry.split('|');
++    return {
++      name: (parts[0] || '').trim(),
++      lang: (parts[1] || '').trim(),
++      uri: (parts[2] || '').trim(),
++      localService: false,
++      default: false,
++    };
++  }).filter(voice => !!voice.name);
 +}
 +
 +function getPath(root: Record<string, any>, path: string): unknown {
@@ -3074,10 +3377,18 @@
 +    mediaDevices: {
 +      audioBaseLatency: 0.01,
 +      audioOutputLatency: 0.02,
++      audioInputCount: 1,
++      videoInputCount: 1,
++      audioOutputCount: 1,
++      labels: [],
 +    },
 +    network: {
 +      type: 'wifi',
 +      downlinkMax: 25,
++      effectiveType: '4g',
++      rtt: 50,
++      downlink: 10,
++      saveData: false,
 +    },
 +    advanced: DEFAULT_ADVANCED,
 +  } satisfies PersonaRecord;
@@ -3141,6 +3452,9 @@
 +  persona.fonts.aliases = splitCsv(textFields.fontAliases);
 +  persona.uaCh.brands = parseUaChBrands(textFields.uaChBrands);
 +  persona.uaCh.formFactors = splitCsv(textFields.uaChFormFactors);
++  persona.mediaDevices.labels = splitCsv(textFields.mediaDeviceLabels);
++  persona.advanced.speechVoices =
++      parseSpeechVoices(textFields.speechVoices);
 +  if (!persona.uaCh.brands.length) {
 +    fieldErrors['uaCh.brands'] = 'Enter at least one brand/version pair.';
 +  }

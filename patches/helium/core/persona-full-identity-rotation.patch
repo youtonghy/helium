@@ -287,7 +287,7 @@
  constexpr int kDefaultFingerprintRotationIntervalDays = 14;
  constexpr char kPersonaChromeMajorVersion[] = "149";
  constexpr char kPersonaChromeFullVersion[] = "149.0.7827.114";
-@@ -1398,6 +1397,70 @@ void PersonaService::RefreshFingerprint(
+@@ -1462,6 +1461,70 @@ void PersonaService::RefreshFingerprint(
                    std::move(rotation_epoch));
  }
  
@@ -358,7 +358,7 @@
  blink::HeliumPersonaSnapshot PersonaService::GetActiveSnapshot() const {
    base::DictValue state = ReadState();
    const base::DictValue* persona =
-@@ -1712,6 +1775,25 @@ blink::HeliumPersonaSnapshot PersonaServ
+@@ -1855,6 +1918,25 @@ blink::HeliumPersonaSnapshot PersonaServ
      }
    }
  
@@ -384,7 +384,7 @@
    return snapshot;
  }
  
-@@ -1780,6 +1862,9 @@ base::DictValue PersonaService::ReadStat
+@@ -1923,6 +2005,9 @@ base::DictValue PersonaService::ReadStat
              FindPersonaInList(personas, last_used_id) ? last_used_id
                                                       : kDefaultPersonaId);
    state.Set("launchSelectionMode", GetLaunchSelectionMode());
@@ -761,7 +761,7 @@
    }
 --- a/chrome/browser/resources/settings/privacy_page/persona_config.ts
 +++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
-@@ -120,6 +120,8 @@ export interface PersonaState {
+@@ -143,6 +143,8 @@ export interface PersonaState {
    presets: PersonaRecord[];
    lastUsedPersonaId?: string;
    launchSelectionMode?: string;
@@ -815,8 +815,8 @@
  import 'chrome://resources/cr_elements/cr_input/cr_input.js';
  import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
  import 'chrome://resources/cr_elements/policy/cr_tooltip_icon.js';
-@@ -427,6 +428,12 @@ export class SettingsPersonaPageElement
-       fontAliasesText_: String,
+@@ -456,6 +457,12 @@ export class SettingsPersonaPageElement
+       speechVoicesText_: String,
        hasUnsavedChanges_: {type: Boolean, value: false},
        pending_: {type: Boolean, value: false},
 +      identityRotationAvailable_: {type: Boolean, value: false},
@@ -828,8 +828,8 @@
      };
    }
  
-@@ -452,6 +459,9 @@ export class SettingsPersonaPageElement
-   declare private fontAliasesText_: string;
+@@ -483,6 +490,9 @@ export class SettingsPersonaPageElement
+   declare private speechVoicesText_: string;
    declare private hasUnsavedChanges_: boolean;
    declare private pending_: boolean;
 +  declare private identityRotationAvailable_: boolean;
@@ -838,7 +838,7 @@
  
    override connectedCallback() {
      super.connectedCallback();
-@@ -490,6 +500,8 @@ export class SettingsPersonaPageElement
+@@ -521,6 +531,8 @@ export class SettingsPersonaPageElement
          state.launchSelectionMode || profilesResponse?.launchSelectionMode ||
          this.launchSelectionMode_;
      this.persistedLaunchSelectionMode_ = this.launchSelectionMode_;
@@ -847,7 +847,7 @@
  
      const targetProfileId =
          this.selectedProfileId_ || this.activePersonaId_ || this.lastUsedPersonaId_;
-@@ -820,6 +832,51 @@ export class SettingsPersonaPageElement
+@@ -851,6 +863,51 @@ export class SettingsPersonaPageElement
      this.importStatusIsError_ = false;
    }
  

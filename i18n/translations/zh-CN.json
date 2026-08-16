@@ -505,6 +505,46 @@
     "message": "覆盖 WebGPU 报告的适配器名称。请使用与 GPU 渲染器系列匹配的简短设备名称。"
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_LABEL",
+    "source": "WebGPU architecture",
+    "message": "WebGPU 架构"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_ARCHITECTURE_TOOLTIP",
+    "source": "Overrides GPUAdapterInfo.architecture. Leave empty to hide the real GPU architecture.",
+    "message": "覆盖 GPUAdapterInfo.architecture。留空可隐藏真实的 GPU 架构。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_LABEL",
+    "source": "WebGPU device ID",
+    "message": "WebGPU 设备 ID"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DEVICE_TOOLTIP",
+    "source": "Overrides the vendor-specific GPUAdapterInfo.device identifier. This is usually a hexadecimal device ID, not a device name.",
+    "message": "覆盖厂商特定的 GPUAdapterInfo.device 标识符。该值通常是十六进制设备 ID，而不是设备名称。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_LABEL",
+    "source": "WebGPU description",
+    "message": "WebGPU 描述"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DESCRIPTION_TOOLTIP",
+    "source": "Overrides the human-readable GPUAdapterInfo.description.",
+    "message": "覆盖便于阅读的 GPUAdapterInfo.description。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_LABEL",
+    "source": "WebGPU driver",
+    "message": "WebGPU 驱动程序"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBGPU_DRIVER_TOOLTIP",
+    "source": "Overrides the WebGPU developer driver string. Leave empty to hide the real driver.",
+    "message": "覆盖 WebGPU 开发者驱动程序字符串。留空可隐藏真实的驱动程序。"
+  },
+  {
     "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_CONCURRENCY_LABEL",
     "source": "Hardware concurrency",
     "message": "硬件并发数"
@@ -1193,5 +1233,415 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_WEB_RTC_TOOLTIP",
     "source": "When off (default), RTCPeerConnection is blocked so sites cannot use WebRTC ICE to learn local network details. Enable only if you need browser-based calls.",
     "message": "关闭时（默认）会阻止 RTCPeerConnection，避免网站通过 WebRTC ICE 获取本地网络信息。仅在需要浏览器通话时开启。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_LABEL",
+    "source": "Hide WebDriver flag",
+    "message": "隐藏 WebDriver 标志"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_TOOLTIP",
+    "source": "Controls whether navigator.webdriver reports automation. When on (default), automation is hidden from sites that probe for it.",
+    "message": "控制 navigator.webdriver 是否报告自动化状态。开启（默认）时，网站探测时不会看到自动化标记。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_LABEL",
+    "source": "Do Not Track",
+    "message": "请勿跟踪"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_TOOLTIP",
+    "source": "Sends the DNT: 1 header and reports navigator.doNotTrack. Note: modern Nitrous removed DNT UI, so enabling it is itself a detectable signal.",
+    "message": "发送 DNT: 1 请求头，并报告 navigator.doNotTrack。注意：新版 Nitrous 已移除 DNT 界面，启用它本身就是可被识别的信号。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_LABEL",
+    "source": "Geolocation override",
+    "message": "地理位置覆盖"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_TOOLTIP",
+    "source": "Replaces the reported device position with fixed coordinates. When on, latitude, longitude and accuracy below are served to sites.",
+    "message": "将上报的设备位置替换为固定坐标。开启后，向网站提供下方设置的纬度、经度和精度。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_LABEL",
+    "source": "Latitude",
+    "message": "纬度"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_TOOLTIP",
+    "source": "Latitude in decimal degrees, from -90 to +90. Must be consistent with the persona timezone and proxy location.",
+    "message": "十进制度纬度，范围 -90 到 +90。必须与 persona 的时区和代理位置一致。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_LABEL",
+    "source": "Longitude",
+    "message": "经度"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_TOOLTIP",
+    "source": "Longitude in decimal degrees, from -180 to +180. Must be consistent with the persona timezone and proxy location.",
+    "message": "十进制度经度，范围 -180 到 +180。必须与 persona 的时区和代理位置一致。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_LABEL",
+    "source": "Accuracy (m)",
+    "message": "精度（米）"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_TOOLTIP",
+    "source": "Horizontal position accuracy in meters. Small values (10–100) imply GPS; larger values (1000+) imply IP geolocation.",
+    "message": "水平定位精度（米）。小值（10–100）暗示 GPS；大值（1000+）暗示 IP 定位。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_LABEL",
+    "source": "Audio input devices",
+    "message": "音频输入设备"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_TOOLTIP",
+    "source": "Number of microphones reported by enumerateDevices(). 0 hides input devices.",
+    "message": "enumerateDevices() 上报的麦克风数量。0 表示隐藏输入设备。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_LABEL",
+    "source": "Video input devices",
+    "message": "视频输入设备"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_TOOLTIP",
+    "source": "Number of cameras reported by enumerateDevices(). 0 hides input devices.",
+    "message": "enumerateDevices() 上报的摄像头数量。0 表示隐藏输入设备。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_LABEL",
+    "source": "Audio output devices",
+    "message": "音频输出设备"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_TOOLTIP",
+    "source": "Number of speakers reported by enumerateDevices(). 0 hides output devices.",
+    "message": "enumerateDevices() 上报的扬声器数量。0 表示隐藏输出设备。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_LABEL",
+    "source": "Device labels",
+    "message": "设备名称"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_TOOLTIP",
+    "source": "Comma-separated labels for the fake devices. When set, labels are assigned to the reported devices in order; leave empty for generic labels.",
+    "message": "伪造设备的逗号分隔名称。设置后按顺序分配给上报的设备；留空使用通用名称。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_LABEL",
+    "source": "Speech voices",
+    "message": "语音合成音色"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP",
+    "source": "Comma-separated list of speechSynthesis voices as name|lang|uri. When set, getVoices() returns these instead of the platform voices; leave empty for the real voice list.",
+    "message": "speechSynthesis 音色的逗号分隔列表，格式为 名称|语言|uri。设置后 getVoices() 返回这些音色；留空使用真实音色列表。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_LABEL",
+    "source": "WebRTC mode",
+    "message": "WebRTC 模式"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_TOOLTIP",
+    "source": "Disabled blocks RTCPeerConnection entirely. Real leaves the IP handling policy unchanged. Altered forces the non-proxied-UDP policy so host candidates do not leak the local network.",
+    "message": "禁用会完全阻止 RTCPeerConnection。真实模式保持 IP 处理策略不变。变更模式强制非代理 UDP 策略，使主机候选地址不会泄露本地网络。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_LABEL",
+    "source": "Client rect noise",
+    "message": "元素矩形噪声"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_TOOLTIP",
+    "source": "When enabled, Element.getClientRects() and getBoundingClientRect() receive small deterministic noise tied to this persona.",
+    "message": "开启后，Element.getClientRects() 与 getBoundingClientRect() 会收到与该 persona 绑定的确定性微小噪声。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_LABEL",
+    "source": "Effective connection type",
+    "message": "有效连接类型"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_TOOLTIP",
+    "source": "Overrides navigator.connection.effectiveType, one of slow-2g, 2g, 3g, 4g.",
+    "message": "覆盖 navigator.connection.effectiveType，可选 slow-2g、2g、3g、4g。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_RTT_LABEL",
+    "source": "Round-trip time (ms)",
+    "message": "往返时延（毫秒）"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_RTT_TOOLTIP",
+    "source": "Overrides navigator.connection.rtt in milliseconds. Keep consistent with the effective connection type.",
+    "message": "覆盖 navigator.connection.rtt（毫秒）。应与有效连接类型保持一致。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_LABEL",
+    "source": "Downlink (Mbps)",
+    "message": "下行带宽（Mbps）"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_TOOLTIP",
+    "source": "Overrides navigator.connection.downlink in megabits per second. Keep consistent with the effective connection type.",
+    "message": "覆盖 navigator.connection.downlink（兆比特/秒）。应与有效连接类型保持一致。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_LABEL",
+    "source": "Save-Data",
+    "message": "省流量模式"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_TOOLTIP",
+    "source": "Overrides navigator.connection.saveData, reporting data-saver mode to sites.",
+    "message": "覆盖 navigator.connection.saveData，向网站报告省流量模式状态。"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_TITLE",
+    "source": "Fingerprints",
+    "message": "指纹"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_DESCRIPTION",
+    "source": "Manage fingerprint seeds and automatic rotation",
+    "message": "管理指纹种子和自动轮换"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_CURRENT_SEED_TITLE",
+    "source": "Current fingerprint seed",
+    "message": "当前指纹种子"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_CURRENT_SEED_DESCRIPTION",
+    "source": "This seed determines the stable fingerprint noise for this profile.",
+    "message": "此种子决定当前配置文件的稳定指纹噪声。"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_SEED_LABEL",
+    "source": "Seed",
+    "message": "种子"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_GENERATION_LABEL",
+    "source": "Generation",
+    "message": "代次"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_LAST_CHANGED_LABEL",
+    "source": "Last changed",
+    "message": "上次更改"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_MODE_TITLE",
+    "source": "Seed mode",
+    "message": "种子模式"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_MODE_DESCRIPTION",
+    "source": "Use a fixed seed for repeatable fingerprints, or let Nitrous generate a random seed.",
+    "message": "使用固定种子获得可重复的指纹，或让 Nitrous 生成随机种子。"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_FIXED_SEED_LABEL",
+    "source": "Fixed seed",
+    "message": "固定种子"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_FIXED_SEED_INVALID",
+    "source": "Enter 64 hexadecimal characters.",
+    "message": "请输入 64 个十六进制字符。"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_USE_FIXED_SEED",
+    "source": "Use fixed seed",
+    "message": "使用固定种子"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_GENERATE_RANDOM_SEED",
+    "source": "Generate random seed",
+    "message": "生成随机种子"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_AUTOMATION_TITLE",
+    "source": "Automatic management",
+    "message": "自动管理"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_AUTOMATION_DESCRIPTION",
+    "source": "Automatic options are available only while random seed mode is active.",
+    "message": "自动选项仅在随机种子模式启用时可用。"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_CLEAR_ON_EXIT",
+    "source": "Clear random fingerprint on exit",
+    "message": "退出时清除随机指纹"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_ROTATE_DAILY",
+    "source": "Change random fingerprint daily",
+    "message": "每天更换随机指纹"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_UNAVAILABLE",
+    "source": "Fingerprint settings are unavailable for this profile.",
+    "message": "当前配置文件无法使用指纹设置。"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_TITLE",
+    "source": "Proxy",
+    "message": "代理"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_DESCRIPTION",
+    "source": "Route all traffic through an HTTP or SOCKS5 proxy",
+    "message": "通过 HTTP 或 SOCKS5 代理路由所有流量"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_ROUTE_TITLE",
+    "source": "Proxy server",
+    "message": "代理服务器"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_ROUTE_DESCRIPTION",
+    "source": "When enabled, all traffic for this profile goes through the proxy. If the proxy cannot be reached, traffic stops rather than falling back to a direct connection.",
+    "message": "开启后，此配置文件的所有流量都通过代理。若无法连接代理，流量将停止，而不会回退到直接连接。"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_MODE_LABEL",
+    "source": "Protocol",
+    "message": "协议"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_MODE_OFF",
+    "source": "Off",
+    "message": "关闭"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_MODE_HTTP",
+    "source": "HTTP",
+    "message": "HTTP"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_MODE_HTTPS",
+    "source": "HTTPS",
+    "message": "HTTPS"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_MODE_SOCKS5",
+    "source": "SOCKS5",
+    "message": "SOCKS5"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_HOST_LABEL",
+    "source": "Host",
+    "message": "主机"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_PORT_LABEL",
+    "source": "Port",
+    "message": "端口"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_USERNAME_LABEL",
+    "source": "Username (optional)",
+    "message": "用户名（可选）"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_PASSWORD_LABEL",
+    "source": "Password (optional)",
+    "message": "密码（可选）"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_PASSWORD_STORED",
+    "source": "Saved. Leave blank to keep.",
+    "message": "已保存。留空可保留原密码。"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_SAVE",
+    "source": "Save",
+    "message": "保存"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_TEST_CONNECTION",
+    "source": "Test connection",
+    "message": "测试连接"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_TEST_RUNNING",
+    "source": "Checking…",
+    "message": "正在检查…"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_TEST_SUCCEEDED",
+    "source": "Proxy server reachable",
+    "message": "代理服务器可连接"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_TEST_FAILED",
+    "source": "Proxy server could not be reached",
+    "message": "无法连接到代理服务器"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_INVALID_CONFIG",
+    "source": "Enter a valid host and a port between 1 and 65535.",
+    "message": "请输入有效的主机和 1 至 65535 之间的端口。"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_SUBVERTED",
+    "source": "The proxy route is no longer in effect, so requests are being blocked. An extension or a policy may have changed the proxy settings.",
+    "message": "代理路由已不再生效，因此请求正被阻止。扩展程序或政策可能更改了代理设置。"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_TITLE",
+    "source": "Browser traffic",
+    "message": "浏览器流量"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_DESCRIPTION",
+    "source": "Requests the browser makes on its own, such as updates and Safe Browsing, are not tied to a profile. Sending them through this proxy applies to the whole browser, and they stop while the proxy is unreachable.",
+    "message": "浏览器自行发出的请求（例如更新和安全浏览）不属于任何配置文件。让这些请求通过此代理会影响整个浏览器，并且在代理无法连接时停止。"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_BROWSER_TRAFFIC_TOGGLE",
+    "source": "Also use this proxy for browser traffic",
+    "message": "同时将此代理用于浏览器流量"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_TITLE",
+    "source": "Enforced while the proxy is on",
+    "message": "代理开启时强制执行"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_DESCRIPTION",
+    "source": "These settings would let traffic leave outside the proxy, so they are turned off automatically. Your own choices are kept and restored when the proxy is switched off.",
+    "message": "这些设置会让流量绕过代理，因此会被自动关闭。您的原有选择会保留，并在关闭代理后恢复。"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_DOH",
+    "source": "Secure DNS, which resolves names outside the proxy",
+    "message": "安全 DNS（会在代理之外解析域名）"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_WEBRTC",
+    "source": "WebRTC connections that do not go through a proxy",
+    "message": "不通过代理的 WebRTC 连接"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_PREFETCH",
+    "source": "Preloading and DNS prefetching",
+    "message": "预加载和 DNS 预取"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_QUIC",
+    "source": "QUIC, which cannot traverse a proxy",
+    "message": "QUIC（无法通过代理传输）"
   }
 ]

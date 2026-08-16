@@ -17,7 +17,7 @@
  
  namespace helium_persona {
  
-@@ -56,6 +59,26 @@
+@@ -56,6 +59,26 @@ std::string MakeFingerprintSalt() {
    return base::HexEncodeLower(bytes);
  }
  
@@ -44,7 +44,7 @@
  std::string GetPersonaIconForPlatform(std::string_view platform) {
    if (platform == "macOS") {
      return "macos";
-@@ -1347,12 +1370,29 @@
+@@ -1411,12 +1434,29 @@ void PersonaService::RefreshFingerprint(
        prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
    if (scope == FingerprintRefreshScope::kSite &&
        !site_origin_or_empty.empty()) {
@@ -78,7 +78,7 @@
    }
    prefs_->SetDict(kPersonaFingerprintRotationEpochPref,
                    std::move(rotation_epoch));
-@@ -1403,12 +1443,21 @@
+@@ -1467,12 +1507,21 @@ blink::HeliumPersonaSnapshot PersonaServ
    if (prefs_) {
      const base::DictValue rotation_epoch =
          prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
@@ -102,7 +102,7 @@
      }
 --- a/chrome/browser/helium_persona/persona_service_unittest.cc
 +++ b/chrome/browser/helium_persona/persona_service_unittest.cc
-@@ -19,6 +19,8 @@
+@@ -19,6 +19,8 @@ namespace {
  
  constexpr char kPersonaStatePref[] = "helium.persona.state";
  constexpr char kPersonaLastUsedIdPref[] = "helium.persona.last_used_id";
@@ -111,7 +111,7 @@
  constexpr char kDefaultPersonaId[] = "default";
  
  const base::DictValue* FindPersona(const base::ListValue* personas,
-@@ -552,6 +554,48 @@
+@@ -552,6 +554,48 @@ TEST_F(PersonaServiceTest, DeleteUnknown
    EXPECT_TRUE(response.FindDict("fieldErrors"));
  }
  
@@ -162,7 +162,7 @@
  }  // namespace helium_persona
 --- a/content/browser/helium_noise/noise_token_data.cc
 +++ b/content/browser/helium_noise/noise_token_data.cc
-@@ -38,14 +38,34 @@
+@@ -40,14 +40,34 @@ std::string_view FeatureTag(blink::Heliu
    }
  }
  
@@ -201,7 +201,7 @@
  }
  
  int64_t RotationBucket(const blink::HeliumPersonaSnapshot& persona,
-@@ -85,6 +105,8 @@
+@@ -87,6 +107,8 @@ std::string BuildSeed(const url::Origin&
      seed.append(origin.Serialize());
    }
    seed.push_back('\n');
@@ -212,7 +212,7 @@
  }
 --- a/content/browser/helium_noise/noise_token_data_unittest.cc
 +++ b/content/browser/helium_noise/noise_token_data_unittest.cc
-@@ -188,6 +188,22 @@
+@@ -194,6 +194,22 @@ TEST_F(HeliumNoiseTokenDataTest,
    EXPECT_TRUE(AnyFeatureChanged(first, rotated));
  }
  
@@ -235,7 +235,7 @@
  TEST_F(HeliumNoiseTokenDataTest, SiteEpochChangesOnlyMatchingSiteScope) {
    const url::Origin origin =
        url::Origin::Create(GURL("https://fingerprint.example/"));
-@@ -207,6 +223,32 @@
+@@ -213,6 +229,32 @@ TEST_F(HeliumNoiseTokenDataTest, SiteEpo
    const blink::HeliumNoiseTokenMap after =
        HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
    const blink::HeliumNoiseTokenMap other_after =
@@ -278,15 +278,15 @@
  #include <string>
  #include <string_view>
  #include <vector>
-@@ -18,6 +19,7 @@
+@@ -18,6 +19,7 @@ struct HeliumPersonaUaChBrand {
  struct HeliumPersonaFingerprintRotationEpoch {
    std::string scope_key;
    std::string epoch;
 +  uint64_t generation = 0;
  };
  
- inline std::string ResolveHeliumPersonaBrandFullVersion(
-@@ -119,6 +121,7 @@
+ struct HeliumPersonaSpeechVoice {
+@@ -140,6 +142,7 @@ struct HeliumPersonaSnapshot {
    int pixel_depth = 0;
    int refresh_rate = 0;
    int fingerprint_rotation_interval_days = 14;
@@ -296,7 +296,7 @@
    double audio_output_latency = 0.0;
 --- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
 +++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
-@@ -45,11 +45,16 @@
+@@ -45,11 +45,16 @@ struct StructTraits<blink::mojom::Helium
      return data.epoch;
    }
  
@@ -315,7 +315,7 @@
    }
  };
  
-@@ -423,6 +428,11 @@
+@@ -479,6 +484,11 @@ struct StructTraits<blink::mojom::Helium
      return data.fingerprint_rotation_interval_days;
    }
  
@@ -327,7 +327,7 @@
    static double device_scale_factor(
        const ::blink::HeliumPersonaSnapshot& data) {
      return data.device_scale_factor;
-@@ -530,6 +540,7 @@
+@@ -623,6 +633,7 @@ struct StructTraits<blink::mojom::Helium
      out->refresh_rate = data.refresh_rate();
      out->fingerprint_rotation_interval_days =
          data.fingerprint_rotation_interval_days();
@@ -337,15 +337,15 @@
      out->audio_output_latency = data.audio_output_latency();
 --- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
 +++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
-@@ -11,6 +11,7 @@
+@@ -11,6 +11,7 @@ struct HeliumPersonaUaChBrand {
  struct HeliumPersonaFingerprintRotationEpoch {
    string scope_key;
    string epoch;
 +  uint64 generation;
  };
  
- struct HeliumPersonaSnapshot {
-@@ -96,6 +97,7 @@
+ struct HeliumPersonaSpeechVoice {
+@@ -117,6 +118,7 @@ struct HeliumPersonaSnapshot {
    int32 pixel_depth;
    int32 refresh_rate;
    int32 fingerprint_rotation_interval_days;

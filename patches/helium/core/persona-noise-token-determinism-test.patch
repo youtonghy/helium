@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/content/browser/helium_noise/noise_token_data_unittest.cc
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,224 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -100,7 +100,9 @@
 +         TokenValue(before, blink::HeliumNoiseFeature::kHardware) !=
 +             TokenValue(after, blink::HeliumNoiseFeature::kHardware) ||
 +         TokenValue(before, blink::HeliumNoiseFeature::kFontMetric) !=
-+             TokenValue(after, blink::HeliumNoiseFeature::kFontMetric);
++             TokenValue(after, blink::HeliumNoiseFeature::kFontMetric) ||
++         TokenValue(before, blink::HeliumNoiseFeature::kClientRect) !=
++             TokenValue(after, blink::HeliumNoiseFeature::kClientRect);
 +}
 +
 +class HeliumNoiseTokenDataTest : public testing::Test {
@@ -120,7 +122,7 @@
 +  const blink::HeliumNoiseTokenMap after =
 +      HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
 +
-+  EXPECT_EQ(4u, before.size());
++  EXPECT_EQ(5u, before.size());
 +  EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kCanvas),
 +            TokenValue(after, blink::HeliumNoiseFeature::kCanvas));
 +  EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kAudio),
@@ -129,6 +131,8 @@
 +            TokenValue(after, blink::HeliumNoiseFeature::kHardware));
 +  EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kFontMetric),
 +            TokenValue(after, blink::HeliumNoiseFeature::kFontMetric));
++  EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kClientRect),
++            TokenValue(after, blink::HeliumNoiseFeature::kClientRect));
 +}
 +
 +TEST_F(HeliumNoiseTokenDataTest,
@@ -162,6 +166,8 @@
 +            TokenValue(tokens, blink::HeliumNoiseFeature::kHardware));
 +  EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
 +            TokenValue(tokens, blink::HeliumNoiseFeature::kFontMetric));
++  EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
++            TokenValue(tokens, blink::HeliumNoiseFeature::kClientRect));
 +
 +  EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
 +            TokenValue(other_origin_tokens,

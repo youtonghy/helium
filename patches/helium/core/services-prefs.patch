@@ -1,6 +1,6 @@
 --- a/chrome/app/settings_strings.grdp
 +++ b/chrome/app/settings_strings.grdp
-@@ -1705,6 +1705,638 @@
+@@ -1705,6 +1705,740 @@
        </message>
      </if>
  
@@ -341,17 +341,95 @@
 +    <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_TOOLTIP" desc="Help text for the persona audio noise toggle">
 +      Applies persona-scoped deterministic noise to supported offline audio render results. Live audio analysis paths are not covered yet.
 +    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_LABEL" desc="Label for the persona webdriver flag toggle">
++      Hide WebDriver flag
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_TOOLTIP" desc="Help text for the persona webdriver flag toggle">
++      Controls whether navigator.webdriver reports automation. When on (default), automation is hidden from sites that probe for it.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_LABEL" desc="Label for the persona do-not-track toggle">
++      Do Not Track
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_TOOLTIP" desc="Help text for the persona do-not-track toggle">
++      Sends the DNT: 1 header and reports navigator.doNotTrack. Note: modern Chrome removed DNT UI, so enabling it is itself a detectable signal.
++    </message>
 +    <message name="IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_LABEL" desc="Label for the persona hardware noise toggle">
 +      Hardware noise
 +    </message>
 +    <message name="IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP" desc="Help text for the persona hardware noise toggle">
 +      Applies deterministic noise to supported low-level hardware readback paths. CPU and memory values use their explicit fields instead.
 +    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_LABEL" desc="Label for the persona geolocation override toggle">
++      Geolocation override
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_TOOLTIP" desc="Help text for the persona geolocation override toggle">
++      Replaces the reported device position with fixed coordinates. When on, latitude, longitude and accuracy below are served to sites.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_LABEL" desc="Label for the persona geolocation latitude field">
++      Latitude
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_TOOLTIP" desc="Help text for the persona geolocation latitude field">
++      Latitude in decimal degrees, from -90 to +90. Must be consistent with the persona timezone and proxy location.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_LABEL" desc="Label for the persona geolocation longitude field">
++      Longitude
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_TOOLTIP" desc="Help text for the persona geolocation longitude field">
++      Longitude in decimal degrees, from -180 to +180. Must be consistent with the persona timezone and proxy location.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_LABEL" desc="Label for the persona geolocation accuracy field">
++      Accuracy (m)
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_TOOLTIP" desc="Help text for the persona geolocation accuracy field">
++      Horizontal position accuracy in meters. Small values (10–100) imply GPS; larger values (1000+) imply IP geolocation.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_LABEL" desc="Label for the persona audio input device count">
++      Audio input devices
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_TOOLTIP" desc="Help text for the persona audio input device count">
++      Number of microphones reported by enumerateDevices(). 0 hides input devices.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_LABEL" desc="Label for the persona video input device count">
++      Video input devices
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_TOOLTIP" desc="Help text for the persona video input device count">
++      Number of cameras reported by enumerateDevices(). 0 hides input devices.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_LABEL" desc="Label for the persona audio output device count">
++      Audio output devices
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_TOOLTIP" desc="Help text for the persona audio output device count">
++      Number of speakers reported by enumerateDevices(). 0 hides output devices.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_LABEL" desc="Label for the persona media device labels">
++      Device labels
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_TOOLTIP" desc="Help text for the persona media device labels">
++      Comma-separated labels for the fake devices. When set, labels are assigned to the reported devices in order; leave empty for generic labels.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_LABEL" desc="Label for the persona speech voices">
++      Speech voices
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP" desc="Help text for the persona speech voices">
++      Comma-separated list of speechSynthesis voices as name|lang|uri. When set, getVoices() returns these instead of the platform voices; leave empty for the real voice list.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_LABEL" desc="Label for the persona WebRTC mode">
++      WebRTC mode
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_TOOLTIP" desc="Help text for the persona WebRTC mode">
++      Disabled blocks RTCPeerConnection entirely. Real leaves the IP handling policy unchanged. Altered forces the non-proxied-UDP policy so host candidates do not leak the local network.
++    </message>
 +    <message name="IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_LABEL" desc="Label for the persona font metric noise toggle">
 +      Font metric noise
 +    </message>
 +    <message name="IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_TOOLTIP" desc="Help text for the persona font metric noise toggle">
 +      When enabled, font measurement APIs receive small deterministic noise tied to this persona.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_LABEL" desc="Label for the persona client rect noise toggle">
++      Client rect noise
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_TOOLTIP" desc="Help text for the persona client rect noise toggle">
++      When enabled, Element.getClientRects() and getBoundingClientRect() receive small deterministic noise tied to this persona.
 +    </message>
 +    <message name="IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_LABEL" desc="Label for the persona network type field">
 +      Network type
@@ -364,6 +442,30 @@
 +    </message>
 +    <message name="IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_TOOLTIP" desc="Help text for the persona maximum downlink field">
 +      Overrides navigator.connection.downlinkMax in megabits per second. Use a value that fits the chosen network type.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_LABEL" desc="Label for the persona effective connection type">
++      Effective connection type
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_TOOLTIP" desc="Help text for the persona effective connection type">
++      Overrides navigator.connection.effectiveType, one of slow-2g, 2g, 3g, 4g.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_RTT_LABEL" desc="Label for the persona round-trip time">
++      Round-trip time (ms)
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_RTT_TOOLTIP" desc="Help text for the persona round-trip time">
++      Overrides navigator.connection.rtt in milliseconds. Keep consistent with the effective connection type.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_LABEL" desc="Label for the persona downlink">
++      Downlink (Mbps)
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_TOOLTIP" desc="Help text for the persona downlink">
++      Overrides navigator.connection.downlink in megabits per second. Keep consistent with the effective connection type.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_LABEL" desc="Label for the persona save data toggle">
++      Save-Data
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_TOOLTIP" desc="Help text for the persona save data toggle">
++      Overrides navigator.connection.saveData, reporting data-saver mode to sites.
 +    </message>
 +    <message name="IDS_SETTINGS_PERSONA_NEW_PROFILE_DEFAULT_NAME" desc="Default display name assigned to a newly created persona profile">
 +      New Persona
@@ -641,7 +743,7 @@
        Info
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -2234,6 +2234,373 @@ void AddPrivacyStrings(content::WebUIDat
+@@ -2234,6 +2234,441 @@ void AddPrivacyStrings(content::WebUIDat
        {"siteSettingsSublabel", IDS_SETTINGS_PERMISSIONS_DESCRIPTION},
        {"securityPageTitle", IDS_SETTINGS_SECURITY},
        {"securityPageDescription", IDS_SETTINGS_SECURITY_DESCRIPTION},
@@ -827,14 +929,66 @@
 +        IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_LABEL},
 +      {"personaFieldAudioNoiseTooltip",
 +        IDS_SETTINGS_PERSONA_FIELD_AUDIO_NOISE_TOOLTIP},
++      {"personaFieldWebdriverEnabledLabel",
++        IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_LABEL},
++      {"personaFieldWebdriverEnabledTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_WEBDRIVER_ENABLED_TOOLTIP},
++      {"personaFieldDoNotTrackEnabledLabel",
++        IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_LABEL},
++      {"personaFieldDoNotTrackEnabledTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_DO_NOT_TRACK_ENABLED_TOOLTIP},
 +      {"personaFieldHardwareNoiseLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_LABEL},
 +      {"personaFieldHardwareNoiseTooltip",
 +        IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP},
++      {"personaFieldGeolocationOverrideLabel",
++        IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_LABEL},
++      {"personaFieldGeolocationOverrideTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_TOOLTIP},
++      {"personaFieldGeolocationLatitudeLabel",
++        IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_LABEL},
++      {"personaFieldGeolocationLatitudeTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LATITUDE_TOOLTIP},
++      {"personaFieldGeolocationLongitudeLabel",
++        IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_LABEL},
++      {"personaFieldGeolocationLongitudeTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_LONGITUDE_TOOLTIP},
++      {"personaFieldGeolocationAccuracyLabel",
++        IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_LABEL},
++      {"personaFieldGeolocationAccuracyTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_ACCURACY_TOOLTIP},
++      {"personaFieldAudioInputCountLabel",
++        IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_LABEL},
++      {"personaFieldAudioInputCountTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_AUDIO_INPUT_COUNT_TOOLTIP},
++      {"personaFieldVideoInputCountLabel",
++        IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_LABEL},
++      {"personaFieldVideoInputCountTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_VIDEO_INPUT_COUNT_TOOLTIP},
++      {"personaFieldAudioOutputCountLabel",
++        IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_LABEL},
++      {"personaFieldAudioOutputCountTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_AUDIO_OUTPUT_COUNT_TOOLTIP},
++      {"personaFieldMediaDeviceLabelsLabel",
++        IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_LABEL},
++      {"personaFieldMediaDeviceLabelsTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_MEDIA_DEVICE_LABELS_TOOLTIP},
++      {"personaFieldSpeechVoicesLabel",
++        IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_LABEL},
++      {"personaFieldSpeechVoicesTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP},
++      {"personaFieldWebrtcModeLabel",
++        IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_LABEL},
++      {"personaFieldWebrtcModeTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_WEBRTC_MODE_TOOLTIP},
 +      {"personaFieldFontMetricNoiseLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_LABEL},
 +      {"personaFieldFontMetricNoiseTooltip",
 +        IDS_SETTINGS_PERSONA_FIELD_FONT_METRIC_NOISE_TOOLTIP},
++      {"personaFieldClientRectNoiseLabel",
++        IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_LABEL},
++      {"personaFieldClientRectNoiseTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_CLIENT_RECT_NOISE_TOOLTIP},
 +      {"personaFieldNetworkTypeLabel",
 +        IDS_SETTINGS_PERSONA_FIELD_NETWORK_TYPE_LABEL},
 +      {"personaFieldNetworkTypeTooltip",
@@ -843,6 +997,22 @@
 +        IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_LABEL},
 +      {"personaFieldDownlinkMaxTooltip",
 +        IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_MAX_TOOLTIP},
++      {"personaFieldEffectiveTypeLabel",
++        IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_LABEL},
++      {"personaFieldEffectiveTypeTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_EFFECTIVE_TYPE_TOOLTIP},
++      {"personaFieldRttLabel",
++        IDS_SETTINGS_PERSONA_FIELD_RTT_LABEL},
++      {"personaFieldRttTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_RTT_TOOLTIP},
++      {"personaFieldDownlinkLabel",
++        IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_LABEL},
++      {"personaFieldDownlinkTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_DOWNLINK_TOOLTIP},
++      {"personaFieldSaveDataLabel",
++        IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_LABEL},
++      {"personaFieldSaveDataTooltip",
++        IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_TOOLTIP},
 +      {"personaNewProfileDefaultName",
 +       IDS_SETTINGS_PERSONA_NEW_PROFILE_DEFAULT_NAME},
 +      {"personaDiscardChangesConfirm",
@@ -1334,7 +1504,7 @@
 +  {
 +    registry->RegisterIntegerPref(prefs::kHeliumSchemaVersion, 0);
 +    registry->RegisterBooleanPref(prefs::kHeliumDisableSchemaAlerts, false);
-+    registry->RegisterBooleanPref(prefs::kHeliumServicesEnabled, true);
++    registry->RegisterBooleanPref(prefs::kHeliumServicesEnabled, false);
 +    registry->RegisterStringPref(prefs::kHeliumServicesOrigin, "");
 +  }
 +

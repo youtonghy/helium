@@ -1,0 +1,89 @@
+--- a/third_party/blink/renderer/core/dom/element.cc
++++ b/third_party/blink/renderer/core/dom/element.cc
+@@ -36,6 +36,7 @@
+ #include "base/feature_list.h"
+ #include "cc/input/snap_selection_strategy.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/public/mojom/scroll/scroll_enums.mojom-blink.h"
+ #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink.h"
+ #include "third_party/blink/public/web/web_autofill_state.h"
+@@ -313,6 +314,33 @@ namespace blink {
+ 
+ namespace {
+ 
++// Client rect noise (Persona). Deterministic sub-pixel jitter applied to
++// Element.getClientRects() / getBoundingClientRect() so the reported geometry
++// varies slightly between personas while staying stable for a given persona
++// and element (same token + same layout => same result).
++constexpr uint64_t kClientRectFnvPrime = 0x00000100000001b3;
++constexpr double kHeliumClientRectNoiseDelta = 0.001;
++
++uint64_t MixHeliumClientRectNoise(uint64_t hash, uint64_t value) {
++  hash ^= value;
++  hash *= kClientRectFnvPrime;
++  return hash;
++}
++
++double ApplyHeliumClientRectNoise(double value,
++                                  uint64_t token_hash,
++                                  uint64_t field_index) {
++  if (!std::isfinite(value) || value == 0.0) {
++    return value;
++  }
++  const uint64_t field_hash =
++      MixHeliumClientRectNoise(token_hash, field_index);
++  const double direction = (field_hash & 1) ? 1.0 : -1.0;
++  const double magnitude =
++      1.0 + static_cast<double>((field_hash >> 1) % 31);
++  return value + direction * magnitude * kHeliumClientRectNoiseDelta;
++}
++
+ class DisplayLockStyleScope {
+   STACK_ALLOCATED();
+ 
+@@ -3439,6 +3467,23 @@ DOMRectList* Element::getClientRects() {
+     GetDocument().AdjustRectForScrollAndAbsoluteZoom(rect,
+                                                      *element_layout_object);
+   }
++  if (ExecutionContext* execution_context =
++          GetDocument().GetExecutionContext()) {
++    if (const std::optional<NoiseToken>& token =
++            execution_context->ClientRectNoiseToken()) {
++      const uint64_t token_hash = token->Value();
++      for (auto& rect : rects) {
++        rect.set_x(static_cast<float>(ApplyHeliumClientRectNoise(
++            rect.x(), token_hash, 0)));
++        rect.set_y(static_cast<float>(ApplyHeliumClientRectNoise(
++            rect.y(), token_hash, 1)));
++        rect.set_width(static_cast<float>(ApplyHeliumClientRectNoise(
++            rect.width(), token_hash, 2)));
++        rect.set_height(static_cast<float>(ApplyHeliumClientRectNoise(
++            rect.height(), token_hash, 3)));
++      }
++    }
++  }
+   return MakeGarbageCollected<DOMRectList>(rects);
+ }
+ 
+@@ -3498,7 +3543,19 @@ DOMRect* Element::GetBoundingClientRectF
+   // TODO(crbug.com/1499981): This should be removed once synchronized scrolling
+   // impact is understood.
+   SyncScrollAttemptHeuristic::DidAccessScrollOffset();
+-  return GetBoundingClientRect();
++  DOMRect* rect = GetBoundingClientRect();
++  if (ExecutionContext* execution_context =
++          GetDocument().GetExecutionContext()) {
++    if (const std::optional<NoiseToken>& token =
++            execution_context->ClientRectNoiseToken()) {
++      const uint64_t token_hash = token->Value();
++      rect->setX(ApplyHeliumClientRectNoise(rect->x(), token_hash, 0));
++      rect->setY(ApplyHeliumClientRectNoise(rect->y(), token_hash, 1));
++      rect->setWidth(ApplyHeliumClientRectNoise(rect->width(), token_hash, 2));
++      rect->setHeight(ApplyHeliumClientRectNoise(rect->height(), token_hash, 3));
++    }
++  }
++  return rect;
+ }
+ 
+ ContainerQueryList* Element::matchContainer(const String& query) {

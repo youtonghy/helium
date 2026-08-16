@@ -1,0 +1,672 @@
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -12,11 +12,13 @@
+ #include <vector>
+ 
+ #include "base/check.h"
++#include "base/containers/span.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/i18n/time_formatting.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/stringprintf.h"
++#include "base/strings/string_split.h"
+ #include "base/strings/string_util.h"
+ #include "base/time/time.h"
+ #include "base/uuid.h"
+@@ -349,6 +351,181 @@ void AttachDevicePackMetadata(base::Dict
+   persona.Set("networkReady", true);
+ }
+ 
++// Built-in font packs.
++//
++// A persona's font list must look like the default install of the OS it claims
++// to be. Two failure modes matter: too few families (the previous four-family
++// list is more identifying than a full system set) and families that contradict
++// the claimed locale (an en-US machine advertising CJK faces).
++//
++// So each pack is a per-OS Western base set that ships with a clean install,
++// plus CJK families appended only when the persona's language actually needs
++// them. Keep these lists in sync with the mirror in persona_config.ts.
++constexpr auto kWindowsBaseFonts = std::to_array<const char*>({
++    "Arial", "Arial Black", "Bahnschrift", "Calibri", "Cambria", "Candara",
++    "Comic Sans MS", "Consolas", "Constantia", "Corbel", "Courier New",
++    "Ebrima", "Franklin Gothic Medium", "Gabriola", "Gadugi", "Georgia",
++    "Impact", "Ink Free", "Javanese Text", "Lucida Console",
++    "Lucida Sans Unicode", "Marlett", "Microsoft Sans Serif", "MV Boli",
++    "Nirmala UI", "Palatino Linotype", "Segoe MDL2 Assets", "Segoe Print",
++    "Segoe Script", "Segoe UI", "Segoe UI Emoji", "Segoe UI Historic",
++    "Segoe UI Symbol", "SimSun-ExtB", "Sitka", "Sylfaen", "Symbol", "Tahoma",
++    "Times New Roman", "Trebuchet MS", "Verdana", "Webdings", "Wingdings",
++});
++
++constexpr auto kMacBaseFonts = std::to_array<const char*>({
++    "American Typewriter", "Andale Mono", "Apple Chancery", "Apple Symbols",
++    "AppleGothic", "Arial", "Arial Black", "Arial Narrow",
++    "Arial Rounded MT Bold", "Arial Unicode MS", "Avenir", "Avenir Next",
++    "Baskerville", "Big Caslon", "Bodoni 72", "Bradley Hand", "Brush Script MT",
++    "Chalkboard", "Chalkduster", "Cochin", "Comic Sans MS", "Copperplate",
++    "Courier New", "Didot", "Futura", "Geneva", "Georgia", "Gill Sans",
++    "Helvetica", "Helvetica Neue", "Herculanum", "Hoefler Text", "Impact",
++    "Lucida Grande", "Luminari", "Marker Felt", "Menlo", "Monaco", "Noteworthy",
++    "Optima", "Palatino", "Papyrus", "Phosphate", "Rockwell", "Savoye LET",
++    "SignPainter", "Skia", "Snell Roundhand", "Tahoma", "Times",
++    "Times New Roman", "Trattatello", "Trebuchet MS", "Verdana", "Zapfino",
++});
++
++constexpr auto kLinuxBaseFonts = std::to_array<const char*>({
++    "Cantarell", "DejaVu Sans", "DejaVu Sans Mono", "DejaVu Serif",
++    "Liberation Mono", "Liberation Sans", "Liberation Sans Narrow",
++    "Liberation Serif", "Noto Mono", "Noto Sans", "Noto Sans Mono",
++    "Noto Serif", "Ubuntu", "Ubuntu Condensed", "Ubuntu Mono",
++});
++
++// CJK supplements, appended only for a matching persona language. `hans` and
++// `hant` are separate because a zh-CN install does not ship the Traditional
++// faces and vice versa.
++constexpr auto kWindowsHansFonts = std::to_array<const char*>({
++    "DengXian", "FangSong", "KaiTi", "Microsoft YaHei", "SimHei", "SimSun",
++});
++constexpr auto kWindowsHantFonts = std::to_array<const char*>({
++    "DFKai-SB", "MingLiU", "Microsoft JhengHei", "PMingLiU",
++});
++constexpr auto kWindowsJapaneseFonts = std::to_array<const char*>({
++    "Meiryo", "Meiryo UI", "MS Gothic", "MS Mincho", "MS PGothic", "Yu Gothic",
++    "Yu Mincho",
++});
++constexpr auto kWindowsKoreanFonts = std::to_array<const char*>({
++    "Batang", "Dotum", "Gulim", "Malgun Gothic",
++});
++
++constexpr auto kMacHansFonts = std::to_array<const char*>({
++    "Hiragino Sans GB", "PingFang SC", "Songti SC", "STHeiti", "STSong",
++});
++constexpr auto kMacHantFonts = std::to_array<const char*>({
++    "Apple LiGothic", "BiauKai", "LiHei Pro", "PingFang TC", "Songti TC",
++});
++constexpr auto kMacJapaneseFonts = std::to_array<const char*>({
++    "Hiragino Kaku Gothic Pro", "Hiragino Maru Gothic Pro",
++    "Hiragino Mincho Pro", "Hiragino Sans", "Osaka", "YuGothic", "YuMincho",
++});
++constexpr auto kMacKoreanFonts = std::to_array<const char*>({
++    "Apple SD Gothic Neo", "AppleMyungjo", "Nanum Gothic", "NanumMyeongjo",
++});
++
++constexpr auto kLinuxHansFonts = std::to_array<const char*>({
++    "Noto Sans CJK SC", "Noto Serif CJK SC", "WenQuanYi Micro Hei",
++});
++constexpr auto kLinuxHantFonts = std::to_array<const char*>({
++    "Noto Sans CJK TC", "Noto Serif CJK TC",
++});
++constexpr auto kLinuxJapaneseFonts = std::to_array<const char*>({
++    "Noto Sans CJK JP", "Noto Serif CJK JP", "TakaoPGothic",
++});
++constexpr auto kLinuxKoreanFonts = std::to_array<const char*>({
++    "Noto Sans CJK KR", "Noto Serif CJK KR",
++});
++
++// Which CJK supplement, if any, a BCP 47 locale calls for. Empty means the
++// Western base set alone is correct for this persona.
++std::string_view ResolveFontScript(std::string_view locale) {
++  const std::string lower = base::ToLowerASCII(locale);
++  const std::vector<std::string> parts = base::SplitString(
++      lower, "-_", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
++  if (parts.empty()) {
++    return "";
++  }
++  const std::string& language = parts.front();
++  if (language == "ja") {
++    return "ja";
++  }
++  if (language == "ko") {
++    return "ko";
++  }
++  if (language != "zh") {
++    return "";
++  }
++  // An explicit script subtag wins over the region; otherwise the region
++  // decides, since zh-TW/HK/MO ship Traditional and zh-CN/SG ship Simplified.
++  for (const std::string& part : parts) {
++    if (part == "hans") {
++      return "hans";
++    }
++    if (part == "hant") {
++      return "hant";
++    }
++    if (part == "tw" || part == "hk" || part == "mo") {
++      return "hant";
++    }
++  }
++  return "hans";
++}
++
++base::ListValue MakeFontFamiliesForPersona(std::string_view platform,
++                                           std::string_view locale) {
++  base::span<const char* const> base_fonts = kMacBaseFonts;
++  if (platform == "Windows") {
++    base_fonts = kWindowsBaseFonts;
++  } else if (platform == "Linux") {
++    base_fonts = kLinuxBaseFonts;
++  }
++
++  const std::string_view script = ResolveFontScript(locale);
++  base::span<const char* const> script_fonts;
++  if (platform == "Windows") {
++    if (script == "hans") {
++      script_fonts = kWindowsHansFonts;
++    } else if (script == "hant") {
++      script_fonts = kWindowsHantFonts;
++    } else if (script == "ja") {
++      script_fonts = kWindowsJapaneseFonts;
++    } else if (script == "ko") {
++      script_fonts = kWindowsKoreanFonts;
++    }
++  } else if (platform == "Linux") {
++    if (script == "hans") {
++      script_fonts = kLinuxHansFonts;
++    } else if (script == "hant") {
++      script_fonts = kLinuxHantFonts;
++    } else if (script == "ja") {
++      script_fonts = kLinuxJapaneseFonts;
++    } else if (script == "ko") {
++      script_fonts = kLinuxKoreanFonts;
++    }
++  } else {
++    if (script == "hans") {
++      script_fonts = kMacHansFonts;
++    } else if (script == "hant") {
++      script_fonts = kMacHantFonts;
++    } else if (script == "ja") {
++      script_fonts = kMacJapaneseFonts;
++    } else if (script == "ko") {
++      script_fonts = kMacKoreanFonts;
++    }
++  }
++
++  base::ListValue families;
++  for (const char* family : base_fonts) {
++    families.Append(family);
++  }
++  for (const char* family : script_fonts) {
++    families.Append(family);
++  }
++  return families;
++}
++
+ base::DictValue MakePreset(std::string_view id,
+                            std::string_view name,
+                            std::string_view user_agent,
+@@ -426,24 +603,7 @@ base::DictValue MakePreset(std::string_v
+ 
+   base::DictValue fonts;
+   fonts.Set("id", fonts_id);
+-  base::ListValue font_families;
+-  if (platform == "Windows") {
+-    font_families.Append("Arial");
+-    font_families.Append("Segoe UI");
+-    font_families.Append("Times New Roman");
+-    font_families.Append("Courier New");
+-  } else if (platform == "Linux") {
+-    font_families.Append("Noto Sans");
+-    font_families.Append("Liberation Sans");
+-    font_families.Append("Liberation Serif");
+-    font_families.Append("DejaVu Sans Mono");
+-  } else {
+-    font_families.Append("Arial");
+-    font_families.Append("Helvetica");
+-    font_families.Append("Times");
+-    font_families.Append("Courier");
+-  }
+-  fonts.Set("families", std::move(font_families));
++  fonts.Set("families", MakeFontFamiliesForPersona(platform, locale));
+   fonts.Set("aliases", base::ListValue());
+ 
+   base::DictValue font_rendering;
+@@ -926,24 +1086,11 @@ base::DictValue NormalizePersona(const b
+                                            : "sf-pro-default");
+   }
+   if (!fonts->FindList("families")) {
+-    base::ListValue families;
+-    if (platform == "Windows") {
+-      families.Append("Arial");
+-      families.Append("Segoe UI");
+-      families.Append("Times New Roman");
+-      families.Append("Courier New");
+-    } else if (platform == "Linux") {
+-      families.Append("Noto Sans");
+-      families.Append("Liberation Sans");
+-      families.Append("Liberation Serif");
+-      families.Append("DejaVu Sans Mono");
+-    } else {
+-      families.Append("Arial");
+-      families.Append("Helvetica");
+-      families.Append("Times");
+-      families.Append("Courier");
+-    }
+-    fonts->Set("families", std::move(families));
++    const std::string* locale = region->FindString("locale");
++    fonts->Set("families",
++               MakeFontFamiliesForPersona(
++                   platform, locale ? std::string_view(*locale)
++                                    : std::string_view()));
+   }
+   if (!fonts->FindList("aliases")) {
+     fonts->Set("aliases", base::ListValue());
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -4,10 +4,12 @@
+ 
+ #include "chrome/browser/helium_persona/persona_service.h"
+ 
++#include <algorithm>
+ #include <array>
+ #include <memory>
+ #include <optional>
+ #include <string>
++#include <string_view>
+ #include <utility>
+ #include <vector>
+ 
+@@ -471,6 +473,77 @@ TEST_F(PersonaServiceTest, PresetsMatchR
+     }
+   }
+ }
++
++TEST_F(PersonaServiceTest, PresetFontPacksMatchPlatformAndLanguage) {
++  const base::DictValue state = service_->GetPersonaState();
++  const base::ListValue* presets = state.FindList("presets");
++  ASSERT_TRUE(presets);
++
++  // Families that only ship on one OS, and CJK families that must never appear
++  // on a persona whose language does not call for them.
++  static constexpr auto kWindowsOnly = std::to_array<const char*>(
++      {"Segoe UI", "Calibri", "Consolas", "Tahoma"});
++  static constexpr auto kMacOnly = std::to_array<const char*>(
++      {"Helvetica Neue", "Menlo", "Lucida Grande"});
++  static constexpr auto kCjkFonts = std::to_array<const char*>(
++      {"Microsoft YaHei", "SimSun", "MingLiU", "MS Gothic", "Meiryo",
++       "Malgun Gothic", "PingFang SC", "PingFang TC", "Hiragino Sans",
++       "Apple SD Gothic Neo", "Noto Sans CJK SC", "Noto Sans CJK JP"});
++
++  for (const auto& value : *presets) {
++    ASSERT_TRUE(value.is_dict());
++    const base::DictValue& preset = value.GetDict();
++    const std::string* id = preset.FindString("id");
++    const std::string* platform = preset.FindString("platform");
++    ASSERT_TRUE(id);
++    ASSERT_TRUE(platform);
++    SCOPED_TRACE(*id);
++
++    const base::DictValue* region = preset.FindDict("region");
++    ASSERT_TRUE(region);
++    const std::string* locale = region->FindString("locale");
++    ASSERT_TRUE(locale);
++
++    const base::ListValue* families =
++        preset.FindDict("fonts")
++            ? preset.FindDict("fonts")->FindList("families")
++            : nullptr;
++    ASSERT_TRUE(families);
++
++    std::vector<std::string> names;
++    for (const auto& family : *families) {
++      ASSERT_TRUE(family.is_string());
++      names.push_back(family.GetString());
++    }
++    const auto has = [&names](std::string_view needle) {
++      return std::ranges::find(names, needle) != names.end();
++    };
++
++    // A four-family list is more identifying than a full system set.
++    EXPECT_GE(names.size(), 15u);
++
++    if (*platform == "Windows") {
++      EXPECT_TRUE(has("Segoe UI"));
++      for (const char* mac_only : kMacOnly) {
++        EXPECT_FALSE(has(mac_only)) << mac_only;
++      }
++    } else if (*platform == "macOS") {
++      EXPECT_TRUE(has("Helvetica Neue"));
++      for (const char* windows_only : kWindowsOnly) {
++        EXPECT_FALSE(has(windows_only)) << windows_only;
++      }
++    }
++
++    const bool is_cjk_locale = locale->starts_with("zh") ||
++                               locale->starts_with("ja") ||
++                               locale->starts_with("ko");
++    if (!is_cjk_locale) {
++      for (const char* cjk : kCjkFonts) {
++        EXPECT_FALSE(has(cjk)) << *locale << " must not claim " << cjk;
++      }
++    }
++  }
++}
+ 
+ TEST_F(PersonaServiceTest, ReadStateCanonicalizesPersistedDefaultPersona) {
+   base::DictValue state = service_->GetPersonaState();
+--- a/chrome/browser/resources/settings/privacy_page/persona_config.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
+@@ -260,6 +260,113 @@ const DEFAULT_ADVANCED = {
+   },
+ };
+ 
++// Built-in font packs, mirroring MakeFontFamiliesForPersona in
++// chrome/browser/helium_persona/persona_service.cc. The browser is the source
++// of truth for a saved persona; this copy exists so the editor can refill the
++// list the moment the user switches platform or locale, without a round trip.
++// Keep both in sync.
++const WINDOWS_BASE_FONTS = [
++  'Arial', 'Arial Black', 'Bahnschrift', 'Calibri', 'Cambria', 'Candara',
++  'Comic Sans MS', 'Consolas', 'Constantia', 'Corbel', 'Courier New', 'Ebrima',
++  'Franklin Gothic Medium', 'Gabriola', 'Gadugi', 'Georgia', 'Impact',
++  'Ink Free', 'Javanese Text', 'Lucida Console', 'Lucida Sans Unicode',
++  'Marlett', 'Microsoft Sans Serif', 'MV Boli', 'Nirmala UI',
++  'Palatino Linotype', 'Segoe MDL2 Assets', 'Segoe Print', 'Segoe Script',
++  'Segoe UI', 'Segoe UI Emoji', 'Segoe UI Historic', 'Segoe UI Symbol',
++  'SimSun-ExtB', 'Sitka', 'Sylfaen', 'Symbol', 'Tahoma', 'Times New Roman',
++  'Trebuchet MS', 'Verdana', 'Webdings', 'Wingdings',
++];
++
++const MAC_BASE_FONTS = [
++  'American Typewriter', 'Andale Mono', 'Apple Chancery', 'Apple Symbols',
++  'AppleGothic', 'Arial', 'Arial Black', 'Arial Narrow',
++  'Arial Rounded MT Bold', 'Arial Unicode MS', 'Avenir', 'Avenir Next',
++  'Baskerville', 'Big Caslon', 'Bodoni 72', 'Bradley Hand', 'Brush Script MT',
++  'Chalkboard', 'Chalkduster', 'Cochin', 'Comic Sans MS', 'Copperplate',
++  'Courier New', 'Didot', 'Futura', 'Geneva', 'Georgia', 'Gill Sans',
++  'Helvetica', 'Helvetica Neue', 'Herculanum', 'Hoefler Text', 'Impact',
++  'Lucida Grande', 'Luminari', 'Marker Felt', 'Menlo', 'Monaco', 'Noteworthy',
++  'Optima', 'Palatino', 'Papyrus', 'Phosphate', 'Rockwell', 'Savoye LET',
++  'SignPainter', 'Skia', 'Snell Roundhand', 'Tahoma', 'Times',
++  'Times New Roman', 'Trattatello', 'Trebuchet MS', 'Verdana', 'Zapfino',
++];
++
++const LINUX_BASE_FONTS = [
++  'Cantarell', 'DejaVu Sans', 'DejaVu Sans Mono', 'DejaVu Serif',
++  'Liberation Mono', 'Liberation Sans', 'Liberation Sans Narrow',
++  'Liberation Serif', 'Noto Mono', 'Noto Sans', 'Noto Sans Mono', 'Noto Serif',
++  'Ubuntu', 'Ubuntu Condensed', 'Ubuntu Mono',
++];
++
++const SCRIPT_FONTS: Record<string, Record<string, string[]>> = {
++  'Windows': {
++    hans: ['DengXian', 'FangSong', 'KaiTi', 'Microsoft YaHei', 'SimHei',
++           'SimSun'],
++    hant: ['DFKai-SB', 'MingLiU', 'Microsoft JhengHei', 'PMingLiU'],
++    ja: ['Meiryo', 'Meiryo UI', 'MS Gothic', 'MS Mincho', 'MS PGothic',
++         'Yu Gothic', 'Yu Mincho'],
++    ko: ['Batang', 'Dotum', 'Gulim', 'Malgun Gothic'],
++  },
++  'macOS': {
++    hans: ['Hiragino Sans GB', 'PingFang SC', 'Songti SC', 'STHeiti', 'STSong'],
++    hant: ['Apple LiGothic', 'BiauKai', 'LiHei Pro', 'PingFang TC',
++           'Songti TC'],
++    ja: ['Hiragino Kaku Gothic Pro', 'Hiragino Maru Gothic Pro',
++         'Hiragino Mincho Pro', 'Hiragino Sans', 'Osaka', 'YuGothic',
++         'YuMincho'],
++    ko: ['Apple SD Gothic Neo', 'AppleMyungjo', 'Nanum Gothic',
++         'NanumMyeongjo'],
++  },
++  'Linux': {
++    hans: ['Noto Sans CJK SC', 'Noto Serif CJK SC', 'WenQuanYi Micro Hei'],
++    hant: ['Noto Sans CJK TC', 'Noto Serif CJK TC'],
++    ja: ['Noto Sans CJK JP', 'Noto Serif CJK JP', 'TakaoPGothic'],
++    ko: ['Noto Sans CJK KR', 'Noto Serif CJK KR'],
++  },
++};
++
++/**
++ * Returns the CJK script a locale calls for, or '' when the Western base set
++ * alone is correct. An en-US persona must not advertise CJK faces.
++ */
++export function resolveFontScript(locale: string): string {
++  const parts = String(locale || '').toLowerCase().split(/[-_]/).filter(
++      part => part.length > 0);
++  if (parts.length === 0) {
++    return '';
++  }
++  const language = parts[0];
++  if (language === 'ja' || language === 'ko') {
++    return language;
++  }
++  if (language !== 'zh') {
++    return '';
++  }
++  for (const part of parts) {
++    if (part === 'hans' || part === 'hant') {
++      return part;
++    }
++    if (part === 'tw' || part === 'hk' || part === 'mo') {
++      return 'hant';
++    }
++  }
++  return 'hans';
++}
++
++/** Built-in font families for a platform and locale pair. */
++export function buildFontFamilies(platform: string, locale: string): string[] {
++  let base = MAC_BASE_FONTS;
++  if (platform === 'Windows') {
++    base = WINDOWS_BASE_FONTS;
++  } else if (platform === 'Linux') {
++    base = LINUX_BASE_FONTS;
++  }
++  const script = resolveFontScript(locale);
++  const perPlatform = SCRIPT_FONTS[platform] || SCRIPT_FONTS['macOS'];
++  const scriptFonts = script ? (perPlatform[script] || []) : [];
++  return [...base, ...scriptFonts];
++}
++
+ function clone<T>(value: T): T {
+   return JSON.parse(JSON.stringify(value)) as T;
+ }
+@@ -382,7 +489,7 @@ export function createPersonaDraft(
+     },
+     fonts: {
+       id: 'sf-pro-default',
+-      families: ['Arial', 'Helvetica', 'Times', 'Courier'],
++      families: buildFontFamilies('macOS', 'en-US'),
+       aliases: [],
+     },
+     fontRendering: {
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -24,6 +24,7 @@ import type {
+   PersonaTextFields,
+ } from './persona_config.js';
+ import {
++  buildFontFamilies,
+   createPersonaDraft,
+   parsePersonaImportPayload,
+   PERSONA_EXPORT_SCHEMA,
+@@ -1018,6 +1019,23 @@ export class SettingsPersonaPageElement
+           'customFieldSelections_.uaChPlatform',
+           hasOption('uaChPlatform', value) ? value : CUSTOM_OPTION_VALUE);
+     }
++    if (optionId === 'platform' || optionId === 'locale') {
++      this.applyBuiltInFontPack_();
++    }
++  }
++
++  /**
++   * Refills the font list from the built-in pack for the current platform and
++   * locale. Called when either changes so the persona never keeps a font set
++   * that contradicts the OS or language it now claims -- for example a Windows
++   * persona still listing macOS families, or an en-US persona listing CJK ones.
++   */
++  private applyBuiltInFontPack_() {
++    const platform = this.editablePersona_?.platform || 'macOS';
++    const locale = this.editablePersona_?.region?.locale || '';
++    const families = buildFontFamilies(platform, locale);
++    this.set('editablePersona_.fonts.families', families);
++    this.fontFamiliesText_ = families.join(', ');
+   }
+ 
+   private getFieldOptions_(optionId: string) {
+--- a/chrome/test/data/webui/settings/persona_config_test.ts
++++ b/chrome/test/data/webui/settings/persona_config_test.ts
+@@ -5,14 +5,17 @@
+ import {
+   assertDeepEquals,
+   assertEquals,
++  assertFalse,
+   assertNotEquals,
+   assertTrue,
+ } from 'chrome://webui-test/chai_assert.js';
+ 
+ import {
++  buildFontFamilies,
+   createPersonaDraft,
+   parsePersonaImportPayload,
+   preparePersonaForSave,
++  resolveFontScript,
+ } from 'chrome://settings/privacy_page/persona_config.js';
+ 
+ suite('PersonaConfig', () => {
+@@ -175,4 +178,60 @@ suite('PersonaConfig', () => {
+     assertEquals(
+         'string', typeof result.fieldErrors['hardware.deviceMemory']);
+   });
++
++  test('resolves the CJK script a locale calls for', () => {
++    assertEquals('', resolveFontScript('en-US'));
++    assertEquals('', resolveFontScript('de-DE'));
++    assertEquals('', resolveFontScript(''));
++    assertEquals('hans', resolveFontScript('zh-CN'));
++    assertEquals('hans', resolveFontScript('zh-SG'));
++    assertEquals('hant', resolveFontScript('zh-TW'));
++    assertEquals('hant', resolveFontScript('zh-HK'));
++    assertEquals('hant', resolveFontScript('zh-Hant-TW'));
++    assertEquals('hans', resolveFontScript('zh-Hans-CN'));
++    assertEquals('ja', resolveFontScript('ja-JP'));
++    assertEquals('ko', resolveFontScript('ko-KR'));
++  });
++
++  test('builds font packs matching the platform and language', () => {
++    const windowsEn = buildFontFamilies('Windows', 'en-US');
++    assertTrue(windowsEn.includes('Segoe UI'));
++    assertTrue(windowsEn.includes('Calibri'));
++    // A Windows machine must not claim macOS-only faces.
++    assertFalse(windowsEn.includes('Helvetica Neue'));
++    // An en-US install ships no CJK faces.
++    assertFalse(windowsEn.includes('Microsoft YaHei'));
++    assertFalse(windowsEn.includes('MS Gothic'));
++
++    const macEn = buildFontFamilies('macOS', 'en-US');
++    assertTrue(macEn.includes('Helvetica Neue'));
++    assertFalse(macEn.includes('Segoe UI'));
++    assertFalse(macEn.includes('PingFang SC'));
++
++    // CJK faces appear only for a matching language, and Simplified and
++    // Traditional do not mix.
++    const windowsHans = buildFontFamilies('Windows', 'zh-CN');
++    assertTrue(windowsHans.includes('Microsoft YaHei'));
++    assertTrue(windowsHans.includes('SimSun'));
++    assertFalse(windowsHans.includes('PMingLiU'));
++
++    const windowsHant = buildFontFamilies('Windows', 'zh-TW');
++    assertTrue(windowsHant.includes('PMingLiU'));
++    assertFalse(windowsHant.includes('Microsoft YaHei'));
++
++    const macJa = buildFontFamilies('macOS', 'ja-JP');
++    assertTrue(macJa.includes('Hiragino Sans'));
++    assertFalse(macJa.includes('PingFang SC'));
++
++    // The Western base set is always retained alongside the supplement.
++    assertTrue(windowsHans.includes('Segoe UI'));
++    assertTrue(macJa.includes('Helvetica Neue'));
++  });
++
++  test('seeds a new draft with the full built-in font pack', () => {
++    const draft = createPersonaDraft({id: 'persona-test'});
++    assertTrue(draft.fonts.families.length > 15);
++    assertTrue(draft.fonts.families.includes('Helvetica Neue'));
++    assertFalse(draft.fonts.families.includes('PingFang SC'));
++  });
+ });
+--- a/content/browser/client_hints/client_hints.cc
++++ b/content/browser/client_hints/client_hints.cc
+@@ -920,7 +920,7 @@ void AddRequestClientHintsHeaders(
+   const bool persona_enabled = persona_snapshot && persona_snapshot->IsEnabled();
+   const std::optional<double> persona_device_memory =
+       persona_enabled && persona_snapshot->device_memory > 0
+-          ? std::optional<double>(persona_snapshot->device_memory)
++          ? std::optional<double>(persona_snapshot->ReportedDeviceMemoryGb())
+           : std::nullopt;
+   const std::optional<double> persona_device_scale_factor =
+       persona_enabled && persona_snapshot->device_scale_factor > 0.0
+--- a/content/browser/client_hints/client_hints_unittest.cc
++++ b/content/browser/client_hints/client_hints_unittest.cc
+@@ -537,8 +537,11 @@ TEST_F(ClientHintsTest, AddNavigationReq
+       /*is_ua_override_on=*/false, main_frame_node,
+       /*container_policy=*/{}, std::nullopt, &snapshot);
+ 
+-  EXPECT_EQ("16", headers.GetHeader("device-memory").value_or(""));
+-  EXPECT_EQ("16", headers.GetHeader("sec-ch-device-memory").value_or(""));
++  // The persona describes 16 GiB of physical RAM, but the Device Memory API
++  // caps the exposed value at 8 GiB. Reporting 16 would be a value no real
++  // Chrome can emit.
++  EXPECT_EQ("8", headers.GetHeader("device-memory").value_or(""));
++  EXPECT_EQ("8", headers.GetHeader("sec-ch-device-memory").value_or(""));
+   EXPECT_EQ("1.25", headers.GetHeader("dpr").value_or(""));
+   EXPECT_EQ("1.25", headers.GetHeader("sec-ch-dpr").value_or(""));
+ }
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -4,6 +4,7 @@
+ #ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
+ #define THIRD_PARTY_BLINK_PUBLIC_COMMON_HELIUM_PERSONA_PERSONA_SNAPSHOT_H_
+ 
++#include <algorithm>
+ #include <cstdint>
+ #include <string>
+ #include <string_view>
+@@ -163,6 +164,17 @@ struct HeliumPersonaSnapshot {
+       fingerprint_rotation_site_epochs;
+ 
+   bool IsEnabled() const { return enabled; }
++
++  // `device_memory` describes the persona machine's physical RAM in GiB, which
++  // may exceed what the Device Memory API is allowed to expose. Web-facing
++  // surfaces must report this value instead: per
++  // https://w3c.github.io/device-memory/ the exposed figure is clamped to
++  // 8 GiB, so echoing a larger number is itself a fingerprinting signal.
++  float ReportedDeviceMemoryGb() const {
++    constexpr int kMaxReportedDeviceMemoryGb = 8;
++    return static_cast<float>(std::min(device_memory,
++                                       kMaxReportedDeviceMemoryGb));
++  }
+ };
+ 
+ }  // namespace blink
+--- a/third_party/blink/renderer/core/execution_context/navigator_base.cc
++++ b/third_party/blink/renderer/core/execution_context/navigator_base.cc
+@@ -120,7 +120,7 @@ float NavigatorBase::deviceMemory() cons
+   if (const HeliumPersonaSnapshot* snapshot =
+           GetPersonaSnapshot(GetExecutionContext());
+       snapshot && snapshot->device_memory > 0) {
+-    return static_cast<float>(snapshot->device_memory);
++    return snapshot->ReportedDeviceMemoryGb();
+   }
+   return NavigatorDeviceMemory::deviceMemory();
+ }
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -4210,12 +4210,10 @@ ScriptValue WebGLRenderingContextBase::g
+       return ScriptValue::CreateNull(script_state->GetIsolate());
+     case GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT:  // EXT_texture_filter_anisotropic
+       if (ExtensionEnabled(kEXTTextureFilterAnisotropicName)) {
+-        if (auto hash = GetHardwareNoiseHash(Host()->GetTopExecutionContext(),
+-                                             pname)) {
+-          GLfloat value = 0;
+-          ContextGL()->GetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &value);
+-          return WebGLAny(script_state, ApplyHardwareFloatNoise(value, *hash));
+-        }
++        // Intentionally un-noised: real drivers only ever report an exact
++        // power of two here (typically 16). A fractional value such as
++        // 16.04 exists on no real GPU, so perturbing this limit creates a
++        // fingerprinting signal instead of hiding one.
+         return GetFloatParameter(script_state,
+                                  GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+       }

@@ -1,0 +1,81 @@
+--- a/chrome/browser/resources/settings/privacy_page/persona_config.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
+@@ -9,6 +9,14 @@
+   version: string;
+ }
+ 
++export interface PersonaSpeechVoice extends Record<string, unknown> {
++  name: string;
++  lang: string;
++  uri: string;
++  localService: boolean;
++  default: boolean;
++}
++
+ export interface PersonaAdvanced extends Record<string, unknown> {
+   clientHintsEnabled: boolean;
+   canvasNoise: boolean;
+@@ -48,13 +56,7 @@
+   geolocationLatitude: number;
+   geolocationLongitude: number;
+   geolocationAccuracy: number;
+-  speechVoices: Array<Record<string, unknown>>&{
+-    name: string;
+-    lang: string;
+-    uri: string;
+-    localService: boolean;
+-    default: boolean;
+-  };
++  speechVoices: PersonaSpeechVoice[];
+   webrtcMode: string;
+   fingerprintRotation: Record<string, unknown>&{
+     scope: string;
+@@ -398,13 +400,7 @@
+       !!entry?.brand && !!entry.version);
+ }
+ 
+-function parseSpeechVoices(value: string): Array<Record<string, unknown>>&{
+-  name: string;
+-  lang: string;
+-  uri: string;
+-  localService: boolean;
+-  default: boolean;
+-} {
++function parseSpeechVoices(value: string): PersonaSpeechVoice[] {
+   return splitCsv(value).map(entry => {
+     const parts = entry.split('|');
+     return {
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -148,7 +148,6 @@
+   double device_scale_factor = 0.0;
+   double audio_base_latency = 0.0;
+   double audio_output_latency = 0.0;
+-  double network_downlink_max = 0.0;
+   int media_devices_audio_input_count = 1;
+   int media_devices_video_input_count = 1;
+   int media_devices_audio_output_count = 1;
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -123,7 +123,6 @@
+   double device_scale_factor;
+   double audio_base_latency;
+   double audio_output_latency;
+-  double network_downlink_max;
+   int32 media_devices_audio_input_count;
+   int32 media_devices_video_input_count;
+   int32 media_devices_audio_output_count;
+--- a/third_party/blink/renderer/modules/speech/speech_synthesis.cc
++++ b/third_party/blink/renderer/modules/speech/speech_synthesis.cc
+@@ -115,8 +115,9 @@
+     for (const auto& voice : snapshot->speech_voices) {
+       voice_list_.push_back(MakeGarbageCollected<SpeechSynthesisVoice>(
+           mojom::blink::SpeechSynthesisVoice::New(
+-              blink::String::FromUTF8(voice.uri), blink::String::FromUTF8(voice.name),
+-              blink::String::FromUTF8(voice.lang), voice.local_service,
++              blink::String::FromUtf8(voice.uri),
++              blink::String::FromUtf8(voice.name),
++              blink::String::FromUtf8(voice.lang), voice.local_service,
+               voice.is_default)));
+     }
+   } else {

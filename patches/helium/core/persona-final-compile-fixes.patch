@@ -1,0 +1,150 @@
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -2374,8 +2374,8 @@
+   snapshot.media_devices_audio_output_count =
+       FindNestedInt(*persona, "mediaDevices", "audioOutputCount").value_or(1);
+   if (const base::ListValue* device_labels =
+-          persona.FindDict("mediaDevices")
+-              ? persona.FindDict("mediaDevices")->FindList("labels")
++          persona->FindDict("mediaDevices")
++              ? persona->FindDict("mediaDevices")->FindList("labels")
+               : nullptr) {
+     for (const auto& value : *device_labels) {
+       if (value.is_string()) {
+@@ -2384,8 +2384,8 @@
+     }
+   }
+   if (const base::ListValue* speech_voices =
+-          persona.FindDict("advanced")
+-              ? persona.FindDict("advanced")->FindList("speechVoices")
++          persona->FindDict("advanced")
++              ? persona->FindDict("advanced")->FindList("speechVoices")
+               : nullptr) {
+     for (const auto& value : *speech_voices) {
+       if (!value.is_dict()) {
+@@ -2398,7 +2398,7 @@
+       if (!name || name->empty()) {
+         continue;
+       }
+-      HeliumPersonaSpeechVoice voice;
++      blink::HeliumPersonaSpeechVoice voice;
+       voice.name = *name;
+       voice.lang = lang ? *lang : "";
+       voice.uri = uri ? *uri : "";
+--- a/chrome/browser/renderer_preferences_util.cc
++++ b/chrome/browser/renderer_preferences_util.cc
+@@ -14,6 +14,7 @@
+ #include "base/strings/string_util.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/browser_process.h"
++#include "chrome/browser/helium_persona/persona_runtime_override.h"
+ #include "chrome/browser/net/convert_explicitly_allowed_network_ports_pref.h"
+ #include "chrome/browser/nitrous_proxy/nitrous_proxy_enforcement.h"
+ #include "content/public/browser/content_browser_client.h"
+@@ -201,10 +202,10 @@
+   // policy so host candidates do not leak the local network behind the proxy.
+   // "disabled" is handled in the renderer (RTCPeerConnection is blocked);
+   // "real" leaves the policy alone. Only applied when the persona is enabled.
+-  const blink::HeliumPersonaSnapshot persona_snapshot =
+-      GetContentClient()->browser()->GetHeliumPersonaSnapshot(profile);
+-  if (persona_snapshot.IsEnabled() &&
+-      persona_snapshot.webrtc_mode == "altered") {
++  const helium_persona::PersonaRuntimeState persona_state =
++      helium_persona::PersonaRuntimeOverride::ResolveForBrowserContext(profile);
++  if (persona_state.snapshot && persona_state.snapshot->IsEnabled() &&
++      persona_state.snapshot->webrtc_mode == "altered") {
+     prefs->webrtc_ip_handling_policy =
+         blink::ToWebRTCIPHandlingPolicy(blink::kWebRTCIPHandlingDisableNonProxiedUdp);
+     prefs->webrtc_ip_handling_urls.clear();
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -363,7 +363,7 @@
+   const base::DictValue* advanced =
+       ValidateDictField(value, "advanced", "advanced", true, &errors);
+   if (advanced) {
+-    constexpr std::array<std::string_view, 33> kAdvancedBooleanFields = {
++    constexpr std::array<std::string_view, 34> kAdvancedBooleanFields = {
+         "clientHintsEnabled",
+         "canvasNoise",
+         "audioNoise",
+@@ -554,7 +554,7 @@
+       std::tuple{"deviceScaleFactor", 0.25, 8.0, false},
+   };
+   ValidateNumericGroup(value, "screen", kScreenFields, &errors);
+-  constexpr std::array<std::tuple<std::string_view, double, double, bool>, 5>
++  constexpr std::array<std::tuple<std::string_view, double, double, bool>, 6>
+       kMediaFields = {
+       std::tuple{"audioBaseLatency", 0.0, 10.0, false},
+       std::tuple{"audioOutputLatency", 0.0, 10.0, false},
+--- a/content/browser/renderer_host/navigation_controller_impl.cc
++++ b/content/browser/renderer_host/navigation_controller_impl.cc
+@@ -4688,6 +4688,7 @@
+           /*helium_audio_noise_token=*/std::nullopt,
+           /*helium_hardware_noise_token=*/std::nullopt,
+           /*helium_font_metric_noise_token=*/std::nullopt,
++          /*helium_client_rect_noise_token=*/std::nullopt,
+           /*should_skip_screentshot=*/false,
+           /*force_new_document_sequence_number=*/false,
+           /*navigation_metrics_token=*/base::UnguessableToken::Create(),
+--- a/content/browser/renderer_host/navigation_entry_impl.cc
++++ b/content/browser/renderer_host/navigation_entry_impl.cc
+@@ -1078,6 +1078,7 @@
+           /*helium_audio_noise_token=*/std::nullopt,
+           /*helium_hardware_noise_token=*/std::nullopt,
+           /*helium_font_metric_noise_token=*/std::nullopt,
++          /*helium_client_rect_noise_token=*/std::nullopt,
+           /*should_skip_screenshot*/ false,
+           /*force_new_document_sequence_number=*/false,
+           /*navigation_metrics_token=*/base::UnguessableToken::Create(),
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -33,6 +33,41 @@
+ };
+ 
+ template <>
++struct StructTraits<blink::mojom::HeliumPersonaSpeechVoiceDataView,
++                    ::blink::HeliumPersonaSpeechVoice> {
++  static const std::string& name(
++      const ::blink::HeliumPersonaSpeechVoice& data) {
++    return data.name;
++  }
++
++  static const std::string& lang(
++      const ::blink::HeliumPersonaSpeechVoice& data) {
++    return data.lang;
++  }
++
++  static const std::string& uri(
++      const ::blink::HeliumPersonaSpeechVoice& data) {
++    return data.uri;
++  }
++
++  static bool local_service(const ::blink::HeliumPersonaSpeechVoice& data) {
++    return data.local_service;
++  }
++
++  static bool is_default(const ::blink::HeliumPersonaSpeechVoice& data) {
++    return data.is_default;
++  }
++
++  static bool Read(blink::mojom::HeliumPersonaSpeechVoiceDataView data,
++                   ::blink::HeliumPersonaSpeechVoice* out) {
++    out->local_service = data.local_service();
++    out->is_default = data.is_default();
++    return data.ReadName(&out->name) && data.ReadLang(&out->lang) &&
++           data.ReadUri(&out->uri);
++  }
++};
++
++template <>
+ struct StructTraits<blink::mojom::HeliumPersonaFingerprintRotationEpochDataView,
+                     ::blink::HeliumPersonaFingerprintRotationEpoch> {
+   static const std::string& scope_key(
+@@ -643,7 +678,6 @@
+     out->audio_base_latency = data.audio_base_latency();
+     out->audio_output_latency = data.audio_output_latency();
+     out->network_downlink_max = data.network_downlink_max();
+-    out->network_effective_type = data.network_effective_type();
+     out->network_rtt = data.network_rtt();
+     out->network_downlink = data.network_downlink();
+     out->network_save_data = data.network_save_data();

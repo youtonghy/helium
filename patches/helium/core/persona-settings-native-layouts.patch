@@ -1,0 +1,1061 @@
+--- a/chrome/browser/resources/settings/privacy_page/fingerprint_page.html
++++ b/chrome/browser/resources/settings/privacy_page/fingerprint_page.html
+@@ -2,33 +2,9 @@
+ <!-- You can use, redistribute, and/or modify this source code under -->
+ <!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
+ <style include="cr-shared-style settings-shared">
+-  .section {
+-    border-top: var(--cr-separator-line);
+-    margin-top: 20px;
+-    padding-top: 16px;
+-  }
+-
+-  .section:first-of-type {
+-    border-top: none;
+-    margin-top: 0;
+-    padding-top: 0;
+-  }
+-
+-  .section-header {
+-    margin-bottom: 12px;
+-  }
+-
+-  .section-header h3 {
+-    margin: 0;
+-  }
+-
+-  .secondary {
+-    color: var(--cr-secondary-text-color);
+-  }
+-
+   .error {
+     color: var(--cr-error-text-color);
+-    margin-bottom: 12px;
++    padding: var(--cr-section-vertical-padding) var(--cr-section-padding);
+   }
+ 
+   .seed-input {
+@@ -36,7 +12,14 @@
+     width: 100%;
+   }
+ 
+-  .seed-actions {
++  .control-stack {
++    box-sizing: border-box;
++    padding-bottom: var(--cr-section-vertical-padding);
++    padding-top: var(--cr-section-vertical-padding);
++    width: 100%;
++  }
++
++  .button-row {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 8px;
+@@ -50,11 +33,9 @@
+     margin-top: 12px;
+   }
+ 
+-  .toggle-row {
+-    align-items: center;
+-    display: flex;
+-    justify-content: space-between;
+-    min-height: 48px;
++  .row-label {
++    flex: 1;
++    min-width: 0;
+   }
+ 
+   @media (max-width: 600px) {
+@@ -69,65 +50,73 @@
+   <template is="dom-if" if="[[isUnavailable_(settings_.error)]]">
+     <div class="error" role="alert">$i18n{fingerprintUnavailable}</div>
+   </template>
+-  <div class="section">
+-    <div class="section-header">
+-      <h3>$i18n{fingerprintCurrentSeedTitle}</h3>
++  <div class="settings-box first two-line">
++    <div class="settings-box-text">
++      <div>$i18n{fingerprintCurrentSeedTitle}</div>
+       <div class="secondary">$i18n{fingerprintCurrentSeedDescription}</div>
+     </div>
+-    <cr-input class="seed-input" label="$i18n{fingerprintSeedLabel}"
+-        value="[[settings_.seed]]" readonly>
+-    </cr-input>
+-    <div class="metadata">
+-      <div>
+-        <div class="secondary">$i18n{fingerprintGenerationLabel}</div>
+-        <div>[[settings_.generation]]</div>
+-      </div>
+-      <div>
+-        <div class="secondary">$i18n{fingerprintLastChangedLabel}</div>
+-        <div>[[settings_.lastChanged]]</div>
++  </div>
++  <div class="settings-box block continuation">
++    <div class="control-stack">
++      <cr-input class="seed-input" label="$i18n{fingerprintSeedLabel}"
++          value="[[settings_.seed]]" readonly>
++      </cr-input>
++      <div class="metadata">
++        <div>
++          <div class="secondary">$i18n{fingerprintGenerationLabel}</div>
++          <div>[[settings_.generation]]</div>
++        </div>
++        <div>
++          <div class="secondary">$i18n{fingerprintLastChangedLabel}</div>
++          <div>[[settings_.lastChanged]]</div>
++        </div>
+       </div>
+     </div>
+   </div>
+ 
+-  <div class="section">
+-    <div class="section-header">
+-      <h3>$i18n{fingerprintModeTitle}</h3>
++  <div class="settings-box two-line">
++    <div class="settings-box-text">
++      <div>$i18n{fingerprintModeTitle}</div>
+       <div class="secondary">$i18n{fingerprintModeDescription}</div>
+     </div>
+-    <cr-input class="seed-input" label="$i18n{fingerprintFixedSeedLabel}"
+-        value="{{fixedSeed_}}" invalid="[[hasError_(settings_.error)]]"
+-        error-message="$i18n{fingerprintFixedSeedInvalid}">
+-    </cr-input>
+-    <div class="seed-actions">
+-      <cr-button on-click="onApplyFixedSeedClick_">
+-        $i18n{fingerprintUseFixedSeed}
+-      </cr-button>
+-      <cr-button on-click="onGenerateRandomSeedClick_">
+-        $i18n{fingerprintGenerateRandomSeed}
+-      </cr-button>
++  </div>
++  <div class="settings-box block continuation">
++    <div class="control-stack">
++      <cr-input class="seed-input" label="$i18n{fingerprintFixedSeedLabel}"
++          value="{{fixedSeed_}}" invalid="[[hasError_(settings_.error)]]"
++          error-message="$i18n{fingerprintFixedSeedInvalid}">
++      </cr-input>
++      <div class="button-row">
++        <cr-button on-click="onGenerateRandomSeedClick_">
++          $i18n{fingerprintGenerateRandomSeed}
++        </cr-button>
++        <cr-button class="action-button" on-click="onApplyFixedSeedClick_">
++          $i18n{fingerprintUseFixedSeed}
++        </cr-button>
++      </div>
+     </div>
+   </div>
+ 
+-  <div class="section">
+-    <div class="section-header">
+-      <h3>$i18n{fingerprintAutomationTitle}</h3>
++  <div class="settings-box two-line">
++    <div class="settings-box-text">
++      <div>$i18n{fingerprintAutomationTitle}</div>
+       <div class="secondary">$i18n{fingerprintAutomationDescription}</div>
+     </div>
+-    <div class="toggle-row">
+-      <div>$i18n{fingerprintClearOnExit}</div>
+-      <cr-toggle aria-label="$i18n{fingerprintClearOnExit}"
+-          checked="[[settings_.clearOnExit]]"
+-          disabled="[[isFixedMode_(settings_.mode)]]"
+-          on-change="onClearOnExitChange_">
+-      </cr-toggle>
+-    </div>
+-    <div class="toggle-row">
+-      <div>$i18n{fingerprintRotateDaily}</div>
+-      <cr-toggle aria-label="$i18n{fingerprintRotateDaily}"
+-          checked="[[settings_.rotateDaily]]"
+-          disabled="[[isFixedMode_(settings_.mode)]]"
+-          on-change="onRotateDailyChange_">
+-      </cr-toggle>
+-    </div>
++  </div>
++  <div class="settings-box">
++    <div class="row-label">$i18n{fingerprintClearOnExit}</div>
++    <cr-toggle aria-label="$i18n{fingerprintClearOnExit}"
++        checked="[[settings_.clearOnExit]]"
++        disabled="[[isFixedMode_(settings_.mode)]]"
++        on-change="onClearOnExitChange_">
++    </cr-toggle>
++  </div>
++  <div class="settings-box">
++    <div class="row-label">$i18n{fingerprintRotateDaily}</div>
++    <cr-toggle aria-label="$i18n{fingerprintRotateDaily}"
++        checked="[[settings_.rotateDaily]]"
++        disabled="[[isFixedMode_(settings_.mode)]]"
++        on-change="onRotateDailyChange_">
++    </cr-toggle>
+   </div>
+ </settings-subpage>
+--- a/chrome/browser/resources/settings/privacy_page/nitrous_proxy_page.html
++++ b/chrome/browser/resources/settings/privacy_page/nitrous_proxy_page.html
+@@ -2,33 +2,9 @@
+ <!-- You can use, redistribute, and/or modify this source code under -->
+ <!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
+ <style include="cr-shared-style settings-shared">
+-  .section {
+-    border-top: var(--cr-separator-line);
+-    margin-top: 20px;
+-    padding-top: 16px;
+-  }
+-
+-  .section:first-of-type {
+-    border-top: none;
+-    margin-top: 0;
+-    padding-top: 0;
+-  }
+-
+-  .section-header {
+-    margin-bottom: 12px;
+-  }
+-
+-  .section-header h3 {
+-    margin: 0;
+-  }
+-
+-  .secondary {
+-    color: var(--cr-secondary-text-color);
+-  }
+-
+   .error {
+     color: var(--cr-error-text-color);
+-    margin-bottom: 12px;
++    padding: var(--cr-section-vertical-padding) var(--cr-section-padding);
+   }
+ 
+   .status {
+@@ -39,6 +15,14 @@
+     width: 100%;
+   }
+ 
++  .control-stack {
++    box-sizing: border-box;
++    padding-bottom: var(--cr-section-vertical-padding);
++    padding-top: var(--cr-section-vertical-padding);
++    width: 100%;
++  }
++
++  .mode-row,
+   .endpoint {
+     display: grid;
+     gap: 8px;
+@@ -46,6 +30,11 @@
+     margin-top: 12px;
+   }
+ 
++  .mode-row {
++    grid-template-columns: minmax(0, 1fr);
++    margin-top: 0;
++  }
++
+   .credentials {
+     display: grid;
+     gap: 8px;
+@@ -60,11 +49,9 @@
+     margin-top: 12px;
+   }
+ 
+-  .toggle-row {
+-    align-items: center;
+-    display: flex;
+-    justify-content: space-between;
+-    min-height: 48px;
++  .row-label {
++    flex: 1;
++    min-width: 0;
+   }
+ 
+   .locked-list {
+@@ -86,82 +73,90 @@
+     <div class="error" role="alert">$i18n{nitrousProxySubverted}</div>
+   </template>
+ 
+-  <div class="section">
+-    <div class="section-header">
+-      <h3>$i18n{nitrousProxyRouteTitle}</h3>
++  <div class="settings-box first two-line">
++    <div class="settings-box-text">
++      <div>$i18n{nitrousProxyRouteTitle}</div>
+       <div class="secondary">$i18n{nitrousProxyRouteDescription}</div>
+     </div>
+-    <select class="md-select" aria-label="$i18n{nitrousProxyModeLabel}"
+-        value="[[editableMode_]]" on-change="onModeChange_">
+-      <option value="off">$i18n{nitrousProxyModeOff}</option>
+-      <option value="http">$i18n{nitrousProxyModeHttp}</option>
+-      <option value="https">$i18n{nitrousProxyModeHttps}</option>
+-      <option value="socks5">$i18n{nitrousProxyModeSocks5}</option>
+-    </select>
+-
+-    <template is="dom-if" if="[[isEnabled_(editableMode_)]]">
+-      <div class="endpoint">
+-        <cr-input class="field" label="$i18n{nitrousProxyHostLabel}"
+-            value="{{editableHost_}}">
+-        </cr-input>
+-        <cr-input class="field" type="number" min="1" max="65535"
+-            label="$i18n{nitrousProxyPortLabel}" value="{{editablePort_}}">
+-        </cr-input>
++  </div>
++  <div class="settings-box block continuation">
++    <div class="control-stack">
++      <div class="mode-row">
++        <select class="md-select" aria-label="$i18n{nitrousProxyModeLabel}"
++            value="[[editableMode_]]" on-change="onModeChange_">
++          <option value="off">$i18n{nitrousProxyModeOff}</option>
++          <option value="http">$i18n{nitrousProxyModeHttp}</option>
++          <option value="https">$i18n{nitrousProxyModeHttps}</option>
++          <option value="socks5">$i18n{nitrousProxyModeSocks5}</option>
++        </select>
+       </div>
+ 
+-      <template is="dom-if" if="[[supportsAuth_(editableMode_)]]">
+-        <div class="credentials">
+-          <cr-input class="field" label="$i18n{nitrousProxyUsernameLabel}"
+-              value="{{editableUsername_}}">
++      <template is="dom-if" if="[[isEnabled_(editableMode_)]]">
++        <div class="endpoint">
++          <cr-input class="field" label="$i18n{nitrousProxyHostLabel}"
++              value="{{editableHost_}}">
+           </cr-input>
+-          <cr-input class="field" type="password"
+-              label="$i18n{nitrousProxyPasswordLabel}"
+-              placeholder="[[passwordPlaceholder_(state_.config.hasPassword)]]"
+-              value="{{editablePassword_}}">
++          <cr-input class="field" type="number" min="1" max="65535"
++              label="$i18n{nitrousProxyPortLabel}" value="{{editablePort_}}">
+           </cr-input>
+         </div>
++
++        <template is="dom-if" if="[[supportsAuth_(editableMode_)]]">
++          <div class="credentials">
++            <cr-input class="field" label="$i18n{nitrousProxyUsernameLabel}"
++                value="{{editableUsername_}}">
++            </cr-input>
++            <cr-input class="field" type="password"
++                label="$i18n{nitrousProxyPasswordLabel}"
++                placeholder="[[passwordPlaceholder_(state_.config.hasPassword)]]"
++                value="{{editablePassword_}}">
++            </cr-input>
++          </div>
++        </template>
+       </template>
+-    </template>
+ 
+-    <template is="dom-if" if="[[errorMessage_]]">
+-      <div class="error status" role="alert">[[errorMessage_]]</div>
+-    </template>
+-
+-    <div class="actions">
+-      <cr-button on-click="onSaveClick_">
+-        $i18n{nitrousProxySave}
+-      </cr-button>
+-      <cr-button on-click="onTestConnectionClick_"
+-          disabled="[[!isEnabled_(editableMode_)]]">
+-        $i18n{nitrousProxyTestConnection}
+-      </cr-button>
++      <template is="dom-if" if="[[errorMessage_]]">
++        <div class="error status" role="alert">[[errorMessage_]]</div>
++      </template>
++
++      <div class="actions">
++        <cr-button on-click="onTestConnectionClick_"
++            disabled="[[!isEnabled_(editableMode_)]]">
++          $i18n{nitrousProxyTestConnection}
++        </cr-button>
++        <cr-button class="action-button" on-click="onSaveClick_">
++          $i18n{nitrousProxySave}
++        </cr-button>
++      </div>
++      <template is="dom-if" if="[[testResultMessage_]]">
++        <div class="secondary status" role="status">[[testResultMessage_]]</div>
++      </template>
+     </div>
+-    <template is="dom-if" if="[[testResultMessage_]]">
+-      <div class="secondary status" role="status">[[testResultMessage_]]</div>
+-    </template>
+   </div>
+ 
+-  <div class="section">
+-    <div class="section-header">
+-      <h3>$i18n{nitrousProxyBrowserTrafficTitle}</h3>
++  <div class="settings-box two-line">
++    <div class="settings-box-text">
++      <div>$i18n{nitrousProxyBrowserTrafficTitle}</div>
+       <div class="secondary">$i18n{nitrousProxyBrowserTrafficDescription}</div>
+     </div>
+-    <div class="toggle-row">
+-      <div>$i18n{nitrousProxyBrowserTrafficToggle}</div>
+-      <cr-toggle aria-label="$i18n{nitrousProxyBrowserTrafficToggle}"
+-          checked="[[state_.systemRouteEnabled]]"
+-          disabled="[[!isEnabled_(editableMode_)]]"
+-          on-change="onSystemRouteChange_">
+-      </cr-toggle>
+-    </div>
++  </div>
++  <div class="settings-box">
++    <div class="row-label">$i18n{nitrousProxyBrowserTrafficToggle}</div>
++    <cr-toggle aria-label="$i18n{nitrousProxyBrowserTrafficToggle}"
++        checked="[[state_.systemRouteEnabled]]"
++        disabled="[[!isEnabled_(editableMode_)]]"
++        on-change="onSystemRouteChange_">
++    </cr-toggle>
+   </div>
+ 
+-  <div class="section">
+-    <div class="section-header">
+-      <h3>$i18n{nitrousProxyLockedTitle}</h3>
++  <div class="settings-box two-line">
++    <div class="settings-box-text">
++      <div>$i18n{nitrousProxyLockedTitle}</div>
+       <div class="secondary">$i18n{nitrousProxyLockedDescription}</div>
+     </div>
+-    <ul class="locked-list secondary">
++  </div>
++  <div class="settings-box block continuation">
++    <ul class="locked-list secondary settings-box-text">
+       <li>$i18n{nitrousProxyLockedDoh}</li>
+       <li>$i18n{nitrousProxyLockedWebrtc}</li>
+       <li>$i18n{nitrousProxyLockedPrefetch}</li>
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -2,111 +2,81 @@
+ <!-- You can use, redistribute, and/or modify this source code under -->
+ <!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
+ <style include="cr-shared-style settings-shared md-select">
+-  .section {
+-    border-top: var(--cr-separator-line);
+-    margin-top: 20px;
+-    padding-top: 16px;
+-  }
+-
+-  .section:first-of-type {
+-    border-top: none;
+-    margin-top: 0;
+-    padding-top: 0;
+-  }
+-
+-  .section-header {
++  .section-heading {
+     align-items: center;
+-    display: flex;
+-    gap: 12px;
+-    justify-content: space-between;
+-    margin-bottom: 12px;
+   }
+ 
+-  .section-header h3 {
+-    margin: 0;
++  .section-heading .settings-box-text {
++    flex: 1;
++    min-width: 0;
+   }
+ 
+   .section-actions {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 8px;
++    justify-content: flex-end;
+   }
+ 
+-  .profiles-grid {
+-    display: grid;
+-    gap: 12px;
+-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
++  .row-label {
++    flex: 1;
++    min-width: 0;
+   }
+ 
+-  .profile-card {
+-    background: var(--cr-card-background-color);
+-    border: 1px solid var(--cr-separator-color);
+-    border-radius: 8px;
+-    display: flex;
+-    flex-direction: column;
+-    gap: 10px;
+-    min-height: 156px;
+-    padding: 14px;
++  .profile-row {
++    gap: 16px;
++    padding-bottom: 12px;
++    padding-top: 12px;
+   }
+ 
+-  .profile-card-main {
++  .profile-row-main {
++    align-items: center;
+     background: transparent;
+     border: 0;
+     color: inherit;
+     cursor: pointer;
++    display: flex;
++    flex: 1;
+     font: inherit;
++    gap: 12px;
++    min-width: 0;
+     padding: 0;
+     text-align: start;
+-    width: 100%;
+   }
+ 
+-  .profile-card-main:focus-visible {
++  .profile-row-main:focus-visible {
+     outline: 2px solid var(--cr-focus-outline-color);
+-    outline-offset: 4px;
+-  }
+-
+-  .profile-card[data-selected='true'] {
+-    border-color: var(--cr-focus-outline-color);
+-    box-shadow: 0 0 0 1px var(--cr-focus-outline-color);
++    outline-offset: 2px;
+   }
+ 
+-  .profile-card-header {
+-    align-items: flex-start;
+-    display: flex;
+-    gap: 10px;
+-    justify-content: space-between;
++  .profile-row[data-selected='true'] {
++    background: var(--cr-hover-background-color);
+   }
+ 
+-  .profile-card-title {
+-    display: flex;
+-    flex-direction: column;
+-    gap: 4px;
++  .profile-row-text {
++    flex: 1;
+     min-width: 0;
+   }
+ 
+-  .profile-card-title strong {
+-    font-size: 0.95rem;
+-  }
+-
+-  .profile-card-meta,
+-  .profile-card-subtitle {
++  .profile-meta,
++  .profile-subtitle {
+     color: var(--cr-secondary-text-color);
+-    font-size: 0.8rem;
+   }
+ 
+-  .profile-card-actions {
++  .profile-row-actions {
+     display: flex;
++    flex-wrap: wrap;
+     gap: 8px;
+-    margin-top: auto;
++    justify-content: flex-end;
+   }
+ 
+   .chip {
+     border: 1px solid var(--cr-separator-color);
+-    border-radius: 999px;
++    border-radius: 10px;
+     color: var(--cr-secondary-text-color);
+-    font-size: 0.75rem;
+-    line-height: 1;
+-    padding: 5px 8px;
++    font-size: 11px;
++    line-height: 18px;
++    padding: 0 8px;
+     white-space: nowrap;
+   }
+ 
+@@ -116,9 +86,7 @@
+   }
+ 
+   .field-grid {
+-    display: grid;
+-    gap: 12px;
+-    grid-template-columns: repeat(2, minmax(0, 1fr));
++    display: block;
+   }
+ 
+   .field-grid[data-read-only='true'] {
+@@ -126,56 +94,45 @@
+   }
+ 
+   .field {
++    align-items: center;
++    border-top: var(--cr-separator-line);
+     display: flex;
+-    flex-direction: column;
+-    gap: 6px;
++    gap: 16px;
++    min-height: var(--cr-section-two-line-min-height);
++    padding: 0 var(--cr-section-padding);
+   }
+ 
+   .field-label {
+     align-items: center;
+-    color: var(--cr-secondary-text-color);
+     display: flex;
+-    font-size: 0.75rem;
++    flex: 1;
+     gap: 4px;
++    min-width: 0;
+   }
+ 
+-  .field select {
++  .field > cr-input,
++  .field > select {
++    flex: 0 1 300px;
++    max-width: 50%;
+     min-height: 32px;
+-    width: 100%;
++    min-width: 180px;
+   }
+ 
+   .config-group-title {
+-    font-size: 0.9rem;
+-    grid-column: 1 / -1;
+-    margin: 14px 0 0;
++    border-top: var(--cr-separator-line);
++    font-size: 13px;
++    font-weight: 500;
++    margin: 0;
++    padding: 20px var(--cr-section-padding) 8px;
+   }
+ 
+   .toggle-field {
+-    align-items: center;
+-    display: flex;
+-    flex-direction: row;
+-    justify-content: space-between;
+-    min-height: 40px;
+-  }
+-
+-  .full-row {
+-    grid-column: 1 / -1;
+-  }
+-
+-  .preset-actions {
+-    align-items: end;
+-    display: flex;
+-    gap: 12px;
+-  }
+-
+-  .preset-select {
+-    min-width: 260px;
++    min-height: var(--cr-section-min-height);
+   }
+ 
+   .status-message {
+     color: var(--cr-secondary-text-color);
+-    font-size: 0.8rem;
+-    margin-bottom: 12px;
++    padding: var(--cr-section-vertical-padding) var(--cr-section-padding);
+   }
+ 
+   .status-message[data-error='true'] {
+@@ -183,10 +140,18 @@
+   }
+ 
+   .actions {
++    align-items: center;
++    border-top: var(--cr-separator-line);
+     display: flex;
+     gap: 8px;
+     justify-content: flex-end;
+-    margin-top: 20px;
++    min-height: var(--cr-section-min-height);
++    padding: 0 var(--cr-section-padding);
++  }
++
++  .preset-select {
++    max-width: 280px;
++    min-width: 220px;
+   }
+ 
+   #personaImportInput {
+@@ -194,191 +159,188 @@
+   }
+ 
+   @media (max-width: 600px) {
+-    .field-grid {
+-      grid-template-columns: minmax(0, 1fr);
+-    }
+-
+-    .full-row,
+-    .config-group-title {
+-      grid-column: 1;
+-    }
+-
+-    .preset-actions,
+-    .section-header {
++    .field,
++    .control-row,
++    .profile-row,
++    .section-heading {
+       align-items: stretch;
+       flex-direction: column;
+     }
+ 
++    .field {
++      gap: 8px;
++      padding-bottom: var(--cr-section-vertical-padding);
++      padding-top: var(--cr-section-vertical-padding);
++    }
++
++    .field > cr-input,
++    .field > select,
+     .preset-select {
++      max-width: none;
+       min-width: 0;
+       width: 100%;
+     }
++
++    .profile-row-actions,
++    .section-actions {
++      align-items: stretch;
++      justify-content: flex-start;
++    }
+   }
+ </style>
+ <settings-subpage page-title="$i18n{personaTitle}" route-path$="[[routePath]]">
+-  <div class="section">
+-    <div class="section-header">
+-      <div>
+-        <h3>$i18n{personaSectionProfiles}</h3>
+-        <div class="profile-card-meta">$i18n{personaSectionProfilesDesc}</div>
+-      </div>
+-      <div class="section-actions">
+-        <cr-button on-click="onImportClick_" disabled="[[pending_]]">
+-          $i18n{personaImport}
+-        </cr-button>
+-        <cr-button on-click="onExportAllProfilesClick_">
+-          $i18n{personaExportAll}
+-        </cr-button>
+-        <cr-button class="action-button" on-click="onCreateProfileClick_"
+-            disabled="[[pending_]]">
+-          $i18n{personaNewProfile}
+-        </cr-button>
+-        <input id="personaImportInput" type="file" accept=".json,application/json"
+-            on-change="onImportFileChange_">
+-      </div>
+-    </div>
+-    <template is="dom-if" if="[[importStatus_]]">
+-      <div class="status-message" data-error$="[[importStatusIsError_]]"
+-          aria-live="polite" role="status">
+-        [[importStatus_]]
+-      </div>
+-    </template>
+-    <div class="profiles-grid">
+-      <template is="dom-repeat" items="[[profiles_]]">
+-        <div class="profile-card"
+-            data-selected$="[[isSelectedProfile_(item.id, selectedProfileId_)]]">
+-          <button class="profile-card-main" type="button"
+-              data-profile-id$="[[item.id]]"
+-              aria-pressed$="[[isSelectedProfile_(item.id, selectedProfileId_)]]"
+-              disabled="[[pending_]]"
+-              on-click="onProfileCardClick_">
+-            <div class="profile-card-header">
+-              <div class="profile-card-title">
+-                <strong>[[item.displayName]]</strong>
+-                <div class="profile-card-subtitle">
+-                  [[computeProfileSummary_(item)]]
+-                </div>
+-              </div>
+-              <div class="chip"
+-                  data-active$="[[isActiveProfile_(item.id, activePersonaId_)]]">
+-                [[computeProfileStatus_(item.id, activePersonaId_)]]
+-              </div>
+-            </div>
+-          </button>
+-          <div class="profile-card-meta">
+-            [[item.icon]] | [[computeLastUsedText_(item.lastUsedAt)]]
+-          </div>
+-          <div class="profile-card-actions">
+-            <cr-button on-click="onActivateProfileClick_"
+-                data-profile-id$="[[item.id]]" disabled="[[pending_]]">
+-              $i18n{personaUseProfile}
+-            </cr-button>
+-            <cr-button on-click="onDeleteProfileClick_"
+-                data-profile-id$="[[item.id]]"
+-                disabled="[[isDeleteDisabled_(item.id, pending_)]]">
+-              $i18n{personaDeleteProfile}
+-            </cr-button>
+-          </div>
+-        </div>
+-      </template>
+-    </div>
+-  </div>
+-
+-  <div class="section">
+-    <div class="section-header">
+-      <div>
+-        <h3>$i18n{personaSectionStartup}</h3>
+-        <div class="profile-card-meta">$i18n{personaSectionStartupDesc}</div>
+-      </div>
++  <div class="settings-box first two-line section-heading">
++    <div class="settings-box-text">
++      <div>$i18n{personaSectionProfiles}</div>
++      <div class="secondary">$i18n{personaSectionProfilesDesc}</div>
+     </div>
+-    <div class="field preset-select">
+-      <div class="field-label">
+-        <span>$i18n{personaLaunchBehavior}</span>
+-      </div>
+-      <select class="md-select" value="[[launchSelectionMode_]]"
+-          aria-label="$i18n{personaLaunchBehavior}"
+-          disabled="[[pending_]]"
+-          on-change="onLaunchSelectionModeChange_">
+-        <option value="always_ask">$i18n{personaLaunchAlwaysAsk}</option>
+-        <option value="use_last">$i18n{personaLaunchUseLast}</option>
+-      </select>
+-    </div>
+-    <div class="actions">
+-      <cr-button on-click="onRefreshFingerprintsClick_"
+-          disabled="[[pending_]]">
+-        $i18n{personaRefreshFingerprints}
++    <div class="section-actions">
++      <cr-button on-click="onImportClick_" disabled="[[pending_]]">
++        $i18n{personaImport}
++      </cr-button>
++      <cr-button on-click="onExportAllProfilesClick_">
++        $i18n{personaExportAll}
+       </cr-button>
+-      <cr-button on-click="onRotateIdentityClick_"
+-          disabled="[[identityRotationDisabled_]]">
+-        $i18n{personaRotateIdentity}
++      <cr-button class="action-button" on-click="onCreateProfileClick_"
++          disabled="[[pending_]]">
++        $i18n{personaNewProfile}
+       </cr-button>
++      <input id="personaImportInput" type="file" accept=".json,application/json"
++          on-change="onImportFileChange_">
+     </div>
+-    <div class="profile-card-meta" hidden="[[identityRotationAvailable_]]">
+-      $i18n{personaIdentityRotationUnavailable}
++  </div>
++  <template is="dom-if" if="[[importStatus_]]">
++    <div class="status-message" data-error$="[[importStatusIsError_]]"
++        aria-live="polite" role="status">
++      [[importStatus_]]
+     </div>
+-    <template is="dom-if" if="[[showIdentityRotationDialog_]]"
+-        on-dom-change="onIdentityRotationDialogDomChange_" restamp>
+-      <cr-dialog id="identityRotationDialog" close-text="$i18n{close}"
+-          on-cancel="onIdentityRotationCancel_">
+-        <div slot="title">$i18n{personaRotateIdentityDialogTitle}</div>
+-        <div slot="body">$i18n{personaRotateIdentityDialogBody}</div>
+-        <div slot="button-container">
+-          <cr-button class="cancel-button"
+-              on-click="onIdentityRotationCancel_">
+-            $i18n{cancel}
++  </template>
++  <div class="profile-list vertical-list">
++    <template is="dom-repeat" items="[[profiles_]]">
++      <div class="settings-box profile-row"
++          data-selected$="[[isSelectedProfile_(item.id, selectedProfileId_)]]">
++        <button class="profile-row-main" type="button"
++            data-profile-id$="[[item.id]]"
++            aria-pressed$="[[isSelectedProfile_(item.id, selectedProfileId_)]]"
++            disabled="[[pending_]]"
++            on-click="onProfileCardClick_">
++          <div class="profile-row-text">
++            <div>[[item.displayName]]</div>
++            <div class="profile-subtitle">
++              [[computeProfileSummary_(item)]]
++            </div>
++            <div class="profile-meta">
++              [[item.icon]] | [[computeLastUsedText_(item.lastUsedAt)]]
++            </div>
++          </div>
++          <div class="chip"
++              data-active$="[[isActiveProfile_(item.id, activePersonaId_)]]">
++            [[computeProfileStatus_(item.id, activePersonaId_)]]
++          </div>
++        </button>
++        <div class="profile-row-actions">
++          <cr-button on-click="onActivateProfileClick_"
++              data-profile-id$="[[item.id]]" disabled="[[pending_]]">
++            $i18n{personaUseProfile}
+           </cr-button>
+-          <cr-button class="action-button"
+-              on-click="onIdentityRotationConfirm_" disabled="[[pending_]]">
+-            $i18n{personaRotateIdentityConfirm}
++          <cr-button on-click="onDeleteProfileClick_"
++              data-profile-id$="[[item.id]]"
++              disabled="[[isDeleteDisabled_(item.id, pending_)]]">
++            $i18n{personaDeleteProfile}
+           </cr-button>
+         </div>
+-      </cr-dialog>
++      </div>
+     </template>
+   </div>
+ 
+-  <div class="section">
+-    <div class="section-header">
+-      <div>
+-        <h3>$i18n{personaSectionPresets}</h3>
+-        <div class="profile-card-meta">$i18n{personaSectionPresetsDesc}</div>
+-      </div>
++  <div class="settings-box two-line section-heading">
++    <div class="settings-box-text">
++      <div>$i18n{personaSectionStartup}</div>
++      <div class="secondary">$i18n{personaSectionStartupDesc}</div>
+     </div>
+-    <div class="preset-actions">
+-      <div class="field preset-select">
+-        <div class="field-label">
+-          <span>$i18n{personaPresetLabel}</span>
+-        </div>
+-        <select class="md-select" value="{{selectedPresetId_::change}}"
+-            aria-label="$i18n{personaPresetLabel}"
+-            disabled="[[pending_]]"
+-            on-change="onPresetChange_">
+-          <option value="">$i18n{personaPresetChoose}</option>
+-          <optgroup label="$i18n{personaPresetGroupAmericas}">
+-            <template is="dom-repeat"
+-                items="[[getPresetsForRegion_('americas', presets_)]]">
+-              <option value="[[item.id]]">[[item.name]]</option>
+-            </template>
+-          </optgroup>
+-          <optgroup label="$i18n{personaPresetGroupEurope}">
+-            <template is="dom-repeat"
+-                items="[[getPresetsForRegion_('europe', presets_)]]">
+-              <option value="[[item.id]]">[[item.name]]</option>
+-            </template>
+-          </optgroup>
+-          <optgroup label="$i18n{personaPresetGroupAsia}">
+-            <template is="dom-repeat"
+-                items="[[getPresetsForRegion_('asia', presets_)]]">
+-              <option value="[[item.id]]">[[item.name]]</option>
+-            </template>
+-          </optgroup>
+-          <optgroup label="$i18n{personaPresetGroupOceania}">
+-            <template is="dom-repeat"
+-                items="[[getPresetsForRegion_('oceania', presets_)]]">
+-              <option value="[[item.id]]">[[item.name]]</option>
+-            </template>
+-          </optgroup>
+-        </select>
++  </div>
++  <div class="settings-box control-row">
++    <div class="row-label">$i18n{personaLaunchBehavior}</div>
++    <select class="md-select preset-select" value="[[launchSelectionMode_]]"
++        aria-label="$i18n{personaLaunchBehavior}"
++        disabled="[[pending_]]"
++        on-change="onLaunchSelectionModeChange_">
++      <option value="always_ask">$i18n{personaLaunchAlwaysAsk}</option>
++      <option value="use_last">$i18n{personaLaunchUseLast}</option>
++    </select>
++  </div>
++  <div class="actions">
++    <cr-button on-click="onRefreshFingerprintsClick_"
++        disabled="[[pending_]]">
++      $i18n{personaRefreshFingerprints}
++    </cr-button>
++    <cr-button on-click="onRotateIdentityClick_"
++        disabled="[[identityRotationDisabled_]]">
++      $i18n{personaRotateIdentity}
++    </cr-button>
++  </div>
++  <div class="status-message" hidden="[[identityRotationAvailable_]]">
++    $i18n{personaIdentityRotationUnavailable}
++  </div>
++  <template is="dom-if" if="[[showIdentityRotationDialog_]]"
++      on-dom-change="onIdentityRotationDialogDomChange_" restamp>
++    <cr-dialog id="identityRotationDialog" close-text="$i18n{close}"
++        on-cancel="onIdentityRotationCancel_">
++      <div slot="title">$i18n{personaRotateIdentityDialogTitle}</div>
++      <div slot="body">$i18n{personaRotateIdentityDialogBody}</div>
++      <div slot="button-container">
++        <cr-button class="cancel-button"
++            on-click="onIdentityRotationCancel_">
++          $i18n{cancel}
++        </cr-button>
++        <cr-button class="action-button"
++            on-click="onIdentityRotationConfirm_" disabled="[[pending_]]">
++          $i18n{personaRotateIdentityConfirm}
++        </cr-button>
+       </div>
++    </cr-dialog>
++  </template>
++
++  <div class="settings-box two-line section-heading">
++    <div class="settings-box-text">
++      <div>$i18n{personaSectionPresets}</div>
++      <div class="secondary">$i18n{personaSectionPresetsDesc}</div>
++    </div>
++  </div>
++  <div class="settings-box control-row">
++    <div class="row-label">$i18n{personaPresetLabel}</div>
++    <div class="section-actions">
++      <select class="md-select preset-select"
++          value="{{selectedPresetId_::change}}"
++          aria-label="$i18n{personaPresetLabel}"
++          disabled="[[pending_]]"
++          on-change="onPresetChange_">
++        <option value="">$i18n{personaPresetChoose}</option>
++        <optgroup label="$i18n{personaPresetGroupAmericas}">
++          <template is="dom-repeat"
++              items="[[getPresetsForRegion_('americas', presets_)]]">
++            <option value="[[item.id]]">[[item.name]]</option>
++          </template>
++        </optgroup>
++        <optgroup label="$i18n{personaPresetGroupEurope}">
++          <template is="dom-repeat"
++              items="[[getPresetsForRegion_('europe', presets_)]]">
++            <option value="[[item.id]]">[[item.name]]</option>
++          </template>
++        </optgroup>
++        <optgroup label="$i18n{personaPresetGroupAsia}">
++          <template is="dom-repeat"
++              items="[[getPresetsForRegion_('asia', presets_)]]">
++            <option value="[[item.id]]">[[item.name]]</option>
++          </template>
++        </optgroup>
++        <optgroup label="$i18n{personaPresetGroupOceania}">
++          <template is="dom-repeat"
++              items="[[getPresetsForRegion_('oceania', presets_)]]">
++            <option value="[[item.id]]">[[item.name]]</option>
++          </template>
++        </optgroup>
++      </select>
+       <cr-button class="action-button" on-click="onApplyPresetClick_"
+           disabled="[[isPresetActionDisabled_(selectedPresetId_, pending_)]]">
+         $i18n{personaClonePreset}
+@@ -386,21 +348,20 @@
+     </div>
+   </div>
+ 
+-  <div class="section">
+-    <div class="section-header">
+-      <div>
+-        <h3>$i18n{personaSectionEdit}</h3>
+-        <div class="profile-card-meta">
+-          [[computeEditSectionDesc_(editablePersona_.displayName)]]
+-        </div>
+-      </div>
+-      <div class="section-actions">
+-        <cr-button on-click="onExportCurrentProfileClick_"
+-            disabled="[[!canDeleteProfile_(editablePersona_.id)]]">
+-          $i18n{personaExportCurrent}
+-        </cr-button>
++  <div class="settings-box two-line section-heading">
++    <div class="settings-box-text">
++      <div>$i18n{personaSectionEdit}</div>
++      <div class="secondary">
++        [[computeEditSectionDesc_(editablePersona_.displayName)]]
+       </div>
+     </div>
++    <div class="section-actions">
++      <cr-button on-click="onExportCurrentProfileClick_"
++          disabled="[[!canDeleteProfile_(editablePersona_.id)]]">
++        $i18n{personaExportCurrent}
++      </cr-button>
++    </div>
++  </div>
+     <template is="dom-if" if="[[saveStatus_]]">
+       <div class="status-message" data-error$="[[saveStatusIsError_]]"
+           aria-live="polite" role="status">
+@@ -1383,5 +1344,4 @@
+         $i18n{personaSave}
+       </cr-button>
+     </div>
+-  </div>
+ </settings-subpage>

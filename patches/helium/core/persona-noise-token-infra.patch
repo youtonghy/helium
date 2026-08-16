@@ -11,7 +11,7 @@
      "gpu/browser_gpu_client_delegate.cc",
 --- /dev/null
 +++ b/content/browser/helium_noise/noise_token_data.cc
-@@ -0,0 +1,179 @@
+@@ -0,0 +1,187 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -49,6 +49,8 @@
 +      return "hardware";
 +    case blink::HeliumNoiseFeature::kFontMetric:
 +      return "font_metric";
++    case blink::HeliumNoiseFeature::kClientRect:
++      return "client_rect";
 +  }
 +}
 +
@@ -152,6 +154,8 @@
 +  AddToken(tokens, seed, origin, persona, blink::HeliumNoiseFeature::kHardware);
 +  AddToken(tokens, seed, origin, persona,
 +           blink::HeliumNoiseFeature::kFontMetric);
++  AddToken(tokens, seed, origin, persona,
++           blink::HeliumNoiseFeature::kClientRect);
 +  return tokens;
 +}
 +
@@ -178,6 +182,10 @@
 +  }
 +  if (feature == blink::HeliumNoiseFeature::kFontMetric &&
 +      !persona_snapshot.font_metric_noise) {
++    return std::nullopt;
++  }
++  if (feature == blink::HeliumNoiseFeature::kClientRect &&
++      !persona_snapshot.client_rect_noise) {
 +    return std::nullopt;
 +  }
 +
@@ -244,7 +252,7 @@
      "history/session_history_constants.h",
 --- /dev/null
 +++ b/third_party/blink/public/common/helium_noise/noise_token.h
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,26 @@
 +// Copyright 2026 The Helium Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -263,6 +271,7 @@
 +  kAudio,
 +  kHardware,
 +  kFontMetric,
++  kClientRect,
 +};
 +
 +using HeliumNoiseTokenMap = std::map<HeliumNoiseFeature, NoiseToken>;

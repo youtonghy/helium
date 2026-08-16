@@ -396,7 +396,7 @@
  }  // namespace helium_persona
 --- a/chrome/browser/helium_persona/persona_service.cc
 +++ b/chrome/browser/helium_persona/persona_service.cc
-@@ -1666,6 +1666,44 @@ blink::HeliumPersonaSnapshot PersonaServ
+@@ -1809,6 +1809,44 @@ blink::HeliumPersonaSnapshot PersonaServ
    return snapshot;
  }
  
