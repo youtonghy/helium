@@ -51,3 +51,5 @@ __pycache__/
 /statuses/
 /_lift_backup/
 /_workspace_meta_lift/
+/.claude/
+/.pi/
