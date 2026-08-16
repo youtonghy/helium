@@ -50,9 +50,9 @@ def test_guidance_distinguishes_validation_from_cold_tree_compilation():
     validate_skill = VALIDATE_SKILL.read_text(encoding='utf-8')
 
     assert '`pre-build` 不包含 Chromium C++ 编译' in agents
-    assert '不得直接判定为源码编译失败' in agents
+    assert '这不是源码编译失败' in agents
     assert 'does not compile Chromium C++' in dev_skill
-    assert 'Generated-header failures on a cold tree are inconclusive' in dev_skill
+    assert 'are NOT source' in dev_skill and 'must not build' in dev_skill
     assert 'does not compile Chromium C++' in validate_skill
     assert 'must not be reported as source compile failures' in validate_skill
     assert all('devutils/build_targets.py' in content

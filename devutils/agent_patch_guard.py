@@ -374,6 +374,101 @@ def run_hot_abort():
         print('No hot export session exists.')
 
 
+def tree_size(path):
+    """Return the size of a directory tree in bytes, or 0 when it is absent."""
+    if not path.is_dir():
+        return 0
+    result = subprocess.run(['du', '-sk', str(path)],
+                            check=False,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL,
+                            text=True)
+    if result.returncode != 0 or not result.stdout.split():
+        return 0
+    return int(result.stdout.split()[0]) * 1024
+
+
+def format_size(size):
+    """Return a human readable size for guard reporting."""
+    value = float(size)
+    for unit in ('B', 'KiB', 'MiB', 'GiB'):
+        if value < 1024.0:
+            return f'{value:.1f} {unit}'
+        value /= 1024.0
+    return f'{value:.1f} TiB'
+
+
+def cleanup_targets():
+    """Return disposable source trees as (path, description) pairs."""
+    codex_tmp = ROOT / 'codex_tmp'
+    hot_tree, _merged_queue, _session_dir = hot_export_paths()
+    targets = [
+        (hot_tree, 'hot development tree'),
+        (codex_tmp / 'patchcheck_src', 'fresh-apply validation tree'),
+        (codex_tmp / 'patchwork_src', 'quilt development tree'),
+    ]
+    known = {path for path, _description in targets}
+    if codex_tmp.is_dir():
+        for entry in sorted(codex_tmp.iterdir()):
+            if entry.is_dir() and entry.name.endswith('_src') and entry not in known:
+                targets.append((entry, 'disposable source tree'))
+    return targets
+
+
+def warn_unignored_cleanup_paths(paths):
+    """Warn when a cleanup target is not ignored by git.
+
+    Pattern matching on .gitignore text is unreliable, so ask git itself.
+    """
+    for path in paths:
+        result = subprocess.run(
+            ['git', 'check-ignore', '-q', str(path)],
+            cwd=ROOT,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+        if result.returncode != 0:
+            print(f'WARNING: {path.relative_to(ROOT)} is not ignored by git.', file=sys.stderr)
+
+
+def run_cleanup():
+    """Remove disposable source trees and report the reclaimed space."""
+    pending = []
+    for path, description in cleanup_targets():
+        size = tree_size(path)
+        if size:
+            pending.append((path, description, size))
+
+    if not pending:
+        print('No disposable source trees to clean up.')
+        return
+
+    print('Disposable source trees to remove:')
+    for path, description, size in pending:
+        print(f'  - {path.relative_to(ROOT)}: {description} ({format_size(size)})')
+    print(f'Total reclaimable: {format_size(sum(size for _, _, size in pending))}')
+    warn_unignored_cleanup_paths([path for path, _description, _size in pending])
+
+    reclaimed = 0
+    failed = []
+    for path, _description, size in pending:
+        for _attempt in range(2):
+            shutil.rmtree(path, ignore_errors=True)
+            if not path.exists():
+                break
+        if path.exists():
+            failed.append(path.relative_to(ROOT))
+            print(f'  could not remove {path.relative_to(ROOT)}', file=sys.stderr)
+            continue
+        reclaimed += size
+        print(f'  removed {path.relative_to(ROOT)}')
+
+    print(f'Reclaimed {format_size(reclaimed)}.')
+    if failed:
+        print('Cleanup left trees behind; remove them manually.', file=sys.stderr)
+        sys.exit(1)
+
+
 def run_normalize_artifacts():
     """Remove forbidden quilt metadata, then verify the full patch queue."""
     changed = normalize_all_patch_artifacts()
@@ -410,6 +505,7 @@ def dispatch_mode(args, files):
         'hot-add': lambda: run_hot_add(args),
         'export-hotfix': lambda: run_export_hotfix(args),
         'hot-abort': run_hot_abort,
+        'cleanup': run_cleanup,
         'normalize-artifacts': run_normalize_artifacts,
     }
     handlers[args.mode]()
@@ -421,7 +517,7 @@ def main():
     parser.add_argument('--mode',
                         required=True,
                         choices=('quick', 'patch-source', 'pre-build', 'hot-start', 'hot-add',
-                                 'export-hotfix', 'hot-abort', 'normalize-artifacts'),
+                                 'export-hotfix', 'hot-abort', 'cleanup', 'normalize-artifacts'),
                         help='Guard mode to run.')
     parser.add_argument('--patch', help='New root-stack patch name for --mode hot-start.')
     parser.add_argument('--file',

@@ -124,13 +124,27 @@ python3 .codex/skills/nitrous-validate/scripts/run_validation.py --with-source -
 python3 devutils/agent_patch_guard.py --mode quick
 python3 devutils/agent_patch_guard.py --mode patch-source
 python3 devutils/agent_patch_guard.py --mode pre-build
+python3 devutils/agent_patch_guard.py --mode cleanup
 python3 devutils/agent_patch_guard.py --mode normalize-artifacts
 ```
+
+`cleanup` is disk hygiene, not a check. It removes the disposable source trees
+(`build/src`, `codex_tmp/patchcheck_src`, `codex_tmp/patchwork_src`, other
+`codex_tmp/*_src` trees) that patch validation and hot-dev leave behind, and
+reports the reclaimed size. It never touches `patches/`, `chromium_src`, or
+tracked repository files. Run it after a slice is delivered — not between
+intermediate validation runs, since `patch-source` and `pre-build` re-unpack
+their own trees.
 
 ## Reporting
 
 Always report which command ran and the outcome. If source-backed was relevant
 but skipped (no tree), say so explicitly.
+
+State the claim precisely: **validation passed and the patch migrated cleanly**.
+Add that compilation correctness is deferred to the user's unified build. Do not
+turn a guard pass into a promise that the next compile will succeed — `pre-build`
+proves patch application and repository checks, nothing about buildability.
 
 ## Resources
 
