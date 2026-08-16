@@ -8,6 +8,7 @@ Apply translated strings into Chromium XTB files.
 
 import xml.etree.ElementTree as xml
 import argparse
+import hashlib
 import json
 import re
 import os
@@ -23,6 +24,23 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 I18N_DIR = REPO_ROOT / 'i18n'
 SOURCE_PATH = I18N_DIR / 'source.gen.json'
 TRANSLATIONS_DIR = I18N_DIR / 'translations'
+
+
+def get_translation_inputs_digest():
+    """Return a stable digest of every input that affects generated XTB data."""
+    paths = [(SOURCE_PATH, 'source.gen.json'), (I18N_DIR / 'languages.json', 'languages.json')]
+    paths.extend(
+        (path, f'translations/{path.name}') for path in sorted(TRANSLATIONS_DIR.glob('*.json')))
+    paths.append((Path(__file__).resolve(), 'utils/i18n_apply.py'))
+    paths.append((Path(namesub.__file__).resolve(), 'utils/name_substitution_utils.py'))
+
+    digest = hashlib.sha256()
+    for path, logical_name in paths:
+        digest.update(logical_name.encode('utf-8'))
+        digest.update(b'\0')
+        digest.update(path.read_bytes())
+        digest.update(b'\0')
+    return digest.hexdigest()
 
 
 def get_id(name, context, text, meaning):
@@ -204,6 +222,22 @@ def apply_translations(tree):
         pool.map(apply_language, tasks)
 
 
+def apply_translations_if_needed(tree, stamp_path):
+    """Apply translations unless the XTB files already match current inputs."""
+    inputs_digest = get_translation_inputs_digest()
+    if stamp_path.is_file() and stamp_path.read_text(encoding='utf-8').strip() == inputs_digest:
+        print('i18n: translations already current')
+        return False
+
+    apply_translations(tree)
+    stamp_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_stamp = stamp_path.with_name(f'{stamp_path.name}.tmp')
+    temporary_stamp.write_text(f'{inputs_digest}\n', encoding='utf-8')
+    temporary_stamp.replace(stamp_path)
+    print('i18n: translations applied')
+    return True
+
+
 def main():
     """CLI entrypoint"""
     parser = argparse.ArgumentParser(description='Apply i18n translations to Chromium XTB files')
@@ -212,8 +246,14 @@ def main():
                         type=Path,
                         required=True,
                         help='Path to Chromium source tree')
+    parser.add_argument('--stamp-file',
+                        type=Path,
+                        help='Skip application when this state file matches current inputs')
     args = parser.parse_args()
-    apply_translations(args.tree)
+    if args.stamp_file:
+        apply_translations_if_needed(args.tree, args.stamp_file)
+    else:
+        apply_translations(args.tree)
 
 
 if __name__ == '__main__':

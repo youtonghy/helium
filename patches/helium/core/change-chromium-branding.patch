@@ -16,7 +16,7 @@
 +PRODUCT_INSTALLER_FULLNAME=Nitrous Installer
 +PRODUCT_INSTALLER_SHORTNAME=Nitrous Installer
 +COPYRIGHT=Copyright @LASTCHANGE_YEAR@ The Nitrous Authors. All rights reserved.
-+MAC_BUNDLE_ID=net.imput.nitrous
++MAC_BUNDLE_ID=net.tksk.nitrous
  MAC_CREATOR_CODE=Cr24
 -MAC_TEAM_ID=
 +MAC_TEAM_ID=S4Q33XPHB4

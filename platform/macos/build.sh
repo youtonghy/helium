@@ -307,6 +307,7 @@ ___helium_ensure_patches_applied() {
 
 ___helium_ensure_configured() {
     ___helium_ensure_patches_applied
+    ___helium_ensure_i18n
 
     if ! ___helium_out_ready; then
         ___helium_log "writing GN args"
@@ -319,6 +320,13 @@ ___helium_ensure_configured() {
         ___helium_log "configuring GN"
         ___helium_configure
     fi
+}
+
+___helium_ensure_i18n() {
+    ___helium_log "applying localized UI strings"
+    python3 "$_main_repo/utils/i18n_apply.py" \
+        --tree "$_src_dir" \
+        --stamp-file "$_src_dir/.nitrous_i18n_stamp"
 }
 
 ___helium_auto_prepare() {
@@ -428,12 +436,17 @@ ___helium_check() {
 
 ___helium_syntax_smoke() {
     local smoke_file="third_party/blink/common/navigation/navigation_params.cc"
+    local generated_header="gen/third_party/blink/public/mojom/navigation/navigation_params.mojom-forward.h"
     if [ ! -f "$_out_dir/compile_commands.json" ]; then
         ___helium_log "skipping syntax smoke; compile_commands.json is not ready"
         return
     fi
     if [ ! -f "$_src_dir/$smoke_file" ]; then
         ___helium_log "skipping syntax smoke; missing $smoke_file"
+        return
+    fi
+    if [ ! -f "$_out_dir/$generated_header" ]; then
+        ___helium_log "skipping syntax smoke; generated dependencies are not ready"
         return
     fi
 
@@ -527,7 +540,7 @@ ___helium_run() {
     fi
 
     "$app_binary" \
-        --user-data-dir="$HOME/Library/Application Support/net.imput.helium.dev" \
+        --user-data-dir="$HOME/Library/Application Support/Nitrous Dev" \
         --enable-ui-devtools \
         --use-mock-keychain \
         --disable-features=DialMediaRouteProvider

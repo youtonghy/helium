@@ -35,6 +35,21 @@ fi
 _app_path="out/Default/$_app_name.app"
 _framework_path="$_app_path/Contents/Frameworks/$_app_name Framework.framework"
 
+# codesign --identifier overrides CFBundleIdentifier in the signature, so this
+# must stay equal to MAC_BUNDLE_ID in chrome/app/theme/chromium/BRANDING.
+# A mismatch makes Gatekeeper, LaunchServices and TCC record the wrong app.
+_bundle_id="net.tksk.nitrous"
+
+_branding_file="chrome/app/theme/chromium/BRANDING"
+if [ -f "$_branding_file" ]; then
+    _branding_bundle_id="$(sed -n 's/^MAC_BUNDLE_ID=//p' "$_branding_file")"
+    if [ "$_branding_bundle_id" != "$_bundle_id" ]; then
+        echo "error: bundle id mismatch: signing uses '$_bundle_id' but" \
+            "$_branding_file declares '$_branding_bundle_id'" >&2
+        exit 1
+    fi
+fi
+
 python3 "$_main_repo/devutils/sync_component_dylibs.py" "$_app_path" out/Default
 
 xattr -cs "$_app_path" || true
@@ -67,19 +82,19 @@ if [ -n "${MACOS_CERTIFICATE_NAME:-}" ]; then
     ___helium_codesign_if_exists chrome_crashpad_handler \
         "$_framework_path/Helpers/chrome_crashpad_handler" \
         --options=restrict,library,runtime,kill
-    ___helium_codesign_if_exists net.imput.helium.helper \
+    ___helium_codesign_if_exists "$_bundle_id.helper" \
         "$_framework_path/Helpers/$_app_name Helper.app" \
         --options restrict,library,runtime,kill \
         --entitlements "$_platform_dir/entitlements/helper-entitlements.plist"
-    ___helium_codesign_if_exists net.imput.helium.helper.renderer \
+    ___helium_codesign_if_exists "$_bundle_id.helper.renderer" \
         "$_framework_path/Helpers/$_app_name Helper (Renderer).app" \
         --options restrict,kill,runtime \
         --entitlements "$_platform_dir/entitlements/helper-renderer-entitlements.plist"
-    ___helium_codesign_if_exists net.imput.helium.helper \
+    ___helium_codesign_if_exists "$_bundle_id.helper" \
         "$_framework_path/Helpers/$_app_name Helper (GPU).app" \
         --options restrict,kill,runtime \
         --entitlements "$_platform_dir/entitlements/helper-gpu-entitlements.plist"
-    ___helium_codesign_if_exists net.imput.helium.framework.AlertNotificationService \
+    ___helium_codesign_if_exists "$_bundle_id.framework.AlertNotificationService" \
         "$_framework_path/Helpers/$_app_name Helper (Alerts).app" \
         --options restrict,library,runtime,kill
     ___helium_codesign_if_exists app_mode_loader \
@@ -101,7 +116,7 @@ if [ -n "${MACOS_CERTIFICATE_NAME:-}" ]; then
         for dylib_path in "$_app_frameworks_dir"/*.dylib; do
             dylib_name="$(basename "$dylib_path" .dylib)"
             dylib_identifier="$(printf '%s' "$dylib_name" | tr -c '[:alnum:]._-' '_')"
-            ___helium_codesign_if_exists "net.imput.helium.$dylib_identifier" \
+            ___helium_codesign_if_exists "$_bundle_id.$dylib_identifier" \
                 "$dylib_path"
         done
         shopt -u nullglob
@@ -112,17 +127,17 @@ if [ -n "${MACOS_CERTIFICATE_NAME:-}" ]; then
             --options restrict,library,runtime,kill "$_framework_path/Frameworks/Sparkle.framework"
     fi
 
-    ___helium_codesign_if_exists net.imput.helium.framework "$_framework_path" \
+    ___helium_codesign_if_exists "$_bundle_id.framework" "$_framework_path" \
         --entitlements "$_platform_dir/entitlements/helper-entitlements.plist"
 
     app_sign_args=(--options restrict,library,runtime,kill --entitlements "$APP_ENTITLEMENTS")
     if [ -n "${PROD_MACOS_NOTARIZATION_TEAM_ID:-}" ]; then
         app_sign_args+=(
             --requirements
-            '=designated => identifier "net.imput.helium" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = '"$PROD_MACOS_NOTARIZATION_TEAM_ID"
+            '=designated => identifier "'"$_bundle_id"'" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = '"$PROD_MACOS_NOTARIZATION_TEAM_ID"
         )
     fi
-    ___helium_codesign_if_exists net.imput.helium "$_app_path" "${app_sign_args[@]}"
+    ___helium_codesign_if_exists "$_bundle_id" "$_app_path" "${app_sign_args[@]}"
 
     codesign --verify --deep --verbose=4 "$_app_path"
 
@@ -197,5 +212,5 @@ fi
 
 if [ -n "${MACOS_CERTIFICATE_NAME:-}" ]; then
     codesign --sign "$MACOS_CERTIFICATE_NAME" \
-        --identifier net.imput.helium --force "$OUT_DMG_PATH"
+        --identifier "$_bundle_id" --force "$OUT_DMG_PATH"
 fi

@@ -32,8 +32,10 @@ When adding strings to Nitrous, you might need to regenerate the source
 file using `./devutils/i18n.py generate`. Do not generate machine translations
 of the strings, the maintainers will take care of this.
 
-To apply existing translations to the Chromium tree, use `utils/i18n_apply.py`.
-For more instructions, see the help (`-h`) output of these scripts.
+The macOS build flow applies existing translations after patches and before GN
+configuration. To apply them to another Chromium tree manually, use
+`utils/i18n_apply.py`. For more instructions, see the help (`-h`) output of
+these scripts.
 
 ## Format
 Each file in `translations/` is a JSON array of translated entries.
