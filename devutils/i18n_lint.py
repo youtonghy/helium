@@ -22,6 +22,12 @@ _REQUIRED_PERSONA_LANGUAGES = (
     'pt-BR',
     'ru',
 )
+_REQUIRED_CUSTOM_SETTINGS_LANGUAGES = ('zh-CN', 'zh-TW')
+_REQUIRED_CUSTOM_SETTINGS_PREFIXES = (
+    'IDS_SETTINGS_FINGERPRINT_',
+    'IDS_SETTINGS_HELIUM_',
+    'IDS_SETTINGS_NITROUS_PROXY_',
+)
 
 
 def _parse_message(message):
@@ -56,12 +62,10 @@ def get_translation_message_errors(source_message, translated_message):
     return errors
 
 
-def find_missing_persona_translations(source,
-                                      translations_dir,
-                                      required_languages=_REQUIRED_PERSONA_LANGUAGES):
-    """Return required locales missing current Persona source strings."""
-    persona_sources = {(entry['name'], entry['message'])
-                       for entry in source if entry['name'].startswith('IDS_SETTINGS_PERSONA_')}
+def find_missing_translations(source, translations_dir, required_languages, prefixes):
+    """Return required locales missing current source strings for prefixes."""
+    required_sources = {(entry['name'], entry['message'])
+                        for entry in source if entry['name'].startswith(prefixes)}
     missing_by_language = {}
     for language in required_languages:
         path = translations_dir / f'{language}.json'
@@ -70,11 +74,28 @@ def find_missing_persona_translations(source,
             with open(path, encoding='utf-8') as file:
                 translations = json.load(file)
         translated_sources = {(entry['name'], entry['source']) for entry in translations if entry}
-        missing = sorted(name for name, message in persona_sources
+        missing = sorted(name for name, message in required_sources
                          if (name, message) not in translated_sources)
         if missing:
             missing_by_language[language] = missing
     return missing_by_language
+
+
+def find_missing_persona_translations(source,
+                                      translations_dir,
+                                      required_languages=_REQUIRED_PERSONA_LANGUAGES):
+    """Return required locales missing current Persona source strings."""
+    return find_missing_translations(source, translations_dir, required_languages,
+                                     ('IDS_SETTINGS_PERSONA_', ))
+
+
+def find_missing_custom_settings_translations(source,
+                                              translations_dir,
+                                              required_languages=_REQUIRED_CUSTOM_SETTINGS_LANGUAGES
+                                              ):
+    """Return Chinese locales missing custom Nitrous settings strings."""
+    return find_missing_translations(source, translations_dir, required_languages,
+                                     _REQUIRED_CUSTOM_SETTINGS_PREFIXES)
 
 
 def main():
@@ -109,6 +130,15 @@ def main():
     for language, names in missing_persona_translations.items():
         print(
             f'{language}.json: missing {len(names)} required Persona '
+            f'translation(s): {", ".join(names)}',
+            file=sys.stderr)
+        errors += len(names)
+
+    missing_custom_settings = find_missing_custom_settings_translations(
+        source, I18N_DIR / 'translations')
+    for language, names in missing_custom_settings.items():
+        print(
+            f'{language}.json: missing {len(names)} required custom settings '
             f'translation(s): {", ".join(names)}',
             file=sys.stderr)
         errors += len(names)

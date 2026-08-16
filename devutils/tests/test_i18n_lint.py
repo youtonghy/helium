@@ -9,7 +9,8 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from i18n_lint import (find_missing_persona_translations, get_translation_message_errors)
+from i18n_lint import (find_missing_custom_settings_translations, find_missing_persona_translations,
+                       get_translation_message_errors)
 
 sys.path.pop(0)
 
@@ -37,6 +38,42 @@ def test_find_missing_persona_translations():
         missing = find_missing_persona_translations(source, translations_dir, ('zh-CN', 'de'))
 
     assert missing == {'de': ['IDS_SETTINGS_PERSONA_TITLE']}
+
+
+def test_find_missing_custom_settings_translations():
+    """Chinese locales must cover every custom Nitrous settings page."""
+    source = [{
+        'name': 'IDS_SETTINGS_NITROUS_PROXY_TITLE',
+        'message': 'Proxy',
+    }, {
+        'name': 'IDS_SETTINGS_FINGERPRINT_TITLE',
+        'message': 'Fingerprints',
+    }, {
+        'name': 'IDS_SETTINGS_HELIUM_SERVICES',
+        'message': 'Nitrous services',
+    }, {
+        'name': 'IDS_SETTINGS_OTHER_TITLE',
+        'message': 'Other',
+    }]
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        translations_dir = Path(tmpdirname)
+        (translations_dir / 'zh-CN.json').write_text(json.dumps([{
+            'name': 'IDS_SETTINGS_NITROUS_PROXY_TITLE',
+            'source': 'Proxy',
+            'message': '代理',
+        }]),
+                                                     encoding='utf-8')
+        (translations_dir / 'zh-TW.json').write_text('[]', encoding='utf-8')
+
+        missing = find_missing_custom_settings_translations(source, translations_dir)
+
+    assert missing == {
+        'zh-CN': ['IDS_SETTINGS_FINGERPRINT_TITLE', 'IDS_SETTINGS_HELIUM_SERVICES'],
+        'zh-TW': [
+            'IDS_SETTINGS_FINGERPRINT_TITLE', 'IDS_SETTINGS_HELIUM_SERVICES',
+            'IDS_SETTINGS_NITROUS_PROXY_TITLE'
+        ],
+    }
 
 
 def test_translation_message_rejects_empty_content():
@@ -70,6 +107,7 @@ def test_translation_message_allows_placeholder_reordering():
 
 if __name__ == '__main__':
     test_find_missing_persona_translations()
+    test_find_missing_custom_settings_translations()
     test_translation_message_rejects_empty_content()
     test_translation_message_preserves_placeholder_subtrees()
     test_translation_message_allows_placeholder_reordering()
