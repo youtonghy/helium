@@ -1,0 +1,444 @@
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -1065,6 +1065,9 @@
+     mojo::PendingReceiver<mojom::URLLoaderFactory> receiver,
+     mojom::URLLoaderFactoryParamsPtr params,
+     scoped_refptr<ResourceSchedulerClient> resource_scheduler_client) {
++  if (network_persona_requests_blocked_) {
++    return;
++  }
+   url_loader_factories_.emplace(
+       std::make_unique<PrefetchMatchingURLLoaderFactory>(
+           this, std::move(params), std::move(resource_scheduler_client),
+@@ -1913,6 +1916,10 @@
+   for (const auto& resolver : host_resolvers_) {
+     resolver->SetNetworkRequestsBlocked(true);
+   }
++  // Child resolver pipes are independent from the NetworkContext pipe. Close
++  // them after cancelling active work so requests queued before this gate
++  // cannot run after the next identity generation is published.
++  host_resolvers_.clear();
+   doh_probes_request_.reset();
+   canary_domain_service_.reset();
+ 
+@@ -1927,6 +1934,12 @@
+     if (url_loader_factories_.find(factory) != url_loader_factories_.end()) {
+       factory->AbortAllRequestsForNetworkPersonaTransition();
+     }
++    // Aborting the last loader can delete the factory. If it survived, close
++    // its independent receiver pipes to prevent queued requests from crossing
++    // the identity generation boundary.
++    if (url_loader_factories_.find(factory) != url_loader_factories_.end()) {
++      factory->ClearBindings();
++    }
+   }
+ #if BUILDFLAG(ENABLE_WEBSOCKETS)
+   websocket_factory_.reset();
+@@ -1963,6 +1976,10 @@
+     return;
+   }
+ 
++  // This factory owns a separate HttpNetworkSession. Drop it before changing
++  // the primary session so future proxy-resolving sockets cannot use the old
++  // Persona generation or SOCKS credentials.
++  proxy_resolving_socket_factories_.Clear();
+   http_session->ApplyNetworkPersonaConfig(std::move(net_config));
+   std::move(callback).Run(true);
+ }
+@@ -1983,6 +2000,11 @@
+   net::HttpNetworkSession* http_session =
+       url_request_context_->http_transaction_factory()->GetSession();
+   DCHECK(http_session);
++  if (http_session->params().socks_credentials == net_credentials) {
++    std::move(callback).Run(true);
++    return;
++  }
++  proxy_resolving_socket_factories_.Clear();
+   http_session->ApplySocksCredentials(std::move(net_credentials));
+   std::move(callback).Run(true);
+ }
+@@ -2166,6 +2188,10 @@
+ 
+ void NetworkContext::ForceReloadProxyConfig(
+     ForceReloadProxyConfigCallback callback) {
++  if (network_persona_requests_blocked_) {
++    std::move(callback).Run();
++    return;
++  }
+   net::ConfiguredProxyResolutionService* configured_proxy_resolution_service =
+       nullptr;
+   if (url_request_context()
+--- a/services/network/network_context_unittest.cc
++++ b/services/network/network_context_unittest.cc
+@@ -850,6 +850,30 @@
+             session_params.network_persona_config->deterministic_seed[0]);
+ }
+ 
++TEST_F(NetworkContextTest,
++       UpdatingNetworkPersonaInvalidatesProxyResolvingFactories) {
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(CreateNetworkContextParamsForTesting());
++
++  mojo::Remote<mojom::ProxyResolvingSocketFactory> proxy_factory;
++  network_context->CreateProxyResolvingSocketFactory(
++      proxy_factory.BindNewPipeAndPassReceiver());
++  proxy_factory.FlushForTesting();
++
++  base::RunLoop proxy_factory_disconnected;
++  proxy_factory.set_disconnect_handler(
++      proxy_factory_disconnected.QuitClosure());
++  auto config = mojom::NetworkPersonaConfig::New();
++  config->generation = 3;
++  config->template_id = 0;
++  config->deterministic_seed.assign(32, 0x3c);
++  base::test::TestFuture<bool> accepted;
++  network_context->UpdateNetworkPersona(std::move(config),
++                                        accepted.GetCallback());
++  EXPECT_TRUE(accepted.Get());
++  proxy_factory_disconnected.Run();
++}
++
+ TEST_F(NetworkContextTest, InitialNetworkPersonaRequestGateBlocksRequests) {
+   mojom::NetworkContextParamsPtr params =
+       CreateNetworkContextParamsForTesting();
+@@ -887,7 +911,8 @@
+             proxy_lookup_client.net_error());
+ }
+ 
+-TEST_F(NetworkContextTest, NetworkPersonaRequestGateCancelsActiveLoader) {
++TEST_F(NetworkContextTest,
++       NetworkPersonaRequestGateCancelsLoaderAndInvalidatesFactory) {
+   net::EmbeddedTestServer test_server;
+   net::test_server::ControllableHttpResponse response(&test_server, "/hung");
+   ASSERT_TRUE(test_server.Start());
+@@ -913,19 +938,47 @@
+       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
+   response.WaitForRequest();
+ 
++  base::RunLoop factory_disconnected;
++  loader_factory.set_disconnect_handler(factory_disconnected.QuitClosure());
+   base::test::TestFuture<bool> blocked;
+   network_context->SetNetworkPersonaRequestsBlocked(true,
+                                                     blocked.GetCallback());
+   EXPECT_TRUE(blocked.Get());
+   client.RunUntilComplete();
++  factory_disconnected.Run();
+   EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED,
+             client.completion_status().error_code);
+ 
++  mojo::Remote<mojom::URLLoaderFactory> blocked_factory;
++  auto blocked_factory_params = mojom::URLLoaderFactoryParams::New();
++  blocked_factory_params->process_id = OriginatingProcessId::browser();
++  blocked_factory_params->is_orb_enabled = false;
++  base::RunLoop blocked_factory_disconnected;
++  blocked_factory.set_disconnect_handler(
++      blocked_factory_disconnected.QuitClosure());
++  network_context->CreateURLLoaderFactory(
++      blocked_factory.BindNewPipeAndPassReceiver(),
++      std::move(blocked_factory_params));
++  blocked_factory_disconnected.Run();
++
+   base::test::TestFuture<bool> released;
+   network_context->SetNetworkPersonaRequestsBlocked(false,
+                                                     released.GetCallback());
+   EXPECT_TRUE(released.Get());
+   EXPECT_FALSE(network_context->network_persona_requests_blocked());
++
++  mojo::Remote<mojom::URLLoaderFactory> replacement_factory;
++  auto replacement_params = mojom::URLLoaderFactoryParams::New();
++  replacement_params->process_id = OriginatingProcessId::browser();
++  replacement_params->is_orb_enabled = false;
++  replacement_params->isolation_info =
++      net::IsolationInfo::CreateForInternalRequest(
++          url::Origin::Create(test_server.base_url()));
++  network_context->CreateURLLoaderFactory(
++      replacement_factory.BindNewPipeAndPassReceiver(),
++      std::move(replacement_params));
++  replacement_factory.FlushForTesting();
++  EXPECT_TRUE(replacement_factory.is_connected());
+ }
+ 
+ TEST_F(NetworkContextTest, NetworkPersonaRequestGateCancelsDirectSockets) {
+@@ -5564,6 +5617,36 @@
+             network_context->GetNumOutstandingResolveHostRequestsForTesting());
+ }
+ 
++TEST_F(NetworkContextCreateHostResolverTest,
++       NetworkPersonaRequestGateInvalidatesResolverEpoch) {
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(CreateNetworkContextParamsForTesting());
++
++  mojo::Remote<mojom::HostResolver> resolver;
++  network_context->CreateHostResolver(std::nullopt,
++                                      resolver.BindNewPipeAndPassReceiver());
++  resolver.FlushForTesting();
++
++  base::RunLoop resolver_disconnected;
++  resolver.set_disconnect_handler(resolver_disconnected.QuitClosure());
++  base::test::TestFuture<bool> blocked;
++  network_context->SetNetworkPersonaRequestsBlocked(true,
++                                                    blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++  resolver_disconnected.Run();
++
++  base::test::TestFuture<bool> released;
++  network_context->SetNetworkPersonaRequestsBlocked(false,
++                                                    released.GetCallback());
++  EXPECT_TRUE(released.Get());
++
++  mojo::Remote<mojom::HostResolver> replacement_resolver;
++  network_context->CreateHostResolver(
++      std::nullopt, replacement_resolver.BindNewPipeAndPassReceiver());
++  replacement_resolver.FlushForTesting();
++  EXPECT_TRUE(replacement_resolver.is_connected());
++}
++
+ TEST_F(NetworkContextCreateHostResolverTest, CloseResolver) {
+   // Override the HostResolver with a hanging one, so the test can ensure the
+   // request won't be completed before the cancellation arrives.
+@@ -7055,6 +7138,32 @@
+   base::DeleteFile(net_log_path);
+ }
+ 
++TEST_F(NetworkContextTest,
++       NetworkPersonaRequestGateBlocksForceReloadProxyConfig) {
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(CreateNetworkContextParamsForTesting());
++  net::RecordingNetLogObserver observer(
++      network_context->url_request_context()->net_log(),
++      net::NetLogCaptureMode::kDefault);
++
++  base::test::TestFuture<bool> blocked;
++  network_context->SetNetworkPersonaRequestsBlocked(true,
++                                                    blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++  task_environment_.RunUntilIdle();
++  observer.Clear();
++
++  base::RunLoop run_loop;
++  network_context->ForceReloadProxyConfig(run_loop.QuitClosure());
++  run_loop.Run();
++  task_environment_.RunUntilIdle();
++
++  EXPECT_TRUE(observer
++                  .GetEntriesWithType(
++                      net::NetLogEventType::PROXY_CONFIG_CHANGED)
++                  .empty());
++}
++
+ TEST_F(NetworkContextTest, ClearBadProxiesCache) {
+   std::unique_ptr<NetworkContext> network_context =
+       CreateContextWithParams(CreateNetworkContextParamsForTesting());
+--- a/services/network/proxy_resolving_client_socket_factory.cc
++++ b/services/network/proxy_resolving_client_socket_factory.cc
+@@ -51,6 +51,9 @@
+         reference_params->testing_fixed_http_port;
+     session_params.testing_fixed_https_port =
+         reference_params->testing_fixed_https_port;
++    session_params.network_persona_config =
++        reference_params->network_persona_config;
++    session_params.socks_credentials = reference_params->socks_credentials;
+ 
+     // Disable H2 negotiation via ALPN.
+     //
+@@ -85,6 +88,11 @@
+ 
+ ProxyResolvingClientSocketFactory::~ProxyResolvingClientSocketFactory() {}
+ 
++const net::HttpNetworkSessionParams&
++ProxyResolvingClientSocketFactory::GetSessionParamsForTesting() const {
++  return network_session_->params();
++}
++
+ std::unique_ptr<ProxyResolvingClientSocket>
+ ProxyResolvingClientSocketFactory::CreateSocket(
+     const GURL& url,
+--- a/services/network/proxy_resolving_client_socket_factory.h
++++ b/services/network/proxy_resolving_client_socket_factory.h
+@@ -16,6 +16,7 @@
+ namespace net {
+ struct CommonConnectJobParams;
+ class HttpNetworkSession;
++struct HttpNetworkSessionParams;
+ class NetworkAnonymizationKey;
+ class URLRequestContext;
+ }  // namespace net
+@@ -59,6 +60,8 @@
+       const net::NetworkAnonymizationKey& network_anonymization_key,
+       bool use_tls);
+ 
++  const net::HttpNetworkSessionParams& GetSessionParamsForTesting() const;
++
+  private:
+   std::unique_ptr<net::HttpNetworkSession> network_session_;
+   std::unique_ptr<net::CommonConnectJobParams> common_connect_job_params_;
+--- a/services/network/proxy_resolving_client_socket_unittest.cc
++++ b/services/network/proxy_resolving_client_socket_unittest.cc
+@@ -18,13 +18,17 @@
+ #include "net/base/features.h"
+ #include "net/base/mock_proxy_delegate.h"
+ #include "net/base/net_errors.h"
++#include "net/base/network_persona_config.h"
+ #include "net/base/network_isolation_key.h"
+ #include "net/base/proxy_server.h"
+ #include "net/base/proxy_string_util.h"
+ #include "net/base/schemeful_site.h"
++#include "net/base/socks_credentials.h"
+ #include "net/base/test_completion_callback.h"
+ #include "net/dns/mock_host_resolver.h"
++#include "net/http/http_network_session.h"
+ #include "net/http/http_proxy_connect_job.h"
++#include "net/http/http_transaction_factory.h"
+ #include "net/proxy_resolution/configured_proxy_resolution_service.h"
+ #include "net/proxy_resolution/mock_proxy_resolver.h"
+ #include "net/proxy_resolution/proxy_config_service_fixed.h"
+@@ -91,6 +95,30 @@
+                          ProxyResolvingClientSocketTest,
+                          ::testing::Bool());
+ 
++TEST_P(ProxyResolvingClientSocketTest, FactoryCopiesNetworkIdentityParams) {
++  auto context = CreateBuilder()->Build();
++  net::HttpNetworkSession* session =
++      context->http_transaction_factory()->GetSession();
++
++  net::NetworkPersonaConfig persona_config;
++  persona_config.generation = 42;
++  persona_config.template_id = 7;
++  persona_config.deterministic_seed.fill(0x5a);
++  session->ApplyNetworkPersonaConfig(persona_config);
++
++  net::SocksCredentials socks_credentials;
++  socks_credentials.username = "persona-user";
++  socks_credentials.password = "persona-password";
++  session->ApplySocksCredentials(socks_credentials);
++
++  ProxyResolvingClientSocketFactory factory(context.get());
++  const net::HttpNetworkSessionParams& copied_params =
++      factory.GetSessionParamsForTesting();
++  ASSERT_TRUE(copied_params.network_persona_config);
++  EXPECT_EQ(persona_config, *copied_params.network_persona_config);
++  EXPECT_EQ(socks_credentials, copied_params.socks_credentials);
++}
++
+ // Checks the correct NetworkAnonymizationKey is used for host resolution in the
+ // case no proxy is in use.
+ TEST_P(ProxyResolvingClientSocketTest, NetworkIsolationKeyDirect) {
+--- a/services/network/socket_factory.cc
++++ b/services/network/socket_factory.cc
+@@ -9,6 +9,8 @@
+ #include <string>
+ #include <utility>
+ 
++#include "base/location.h"
++#include "base/task/single_thread_task_runner.h"
+ #include "mojo/public/cpp/bindings/type_converter.h"
+ #include "net/base/completion_once_callback.h"
+ #include "net/base/net_errors.h"
+@@ -54,6 +56,11 @@
+ 
+   tls_socket_factory_.AbortAllSocketsForNetworkPersonaTransition();
+   tcp_connected_socket_receiver_.Clear();
++  for (const auto& entry : tcp_bound_socket_receivers_.GetAllContexts()) {
++    if (entry.second && *entry.second) {
++      (*entry.second)->Abort(net::ERR_NETWORK_ACCESS_REVOKED);
++    }
++  }
+   tcp_bound_socket_receivers_.Clear();
+   tcp_server_socket_receivers_.Clear();
+   restricted_udp_socket_receivers_.Clear();
+@@ -244,7 +251,8 @@
+   }
+   TCPBoundSocket* socket_ptr = socket.get();
+   socket_ptr->set_id(
+-      tcp_bound_socket_receivers_.Add(std::move(socket), std::move(receiver)));
++      tcp_bound_socket_receivers_.Add(std::move(socket), std::move(receiver),
++                                      socket_ptr));
+   std::move(callback).Run(result, local_addr_out);
+ }
+ 
+--- a/services/network/socket_factory.h
++++ b/services/network/socket_factory.h
+@@ -161,7 +161,8 @@
+   mojo::UniqueReceiverSet<mojom::TCPServerSocket> tcp_server_socket_receivers_;
+   mojo::UniqueReceiverSet<mojom::TCPConnectedSocket>
+       tcp_connected_socket_receiver_;
+-  mojo::UniqueReceiverSet<mojom::TCPBoundSocket> tcp_bound_socket_receivers_;
++  mojo::UniqueReceiverSet<mojom::TCPBoundSocket, TCPBoundSocket*>
++      tcp_bound_socket_receivers_;
+ 
+ #if BUILDFLAG(IS_WIN)
+   std::optional<SocketBrokerClient> socket_broker_client_;
+--- a/services/network/tcp_bound_socket.cc
++++ b/services/network/tcp_bound_socket.cc
+@@ -9,8 +9,10 @@
+ 
+ #include "base/check.h"
+ #include "base/functional/bind.h"
++#include "base/location.h"
+ #include "base/notreached.h"
+ #include "base/numerics/safe_conversions.h"
++#include "base/task/single_thread_task_runner.h"
+ #include "net/base/ip_endpoint.h"
+ #include "net/base/net_errors.h"
+ #include "net/log/net_log.h"
+@@ -32,7 +34,29 @@
+                                      net::NetLogSource())),
+       traffic_annotation_(traffic_annotation) {}
+ 
+-TCPBoundSocket::~TCPBoundSocket() = default;
++TCPBoundSocket::~TCPBoundSocket() {
++  Abort(net::ERR_ABORTED);
++}
++
++void TCPBoundSocket::Abort(int error) {
++  weak_factory_.InvalidateWeakPtrs();
++  connecting_socket_.reset();
++  if (!connect_callback_) {
++    return;
++  }
++
++  ConnectCallback callback = std::move(connect_callback_);
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(
++          [](ConnectCallback callback, int error) {
++            std::move(callback).Run(
++                error, std::nullopt, std::nullopt,
++                mojo::ScopedDataPipeConsumerHandle(),
++                mojo::ScopedDataPipeProducerHandle());
++          },
++          std::move(callback), error));
++}
+ 
+ int TCPBoundSocket::Bind(const net::IPEndPoint& local_addr,
+                          net::IPEndPoint* local_addr_out) {
+@@ -117,7 +141,7 @@
+           std::move(socket_), remote_addr_list, bind_address_, nullptr),
+       std::move(tcp_connected_socket_options),
+       base::BindOnce(&TCPBoundSocket::OnConnectComplete,
+-                     base::Unretained(this)));
++                     weak_factory_.GetWeakPtr()));
+ }
+ 
+ void TCPBoundSocket::OnConnectComplete(
+--- a/services/network/tcp_bound_socket_unittest.cc
++++ b/services/network/tcp_bound_socket_unittest.cc
+@@ -230,6 +230,18 @@
+               result == net::ERR_INVALID_ARGUMENT);
+ }
+ 
++TEST_F(TCPBoundSocketTest, NetworkPersonaRequestGateClosesBoundSocket) {
++  mojo::Remote<mojom::TCPBoundSocket> bound_socket;
++  net::IPEndPoint bound_address;
++  ASSERT_EQ(net::OK, BindSocket(LocalHostWithAnyPort(), &bound_socket,
++                                &bound_address));
++
++  base::RunLoop disconnected;
++  bound_socket.set_disconnect_handler(disconnected.QuitClosure());
++  factory()->SetNetworkPersonaRequestsBlocked(true);
++  disconnected.Run();
++}
++
+ // Test the case of a connect error. To cause a connect error, bind a socket,
+ // but don't listen on it, and then try connecting to it using another bound
+ // socket.

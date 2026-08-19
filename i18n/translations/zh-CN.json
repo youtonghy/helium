@@ -1643,5 +1643,50 @@
     "name": "IDS_SETTINGS_NITROUS_PROXY_LOCKED_QUIC",
     "source": "QUIC, which cannot traverse a proxy",
     "message": "QUIC（无法通过代理传输）"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_ROUTE_SELECT",
+    "source": "Saved route",
+    "message": "已保存的路由"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_NEW_ROUTE",
+    "source": "New route",
+    "message": "新建路由"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_ROUTE_NAME_LABEL",
+    "source": "Route name",
+    "message": "路由名称"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_ROUTE_IN_USE",
+    "source": "This route is in use. Activate a different route before editing or deleting it.",
+    "message": "此路由正在使用中。请先激活其他路由，再编辑或删除此路由。"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_DELETE_ROUTE",
+    "source": "Delete route",
+    "message": "删除路由"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_DIRECT_ROUTE",
+    "source": "Direct connection",
+    "message": "直接连接"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_SYSTEM_ROUTE_UNSUPPORTED",
+    "source": "Browser traffic cannot use an authenticated profile route. Keep this option off for routes with credentials.",
+    "message": "浏览器流量无法使用已认证的配置文件路由。对于带凭据的路由，请关闭此选项。"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_SYSTEM_ROUTE_CONTROLLED",
+    "source": "Browser traffic proxy settings are controlled externally. Remove that policy, extension, or command-line setting before enabling this route.",
+    "message": "浏览器流量的代理设置由外部控制。请先移除相应政策、扩展程序或命令行设置，再启用此路由。"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_CLEAR_PASSWORD",
+    "source": "Clear saved password",
+    "message": "清除已保存的密码"
   }
 ]

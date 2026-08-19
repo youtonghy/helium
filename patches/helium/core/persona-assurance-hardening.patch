@@ -1,0 +1,2732 @@
+--- a/chrome/browser/devtools/protocol/nitrous_persona_handler.cc
++++ b/chrome/browser/devtools/protocol/nitrous_persona_handler.cc
+@@ -110,8 +110,9 @@
+     SendUnavailable(std::move(callback), browser_context_id.has_value());
+     return;
+   }
+-  std::move(callback)->sendSuccess(
+-      std::make_unique<base::DictValue>(service->GetPersonaAudit()));
++  service->GetPersonaAudit(
++      base::BindOnce(&NitrousPersonaHandler::OnAuditReady,
++                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+ }
+ 
+ void NitrousPersonaHandler::Activate(
+@@ -153,6 +154,13 @@
+   return context ? Profile::FromBrowserContext(context) : nullptr;
+ }
+ 
++void NitrousPersonaHandler::OnAuditReady(
++    std::unique_ptr<GetAuditCallback> callback,
++    base::DictValue result) {
++  std::move(callback)->sendSuccess(
++      std::make_unique<base::DictValue>(std::move(result)));
++}
++
+ void NitrousPersonaHandler::OnActivated(
+     std::unique_ptr<ActivateCallback> callback,
+     base::DictValue result) {
+--- a/chrome/browser/devtools/protocol/nitrous_persona_handler.h
++++ b/chrome/browser/devtools/protocol/nitrous_persona_handler.h
+@@ -42,6 +42,8 @@
+ 
+   Profile* GetProfile(
+       const std::optional<protocol::String>& browser_context_id) const;
++  void OnAuditReady(std::unique_ptr<GetAuditCallback> callback,
++                    base::DictValue result);
+   void OnActivated(std::unique_ptr<ActivateCallback> callback,
+                    base::DictValue result);
+ 
+--- a/chrome/browser/helium_persona/persona_audio_readback_browsertest.cc
++++ b/chrome/browser/helium_persona/persona_audio_readback_browsertest.cc
+@@ -209,6 +209,49 @@
+   EXPECT_LE(MaxAbsoluteError(baseline, generation_one), 1e-4);
+ }
+ 
++IN_PROC_BROWSER_TEST_F(PersonaAudioReadbackBrowserTest,
++                       AuditVerifiesFrameSnapshotsAndNoiseTokens) {
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response = service->CreatePersonaProfile("Audit test");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
++
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents,
++      GURL("data:text/html,<iframe srcdoc='child'></iframe>")));
++  ASSERT_TRUE(content::ChildFrameAt(web_contents->GetPrimaryMainFrame(), 0));
++
++  base::test::TestFuture<base::DictValue> audit_future;
++  service->GetPersonaAudit(audit_future.GetCallback());
++  const base::DictValue audit = audit_future.Take();
++  EXPECT_TRUE(audit.FindBool("ok").value_or(false));
++  ASSERT_TRUE(audit.FindDict("surfaces"));
++  EXPECT_EQ("runtime_snapshot_verified",
++            *audit.FindDict("surfaces")->FindString("renderer"));
++  EXPECT_EQ("unknown", *audit.FindDict("surfaces")->FindString("workers"));
++  EXPECT_EQ("partial", *audit.FindDict("surfaces")->FindString("probe"));
++
++  const base::DictValue* evidence = audit.FindDict("runtimeEvidence");
++  ASSERT_TRUE(evidence);
++  const base::DictValue* frames = evidence->FindDict("frames");
++  ASSERT_TRUE(frames);
++  const int total = frames->FindInt("total").value_or(0);
++  EXPECT_GE(total, 2);
++  EXPECT_EQ(total, frames->FindInt("matched").value_or(0));
++  EXPECT_EQ(0, frames->FindInt("mismatched").value_or(-1));
++  EXPECT_EQ(0, frames->FindInt("unreachable").value_or(-1));
++  EXPECT_EQ("matched", *evidence->FindDict("noiseTokens")
++                            ->FindDict("clientRect")
++                            ->FindString("status"));
++}
++
+ class PersonaSiteRefreshBrowserTest : public InProcessBrowserTest {
+  public:
+   void SetUpOnMainThread() override {
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -17,12 +17,14 @@
+ #include "base/functional/callback_helpers.h"
+ #include "base/i18n/time_formatting.h"
+ #include "base/location.h"
++#include "base/memory/ref_counted.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_split.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/stringprintf.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/time/time.h"
++#include "base/timer/timer.h"
+ #include "base/uuid.h"
+ #include "chrome/browser/helium_persona/persona_identity_template.h"
+ #include "chrome/browser/helium_persona/persona_pref_names.h"
+@@ -31,11 +33,18 @@
+ #include "chrome/browser/nitrous_proxy/nitrous_proxy_service.h"
+ #include "chrome/browser/nitrous_proxy/nitrous_proxy_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+ #include "chrome/browser/ui/persona_tab_reloader.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "components/helium_persona/persona_snapshot.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+ #include "components/prefs/pref_service.h"
+ #include "crypto/random.h"
++#include "content/public/browser/global_routing_id.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "third_party/blink/public/mojom/frame/frame.mojom.h"
+ #include "url/gurl.h"
+ #include "url/origin.h"
+ 
+@@ -62,6 +71,7 @@
+ constexpr int kDefaultFingerprintRotationIntervalDays = 14;
+ constexpr char kPersonaChromeMajorVersion[] = "149";
+ constexpr char kPersonaChromeFullVersion[] = "149.0.7827.114";
++constexpr base::TimeDelta kPersonaSurfaceProbeTimeout = base::Seconds(3);
+ 
+ class ProfilePersonaIdentityRotationDelegate
+     : public PersonaIdentityRotationDelegate {
+@@ -105,6 +115,20 @@
+     network_service->ApplyCurrentNetworkIdentity(std::move(callback));
+   }
+ 
++  void ReleaseNetworkIdentityRequestGate(ApplyCallback callback) override {
++    if (!profile_) {
++      std::move(callback).Run(false);
++      return;
++    }
++    ProfileNetworkContextService* network_service =
++        ProfileNetworkContextServiceFactory::GetForContext(profile_.get());
++    if (!network_service) {
++      std::move(callback).Run(false);
++      return;
++    }
++    network_service->ReleaseNetworkPersonaRequestGate(std::move(callback));
++  }
++
+   std::string ValidateNetworkRoute(const std::string& route_id) const override {
+     nitrous_proxy::NitrousProxyService* proxy_service = GetProxyService();
+     return proxy_service ? proxy_service->ValidateRouteForActivation(route_id)
+@@ -1809,7 +1833,7 @@
+   if (status == PersonaResolutionStatus::kPersonaReady) {
+     reasons.Append("network_identity_applied");
+     reasons.Append("persona_snapshot_built");
+-    reasons.Append("renderer_probe_partial");
++    reasons.Append("runtime_probe_partial");
+   } else if (status == PersonaResolutionStatus::kSystemReal) {
+     reasons.Append("system_identity");
+   } else {
+@@ -1832,6 +1856,183 @@
+       .Set("reasons", std::move(reasons));
+ }
+ 
++constexpr std::array<const char*, 5> kNoiseTokenNames = {
++    "canvas", "audio", "hardware", "fontMetric", "clientRect"};
++
++std::array<bool, 5> ExpectedNoiseTokens(
++    const blink::HeliumPersonaSnapshot& snapshot) {
++  return {snapshot.canvas_noise, snapshot.audio_noise, snapshot.hardware_noise,
++          snapshot.font_metric_noise, snapshot.client_rect_noise};
++}
++
++std::array<bool, 5> AppliedNoiseTokens(
++    const blink::mojom::HeliumPersonaSurfaceProbe& probe) {
++  return {probe.canvas_noise_token_present, probe.audio_noise_token_present,
++          probe.hardware_noise_token_present,
++          probe.font_metric_noise_token_present,
++          probe.client_rect_noise_token_present};
++}
++
++void SetEmptyRuntimeEvidence(base::DictValue* audit,
++                             std::string_view status) {
++  audit->EnsureDict("surfaces")->Set("renderer", status);
++  audit->Set(
++      "runtimeEvidence",
++      base::DictValue()
++          .Set("scope", "active_primary_frame_tree")
++          .Set("frames", base::DictValue()
++                             .Set("status", status)
++                             .Set("total", 0)
++                             .Set("matched", 0)
++                             .Set("mismatched", 0)
++                             .Set("unreachable", 0)));
++}
++
++class PersonaSurfaceProbeOperation
++    : public base::RefCounted<PersonaSurfaceProbeOperation> {
++ public:
++  static void Run(
++      blink::HeliumPersonaSnapshot expected_snapshot,
++      std::vector<content::GlobalRenderFrameHostId> frame_ids,
++      base::DictValue audit,
++      base::OnceCallback<void(base::DictValue)> callback) {
++    auto operation = base::MakeRefCounted<PersonaSurfaceProbeOperation>(
++        std::move(expected_snapshot), frame_ids.size(), std::move(audit),
++        std::move(callback));
++    operation->Start(std::move(frame_ids));
++  }
++
++  PersonaSurfaceProbeOperation(
++      blink::HeliumPersonaSnapshot expected_snapshot,
++      size_t frame_count,
++      base::DictValue audit,
++      base::OnceCallback<void(base::DictValue)> callback)
++      : expected_snapshot_(std::move(expected_snapshot)),
++        expected_tokens_(ExpectedNoiseTokens(expected_snapshot_)),
++        total_(frame_count),
++        pending_(frame_count),
++        audit_(std::move(audit)),
++        callback_(std::move(callback)) {}
++
++  void Start(std::vector<content::GlobalRenderFrameHostId> frame_ids) {
++    timeout_.Start(FROM_HERE, kPersonaSurfaceProbeTimeout,
++                   base::BindOnce(&PersonaSurfaceProbeOperation::OnTimeout,
++                                  base::WrapRefCounted(this)));
++    for (const content::GlobalRenderFrameHostId& frame_id : frame_ids) {
++      content::RenderFrameHost* frame =
++          content::RenderFrameHost::FromID(frame_id);
++      if (!frame || !frame->IsRenderFrameLive() ||
++          frame->GetLifecycleState() !=
++              content::RenderFrameHost::LifecycleState::kActive) {
++        OnProbe(nullptr);
++        continue;
++      }
++      frame->GetHeliumPersonaSurfaceProbe(base::BindOnce(
++          &PersonaSurfaceProbeOperation::OnProbe,
++          weak_ptr_factory_.GetWeakPtr()));
++    }
++  }
++
++  void OnProbe(blink::mojom::HeliumPersonaSurfaceProbePtr probe) {
++    if (!callback_) {
++      return;
++    }
++    CHECK_GT(pending_, 0u);
++    --pending_;
++    if (!probe) {
++      ++unreachable_;
++    } else {
++      bool matches = probe->snapshot == expected_snapshot_;
++      const std::array<bool, 5> applied_tokens = AppliedNoiseTokens(*probe);
++      for (size_t i = 0; i < expected_tokens_.size(); ++i) {
++        if (expected_tokens_[i] != applied_tokens[i]) {
++          ++token_mismatches_[i];
++          matches = false;
++        }
++      }
++      if (matches) {
++        ++matched_;
++      } else {
++        ++mismatched_;
++      }
++    }
++    if (pending_ == 0u) {
++      Finish();
++    }
++  }
++
++ private:
++  friend class base::RefCounted<PersonaSurfaceProbeOperation>;
++  ~PersonaSurfaceProbeOperation() = default;
++
++  void OnTimeout() {
++    unreachable_ += pending_;
++    pending_ = 0u;
++    Finish();
++  }
++
++  void Finish() {
++    if (!callback_) {
++      return;
++    }
++    scoped_refptr<PersonaSurfaceProbeOperation> keep_alive(this);
++    weak_ptr_factory_.InvalidateWeakPtrs();
++    timeout_.Stop();
++
++    const char* renderer_status =
++        mismatched_ > 0u      ? "mismatched"
++        : unreachable_ > 0u  ? (matched_ > 0u ? "partially_verified"
++                                               : "unreachable")
++                              : "runtime_snapshot_verified";
++    base::DictValue tokens;
++    for (size_t i = 0; i < kNoiseTokenNames.size(); ++i) {
++      const char* token_status = token_mismatches_[i] > 0u
++                                     ? "mismatched"
++                                 : unreachable_ > 0u ? "partially_verified"
++                                                     : "matched";
++      tokens.Set(kNoiseTokenNames[i],
++                 base::DictValue()
++                     .Set("expected", expected_tokens_[i])
++                     .Set("status", token_status)
++                     .Set("mismatched", token_mismatches_[i]));
++    }
++    audit_.EnsureDict("surfaces")->Set("renderer", renderer_status);
++    audit_.Set(
++        "runtimeEvidence",
++        base::DictValue()
++            .Set("scope", "active_primary_frame_tree")
++            .Set("frames", base::DictValue()
++                               .Set("status", renderer_status)
++                               .Set("total", static_cast<int>(total_))
++                               .Set("matched", static_cast<int>(matched_))
++                               .Set("mismatched",
++                                    static_cast<int>(mismatched_))
++                               .Set("unreachable",
++                                    static_cast<int>(unreachable_)))
++            .Set("noiseTokens", std::move(tokens)));
++    if (mismatched_ > 0u || unreachable_ > 0u) {
++      audit_.Set("ok", false);
++    } else if (base::DictValue* assurance = audit_.FindDict("assurance")) {
++      assurance->EnsureList("reasons")
++          ->Append("renderer_runtime_snapshot_verified");
++    }
++    std::move(callback_).Run(std::move(audit_));
++  }
++
++  const blink::HeliumPersonaSnapshot expected_snapshot_;
++  const std::array<bool, 5> expected_tokens_;
++  const size_t total_;
++  size_t pending_;
++  size_t matched_ = 0u;
++  size_t mismatched_ = 0u;
++  size_t unreachable_ = 0u;
++  std::array<int, 5> token_mismatches_ = {};
++  base::DictValue audit_;
++  base::OnceCallback<void(base::DictValue)> callback_;
++  base::OneShotTimer timeout_;
++  base::WeakPtrFactory<PersonaSurfaceProbeOperation> weak_ptr_factory_{this};
++};
++
+ base::ListValue UpsertPersona(const base::ListValue* existing,
+                               const base::DictValue& persona) {
+   base::ListValue personas;
+@@ -2017,7 +2218,7 @@
+ };
+ 
+ PersonaService::PersonaService(PrefService* prefs, Profile* profile)
+-    : prefs_(prefs) {
++    : prefs_(prefs), profile_(profile) {
+   if (profile) {
+     identity_rotation_delegate_ =
+         std::make_unique<ProfilePersonaIdentityRotationDelegate>(profile);
+@@ -2280,7 +2481,7 @@
+   return response;
+ }
+ 
+-base::DictValue PersonaService::GetPersonaAudit() const {
++base::DictValue PersonaService::BuildPersonaAudit() const {
+   base::DictValue effective = GetEffectivePersona();
+   const std::string* status_value = effective.FindString("status");
+   const std::string status =
+@@ -2339,6 +2540,54 @@
+                              : base::DictValue());
+ }
+ 
++void PersonaService::GetPersonaAudit(OperationCallback callback) const {
++  base::DictValue audit = BuildPersonaAudit();
++  const PersonaResolution resolution = ResolveActivePersona();
++  if (resolution.status == PersonaResolutionStatus::kPersonaUnavailable ||
++      !profile_) {
++    SetEmptyRuntimeEvidence(&audit, "not_applicable");
++    std::move(callback).Run(std::move(audit));
++    return;
++  }
++
++  std::vector<content::GlobalRenderFrameHostId> frame_ids;
++  ProfileBrowserCollection* browser_collection =
++      ProfileBrowserCollection::GetForProfile(profile_);
++  if (browser_collection) {
++    browser_collection->ForEach(
++        [&frame_ids](BrowserWindowInterface* browser) {
++          TabStripModel* tab_strip = browser->GetTabStripModel();
++          if (!tab_strip) {
++            return true;
++          }
++          for (int i = 0; i < tab_strip->count(); ++i) {
++            content::WebContents* web_contents =
++                tab_strip->GetWebContentsAt(i);
++            if (!web_contents || !web_contents->GetPrimaryMainFrame()) {
++              continue;
++            }
++            web_contents->GetPrimaryMainFrame()->ForEachRenderFrameHost(
++                [&frame_ids](content::RenderFrameHost* frame) {
++                  if (frame->IsRenderFrameLive() &&
++                      frame->GetLifecycleState() ==
++                          content::RenderFrameHost::LifecycleState::kActive &&
++                      !frame->GetWebUI()) {
++                    frame_ids.push_back(frame->GetGlobalId());
++                  }
++                });
++          }
++          return true;
++        });
++  }
++  if (frame_ids.empty()) {
++    SetEmptyRuntimeEvidence(&audit, "not_applicable");
++    std::move(callback).Run(std::move(audit));
++    return;
++  }
++  PersonaSurfaceProbeOperation::Run(resolution.snapshot, std::move(frame_ids),
++                                    std::move(audit), std::move(callback));
++}
++
+ base::DictValue PersonaService::CreatePersonaProfile(
+     const std::string& display_name) {
+   base::DictValue state = ReadState();
+@@ -2915,10 +3164,19 @@
+         weak_ptr_factory_.GetWeakPtr(), restored));
+     return;
+   }
++  if (!PersonaActivationCandidateMatches()) {
++    network_identity_degraded_ = true;
++    base::DictValue response =
++        MakeResponse(false, ReadState(),
++                     base::DictValue().Set("personaActivation", "stateChanged"));
++    response.Set("restartResult", "state_changed");
++    FinishPersonaActivation(std::move(response));
++    return;
++  }
+   network_identity_degraded_ = false;
+   base::DictValue response = MakeResponse(true, ReadState());
+   response.Set("restartResult", "restarted");
+-  FinishPersonaActivation(std::move(response));
++  ReleasePersonaActivationNetworkGate(std::move(response));
+ }
+ 
+ void PersonaService::OnPersonaActivationRestartRollbackPrefUpdatesResumed(
+@@ -2955,35 +3213,80 @@
+     restart_result = "recovery_isolation_failed";
+   }
+   response.Set("restartResult", restart_result);
++  if (result == PersonaExecutionContextRestartResult::kRestarted &&
++      PersonaActivationOldStateMatches()) {
++    ReleasePersonaActivationNetworkGate(std::move(response));
++    return;
++  }
++  if (result == PersonaExecutionContextRestartResult::kRestarted) {
++    network_identity_degraded_ = true;
++    response.EnsureDict("fieldErrors")
++        ->Set("personaActivation", "stateChanged");
++    response.Set("restartResult", "state_changed");
++  }
+   FinishPersonaActivation(std::move(response));
+ }
+ 
++void PersonaService::ReleasePersonaActivationNetworkGate(
++    base::DictValue response) {
++  if (!identity_rotation_delegate_) {
++    FinishPersonaActivation(std::move(response));
++    return;
++  }
++  network_identity_transition_in_progress_ = true;
++  identity_rotation_delegate_->ReleaseNetworkIdentityRequestGate(
++      base::BindOnce(&PersonaService::OnPersonaActivationNetworkGateReleased,
++                     weak_ptr_factory_.GetWeakPtr(), std::move(response)));
++}
++
++void PersonaService::OnPersonaActivationNetworkGateReleased(
++    base::DictValue response,
++    bool accepted) {
++  if (!pending_persona_activation_) {
++    return;
++  }
++  if (!accepted) {
++    network_identity_degraded_ = true;
++    response.Set("ok", false);
++    response.EnsureDict("fieldErrors")
++        ->Set("personaActivation", "networkGateReleaseFailed");
++    response.Set("restartResult", "network_gate_release_failed");
++  }
++  FinishPersonaActivation(std::move(response));
++}
++
++bool PersonaService::PersonaActivationCandidateMatches() const {
++  return pending_persona_activation_ && prefs_ &&
++         prefs_->GetDict(kPersonaStatePref) ==
++             pending_persona_activation_->candidate_state &&
++         prefs_->GetString(kPersonaLastUsedIdPref) ==
++             pending_persona_activation_->persona_id &&
++         FingerprintSeedStateMatches(
++             *prefs_, pending_persona_activation_->candidate_fingerprint_seed) &&
++         (!identity_rotation_delegate_ ||
++          identity_rotation_delegate_->GetActiveNetworkRouteId() ==
++              pending_persona_activation_->candidate_route_id);
++}
++
++bool PersonaService::PersonaActivationOldStateMatches() const {
++  return pending_persona_activation_ && prefs_ &&
++         prefs_->GetDict(kPersonaStatePref) ==
++             pending_persona_activation_->old_state &&
++         prefs_->GetString(kPersonaLastUsedIdPref) ==
++             pending_persona_activation_->old_last_used_persona_id &&
++         FingerprintSeedStateMatches(
++             *prefs_, pending_persona_activation_->old_fingerprint_seed) &&
++         (!identity_rotation_delegate_ ||
++          identity_rotation_delegate_->GetActiveNetworkRouteId() ==
++              pending_persona_activation_->old_route_id);
++}
++
+ void PersonaService::FinishPersonaActivation(base::DictValue response) {
+   if (!pending_persona_activation_) {
+     return;
+   }
+-  const bool candidate_matches =
+-      prefs_ &&
+-      prefs_->GetDict(kPersonaStatePref) ==
+-          pending_persona_activation_->candidate_state &&
+-      prefs_->GetString(kPersonaLastUsedIdPref) ==
+-          pending_persona_activation_->persona_id &&
+-      FingerprintSeedStateMatches(
+-          *prefs_, pending_persona_activation_->candidate_fingerprint_seed) &&
+-      (!identity_rotation_delegate_ ||
+-       identity_rotation_delegate_->GetActiveNetworkRouteId() ==
+-           pending_persona_activation_->candidate_route_id);
+-  const bool old_matches =
+-      prefs_ &&
+-      prefs_->GetDict(kPersonaStatePref) ==
+-          pending_persona_activation_->old_state &&
+-      prefs_->GetString(kPersonaLastUsedIdPref) ==
+-          pending_persona_activation_->old_last_used_persona_id &&
+-      FingerprintSeedStateMatches(
+-          *prefs_, pending_persona_activation_->old_fingerprint_seed) &&
+-      (!identity_rotation_delegate_ ||
+-       identity_rotation_delegate_->GetActiveNetworkRouteId() ==
+-           pending_persona_activation_->old_route_id);
++  const bool candidate_matches = PersonaActivationCandidateMatches();
++  const bool old_matches = PersonaActivationOldStateMatches();
+   const char* commit_state = "unknown";
+   if (candidate_matches) {
+     commit_state = "committed";
+@@ -3527,19 +3830,15 @@
+         weak_ptr_factory_.GetWeakPtr(), restored));
+     return;
+   }
+-  const bool candidate_matches =
+-      prefs_->GetDict(kPersonaStatePref) ==
+-          pending_identity_rotation_->old_state &&
+-      FingerprintSeedStateMatches(
+-          *prefs_, pending_identity_rotation_->candidate_fingerprint_seed) &&
+-      identity_rotation_delegate_->GetActiveNetworkRouteId() ==
+-          pending_identity_rotation_->route_id;
++  const bool candidate_matches = IdentityRotationCandidateMatches();
+   network_identity_degraded_ = !candidate_matches;
+-  FinishIdentityRotation(
+-      candidate_matches ? MakeResponse(true, ReadState())
+-                        : MakeResponse(false, ReadState(),
+-                                       base::DictValue().Set("identityRotation",
+-                                                             "stateChanged")));
++  if (!candidate_matches) {
++    FinishIdentityRotation(
++        MakeResponse(false, ReadState(),
++                     base::DictValue().Set("identityRotation", "stateChanged")));
++    return;
++  }
++  ReleaseIdentityRotationNetworkGate(MakeResponse(true, ReadState()));
+ }
+ 
+ void PersonaService::OnIdentityRotationRestartRollbackPrefUpdatesResumed(
+@@ -3567,9 +3866,68 @@
+                   ? "executionContextIsolationFailed"
+                   : "executionContextRestartFailed");
+   }
++  if (result == PersonaExecutionContextRestartResult::kRestarted &&
++      IdentityRotationOldStateMatches()) {
++    ReleaseIdentityRotationNetworkGate(std::move(response));
++    return;
++  }
++  if (result == PersonaExecutionContextRestartResult::kRestarted) {
++    network_identity_degraded_ = true;
++    response.EnsureDict("fieldErrors")
++        ->Set("identityRotation", "stateChanged");
++  }
+   FinishIdentityRotation(std::move(response));
+ }
+ 
++void PersonaService::ReleaseIdentityRotationNetworkGate(
++    base::DictValue response) {
++  if (!identity_rotation_delegate_) {
++    FinishIdentityRotation(std::move(response));
++    return;
++  }
++  network_identity_transition_in_progress_ = true;
++  identity_rotation_delegate_->ReleaseNetworkIdentityRequestGate(
++      base::BindOnce(&PersonaService::OnIdentityRotationNetworkGateReleased,
++                     weak_ptr_factory_.GetWeakPtr(), std::move(response)));
++}
++
++void PersonaService::OnIdentityRotationNetworkGateReleased(
++    base::DictValue response,
++    bool accepted) {
++  if (!pending_identity_rotation_) {
++    return;
++  }
++  if (!accepted) {
++    network_identity_degraded_ = true;
++    response.Set("ok", false);
++    response.EnsureDict("fieldErrors")
++        ->Set("identityRotation", "networkGateReleaseFailed");
++  }
++  FinishIdentityRotation(std::move(response));
++}
++
++bool PersonaService::IdentityRotationCandidateMatches() const {
++  return pending_identity_rotation_ && prefs_ &&
++         prefs_->GetDict(kPersonaStatePref) ==
++             pending_identity_rotation_->old_state &&
++         FingerprintSeedStateMatches(
++             *prefs_, pending_identity_rotation_->candidate_fingerprint_seed) &&
++         identity_rotation_delegate_ &&
++         identity_rotation_delegate_->GetActiveNetworkRouteId() ==
++             pending_identity_rotation_->route_id;
++}
++
++bool PersonaService::IdentityRotationOldStateMatches() const {
++  return pending_identity_rotation_ && prefs_ &&
++         prefs_->GetDict(kPersonaStatePref) ==
++             pending_identity_rotation_->old_state &&
++         FingerprintSeedStateMatches(
++             *prefs_, pending_identity_rotation_->old_fingerprint_seed) &&
++         identity_rotation_delegate_ &&
++         identity_rotation_delegate_->GetActiveNetworkRouteId() ==
++             pending_identity_rotation_->route_id;
++}
++
+ void PersonaService::FinishIdentityRotation(base::DictValue response) {
+   if (!pending_identity_rotation_) {
+     return;
+--- a/chrome/browser/helium_persona/persona_service.h
++++ b/chrome/browser/helium_persona/persona_service.h
+@@ -45,6 +45,7 @@
+       const std::string& route_id,
+       ApplyCallback callback) = 0;
+   virtual void ApplyCurrentNetworkIdentity(ApplyCallback callback) = 0;
++  virtual void ReleaseNetworkIdentityRequestGate(ApplyCallback callback) = 0;
+   virtual std::string ValidateNetworkRoute(
+       const std::string& route_id) const = 0;
+   virtual std::string GetActiveNetworkRouteId() const = 0;
+@@ -102,9 +103,9 @@
+   // Returns the requested active persona alongside the effective runtime
+   // snapshot and an explicit list of fields that differ.
+   base::DictValue GetEffectivePersona() const;
+-  // Reports surface-level assurance without claiming that unprobed surfaces
+-  // are live-verified.
+-  base::DictValue GetPersonaAudit() const;
++  // Reports renderer-held snapshot and noise-token evidence without claiming
++  // that unprobed workers or output-level values are verified.
++  void GetPersonaAudit(OperationCallback callback) const;
+   base::DictValue CreatePersonaProfile(const std::string& display_name);
+   base::DictValue SavePersona(const base::DictValue& payload);
+   base::DictValue ImportPersonas(const base::DictValue& bundle);
+@@ -139,6 +140,7 @@
+   struct PendingIdentityRotation;
+ 
+   base::DictValue ReadState() const;
++  base::DictValue BuildPersonaAudit() const;
+   void WriteState(base::DictValue state);
+   void AddNetworkRouteFieldError(const base::DictValue& persona,
+                                  base::DictValue* errors) const;
+@@ -168,6 +170,11 @@
+   void OnPersonaActivationFailureExecutionContextsRestarted(
+       base::DictValue response,
+       PersonaExecutionContextRestartResult result);
++  void ReleasePersonaActivationNetworkGate(base::DictValue response);
++  void OnPersonaActivationNetworkGateReleased(base::DictValue response,
++                                               bool accepted);
++  bool PersonaActivationCandidateMatches() const;
++  bool PersonaActivationOldStateMatches() const;
+   void FinishPersonaActivation(base::DictValue response);
+   void BeginNetworkIdentityTransition();
+   void ResumeNetworkIdentityPrefUpdates(
+@@ -189,9 +196,15 @@
+   void OnIdentityRotationFailureExecutionContextsRestarted(
+       base::DictValue response,
+       PersonaExecutionContextRestartResult result);
++  void ReleaseIdentityRotationNetworkGate(base::DictValue response);
++  void OnIdentityRotationNetworkGateReleased(base::DictValue response,
++                                              bool accepted);
++  bool IdentityRotationCandidateMatches() const;
++  bool IdentityRotationOldStateMatches() const;
+   void FinishIdentityRotation(base::DictValue response);
+ 
+   raw_ptr<PrefService> prefs_;
++  raw_ptr<Profile> profile_;
+   std::unique_ptr<PersonaIdentityRotationDelegate> identity_rotation_delegate_;
+   std::unique_ptr<PendingPersonaActivation> pending_persona_activation_;
+   std::unique_ptr<PendingIdentityRotation> pending_identity_rotation_;
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -94,6 +94,12 @@
+   return result.Take();
+ }
+ 
++base::DictValue GetPersonaAudit(PersonaService* service) {
++  base::test::TestFuture<base::DictValue> result;
++  service->GetPersonaAudit(result.GetCallback());
++  return result.Take();
++}
++
+ constexpr std::array<uint32_t, 1> kTestNetworkVariants = {149001};
+ constexpr std::array<PersonaIdentityTemplate, 2> kTestIdentityTemplates = {{
+     {
+@@ -155,6 +161,17 @@
+                            std::string(), std::move(callback)});
+   }
+ 
++  void ReleaseNetworkIdentityRequestGate(ApplyCallback callback) override {
++    ++network_gate_release_count;
++    if (defer_network_gate_release) {
++      pending_network_gate_release = std::move(callback);
++      return;
++    }
++    const bool accepted = !fail_next_network_gate_release;
++    fail_next_network_gate_release = false;
++    std::move(callback).Run(accepted);
++  }
++
+   std::string ValidateNetworkRoute(const std::string& route_id) const override {
+     return route_id.empty() ? std::string() : route_validation_error;
+   }
+@@ -254,6 +271,11 @@
+         .Run(PersonaExecutionContextRestartResult::kRestarted);
+   }
+ 
++  void CompleteNetworkGateRelease(bool accepted = true) {
++    ASSERT_TRUE(pending_network_gate_release);
++    std::move(pending_network_gate_release).Run(accepted);
++  }
++
+   void FailRestartWithoutIsolation() {
+     ASSERT_TRUE(pending_before_reload);
+     ASSERT_TRUE(pending_restart);
+@@ -295,6 +317,10 @@
+   int quiesce_count = 0;
+   int restart_count = 0;
+   int release_count = 0;
++  int network_gate_release_count = 0;
++  bool fail_next_network_gate_release = false;
++  bool defer_network_gate_release = false;
++  ApplyCallback pending_network_gate_release;
+ };
+ 
+ TEST_F(PersonaServiceTest, CreateDoesNotActivateAndHasCompleteDefaults) {
+@@ -568,12 +594,16 @@
+                    ->FindBool("networkInProgress")
+                    .value_or(true));
+ 
+-  const base::DictValue audit = service_->GetPersonaAudit();
++  const base::DictValue audit = GetPersonaAudit(service_.get());
+   EXPECT_EQ("system_real", *audit.FindString("status"));
+   EXPECT_FALSE(audit.FindBool("failClosed").value_or(true));
+-  EXPECT_EQ("unknown", *audit.FindDict("surfaces")->FindString("renderer"));
++  EXPECT_EQ("not_applicable",
++            *audit.FindDict("surfaces")->FindString("renderer"));
+   EXPECT_EQ("partial", *audit.FindDict("surfaces")->FindString("probe"));
+   EXPECT_EQ("system", *audit.FindDict("surfaces")->FindString("fingerprint"));
++  EXPECT_EQ(0, *audit.FindDict("runtimeEvidence")
++                   ->FindDict("frames")
++                   ->FindInt("total"));
+ }
+ 
+ TEST_F(PersonaServiceTest,
+@@ -596,7 +626,7 @@
+   EXPECT_EQ(rotation_before,
+             prefs_.GetDict(kPersonaFingerprintRotationEpochPref));
+ 
+-  const base::DictValue audit = service_->GetPersonaAudit();
++  const base::DictValue audit = GetPersonaAudit(service_.get());
+   EXPECT_TRUE(audit.FindBool("failClosed").value_or(false));
+   EXPECT_EQ("blocked", *audit.FindDict("surfaces")->FindString("network"));
+   EXPECT_TRUE(prefs_.GetString(kPersonaFingerprintProfileSaltPref).empty());
+@@ -1155,6 +1185,58 @@
+   EXPECT_EQ(PersonaResolutionStatus::kPersonaReady,
+             service_->ResolveActivePersona().status);
+   EXPECT_EQ(1, delegate_ptr->restart_count);
++  EXPECT_EQ(1, delegate_ptr->network_gate_release_count);
++}
++
++TEST_F(PersonaServiceTest,
++       PersonaActivationStaysFailClosedWhenNetworkGateReleaseFails) {
++  base::DictValue create_response =
++      service_->CreatePersonaProfile("Gate release");
++  const std::string* persona_id = create_response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  FakeIdentityRotationDelegate* delegate_ptr = delegate.get();
++  delegate_ptr->fail_next_network_gate_release = true;
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++
++  base::test::TestFuture<base::DictValue> result;
++  service_->SetActivePersona(*persona_id, result.GetCallback());
++  delegate_ptr->CompleteNextApply(true);
++
++  const base::DictValue response = result.Take();
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  EXPECT_EQ("networkGateReleaseFailed",
++            *response.FindDict("fieldErrors")
++                 ->FindString("personaActivation"));
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaUnavailable,
++            service_->ResolveActivePersona().status);
++  EXPECT_EQ(1, delegate_ptr->network_gate_release_count);
++}
++
++TEST_F(PersonaServiceTest,
++       PersonaActivationCompletesOnlyAfterNetworkGateReleaseAck) {
++  base::DictValue create_response =
++      service_->CreatePersonaProfile("Gate barrier");
++  const std::string* persona_id = create_response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  FakeIdentityRotationDelegate* delegate_ptr = delegate.get();
++  delegate_ptr->defer_network_gate_release = true;
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++
++  base::test::TestFuture<base::DictValue> result;
++  service_->SetActivePersona(*persona_id, result.GetCallback());
++  delegate_ptr->CompleteNextApply(true);
++
++  EXPECT_FALSE(result.IsReady());
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaUnavailable,
++            service_->ResolveActivePersona().status);
++  delegate_ptr->CompleteNetworkGateRelease();
++  EXPECT_TRUE(result.Take().FindBool("ok").value_or(false));
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaReady,
++            service_->ResolveActivePersona().status);
+ }
+ 
+ TEST_F(PersonaServiceTest, PersonaActivationCommitsNamedRouteWithPersona) {
+--- a/chrome/browser/net/profile_network_context_service.cc
++++ b/chrome/browser/net/profile_network_context_service.cc
+@@ -10,7 +10,6 @@
+ #include <string_view>
+ #include <vector>
+ 
+-#include "base/barrier_callback.h"
+ #include "base/base64.h"
+ #include "base/check_op.h"
+ #include "base/command_line.h"
+@@ -23,6 +22,7 @@
+ #include "base/functional/callback_helpers.h"
+ #include "base/metrics/field_trial.h"
+ #include "base/metrics/field_trial_params.h"
++#include "base/memory/ref_counted.h"
+ #include "base/notreached.h"
+ #include "base/strings/strcat.h"
+ #include "base/strings/string_number_conversions.h"
+@@ -32,6 +32,8 @@
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/task/task_traits.h"
+ #include "base/task/thread_pool.h"
++#include "base/time/time.h"
++#include "base/timer/timer.h"
+ #include "base/trace_event/trace_event.h"
+ #include "build/build_config.h"
+ #include "build/chromeos_buildflags.h"
+@@ -230,6 +232,62 @@
+             policy_exception_justification: "Not implemented."
+           })");
+ 
++constexpr base::TimeDelta kNetworkPersonaUpdateTimeout = base::Seconds(15);
++
++class TimedBooleanBarrier : public base::RefCounted<TimedBooleanBarrier> {
++ public:
++  static base::RepeatingCallback<void(bool)> Create(
++      size_t pending,
++      base::OnceCallback<void(bool)> callback) {
++    CHECK_GT(pending, 0u);
++    auto operation = base::MakeRefCounted<TimedBooleanBarrier>(
++        pending, std::move(callback));
++    operation->Start();
++    return base::BindRepeating(&TimedBooleanBarrier::OnResult,
++                               operation->weak_ptr_factory_.GetWeakPtr());
++  }
++
++  TimedBooleanBarrier(size_t pending, base::OnceCallback<void(bool)> callback)
++      : pending_(pending), callback_(std::move(callback)) {}
++
++ private:
++  friend class base::RefCounted<TimedBooleanBarrier>;
++  ~TimedBooleanBarrier() = default;
++
++  void Start() {
++    timeout_.Start(FROM_HERE, kNetworkPersonaUpdateTimeout,
++                   base::BindOnce(&TimedBooleanBarrier::Finish,
++                                  base::WrapRefCounted(this), false));
++  }
++
++  void OnResult(bool accepted) {
++    if (!callback_) {
++      return;
++    }
++    accepted_ &= accepted;
++    CHECK_GT(pending_, 0u);
++    if (--pending_ == 0u) {
++      Finish(accepted_);
++    }
++  }
++
++  void Finish(bool accepted) {
++    if (!callback_) {
++      return;
++    }
++    scoped_refptr<TimedBooleanBarrier> keep_alive(this);
++    weak_ptr_factory_.InvalidateWeakPtrs();
++    timeout_.Stop();
++    std::move(callback_).Run(accepted);
++  }
++
++  size_t pending_;
++  bool accepted_ = true;
++  base::OnceCallback<void(bool)> callback_;
++  base::OneShotTimer timeout_;
++  base::WeakPtrFactory<TimedBooleanBarrier> weak_ptr_factory_{this};
++};
++
+ net::ProxyConfigWithAnnotation MakeProxyConfigWithAnnotation(
+     const nitrous_proxy::ProxyConfig& config) {
+   if (!config.is_enabled() || !config.IsValid()) {
+@@ -827,15 +885,8 @@
+     return;
+   }
+ 
+-  auto barrier = base::BarrierCallback<bool>(
+-      partitions.size(),
+-      base::BindOnce(
+-          [](NetworkPersonaUpdateCallback callback,
+-             const std::vector<bool>& results) {
+-            std::move(callback).Run(std::ranges::all_of(
+-                results, [](bool result) { return result; }));
+-          },
+-          std::move(callback)));
++  auto barrier =
++      TimedBooleanBarrier::Create(partitions.size(), std::move(callback));
+   for (content::StoragePartition* partition : partitions) {
+     partition->GetNetworkContext()->UpdateSocksCredentials(
+         credentials ? credentials.Clone() : nullptr,
+@@ -873,14 +924,28 @@
+     }
+   }
+ 
+-  auto barrier = base::BarrierCallback<bool>(
+-      2, base::BindOnce(
+-             [](NetworkPersonaUpdateCallback callback,
+-                const std::vector<bool>& results) {
+-               std::move(callback).Run(std::ranges::all_of(
+-                   results, [](bool result) { return result; }));
+-             },
+-             std::move(callback)));
++  SetNetworkPersonaRequestsBlocked(
++      true,
++      base::BindOnce(
++          &ProfileNetworkContextService::OnNetworkPersonaRequestGateBlocked,
++          weak_factory_.GetWeakPtr(), std::move(config), route_id,
++          std::move(callback)));
++}
++
++void ProfileNetworkContextService::OnNetworkPersonaRequestGateBlocked(
++    network::mojom::NetworkPersonaConfigPtr config,
++    std::string route_id,
++    NetworkPersonaUpdateCallback callback,
++    bool accepted) {
++  if (is_shutting_down_) {
++    std::move(callback).Run(false);
++    return;
++  }
++  if (!accepted) {
++    std::move(callback).Run(false);
++    return;
++  }
++  auto barrier = TimedBooleanBarrier::Create(2, std::move(callback));
+   ApplyNetworkPersonaConfig(std::move(config), base::BindOnce(barrier));
+   ApplyNetworkRouteCandidate(route_id, base::BindOnce(barrier));
+ }
+@@ -896,14 +961,7 @@
+     return;
+   }
+   const nitrous_proxy::ProxyConfig config = service->GetEffectiveConfig();
+-  auto barrier = base::BarrierCallback<bool>(
+-      3, base::BindOnce(
+-             [](NetworkPersonaUpdateCallback callback,
+-                const std::vector<bool>& results) {
+-               std::move(callback).Run(std::ranges::all_of(
+-                   results, [](bool result) { return result; }));
+-             },
+-             std::move(callback)));
++  auto barrier = TimedBooleanBarrier::Create(3, std::move(callback));
+   proxy_config_monitor_->ApplyConfigOverrideAndFlush(
+       MakeProxyConfigWithAnnotation(config), base::BindOnce(barrier));
+   ApplySocksCredentialsForConfig(config, base::BindOnce(barrier));
+@@ -924,14 +982,11 @@
+   const nitrous_proxy::ProxyConfig config = service->GetConfig();
+   const bool route_valid =
+       service->ValidateRouteForActivation(service->GetActiveRouteId()).empty();
+-  auto barrier = base::BarrierCallback<bool>(
++  auto barrier = TimedBooleanBarrier::Create(
+       3, base::BindOnce(
+              [](NetworkPersonaUpdateCallback callback, bool route_valid,
+-                const std::vector<bool>& results) {
+-               std::move(callback).Run(
+-                   route_valid && std::ranges::all_of(results, [](bool result) {
+-                     return result;
+-                   }));
++                bool accepted) {
++               std::move(callback).Run(route_valid && accepted);
+              },
+              std::move(callback), route_valid));
+   proxy_config_monitor_->ClearConfigOverrideAndFlush(
+@@ -943,18 +998,120 @@
+ 
+ void ProfileNetworkContextService::ApplyCurrentNetworkIdentity(
+     NetworkPersonaUpdateCallback callback) {
+-  auto barrier = base::BarrierCallback<bool>(
+-      2, base::BindOnce(
+-             [](NetworkPersonaUpdateCallback callback,
+-                const std::vector<bool>& results) {
+-               std::move(callback).Run(std::ranges::all_of(
+-                   results, [](bool result) { return result; }));
+-             },
+-             std::move(callback)));
++  auto barrier = TimedBooleanBarrier::Create(2, std::move(callback));
+   ApplyNetworkPersonaConfig(base::BindOnce(barrier));
+   ApplyCurrentNetworkRoute(base::BindOnce(barrier));
+ }
+ 
++void ProfileNetworkContextService::ReleaseNetworkPersonaRequestGate(
++    NetworkPersonaUpdateCallback callback) {
++  SetNetworkPersonaRequestsBlocked(false, std::move(callback));
++}
++
++void ProfileNetworkContextService::SetNetworkPersonaRequestsBlocked(
++    bool blocked,
++    NetworkPersonaUpdateCallback callback) {
++  if (is_shutting_down_) {
++    std::move(callback).Run(false);
++    return;
++  }
++  if (blocked) {
++    network_persona_requests_blocked_ = true;
++    FanOutNetworkPersonaRequestGate(true, std::move(callback));
++    return;
++  }
++
++  // Keep new partitions blocked until every partition in the first release
++  // snapshot has acknowledged. A second pass catches partitions created while
++  // that snapshot was in flight.
++  FanOutNetworkPersonaRequestGate(
++      false,
++      base::BindOnce(
++          &ProfileNetworkContextService::
++              OnNetworkPersonaRequestGateReleaseFirstPass,
++          weak_factory_.GetWeakPtr(), std::move(callback)));
++}
++
++void ProfileNetworkContextService::FanOutNetworkPersonaRequestGate(
++    bool blocked,
++    NetworkPersonaUpdateCallback callback) {
++  if (is_shutting_down_ || !profile_ || !g_browser_process) {
++    std::move(callback).Run(false);
++    return;
++  }
++  std::vector<content::StoragePartition*> partitions;
++  profile_->ForEachLoadedStoragePartition(
++      [&](content::StoragePartition* storage_partition) {
++        partitions.push_back(storage_partition);
++      });
++
++  auto barrier =
++      TimedBooleanBarrier::Create(partitions.size() + 1, std::move(callback));
++
++  g_browser_process->system_network_context_manager()
++      ->SetNetworkPersonaRequestsBlockedForProfile(
++          profile_->GetPath(), blocked, base::BindOnce(barrier));
++  for (content::StoragePartition* partition : partitions) {
++    partition->GetNetworkContext()->SetNetworkPersonaRequestsBlocked(
++        blocked,
++        mojo::WrapCallbackWithDefaultInvokeIfNotRun(base::BindOnce(barrier),
++                                                    false));
++  }
++}
++
++void ProfileNetworkContextService::
++    OnNetworkPersonaRequestGateReleaseFirstPass(
++        NetworkPersonaUpdateCallback callback,
++        bool accepted) {
++  if (is_shutting_down_) {
++    std::move(callback).Run(false);
++    return;
++  }
++  if (!accepted) {
++    RestoreNetworkPersonaRequestGateAfterFailedRelease(std::move(callback));
++    return;
++  }
++  network_persona_requests_blocked_ = false;
++  FanOutNetworkPersonaRequestGate(
++      false,
++      base::BindOnce(
++          &ProfileNetworkContextService::
++              OnNetworkPersonaRequestGateReleaseConverged,
++          weak_factory_.GetWeakPtr(), std::move(callback)));
++}
++
++void ProfileNetworkContextService::
++    OnNetworkPersonaRequestGateReleaseConverged(
++        NetworkPersonaUpdateCallback callback,
++        bool accepted) {
++  if (is_shutting_down_) {
++    std::move(callback).Run(false);
++    return;
++  }
++  if (!accepted) {
++    RestoreNetworkPersonaRequestGateAfterFailedRelease(std::move(callback));
++    return;
++  }
++  std::move(callback).Run(true);
++}
++
++void ProfileNetworkContextService::
++    RestoreNetworkPersonaRequestGateAfterFailedRelease(
++        NetworkPersonaUpdateCallback callback) {
++  if (is_shutting_down_) {
++    std::move(callback).Run(false);
++    return;
++  }
++  network_persona_requests_blocked_ = true;
++  FanOutNetworkPersonaRequestGate(
++      true,
++      base::BindOnce(
++          [](NetworkPersonaUpdateCallback callback, bool) {
++            std::move(callback).Run(false);
++          },
++          std::move(callback)));
++}
++
+ void ProfileNetworkContextService::ApplyNetworkPersonaConfig(
+     network::mojom::NetworkPersonaConfigPtr config,
+     NetworkPersonaUpdateCallback callback) {
+@@ -971,14 +1128,8 @@
+     return;
+   }
+ 
+-  auto barrier = base::BarrierCallback<bool>(
+-      partitions.size(), base::BindOnce(
+-                             [](NetworkPersonaUpdateCallback callback,
+-                                const std::vector<bool>& results) {
+-                               std::move(callback).Run(std::ranges::all_of(
+-                                   results, std::identity()));
+-                             },
+-                             std::move(callback)));
++  auto barrier =
++      TimedBooleanBarrier::Create(partitions.size(), std::move(callback));
+   for (content::StoragePartition* partition : partitions) {
+     partition->GetNetworkContext()->UpdateNetworkPersona(
+         config ? config.Clone() : nullptr,
+@@ -1744,6 +1895,8 @@
+                  ? network_persona_config_override_.Clone()
+                  : nullptr)
+           : CreateNetworkPersonaConfig();
++  network_context_params->block_network_persona_requests =
++      network_persona_requests_blocked_;
+ 
+   network_context_params->accept_language = ComputeAcceptLanguage();
+   network_context_params->enable_referrers = enable_referrers_.GetValue();
+@@ -2081,8 +2234,16 @@
+ }
+ 
+ void ProfileNetworkContextService::Shutdown() {
++  weak_factory_.InvalidateWeakPtrs();
+   is_shutting_down_ = true;
+ 
++  if (network_persona_requests_blocked_ && g_browser_process) {
++    g_browser_process->system_network_context_manager()
++        ->SetNetworkPersonaRequestsBlockedForProfile(
++            profile_->GetPath(), false, base::DoNothing());
++    network_persona_requests_blocked_ = false;
++  }
++
+ #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
+   server_cert_database_observer_ = {};
+ #endif
+--- a/chrome/browser/net/profile_network_context_service.h
++++ b/chrome/browser/net/profile_network_context_service.h
+@@ -152,6 +152,8 @@
+       const std::string& route_id,
+       NetworkPersonaUpdateCallback callback);
+   void ApplyCurrentNetworkIdentity(NetworkPersonaUpdateCallback callback);
++  void ReleaseNetworkPersonaRequestGate(
++      NetworkPersonaUpdateCallback callback);
+   // Activation transactions apply an explicit candidate config. Suppress the
+   // pref observers until the transaction either commits or restores the
+   // current persisted config, so intermediate pref writes cannot overwrite it.
+@@ -179,6 +181,25 @@
+  private:
+   void ApplyNetworkRouteCandidate(const std::string& route_id,
+                                   NetworkPersonaUpdateCallback callback);
++  void OnNetworkPersonaRequestGateBlocked(
++      network::mojom::NetworkPersonaConfigPtr config,
++      std::string route_id,
++      NetworkPersonaUpdateCallback callback,
++      bool accepted);
++  void SetNetworkPersonaRequestsBlocked(
++      bool blocked,
++      NetworkPersonaUpdateCallback callback);
++  void FanOutNetworkPersonaRequestGate(
++      bool blocked,
++      NetworkPersonaUpdateCallback callback);
++  void OnNetworkPersonaRequestGateReleaseFirstPass(
++      NetworkPersonaUpdateCallback callback,
++      bool accepted);
++  void OnNetworkPersonaRequestGateReleaseConverged(
++      NetworkPersonaUpdateCallback callback,
++      bool accepted);
++  void RestoreNetworkPersonaRequestGateAfterFailedRelease(
++      NetworkPersonaUpdateCallback callback);
+   void ApplyCurrentNetworkRoute(NetworkPersonaUpdateCallback callback);
+   void ApplySocksCredentialsForConfig(const nitrous_proxy::ProxyConfig& config,
+                                       NetworkPersonaUpdateCallback callback);
+@@ -339,6 +360,7 @@
+       client_cert_store_factory_for_testing_;
+ 
+   bool network_persona_pref_updates_suppressed_ = false;
++  bool network_persona_requests_blocked_ = false;
+   // During an activation/rotation transaction, a partition can be created
+   // after the fan-out snapshot has been taken. Keep the transaction's latest
+   // config here so that such a partition starts with the same identity.
+--- a/chrome/browser/net/proxy_config_monitor.cc
++++ b/chrome/browser/net/proxy_config_monitor.cc
+@@ -4,13 +4,16 @@
+ 
+ #include "chrome/browser/net/proxy_config_monitor.h"
+ 
+-#include <algorithm>
+ #include <utility>
+-#include <vector>
+ 
+-#include "base/barrier_callback.h"
++#include "base/check.h"
++#include "base/check_op.h"
++#include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
++#include "base/memory/ref_counted.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "base/time/time.h"
++#include "base/timer/timer.h"
+ #include "build/build_config.h"
+ #include "build/chromeos_buildflags.h"
+ #include "chrome/browser/browser_process.h"
+@@ -28,10 +31,68 @@
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+ #include "chrome/browser/extensions/api/proxy/proxy_api.h"
+-#endif // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
++#endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+ 
+ using content::BrowserThread;
+ 
++namespace {
++
++constexpr base::TimeDelta kProxyConfigFlushTimeout = base::Seconds(15);
++
++class ProxyConfigFlushOperation
++    : public base::RefCounted<ProxyConfigFlushOperation> {
++ public:
++  ProxyConfigFlushOperation(size_t pending,
++                            base::OnceCallback<void(bool)> callback)
++      : pending_(pending), callback_(std::move(callback)) {}
++
++  void Start() {
++    timeout_.Start(
++        FROM_HERE, kProxyConfigFlushTimeout,
++        base::BindOnce(&ProxyConfigFlushOperation::OnTimeout,
++                       base::WrapRefCounted(this)));
++  }
++
++  void OnResult(bool accepted) {
++    if (!callback_) {
++      return;
++    }
++    accepted_ &= accepted;
++    CHECK_GT(pending_, 0u);
++    if (--pending_ == 0u) {
++      Finish(accepted_);
++    }
++  }
++
++  base::WeakPtr<ProxyConfigFlushOperation> GetWeakPtr() {
++    return weak_ptr_factory_.GetWeakPtr();
++  }
++
++ private:
++  friend class base::RefCounted<ProxyConfigFlushOperation>;
++  ~ProxyConfigFlushOperation() = default;
++
++  void OnTimeout() { Finish(false); }
++
++  void Finish(bool accepted) {
++    if (!callback_) {
++      return;
++    }
++    scoped_refptr<ProxyConfigFlushOperation> keep_alive(this);
++    weak_ptr_factory_.InvalidateWeakPtrs();
++    timeout_.Stop();
++    std::move(callback_).Run(accepted);
++  }
++
++  size_t pending_;
++  bool accepted_ = true;
++  base::OnceCallback<void(bool)> callback_;
++  base::OneShotTimer timeout_;
++  base::WeakPtrFactory<ProxyConfigFlushOperation> weak_ptr_factory_{this};
++};
++
++}  // namespace
++
+ ProxyConfigMonitor::ProxyConfigMonitor(Profile* profile) {
+   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+   DCHECK(profile);
+@@ -76,11 +137,20 @@
+   proxy_config_service_->AddObserver(this);
+ }
+ 
++ProxyConfigMonitor::ProxyConfigMonitor(
++    std::unique_ptr<net::ProxyConfigService> proxy_config_service)
++    : proxy_config_service_(std::move(proxy_config_service)) {
++  CHECK(proxy_config_service_);
++  proxy_config_service_->AddObserver(this);
++}
++
+ ProxyConfigMonitor::~ProxyConfigMonitor() {
+   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI) ||
+          !BrowserThread::IsThreadInitialized(BrowserThread::UI));
+   proxy_config_service_->RemoveObserver(this);
+-  pref_proxy_config_tracker_->DetachFromPrefService();
++  if (pref_proxy_config_tracker_) {
++    pref_proxy_config_tracker_->DetachFromPrefService();
++  }
+ }
+ 
+ void ProxyConfigMonitor::AddToNetworkContextParams(
+@@ -123,42 +193,37 @@
+     return;
+   }
+ 
+-  auto barrier = base::BarrierCallback<bool>(
+-      proxy_config_client_set_.size(),
+-      base::BindOnce(
+-          [](base::OnceCallback<void(bool)> callback,
+-             const std::vector<bool>& results) {
+-            std::move(callback).Run(std::ranges::all_of(
+-                results, [](bool result) { return result; }));
+-          },
+-          std::move(callback)));
++  auto operation = base::MakeRefCounted<ProxyConfigFlushOperation>(
++      proxy_config_client_set_.size(), std::move(callback));
++  operation->Start();
+   for (const auto& proxy_config_client : proxy_config_client_set_) {
+     proxy_config_client->FlushProxyConfig(mojo::WrapCallbackWithDropHandler(
+         base::BindOnce(
+-            [](base::RepeatingCallback<void(bool)> barrier) {
+-              barrier.Run(true);
+-            },
+-            barrier),
++            &ProxyConfigFlushOperation::OnResult, operation->GetWeakPtr(),
++            true),
+         base::BindOnce(
+-            [](base::RepeatingCallback<void(bool)> barrier) {
+-              barrier.Run(false);
+-            },
+-            barrier)));
++            &ProxyConfigFlushOperation::OnResult, operation->GetWeakPtr(),
++            false)));
+   }
+ }
+ 
+ void ProxyConfigMonitor::ApplyConfigOverrideAndFlush(
+     const net::ProxyConfigWithAnnotation& config,
+     base::OnceCallback<void(bool)> callback) {
++  const uint64_t generation = ++proxy_config_override_generation_;
+   proxy_config_override_ = config;
+   for (const auto& proxy_config_client : proxy_config_client_set_) {
+     proxy_config_client->OnProxyConfigUpdated(config);
+   }
+   Flush(base::BindOnce(
+       [](base::WeakPtr<ProxyConfigMonitor> monitor,
+-         base::OnceCallback<void(bool)> callback,
+-         bool flushed) { std::move(callback).Run(flushed && monitor); },
+-      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
++         uint64_t generation, base::OnceCallback<void(bool)> callback,
++         bool flushed) {
++        std::move(callback).Run(
++            flushed && monitor &&
++            monitor->proxy_config_override_generation_ == generation);
++      },
++      weak_ptr_factory_.GetWeakPtr(), generation, std::move(callback)));
+ }
+ 
+ void ProxyConfigMonitor::ClearConfigOverrideAndFlush(
+@@ -168,15 +233,18 @@
+   // full Mojo round trip. Sampling before the flush can observe the old pref;
+   // clearing the override before it completes can publish a newer conflicting
+   // update while the transaction still reports success.
++  const uint64_t generation = ++proxy_config_override_generation_;
+   proxy_config_override_ = expected_config;
+   for (const auto& proxy_config_client : proxy_config_client_set_) {
+     proxy_config_client->OnProxyConfigUpdated(expected_config);
+   }
+   Flush(base::BindOnce(
+       [](base::WeakPtr<ProxyConfigMonitor> monitor,
++         uint64_t generation,
+          net::ProxyConfigWithAnnotation expected_config,
+          base::OnceCallback<void(bool)> callback, bool flushed) {
+-        if (!flushed || !monitor) {
++        if (!flushed || !monitor ||
++            monitor->proxy_config_override_generation_ != generation) {
+           std::move(callback).Run(false);
+           return;
+         }
+@@ -197,7 +265,8 @@
+         // remain degraded instead of publishing an unverified route.
+         std::move(callback).Run(matches);
+       },
+-      weak_ptr_factory_.GetWeakPtr(), expected_config, std::move(callback)));
++      weak_ptr_factory_.GetWeakPtr(), generation, expected_config,
++      std::move(callback)));
+ }
+ 
+ void ProxyConfigMonitor::OnProxyConfigChanged(
+--- a/chrome/browser/net/proxy_config_monitor.h
++++ b/chrome/browser/net/proxy_config_monitor.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_NET_PROXY_CONFIG_MONITOR_H_
+ #define CHROME_BROWSER_NET_PROXY_CONFIG_MONITOR_H_
+ 
++#include <cstdint>
+ #include <memory>
+ #include <optional>
+ #include <string>
+@@ -50,6 +51,11 @@
+   // associated with a profile. Must be destroyed before |local_state|.
+   explicit ProxyConfigMonitor(PrefService* local_state);
+ 
++  // Test-only constructor for deterministic proxy service and Mojo ACK
++  // failure coverage.
++  explicit ProxyConfigMonitor(
++      std::unique_ptr<net::ProxyConfigService> proxy_config_service);
++
+   ProxyConfigMonitor(const ProxyConfigMonitor&) = delete;
+   ProxyConfigMonitor& operator=(const ProxyConfigMonitor&) = delete;
+ 
+@@ -69,8 +75,9 @@
+   // inherit the same candidate until ClearConfigOverrideAndFlush() runs.
+   void ApplyConfigOverrideAndFlush(const net::ProxyConfigWithAnnotation& config,
+                                    base::OnceCallback<void(bool)> callback);
+-  // Clears the transaction override, pushes the tracker-selected config, and
+-  // succeeds only when it matches the transaction's expected persisted config.
++  // Keeps the expected transaction config pinned through a full Mojo round
++  // trip, then clears the override only when the tracker-selected config
++  // matches it.
+   void ClearConfigOverrideAndFlush(
+       const net::ProxyConfigWithAnnotation& expected_config,
+       base::OnceCallback<void(bool)> callback);
+@@ -105,6 +112,7 @@
+ 
+   mojo::RemoteSet<network::mojom::ProxyConfigClient> proxy_config_client_set_;
+   std::optional<net::ProxyConfigWithAnnotation> proxy_config_override_;
++  uint64_t proxy_config_override_generation_ = 0;
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+   mojo::ReceiverSet<network::mojom::ProxyErrorClient> error_receiver_set_;
+--- /dev/null
++++ b/chrome/browser/net/proxy_config_monitor_unittest.cc
+@@ -0,0 +1,289 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/net/proxy_config_monitor.h"
++
++#include <memory>
++#include <utility>
++#include <vector>
++
++#include "base/check.h"
++#include "base/memory/raw_ptr.h"
++#include "base/test/task_environment.h"
++#include "base/test/test_future.h"
++#include "base/time/time.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++#include "net/proxy_resolution/proxy_config.h"
++#include "net/proxy_resolution/proxy_config_with_annotation.h"
++#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
++#include "services/network/public/mojom/network_context.mojom.h"
++#include "services/network/public/mojom/proxy_config_with_annotation.mojom.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace {
++
++class TestProxyConfigService final : public net::ProxyConfigService {
++ public:
++  void AddObserver(Observer* observer) override { observer_ = observer; }
++  void RemoveObserver(Observer* observer) override {
++    EXPECT_EQ(observer_, observer);
++    observer_ = nullptr;
++  }
++
++  ConfigAvailability GetLatestProxyConfig(
++      net::ProxyConfigWithAnnotation* config) override {
++    *config = config_;
++    return availability_;
++  }
++
++  void SetConfig(ConfigAvailability availability,
++                 const net::ProxyConfigWithAnnotation& config) {
++    availability_ = availability;
++    config_ = config;
++  }
++
++  void NotifyConfig(ConfigAvailability availability,
++                    const net::ProxyConfigWithAnnotation& config) {
++    SetConfig(availability, config);
++    ASSERT_TRUE(observer_);
++    observer_->OnProxyConfigChanged(config, availability);
++  }
++
++ private:
++  raw_ptr<Observer> observer_ = nullptr;
++  ConfigAvailability availability_ = CONFIG_UNSET;
++  net::ProxyConfigWithAnnotation config_;
++};
++
++class TestProxyConfigClient final
++    : public network::mojom::ProxyConfigClient {
++ public:
++  enum class FlushBehavior { kAutoAck, kDelayedAck, kDrop, kHang };
++
++  explicit TestProxyConfigClient(FlushBehavior behavior)
++      : behavior_(behavior) {}
++
++  void Bind(
++      mojo::PendingReceiver<network::mojom::ProxyConfigClient> receiver) {
++    receiver_.Bind(std::move(receiver));
++  }
++
++  void OnProxyConfigUpdated(
++      const net::ProxyConfigWithAnnotation& config) override {
++    updates_.push_back(config);
++  }
++
++  void FlushProxyConfig(FlushProxyConfigCallback callback) override {
++    switch (behavior_) {
++      case FlushBehavior::kAutoAck:
++        std::move(callback).Run();
++        return;
++      case FlushBehavior::kDelayedAck:
++        pending_flush_ = std::move(callback);
++        return;
++      case FlushBehavior::kDrop:
++        receiver_.reset();
++        return;
++      case FlushBehavior::kHang:
++        pending_flush_ = std::move(callback);
++        return;
++    }
++  }
++
++  void CompleteFlush() {
++    ASSERT_TRUE(pending_flush_);
++    std::move(pending_flush_).Run();
++  }
++
++  void set_behavior(FlushBehavior behavior) { behavior_ = behavior; }
++
++  size_t update_count() const { return updates_.size(); }
++
++  const net::ProxyConfigWithAnnotation& last_update() const {
++    CHECK(!updates_.empty());
++    return updates_.back();
++  }
++
++ private:
++  FlushBehavior behavior_;
++  std::vector<net::ProxyConfigWithAnnotation> updates_;
++  FlushProxyConfigCallback pending_flush_;
++  mojo::Receiver<network::mojom::ProxyConfigClient> receiver_{this};
++};
++
++net::ProxyConfigWithAnnotation MakeProxyConfig() {
++  net::ProxyConfig config;
++  config.proxy_rules().ParseFromString("http://proxy.test:8080");
++  return net::ProxyConfigWithAnnotation(config,
++                                        TRAFFIC_ANNOTATION_FOR_TESTS);
++}
++
++class ProxyConfigMonitorTest : public testing::Test {
++ protected:
++  ProxyConfigMonitorTest()
++      : task_environment_(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
++    auto proxy_config_service = std::make_unique<TestProxyConfigService>();
++    proxy_config_service_ = proxy_config_service.get();
++    monitor_ =
++        std::make_unique<ProxyConfigMonitor>(std::move(proxy_config_service));
++  }
++
++  void AddClient(TestProxyConfigClient* client) {
++    auto params = network::mojom::NetworkContextParams::New();
++    monitor_->AddToNetworkContextParams(params.get());
++    client->Bind(std::move(params->proxy_config_client_receiver));
++  }
++
++  base::test::TaskEnvironment task_environment_;
++  raw_ptr<TestProxyConfigService> proxy_config_service_;
++  std::unique_ptr<ProxyConfigMonitor> monitor_;
++};
++
++TEST_F(ProxyConfigMonitorTest, FlushWaitsForEveryClient) {
++  TestProxyConfigClient first(
++      TestProxyConfigClient::FlushBehavior::kDelayedAck);
++  TestProxyConfigClient second(
++      TestProxyConfigClient::FlushBehavior::kDelayedAck);
++  AddClient(&first);
++  AddClient(&second);
++
++  base::test::TestFuture<bool> result;
++  monitor_->Flush(result.GetCallback());
++  task_environment_.RunUntilIdle();
++  EXPECT_FALSE(result.IsReady());
++  first.CompleteFlush();
++  task_environment_.RunUntilIdle();
++  EXPECT_FALSE(result.IsReady());
++  second.CompleteFlush();
++  EXPECT_TRUE(result.Get());
++}
++
++TEST_F(ProxyConfigMonitorTest, FlushFailsWhenAnyClientDrops) {
++  TestProxyConfigClient first(TestProxyConfigClient::FlushBehavior::kAutoAck);
++  TestProxyConfigClient second(TestProxyConfigClient::FlushBehavior::kDrop);
++  AddClient(&first);
++  AddClient(&second);
++
++  base::test::TestFuture<bool> result;
++  monitor_->Flush(result.GetCallback());
++  EXPECT_FALSE(result.Get());
++}
++
++TEST_F(ProxyConfigMonitorTest, FlushTimesOutAndIgnoresLateAck) {
++  TestProxyConfigClient client(TestProxyConfigClient::FlushBehavior::kHang);
++  AddClient(&client);
++
++  base::test::TestFuture<bool> result;
++  monitor_->Flush(result.GetCallback());
++  task_environment_.RunUntilIdle();
++  EXPECT_FALSE(result.IsReady());
++  task_environment_.FastForwardBy(base::Seconds(15));
++  EXPECT_FALSE(result.Get());
++  client.CompleteFlush();
++  task_environment_.RunUntilIdle();
++}
++
++TEST_F(ProxyConfigMonitorTest, ClearMismatchKeepsExpectedConfigPinned) {
++  TestProxyConfigClient client(
++      TestProxyConfigClient::FlushBehavior::kAutoAck);
++  AddClient(&client);
++  proxy_config_service_->SetConfig(net::ProxyConfigService::CONFIG_VALID,
++                                   MakeProxyConfig());
++  const net::ProxyConfigWithAnnotation expected =
++      net::ProxyConfigWithAnnotation::CreateDirect();
++
++  base::test::TestFuture<bool> result;
++  monitor_->ClearConfigOverrideAndFlush(expected, result.GetCallback());
++  EXPECT_FALSE(result.Get());
++
++  auto params = network::mojom::NetworkContextParams::New();
++  monitor_->AddToNetworkContextParams(params.get());
++  ASSERT_TRUE(params->initial_proxy_config);
++  EXPECT_TRUE(params->initial_proxy_config->value().Equals(expected.value()));
++}
++
++TEST_F(ProxyConfigMonitorTest, ClearPendingKeepsExpectedConfigPinned) {
++  TestProxyConfigClient client(
++      TestProxyConfigClient::FlushBehavior::kAutoAck);
++  AddClient(&client);
++  proxy_config_service_->SetConfig(net::ProxyConfigService::CONFIG_PENDING,
++                                   MakeProxyConfig());
++  const net::ProxyConfigWithAnnotation expected =
++      net::ProxyConfigWithAnnotation::CreateDirect();
++
++  base::test::TestFuture<bool> result;
++  monitor_->ClearConfigOverrideAndFlush(expected, result.GetCallback());
++  EXPECT_FALSE(result.Get());
++
++  auto params = network::mojom::NetworkContextParams::New();
++  monitor_->AddToNetworkContextParams(params.get());
++  ASSERT_TRUE(params->initial_proxy_config);
++  EXPECT_TRUE(params->initial_proxy_config->value().Equals(expected.value()));
++}
++
++TEST_F(ProxyConfigMonitorTest, ClearAcceptsUnsetAsDirect) {
++  TestProxyConfigClient client(
++      TestProxyConfigClient::FlushBehavior::kAutoAck);
++  AddClient(&client);
++  proxy_config_service_->SetConfig(
++      net::ProxyConfigService::CONFIG_UNSET,
++      net::ProxyConfigWithAnnotation::CreateDirect());
++
++  base::test::TestFuture<bool> result;
++  monitor_->ClearConfigOverrideAndFlush(
++      net::ProxyConfigWithAnnotation::CreateDirect(), result.GetCallback());
++  EXPECT_TRUE(result.Get());
++}
++
++TEST_F(ProxyConfigMonitorTest, ClearMatchReleasesOverride) {
++  TestProxyConfigClient client(
++      TestProxyConfigClient::FlushBehavior::kAutoAck);
++  AddClient(&client);
++  const net::ProxyConfigWithAnnotation expected = MakeProxyConfig();
++  proxy_config_service_->SetConfig(net::ProxyConfigService::CONFIG_VALID,
++                                   expected);
++
++  base::test::TestFuture<bool> result;
++  monitor_->ClearConfigOverrideAndFlush(expected, result.GetCallback());
++  EXPECT_TRUE(result.Get());
++  ASSERT_EQ(client.update_count(), 1u);
++
++  const net::ProxyConfigWithAnnotation direct =
++      net::ProxyConfigWithAnnotation::CreateDirect();
++  proxy_config_service_->NotifyConfig(net::ProxyConfigService::CONFIG_VALID,
++                                      direct);
++  ASSERT_EQ(client.update_count(), 2u);
++  EXPECT_TRUE(client.last_update().value().Equals(direct.value()));
++}
++
++TEST_F(ProxyConfigMonitorTest, StaleClearCannotReleaseNewOverride) {
++  TestProxyConfigClient client(
++      TestProxyConfigClient::FlushBehavior::kDelayedAck);
++  AddClient(&client);
++  const net::ProxyConfigWithAnnotation direct =
++      net::ProxyConfigWithAnnotation::CreateDirect();
++  proxy_config_service_->SetConfig(net::ProxyConfigService::CONFIG_VALID,
++                                   direct);
++
++  base::test::TestFuture<bool> stale_clear;
++  monitor_->ClearConfigOverrideAndFlush(direct, stale_clear.GetCallback());
++  task_environment_.RunUntilIdle();
++  EXPECT_FALSE(stale_clear.IsReady());
++
++  client.set_behavior(TestProxyConfigClient::FlushBehavior::kAutoAck);
++  const net::ProxyConfigWithAnnotation candidate = MakeProxyConfig();
++  base::test::TestFuture<bool> new_apply;
++  monitor_->ApplyConfigOverrideAndFlush(candidate, new_apply.GetCallback());
++  EXPECT_TRUE(new_apply.Get());
++
++  client.CompleteFlush();
++  EXPECT_FALSE(stale_clear.Get());
++  auto params = network::mojom::NetworkContextParams::New();
++  monitor_->AddToNetworkContextParams(params.get());
++  ASSERT_TRUE(params->initial_proxy_config);
++  EXPECT_TRUE(
++      params->initial_proxy_config->value().Equals(candidate.value()));
++}
++
++}  // namespace
+--- a/chrome/browser/net/system_network_context_manager.cc
++++ b/chrome/browser/net/system_network_context_manager.cc
+@@ -71,6 +71,7 @@
+ #include "content/public/common/content_switches.h"
+ #include "crypto/sha2.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
++#include "mojo/public/cpp/bindings/callback_helpers.h"
+ #include "mojo/public/cpp/bindings/receiver_set.h"
+ #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+ #include "net/base/features.h"
+@@ -1092,6 +1093,72 @@
+                                                     std::move(callback));
+ }
+ 
++void SystemNetworkContextManager::
++    SetNetworkPersonaRequestsBlockedForProfile(
++        const base::FilePath& profile_path,
++        bool blocked,
++        base::OnceCallback<void(bool)> callback) {
++  if (blocked) {
++    network_persona_request_gate_profiles_.insert(profile_path);
++  } else {
++    network_persona_request_gate_profiles_.erase(profile_path);
++  }
++  network_persona_request_gate_callbacks_.push_back(
++      NetworkPersonaRequestGateUpdate{blocked, std::move(callback)});
++  UpdateNetworkPersonaRequestGate();
++}
++
++void SystemNetworkContextManager::UpdateNetworkPersonaRequestGate() {
++  if (network_persona_request_gate_update_in_flight_) {
++    return;
++  }
++
++  const bool requested_blocked =
++      !network_persona_request_gate_profiles_.empty();
++  if (network_persona_request_gate_applied_ == requested_blocked) {
++    CompleteNetworkPersonaRequestGateUpdates(true);
++    return;
++  }
++
++  network_persona_request_gate_update_in_flight_ = true;
++  GetContext()->SetNetworkPersonaRequestsBlocked(
++      requested_blocked,
++      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
++          base::BindOnce(
++              &SystemNetworkContextManager::OnNetworkPersonaRequestGateUpdated,
++              weak_factory_.GetWeakPtr(), requested_blocked),
++          false));
++}
++
++void SystemNetworkContextManager::OnNetworkPersonaRequestGateUpdated(
++    bool requested_blocked,
++    bool accepted) {
++  network_persona_request_gate_update_in_flight_ = false;
++  if (!accepted) {
++    network_persona_request_gate_applied_.reset();
++    CompleteNetworkPersonaRequestGateUpdates(false);
++    return;
++  }
++
++  network_persona_request_gate_applied_ = requested_blocked;
++  UpdateNetworkPersonaRequestGate();
++}
++
++void SystemNetworkContextManager::CompleteNetworkPersonaRequestGateUpdates(
++    bool accepted) {
++  std::vector<NetworkPersonaRequestGateUpdate> callbacks;
++  callbacks.swap(network_persona_request_gate_callbacks_);
++  for (auto& update : callbacks) {
++    // A callback is only successful when the aggregate gate reached the state
++    // that this request asked for. A later profile release must not satisfy an
++    // earlier block request merely because both updates shared one ACK.
++    const bool reached_requested_state =
++        network_persona_request_gate_applied_.has_value() &&
++        update.desired_blocked == *network_persona_request_gate_applied_;
++    std::move(update.callback).Run(accepted && reached_requested_state);
++  }
++}
++
+ void SystemNetworkContextManager::FlushSSLConfigManagerForTesting() {
+   ssl_config_service_manager_.FlushForTesting();
+ }
+@@ -1157,6 +1224,8 @@
+   network_context_params->enable_referrers = enable_referrers_.GetValue();
+ 
+   network_context_params->http_cache_enabled = false;
++  network_context_params->block_network_persona_requests =
++      !network_persona_request_gate_profiles_.empty();
+ 
+   proxy_config_monitor_.AddToNetworkContextParams(network_context_params.get());
+ 
+--- a/chrome/browser/net/system_network_context_manager.h
++++ b/chrome/browser/net/system_network_context_manager.h
+@@ -7,13 +7,16 @@
+ 
+ #include <memory>
+ #include <optional>
++#include <set>
+ #include <vector>
+ 
++#include "base/files/file_path.h"
+ #include "base/feature_list.h"
+-#include "base/functional/callback_forward.h"
++#include "base/functional/callback.h"
+ #include "base/gtest_prod_util.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/scoped_refptr.h"
++#include "base/memory/weak_ptr.h"
+ #include "chrome/browser/net/cert_verifier_service_time_updater.h"
+ #include "chrome/browser/net/proxy_config_monitor.h"
+ #include "chrome/browser/net/stub_resolver_config_reader.h"
+@@ -178,6 +181,13 @@
+       const net::ProxyConfigWithAnnotation& expected_config,
+       base::OnceCallback<void(bool)> callback);
+ 
++  // A profile-scoped token keeps the shared system NetworkContext blocked
++  // until every concurrent Persona identity transaction has released it.
++  void SetNetworkPersonaRequestsBlockedForProfile(
++      const base::FilePath& profile_path,
++      bool blocked,
++      base::OnceCallback<void(bool)> callback);
++
+   // Flushes all pending SSL configuration changes.
+   void FlushSSLConfigManagerForTesting();
+ 
+@@ -267,6 +277,16 @@
+ 
+   void UpdateTLS13EarlyDataEnabled();
+ 
++  void UpdateNetworkPersonaRequestGate();
++  void OnNetworkPersonaRequestGateUpdated(bool requested_blocked,
++                                          bool accepted);
++  void CompleteNetworkPersonaRequestGateUpdates(bool accepted);
++
++  struct NetworkPersonaRequestGateUpdate {
++    bool desired_blocked;
++    base::OnceCallback<void(bool)> callback;
++  };
++
+   // The PrefService to retrieve all the pref values.
+   raw_ptr<PrefService> local_state_;
+ 
+@@ -286,6 +306,12 @@
+   scoped_refptr<URLLoaderFactoryForSystem> shared_url_loader_factory_;
+   mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_;
+ 
++  std::set<base::FilePath> network_persona_request_gate_profiles_;
++  std::optional<bool> network_persona_request_gate_applied_ = false;
++  bool network_persona_request_gate_update_in_flight_ = false;
++  std::vector<NetworkPersonaRequestGateUpdate>
++      network_persona_request_gate_callbacks_;
++
+   bool is_quic_allowed_ = true;
+ 
+   PrefChangeRegistrar pref_change_registrar_;
+@@ -318,6 +344,8 @@
+   std::unique_ptr<CookieEncryptionProviderImpl> cookie_encryption_provider_;
+ 
+   std::unique_ptr<CertVerifierServiceTimeUpdater> cert_verifier_time_updater_;
++
++  base::WeakPtrFactory<SystemNetworkContextManager> weak_factory_{this};
+ };
+ 
+ #endif  // CHROME_BROWSER_NET_SYSTEM_NETWORK_CONTEXT_MANAGER_H_
+--- a/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+@@ -76,6 +76,21 @@
+   networkRoute: Record<string, unknown>;
+   assurance: Record<string, unknown>;
+   transition: Record<string, unknown>;
++  runtimeEvidence: {
++    scope: string;
++    frames: {
++      status: string;
++      total: number;
++      matched: number;
++      mismatched: number;
++      unreachable: number;
++    };
++    noiseTokens?: Record<string, {
++      expected: boolean;
++      status: string;
++      mismatched: number;
++    }>;
++  };
+ }
+ 
+ export interface PersonaBrowserProxy {
+--- a/chrome/browser/ui/startup/startup_browser_creator.cc
++++ b/chrome/browser/ui/startup/startup_browser_creator.cc
+@@ -313,8 +313,6 @@
+ 
+   PendingPersonaLaunchRequest request = std::move(it->second);
+   pending_requests.erase(it);
+-  std::move(callback).Run(std::move(response));
+-  ClosePersonaPicker(profile.get());
+ 
+   StartupBrowserCreator browser_creator;
+   browser_creator.AddFirstRunTabs(request.first_run_tabs);
+@@ -322,6 +320,8 @@
+                                 request.cur_dir, request.process_startup,
+                                 request.is_first_run,
+                                 request.restore_tabbed_browser);
++  ClosePersonaPicker(profile.get());
++  std::move(callback).Run(std::move(response));
+ }
+ #endif
+ 
+--- a/chrome/browser/ui/webui/settings/persona_handler.cc
++++ b/chrome/browser/ui/webui/settings/persona_handler.cc
+@@ -176,9 +176,17 @@
+ void PersonaHandler::HandleGetPersonaAudit(const base::ListValue& args) {
+   AllowJavascript();
+   CHECK_EQ(1U, args.size());
++  CHECK(args[0].is_string());
+   helium_persona::PersonaService* service = GetPersonaService(profile_);
+   CHECK(service);
+-  ResolveJavascriptCallback(args[0], service->GetPersonaAudit());
++  service->GetPersonaAudit(base::BindOnce(
++      &PersonaHandler::OnGetPersonaAuditFinished,
++      weak_ptr_factory_.GetWeakPtr(), args[0].GetString()));
++}
++
++void PersonaHandler::OnGetPersonaAuditFinished(std::string callback_id,
++                                               base::DictValue response) {
++  ResolveJavascriptCallback(base::Value(callback_id), response);
+ }
+ 
+ void PersonaHandler::HandleCreatePersonaProfile(const base::ListValue& args) {
+--- a/chrome/browser/ui/webui/settings/persona_handler.h
++++ b/chrome/browser/ui/webui/settings/persona_handler.h
+@@ -29,6 +29,8 @@
+   void HandleResolvePersona(const base::ListValue& args);
+   void HandleGetEffectivePersona(const base::ListValue& args);
+   void HandleGetPersonaAudit(const base::ListValue& args);
++  void OnGetPersonaAuditFinished(std::string callback_id,
++                                 base::DictValue response);
+   void HandleCreatePersonaProfile(const base::ListValue& args);
+   void HandleSavePersona(const base::ListValue& args);
+   void HandleImportPersonas(const base::ListValue& args);
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -7933,6 +7933,8 @@
+     ]
+   }
+ 
++  sources += [ "../browser/net/proxy_config_monitor_unittest.cc" ]
++
+   if (enable_paint_preview) {
+     sources += [
+       "../browser/paint_preview/services/paint_preview_tab_service_unittest.cc",
+--- a/chrome/test/chromedriver/client/chromedriver.py
++++ b/chrome/test/chromedriver/client/chromedriver.py
+@@ -116,7 +116,8 @@
+       page_load_strategy=None, unexpected_alert_behaviour=None,
+       devtools_events_to_log=None, accept_insecure_certs=None,
+       timeouts=None, test_name=None, web_socket_url=None, browser_name=None,
+-      http_timeout=None):
++      http_timeout=None, nitrous_persona_id=None,
++      nitrous_browser_context_id=None):
+     self._executor = command_executor.CommandExecutor(server_url,
+                                                       http_timeout=http_timeout)
+     self._server_url = server_url
+@@ -240,6 +241,12 @@
+     if browser_name is not None:
+       params['browserName'] = browser_name
+ 
++    if nitrous_persona_id is not None:
++      params['nitrous:personaId'] = nitrous_persona_id
++
++    if nitrous_browser_context_id is not None:
++      params['nitrous:browserContextId'] = nitrous_browser_context_id
++
+     if send_w3c_request:
+       params = {'capabilities': {'alwaysMatch': params}}
+     else:
+--- a/chrome/test/chromedriver/test/run_py_tests.py
++++ b/chrome/test/chromedriver/test/run_py_tests.py
+@@ -142,6 +142,7 @@
+     'ChromeDriverTest.testWindowFullScreenHeadless',
+ ]
+ _BROWSER_SPECIFIC_FILTER['chrome-headless-shell'] = [
++    'NitrousPersonaCapabilityTest.*',
+     # Maximize and FullScreeen operations make no sense in chrome-headless-mode.
+     # The implementation just changes the window state.
+     # S/A: BrowserHandler::setWindowsBounds at
+@@ -246,6 +247,7 @@
+ _ANDROID_NEGATIVE_FILTER = {}
+ _ANDROID_NEGATIVE_FILTER['chrome'] = (
+     _NEGATIVE_FILTER + [
++        'NitrousPersonaCapabilityTest.*',
+         # Android doesn't support switches and extensions.
+         'ChromeSwitchesCapabilityTest.*',
+         'ChromeExtensionsCapabilityTest.*',
+@@ -7059,6 +7061,36 @@
+     self.assertFalse(driver.IsAlertOpen())
+ 
+ 
++class NitrousPersonaCapabilityTest(ChromeDriverBaseTest):
++  """Exercises Persona activation through the complete New Session path."""
++
++  def testDefaultPersonaResumesFreshProfileStartup(self):
++    user_data_dir = self.CreateTempDir()
++    driver = self.CreateDriver(
++        chrome_switches=['user-data-dir=' + user_data_dir],
++        nitrous_persona_id='default',
++        nitrous_browser_context_id='default')
++
++    self.assertEqual('default', driver.capabilities['nitrous:personaId'])
++    self.assertEqual('default',
++                     driver.capabilities['nitrous:browserContextId'])
++    self.assertNotEqual('chrome://persona-picker/', driver.GetCurrentUrl())
++    self.assertEqual(2, driver.ExecuteScript('return 1 + 1'))
++
++  def testUnknownPersonaRejectsNewSession(self):
++    user_data_dir = self.CreateTempDir()
++    with self.assertRaises(chromedriver.SessionNotCreated) as raised:
++      self.CreateDriver(
++          chrome_switches=['user-data-dir=' + user_data_dir],
++          nitrous_persona_id='missing-persona',
++          nitrous_browser_context_id='default')
++
++    message = str(raised.exception)
++    self.assertIn('Unknown persona', message)
++    self.assertIn('not_committed', message)
++    self.assertIn('not_started', message)
++
++
+ class ChromeExtensionsCapabilityTest(ChromeDriverBaseTestWithWebServer):
+   """Tests that chromedriver properly processes chromeOptions.extensions."""
+ 
+--- a/content/browser/renderer_host/navigation_request.cc
++++ b/content/browser/renderer_host/navigation_request.cc
+@@ -9119,6 +9119,9 @@
+   commit_params_->helium_font_metric_noise_token = GetHeliumNoiseToken(
+       browser_context, commit_params_->origin_to_commit,
+       commit_params_->persona_snapshot, blink::HeliumNoiseFeature::kFontMetric);
++  commit_params_->helium_client_rect_noise_token = GetHeliumNoiseToken(
++      browser_context, commit_params_->origin_to_commit,
++      commit_params_->persona_snapshot, blink::HeliumNoiseFeature::kClientRect);
+ 
+   if (!IsSameDocument()) {
+ #if DCHECK_IS_ON()
+--- a/content/browser/renderer_host/render_frame_host_impl.cc
++++ b/content/browser/renderer_host/render_frame_host_impl.cc
+@@ -3647,6 +3647,16 @@
+   }
+ }
+ 
++void RenderFrameHostImpl::GetHeliumPersonaSurfaceProbe(
++    base::OnceCallback<void(blink::mojom::HeliumPersonaSurfaceProbePtr)>
++        callback) {
++  if (!IsRenderFrameLive()) {
++    std::move(callback).Run(nullptr);
++    return;
++  }
++  GetAssociatedLocalFrame()->GetHeliumPersonaSurfaceProbe(std::move(callback));
++}
++
+ bool RenderFrameHostImpl::IsErrorDocument() const {
+   // This shouldn't be called before committing the document as this value is
+   // set during call to RenderFrameHostImpl::DidNavigate which happens after
+--- a/content/browser/renderer_host/render_frame_host_impl.h
++++ b/content/browser/renderer_host/render_frame_host_impl.h
+@@ -613,6 +613,9 @@
+   void GetOpenGraphMetadata(
+       base::OnceCallback<void(blink::mojom::OpenGraphMetadataPtr)> callback)
+       override;
++  void GetHeliumPersonaSurfaceProbe(
++      base::OnceCallback<void(blink::mojom::HeliumPersonaSurfaceProbePtr)>
++          callback) override;
+   bool IsErrorDocument() const override;
+   DocumentRef GetDocumentRef() override;
+   WeakDocumentPtr GetWeakDocumentPtr() override;
+--- a/content/public/browser/render_frame_host.h
++++ b/content/public/browser/render_frame_host.h
+@@ -1091,6 +1091,12 @@
+   virtual void GetOpenGraphMetadata(
+       base::OnceCallback<void(blink::mojom::OpenGraphMetadataPtr)>) = 0;
+ 
++  // Returns renderer-held Persona snapshot and noise-token evidence for the
++  // current execution context. A null result means the frame was not live.
++  virtual void GetHeliumPersonaSurfaceProbe(
++      base::OnceCallback<void(
++          blink::mojom::HeliumPersonaSurfaceProbePtr)> callback) = 0;
++
+   // Returns true if the last navigation in this RenderFrameHost has committed
+   // an error document that is a placeholder document installed when the
+   // navigation failed or was blocked, containing an error message like "This
+--- a/content/public/test/fake_local_frame.cc
++++ b/content/public/test/fake_local_frame.cc
+@@ -195,6 +195,11 @@
+ 
+ void FakeLocalFrame::HandleRendererDebugURL(const GURL& url) {}
+ 
++void FakeLocalFrame::GetHeliumPersonaSurfaceProbe(
++    GetHeliumPersonaSurfaceProbeCallback callback) {
++  std::move(callback).Run(blink::mojom::HeliumPersonaSurfaceProbe::New());
++}
++
+ void FakeLocalFrame::GetCanonicalUrlForSharing(
+     base::OnceCallback<void(const std::optional<GURL>&)> callback) {}
+ 
+--- a/content/public/test/fake_local_frame.h
++++ b/content/public/test/fake_local_frame.h
+@@ -47,6 +47,8 @@
+   void FlushMessages();
+ 
+   // blink::mojom::LocalFrame:
++  void GetHeliumPersonaSurfaceProbe(
++      GetHeliumPersonaSurfaceProbeCallback callback) override;
+   void GetTextSurroundingSelection(
+       uint32_t max_length,
+       GetTextSurroundingSelectionCallback callback) override;
+--- a/services/network/cors/cors_url_loader.cc
++++ b/services/network/cors/cors_url_loader.cc
+@@ -1169,6 +1169,13 @@
+   HandleComplete(URLLoaderCompletionStatus(net::ERR_ABORTED));
+ }
+ 
++void CorsURLLoader::CancelForNetworkPersonaTransition() {
++  network_loader_.reset();
++  network_client_receiver_.reset();
++  HandleComplete(
++      URLLoaderCompletionStatus(net::ERR_NETWORK_ACCESS_REVOKED));
++}
++
+ void CorsURLLoader::OnNetworkClientMojoDisconnect() {
+   if (shared_dictionary_data_pipe_writer_) {
+     // If we already received URLLoaderCompletionStatus, ignores this disconnect
+--- a/services/network/cors/cors_url_loader.h
++++ b/services/network/cors/cors_url_loader.h
+@@ -109,6 +109,8 @@
+   void SetPriority(net::RequestPriority priority,
+                    int intra_priority_value) override;
+ 
++  void CancelForNetworkPersonaTransition();
++
+   // mojom::URLLoaderClient overrides:
+   void OnReceiveEarlyHints(mojom::EarlyHintsPtr early_hints) override;
+   void OnReceiveResponse(
+--- a/services/network/cors/cors_url_loader_factory.cc
++++ b/services/network/cors/cors_url_loader_factory.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <optional>
+ #include <utility>
++#include <vector>
+ 
+ #include "base/debug/crash_logging.h"
+ #include "base/functional/bind.h"
+@@ -320,6 +321,34 @@
+   }
+ }
+ 
++void CorsURLLoaderFactory::AbortAllRequestsForNetworkPersonaTransition() {
++  prevent_self_deletion_ = true;
++  std::vector<CorsURLLoader*> cors_loaders;
++  cors_loaders.reserve(cors_url_loaders_.size());
++  for (const auto& loader : cors_url_loaders_) {
++    cors_loaders.push_back(loader.get());
++  }
++  for (CorsURLLoader* loader : cors_loaders) {
++    if (cors_url_loaders_.find(loader) != cors_url_loaders_.end()) {
++      loader->CancelForNetworkPersonaTransition();
++    }
++  }
++
++  std::vector<URLLoader*> url_loaders;
++  url_loaders.reserve(url_loaders_.size());
++  for (const auto& loader : url_loaders_) {
++    url_loaders.push_back(loader.get());
++  }
++  for (URLLoader* loader : url_loaders) {
++    if (url_loaders_.find(loader) != url_loaders_.end()) {
++      loader->CancelForNetworkPersonaTransition();
++    }
++  }
++  prevent_self_deletion_ = false;
++  DeleteIfNeeded();
++  // `this` may be deleted here.
++}
++
+ // This function is only used as an export for URLLoaderNetworkServiceObserver
+ // gained from URLLoaderFactoryParams, which might be invalid in a few cases.
+ // Please call URLLoaderFactory::GetURLLoaderNetworkServiceObserver() instead.
+--- a/services/network/cors/cors_url_loader_factory.h
++++ b/services/network/cors/cors_url_loader_factory.h
+@@ -94,6 +94,10 @@
+   void OnCorsURLLoaderCreated(std::unique_ptr<CorsURLLoader> loader);
+   void DestroyURLLoader(URLLoader* loader);
+ 
++  // Cancels every request owned by this factory while preserving its Mojo
++  // bindings for the post-transition epoch.
++  void AbortAllRequestsForNetworkPersonaTransition();
++
+   // If there are no active loaders and the `owner_` has no remaining external
+   // references (Mojo bindings), requests the owner to destroy this factory
+   // instance. Will not delete `this` if `prevent_self_deletion_` is true.
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -735,6 +735,8 @@
+       prefetch_cache_(prefetch_enabled_ ? std::make_unique<PrefetchCache>()
+                                         : nullptr),
+       variations_headers_(std::move(params_->initial_variations_headers)) {
++  network_persona_requests_blocked_ =
++      params_->block_network_persona_requests;
+ 
+   if (features::ShouldBindNetworkContextDirectReceiver()) {
+     receiver_.emplace<DirectReceiver>(mojo::DirectReceiverKey{}, this);
+@@ -1867,6 +1869,42 @@
+   std::move(callback).Run();
+ }
+ 
++void NetworkContext::SetNetworkPersonaRequestsBlocked(
++    bool blocked,
++    SetNetworkPersonaRequestsBlockedCallback callback) {
++  network_persona_requests_blocked_ = blocked;
++  if (!blocked) {
++    std::move(callback).Run(true);
++    return;
++  }
++
++  // Aborting the last loader can delete its factory, so iterate a pointer
++  // snapshot instead of the owning set.
++  std::vector<PrefetchMatchingURLLoaderFactory*> factories;
++  factories.reserve(url_loader_factories_.size());
++  for (const auto& factory : url_loader_factories_) {
++    factories.push_back(factory.get());
++  }
++  for (PrefetchMatchingURLLoaderFactory* factory : factories) {
++    if (url_loader_factories_.find(factory) != url_loader_factories_.end()) {
++      factory->AbortAllRequestsForNetworkPersonaTransition();
++    }
++  }
++#if BUILDFLAG(ENABLE_WEBSOCKETS)
++  websocket_factory_.reset();
++#endif
++  web_transports_.clear();
++
++  if (url_request_context_ &&
++      url_request_context_->http_transaction_factory()) {
++    url_request_context_->http_transaction_factory()
++        ->GetSession()
++        ->CloseAllConnections(net::ERR_NETWORK_ACCESS_REVOKED,
++                              "Persona network identity transition");
++  }
++  std::move(callback).Run(true);
++}
++
+ void NetworkContext::UpdateNetworkPersona(
+     mojom::NetworkPersonaConfigPtr config,
+     UpdateNetworkPersonaCallback callback) {
+@@ -2122,6 +2160,13 @@
+     const std::optional<base::UnguessableToken>& throttling_profile_id,
+     const std::optional<base::UnguessableToken>& network_restrictions_id) {
+ #if BUILDFLAG(ENABLE_WEBSOCKETS)
++  if (network_persona_requests_blocked_) {
++    mojo::Remote<mojom::WebSocketHandshakeClient> handshake_client_remote(
++        std::move(handshake_client));
++    handshake_client_remote->OnFailure("Network access revoked",
++                                       net::ERR_NETWORK_ACCESS_REVOKED, -1);
++    return;
++  }
+   if (!websocket_factory_) {
+     websocket_factory_ = std::make_unique<WebSocketFactory>(this);
+   }
+@@ -2151,6 +2196,12 @@
+     mojo::PendingRemote<mojom::URLLoaderNetworkServiceObserver>
+         url_loader_network_observer,
+     mojom::ClientSecurityStatePtr client_security_state) {
++  if (network_persona_requests_blocked_) {
++    mojo::Remote<mojom::WebTransportHandshakeClient>(
++        std::move(pending_handshake_client))
++        ->OnHandshakeFailed(nullptr);
++    return;
++  }
+   web_transports_.insert(std::make_unique<WebTransport>(
+       url, origin, key, fingerprints, application_protocols, congestion_control,
+       this, std::move(pending_handshake_client),
+--- a/services/network/network_context.h
++++ b/services/network/network_context.h
+@@ -329,6 +329,9 @@
+   void UpdateNetworkPersona(
+       mojom::NetworkPersonaConfigPtr config,
+       UpdateNetworkPersonaCallback callback) override;
++  void SetNetworkPersonaRequestsBlocked(
++      bool blocked,
++      SetNetworkPersonaRequestsBlockedCallback callback) override;
+   void UpdateSocksCredentials(
+       mojom::SocksCredentialsPtr credentials,
+       UpdateSocksCredentialsCallback callback) override;
+@@ -677,6 +680,9 @@
+   size_t num_url_loader_factories_for_testing() const {
+     return url_loader_factories_.size();
+   }
++  bool network_persona_requests_blocked() const {
++    return network_persona_requests_blocked_;
++  }
+ 
+   net::CanaryDomainService* canary_domain_service_for_testing() {
+     return canary_domain_service_.get();
+@@ -1081,6 +1087,10 @@
+   // calls to DestroyURLLoaderFactory().
+   bool is_destructing_ = false;
+ 
++  // Published before active requests are aborted, so no new request can enter
++  // while a Persona network identity transaction is changing native state.
++  bool network_persona_requests_blocked_ = false;
++
+   // True if the Prefetch() method is enabled.
+   // TODO(ricea): Remove this when it is enabled by default.
+   const bool prefetch_enabled_;
+--- a/services/network/network_context_unittest.cc
++++ b/services/network/network_context_unittest.cc
+@@ -850,6 +850,63 @@
+             session_params.network_persona_config->deterministic_seed[0]);
+ }
+ 
++TEST_F(NetworkContextTest, InitialNetworkPersonaRequestGateBlocksRequests) {
++  mojom::NetworkContextParamsPtr params =
++      CreateNetworkContextParamsForTesting();
++  params->block_network_persona_requests = true;
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(std::move(params));
++
++  EXPECT_TRUE(network_context->network_persona_requests_blocked());
++  ResourceRequest request;
++  request.url = GURL("https://blocked.example.test/");
++  std::unique_ptr<TestURLLoaderClient> client =
++      FetchRequest(request, network_context.get());
++  EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED,
++            client->completion_status().error_code);
++}
++
++TEST_F(NetworkContextTest, NetworkPersonaRequestGateCancelsActiveLoader) {
++  net::EmbeddedTestServer test_server;
++  net::test_server::ControllableHttpResponse response(&test_server, "/hung");
++  ASSERT_TRUE(test_server.Start());
++
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(CreateNetworkContextParamsForTesting());
++  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
++  auto factory_params = mojom::URLLoaderFactoryParams::New();
++  factory_params->process_id = OriginatingProcessId::browser();
++  factory_params->is_orb_enabled = false;
++  factory_params->isolation_info = net::IsolationInfo::CreateForInternalRequest(
++      url::Origin::Create(test_server.base_url()));
++  network_context->CreateURLLoaderFactory(
++      loader_factory.BindNewPipeAndPassReceiver(), std::move(factory_params));
++
++  ResourceRequest request;
++  request.url = test_server.GetURL("/hung");
++  TestURLLoaderClient client;
++  mojo::Remote<mojom::URLLoader> loader;
++  loader_factory->CreateLoaderAndStart(
++      loader.BindNewPipeAndPassReceiver(), 1, mojom::kURLLoadOptionNone,
++      request, client.CreateRemote(),
++      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
++  response.WaitForRequest();
++
++  base::test::TestFuture<bool> blocked;
++  network_context->SetNetworkPersonaRequestsBlocked(true,
++                                                    blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++  client.RunUntilComplete();
++  EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED,
++            client.completion_status().error_code);
++
++  base::test::TestFuture<bool> released;
++  network_context->SetNetworkPersonaRequestsBlocked(false,
++                                                    released.GetCallback());
++  EXPECT_TRUE(released.Get());
++  EXPECT_FALSE(network_context->network_persona_requests_blocked());
++}
++
+ class NetworkContextTestWithMockTime : public NetworkContextTest {
+  public:
+   NetworkContextTestWithMockTime()
+--- a/services/network/prefetch_matching_url_loader_factory.cc
++++ b/services/network/prefetch_matching_url_loader_factory.cc
+@@ -8,11 +8,14 @@
+ 
+ #include "base/check_op.h"
+ #include "base/functional/bind.h"
++#include "net/base/net_errors.h"
+ #include "services/network/cors/cors_url_loader_factory.h"
++#include "services/network/network_context.h"
+ #include "services/network/prefetch_cache.h"
+ #include "services/network/prefetch_url_loader_client.h"
+ #include "services/network/public/cpp/features.h"
+ #include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/url_loader_completion_status.h"
+ #include "services/network/resource_scheduler/resource_scheduler_client.h"
+ 
+ namespace network {
+@@ -66,6 +69,13 @@
+     ResourceRequest& request,
+     mojo::PendingRemote<mojom::URLLoaderClient> client,
+     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
++  if (context_->network_persona_requests_blocked()) {
++    mojo::Remote<mojom::URLLoaderClient>(std::move(client))
++        ->OnComplete(
++            URLLoaderCompletionStatus(net::ERR_NETWORK_ACCESS_REVOKED));
++    return;
++  }
++
+   // If we don't think the request should be permitted from a render process, we
+   // don't try to match it and instead let CorsURLLoaderFactory deal with the
+   // issue.
+@@ -116,6 +126,11 @@
+   next_->DeleteIfNeeded();
+ }
+ 
++void PrefetchMatchingURLLoaderFactory::
++    AbortAllRequestsForNetworkPersonaTransition() {
++  next_->AbortAllRequestsForNetworkPersonaTransition();
++}
++
+ net::handles::NetworkHandle
+ PrefetchMatchingURLLoaderFactory::GetBoundNetworkForTesting() const {
+   return next_->GetBoundNetworkForTesting();  // IN-TEST
+--- a/services/network/prefetch_matching_url_loader_factory.h
++++ b/services/network/prefetch_matching_url_loader_factory.h
+@@ -82,6 +82,7 @@
+ 
+   // Methods called by NetworkContext.
+   void ClearBindings();
++  void AbortAllRequestsForNetworkPersonaTransition();
+ 
+   net::handles::NetworkHandle GetBoundNetworkForTesting() const;
+ 
+--- a/services/network/public/mojom/network_context.mojom
++++ b/services/network/public/mojom/network_context.mojom
+@@ -353,6 +353,10 @@
+   // identity.
+   NetworkPersonaConfig? network_persona_config;
+ 
++  // Starts this context with external requests blocked while a Persona network
++  // identity transaction is converging.
++  bool block_network_persona_requests = false;
++
+   // Credentials offered when a SOCKS5 proxy asks for username/password
+   // authentication (RFC 1929). Null means only no-auth is offered.
+   SocksCredentials? socks_credentials;
+@@ -1308,6 +1312,11 @@
+   // A null config restores Chromium's native network identity.
+   UpdateNetworkPersona(NetworkPersonaConfig? config) => (bool accepted);
+ 
++  // Blocks or releases external requests for a Persona identity transition.
++  // Blocking aborts active URLLoaders, WebSockets, and WebTransports before
++  // acknowledging.
++  SetNetworkPersonaRequestsBlocked(bool blocked) => (bool accepted);
++
+   // Replaces the SOCKS5 credentials used for new connections. Existing
+   // connections are closed, since they were authenticated with the previous
+   // credentials. A null value offers only no-authentication.
+--- a/services/network/test/test_network_context.h
++++ b/services/network/test/test_network_context.h
+@@ -150,6 +150,11 @@
+       mojom::SignedExchangeReportPtr report,
+       const net::NetworkAnonymizationKey& network_anonymization_key) override {}
+   void CloseAllConnections(CloseAllConnectionsCallback callback) override {}
++  void SetNetworkPersonaRequestsBlocked(
++      bool blocked,
++      SetNetworkPersonaRequestsBlockedCallback callback) override {
++    std::move(callback).Run(true);
++  }
+   void UpdateNetworkPersona(
+       mojom::NetworkPersonaConfigPtr config,
+       UpdateNetworkPersonaCallback callback) override {
+--- a/services/network/url_loader.cc
++++ b/services/network/url_loader.cc
+@@ -1984,6 +1984,11 @@
+   url_request_->CancelWithError(net::ERR_SSL_CLIENT_AUTH_CERT_NEEDED);
+ }
+ 
++void URLLoader::CancelForNetworkPersonaTransition() {
++  client_cert_responder_receiver_.reset();
++  url_request_->CancelWithError(net::ERR_NETWORK_ACCESS_REVOKED);
++}
++
+ void URLLoader::NotifyCompleted(int error_code) {
+   // Ensure sending the final upload progress message here, since
+   // OnResponseCompleted can be called without OnResponseStarted on cancellation
+--- a/services/network/url_loader.h
++++ b/services/network/url_loader.h
+@@ -259,6 +259,8 @@
+       const base::UnguessableToken& nonce,
+       const std::set<GURL>& exemptions);
+ 
++  void CancelForNetworkPersonaTransition();
++
+   // Called when the browser process responds to a request for platform-specific
+   // local network permission. If the user granted the permission, this will
+   // restart the transaction. Otherwise, it will cancel the request.
+--- a/services/network/url_loader_factory.cc
++++ b/services/network/url_loader_factory.cc
+@@ -17,6 +17,7 @@
+ #include "components/content_settings/core/common/content_settings.h"
+ #include "mojo/public/cpp/bindings/message.h"
+ #include "net/base/isolation_info.h"
++#include "net/base/net_errors.h"
+ #include "net/cookies/cookie_constants.h"
+ #include "net/cookies/cookie_setting_override.h"
+ #include "net/url_request/url_request_context.h"
+@@ -205,6 +206,17 @@
+     mojo::PendingRemote<mojom::URLLoaderClient> client,
+     base::WeakPtr<mojom::URLLoaderClient> sync_client,
+     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
++  if (context_->network_persona_requests_blocked()) {
++    URLLoaderCompletionStatus status(net::ERR_NETWORK_ACCESS_REVOKED);
++    if (sync_client) {
++      sync_client->OnComplete(status);
++    } else {
++      mojo::Remote<mojom::URLLoaderClient>(std::move(client))
++          ->OnComplete(status);
++    }
++    return;
++  }
++
+   // Requests with |trusted_params| when params_->is_trusted is not set should
+   // have been rejected at the CorsURLLoader layer.
+   DCHECK(!resource_request.trusted_params || params_->is_trusted);
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -15,12 +15,17 @@
+ struct HeliumPersonaUaChBrand {
+   std::string brand;
+   std::string version;
++
++  bool operator==(const HeliumPersonaUaChBrand&) const = default;
+ };
+ 
+ struct HeliumPersonaFingerprintRotationEpoch {
+   std::string scope_key;
+   std::string epoch;
+   uint64_t generation = 0;
++
++  bool operator==(const HeliumPersonaFingerprintRotationEpoch&) const =
++      default;
+ };
+ 
+ struct HeliumPersonaSpeechVoice {
+@@ -29,6 +34,8 @@
+   std::string uri;
+   bool local_service = false;
+   bool is_default = false;
++
++  bool operator==(const HeliumPersonaSpeechVoice&) const = default;
+ };
+ 
+ inline std::string ResolveHeliumPersonaBrandFullVersion(
+@@ -167,6 +174,8 @@
+ 
+   bool IsEnabled() const { return enabled; }
+ 
++  bool operator==(const HeliumPersonaSnapshot&) const = default;
++
+   // `device_memory` describes the persona machine's physical RAM in GiB, which
+   // may exceed what the Device Memory API is allowed to expose. Web-facing
+   // surfaces must report this value instead: per
+--- a/third_party/blink/public/mojom/frame/frame.mojom
++++ b/third_party/blink/public/mojom/frame/frame.mojom
+@@ -55,6 +55,7 @@
+ import "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom";
+ import "third_party/blink/public/mojom/frame/user_activation_update_types.mojom";
+ import "third_party/blink/public/mojom/frame/view_transition_state.mojom";
++import "third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom";
+ import "third_party/blink/public/mojom/input/focus_type.mojom";
+ import "third_party/blink/public/mojom/input/scroll_direction.mojom";
+ import "third_party/blink/public/mojom/loader/referrer.mojom";
+@@ -815,6 +816,17 @@
+   MaybeStartOutermostMainFrameNavigation(array<url.mojom.Url> urls);
+ };
+ 
++// Renderer-held evidence for the Persona snapshot and deterministic-noise
++// tokens attached to the frame's current execution context.
++struct HeliumPersonaSurfaceProbe {
++  HeliumPersonaSnapshot snapshot;
++  bool canvas_noise_token_present;
++  bool audio_noise_token_present;
++  bool hardware_noise_token_present;
++  bool font_metric_noise_token_present;
++  bool client_rect_noise_token_present;
++};
++
+ // Implemented in Blink, this interface defines frame-specific methods that will
+ // be invoked from the browser process (e.g. content::RenderFrameHostImpl).
+ //
+@@ -824,6 +836,10 @@
+ // Onion Soup project advances, which can potentially lead to the removal of
+ // content/common/frame.mojom if enough code is moved to Blink.
+ interface LocalFrame {
++  // Returns the current frame's applied Persona state. This verifies runtime
++  // propagation, not output-level fingerprint values.
++  GetHeliumPersonaSurfaceProbe() => (HeliumPersonaSurfaceProbe probe);
++
+   // Retrieves the text surrounding the current selection for the frame up to
+   // the length specified by |max_length|, along with its start and end offsets.
+   GetTextSurroundingSelection(uint32 max_length)
+--- a/third_party/blink/renderer/core/frame/local_frame_mojo_handler.cc
++++ b/third_party/blink/renderer/core/frame/local_frame_mojo_handler.cc
+@@ -34,6 +34,7 @@
+ #include "third_party/blink/renderer/bindings/core/v8/script_evaluation_result.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_fullscreen_options.h"
++#include "third_party/blink/renderer/core/dom/document.h"
+ #include "third_party/blink/renderer/core/dom/element_traversal.h"
+ #include "third_party/blink/renderer/core/dom/focus_params.h"
+ #include "third_party/blink/renderer/core/dom/ignore_opens_during_unload_count_incrementer.h"
+@@ -382,6 +383,31 @@
+   // TODO(tkent): Should we reset other receivers?
+ }
+ 
++void LocalFrameMojoHandler::GetHeliumPersonaSurfaceProbe(
++    GetHeliumPersonaSurfaceProbeCallback callback) {
++  auto probe = mojom::blink::HeliumPersonaSurfaceProbe::New();
++  if (frame_->Client() && frame_->Client()->GetWebFrame() &&
++      frame_->Client()->GetWebFrame()->Client()) {
++    probe->snapshot = frame_->Client()
++                          ->GetWebFrame()
++                          ->Client()
++                          ->GetHeliumPersonaSnapshot();
++  }
++  if (Document* document = GetDocument()) {
++    probe->canvas_noise_token_present =
++        document->CanvasNoiseToken().has_value();
++    probe->audio_noise_token_present =
++        document->AudioNoiseToken().has_value();
++    probe->hardware_noise_token_present =
++        document->HardwareNoiseToken().has_value();
++    probe->font_metric_noise_token_present =
++        document->FontMetricNoiseToken().has_value();
++    probe->client_rect_noise_token_present =
++        document->ClientRectNoiseToken().has_value();
++  }
++  std::move(callback).Run(std::move(probe));
++}
++
+ void LocalFrameMojoHandler::ClosePageForTesting() {
+   ClosePage(base::DoNothing());
+ }
+--- a/third_party/blink/renderer/core/frame/local_frame_mojo_handler.h
++++ b/third_party/blink/renderer/core/frame/local_frame_mojo_handler.h
+@@ -95,6 +95,8 @@
+           mojom::blink::FullscreenVideoElementHandler> receiver);
+ 
+   // blink::mojom::LocalFrame overrides:
++  void GetHeliumPersonaSurfaceProbe(
++      GetHeliumPersonaSurfaceProbeCallback callback) final;
+   void GetTextSurroundingSelection(
+       uint32_t max_length,
+       GetTextSurroundingSelectionCallback callback) final;

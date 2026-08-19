@@ -1,0 +1,2771 @@
+--- a/components/domain_reliability/context.cc
++++ b/components/domain_reliability/context.cc
+@@ -87,6 +87,15 @@
+   uploading_beacons_size_ = 0;
+ }
+ 
++void DomainReliabilityContext::ResetForNetworkTransition() {
++  weak_factory_.InvalidateWeakPtrs();
++  ClearBeacons();
++  scheduler_.ResetForNetworkTransition();
++  uploading_beacons_isolation_info_ = net::IsolationInfo();
++  upload_time_ = base::TimeTicks();
++  last_upload_time_ = base::TimeTicks();
++}
++
+ void DomainReliabilityContext::GetQueuedBeaconsForTesting(
+     std::vector<const DomainReliabilityBeacon*>* beacons_out) const {
+   DCHECK(beacons_out);
+--- a/components/domain_reliability/context.h
++++ b/components/domain_reliability/context.h
+@@ -70,6 +70,10 @@
+   // Called to clear browsing data, since beacons are like browsing history.
+   void ClearBeacons();
+ 
++  // Invalidates pending permission/upload callbacks and resets scheduling for
++  // a new Persona network identity generation.
++  void ResetForNetworkTransition();
++
+   // Gets the beacons queued for upload in this context. `*beacons_out` will be
+   // cleared and filled with pointers to the beacons; the pointers remain valid
+   // as long as no other requests are reported to the DomainReliabilityMonitor.
+--- a/components/domain_reliability/context_manager.cc
++++ b/components/domain_reliability/context_manager.cc
+@@ -73,6 +73,12 @@
+   }
+ }
+ 
++void DomainReliabilityContextManager::ResetForNetworkTransition() {
++  for (auto& context_entry : contexts_) {
++    context_entry.second->ResetForNetworkTransition();
++  }
++}
++
+ DomainReliabilityContext* DomainReliabilityContextManager::AddContextForConfig(
+     std::unique_ptr<const DomainReliabilityConfig> config) {
+   const std::string& key = config->origin.host();
+--- a/components/domain_reliability/context_manager.h
++++ b/components/domain_reliability/context_manager.h
+@@ -54,6 +54,9 @@
+   void ClearBeacons(
+       const base::RepeatingCallback<bool(const url::Origin&)>& origin_filter);
+ 
++  // Clears all generation-bound work while retaining configured contexts.
++  void ResetForNetworkTransition();
++
+   // Creates and stores a context for the given |config|, which should be for an
+   // origin distinct from any existing ones. Returns pointer to the inserted
+   // context.
+--- a/components/domain_reliability/monitor.cc
++++ b/components/domain_reliability/monitor.cc
+@@ -110,12 +110,29 @@
+ void DomainReliabilityMonitor::SetDiscardUploads(bool discard_uploads) {
+   DCHECK(uploader_);
+ 
+-  uploader_->SetDiscardUploads(discard_uploads);
++  discard_uploads_ = discard_uploads;
++  uploader_->SetDiscardUploads(discard_uploads || network_requests_blocked_);
+   discard_uploads_set_ = true;
+ }
+ 
++void DomainReliabilityMonitor::SetNetworkRequestsBlocked(bool blocked) {
++  DCHECK(uploader_);
++  if (network_requests_blocked_ == blocked)
++    return;
++
++  network_requests_blocked_ = blocked;
++  uploader_->SetDiscardUploads(discard_uploads_ || blocked);
++  if (!blocked)
++    return;
++
++  context_manager_.ResetForNetworkTransition();
++  uploader_->CancelPendingUploadsForNetworkTransition();
++}
++
+ void DomainReliabilityMonitor::OnBeforeRedirect(net::URLRequest* request) {
+   DCHECK(discard_uploads_set_);
++  if (network_requests_blocked_)
++    return;
+ 
+   // Record the redirect itself in addition to the final request. The fact that
+   // a redirect is being followed indicates success.
+@@ -126,6 +143,8 @@
+                                            bool started,
+                                            int net_error) {
+   DCHECK(discard_uploads_set_);
++  if (network_requests_blocked_)
++    return;
+ 
+   if (!started)
+     return;
+@@ -141,6 +160,8 @@
+ 
+ void DomainReliabilityMonitor::OnNetworkChanged(
+     net::NetworkChangeNotifier::ConnectionType type) {
++  if (network_requests_blocked_)
++    return;
+   context_manager_.OnNetworkChanged(time_->NowTicks());
+ }
+ 
+@@ -166,6 +187,8 @@
+ }
+ 
+ void DomainReliabilityMonitor::ForceUploadsForTesting() {
++  if (network_requests_blocked_)
++    return;
+   dispatcher_.RunAllTasksForTesting();
+ }
+ 
+@@ -235,6 +258,8 @@
+     const RequestInfo& request) {
+   // Check these again because unit tests call this directly.
+   DCHECK(discard_uploads_set_);
++  if (network_requests_blocked_)
++    return;
+ 
+   if (!RequestInfo::ShouldReportRequest(request))
+     return;
+--- a/components/domain_reliability/monitor.h
++++ b/components/domain_reliability/monitor.h
+@@ -93,6 +93,10 @@
+   // Sets whether the uploader will discard uploads.
+   void SetDiscardUploads(bool discard_uploads);
+ 
++  // Stops uploads and drops observations from the previous Persona network
++  // identity. Release restores the configured discard policy.
++  void SetNetworkRequestsBlocked(bool blocked);
++
+   // Should be called when |request| is about to follow a redirect. Will
+   // examine and possibly log the redirect request. Must be called after
+   // |SetDiscardUploads|.
+@@ -145,6 +149,8 @@
+   DomainReliabilityContextManager context_manager_;
+ 
+   bool discard_uploads_set_;
++  bool discard_uploads_ = true;
++  bool network_requests_blocked_ = false;
+ };
+ 
+ }  // namespace domain_reliability
+--- a/components/domain_reliability/monitor_unittest.cc
++++ b/components/domain_reliability/monitor_unittest.cc
+@@ -138,6 +138,24 @@
+ TEST_F(DomainReliabilityMonitorTest, Create) {
+ }
+ 
++TEST_F(DomainReliabilityMonitorTest,
++       NetworkTransitionClearsAndRejectsBeaconsUntilRelease) {
++  const DomainReliabilityContext* context = CreateAndAddContext();
++  RequestInfo request = MakeFailedRequest(GURL("http://example/"));
++
++  OnRequestLegComplete(request);
++  ASSERT_EQ(1u, CountQueuedBeacons(context));
++
++  monitor_.SetNetworkRequestsBlocked(true);
++  EXPECT_EQ(0u, CountQueuedBeacons(context));
++  OnRequestLegComplete(request);
++  EXPECT_EQ(0u, CountQueuedBeacons(context));
++
++  monitor_.SetNetworkRequestsBlocked(false);
++  OnRequestLegComplete(request);
++  EXPECT_EQ(1u, CountQueuedBeacons(context));
++}
++
+ TEST_F(DomainReliabilityMonitorTest, NoContext) {
+   const DomainReliabilityContext* context = CreateAndAddContext();
+ 
+--- a/components/domain_reliability/scheduler.cc
++++ b/components/domain_reliability/scheduler.cc
+@@ -151,6 +151,18 @@
+   MaybeScheduleUpload();
+ }
+ 
++void DomainReliabilityScheduler::ResetForNetworkTransition() {
++  upload_pending_ = false;
++  upload_scheduled_ = false;
++  upload_running_ = false;
++  collector_index_ = kInvalidCollectorIndex;
++  first_beacon_time_ = base::TimeTicks();
++  old_first_beacon_time_ = base::TimeTicks();
++  for (const auto& collector : collectors_) {
++    collector->Reset();
++  }
++}
++
+ void DomainReliabilityScheduler::MakeDeterministicForTesting() {
+   backoff_policy_.jitter_factor = 0.0;
+ }
+--- a/components/domain_reliability/scheduler.h
++++ b/components/domain_reliability/scheduler.h
+@@ -75,6 +75,10 @@
+   // passed to the upload callback by the Uploader.
+   void OnUploadComplete(const DomainReliabilityUploader::UploadResult& result);
+ 
++  // Drops scheduled/running work and collector backoff from an obsolete
++  // network identity generation. The next beacon starts a fresh schedule.
++  void ResetForNetworkTransition();
++
+   // Disables jitter in BackoffEntries to make scheduling deterministic for
+   // unit tests.
+   void MakeDeterministicForTesting();
+--- a/components/domain_reliability/scheduler_unittest.cc
++++ b/components/domain_reliability/scheduler_unittest.cc
+@@ -160,6 +160,24 @@
+   NotifySuccessfulUpload();
+ }
+ 
++TEST_F(DomainReliabilitySchedulerTest,
++       NetworkTransitionResetsScheduledAndRunningUploads) {
++  CreateScheduler(1);
++
++  scheduler_->OnBeaconAdded();
++  ASSERT_TRUE(CheckPendingUpload(min_delay(), max_delay()));
++  scheduler_->ResetForNetworkTransition();
++
++  scheduler_->OnBeaconAdded();
++  ASSERT_TRUE(CheckPendingUpload(min_delay(), max_delay()));
++  time_.Advance(min_delay());
++  ASSERT_TRUE(CheckStartingUpload(0));
++  scheduler_->ResetForNetworkTransition();
++
++  scheduler_->OnBeaconAdded();
++  ASSERT_TRUE(CheckPendingUpload(min_delay(), max_delay()));
++}
++
+ TEST_F(DomainReliabilitySchedulerTest, RetryAfter) {
+   CreateScheduler(1);
+ 
+--- a/components/domain_reliability/test_util.cc
++++ b/components/domain_reliability/test_util.cc
+@@ -107,6 +107,8 @@
+   discard_uploads_ = discard_uploads;
+ }
+ 
++void MockUploader::CancelPendingUploadsForNetworkTransition() {}
++
+ int MockUploader::GetDiscardedUploadCount() const {
+   return 0;
+ }
+--- a/components/domain_reliability/test_util.h
++++ b/components/domain_reliability/test_util.h
+@@ -66,6 +66,7 @@
+                     UploadCallback callback) override;
+   void Shutdown() override;
+   void SetDiscardUploads(bool discard_uploads) override;
++  void CancelPendingUploadsForNetworkTransition() override;
+   int GetDiscardedUploadCount() const override;
+ 
+  private:
+--- a/components/domain_reliability/uploader.cc
++++ b/components/domain_reliability/uploader.cc
+@@ -163,6 +163,10 @@
+     DVLOG(1) << "Setting discard_uploads to " << discard_uploads;
+   }
+ 
++  void CancelPendingUploadsForNetworkTransition() override {
++    uploads_.clear();
++  }
++
+   void Shutdown() override {
+     DCHECK(!shutdown_);
+     shutdown_ = true;
+--- a/components/domain_reliability/uploader.h
++++ b/components/domain_reliability/uploader.h
+@@ -72,6 +72,10 @@
+   // generates an upload or not.
+   virtual void SetDiscardUploads(bool discard_uploads) = 0;
+ 
++  // Cancels active requests after their initiating contexts have invalidated
++  // callbacks and reset scheduling for a network identity transition.
++  virtual void CancelPendingUploadsForNetworkTransition() = 0;
++
+   // Gets the number of uploads that have been discarded after SetDiscardUploads
+   // was called with true.
+   virtual int GetDiscardedUploadCount() const = 0;
+--- a/content/browser/renderer_host/p2p/socket_dispatcher_host.cc
++++ b/content/browser/renderer_host/p2p/socket_dispatcher_host.cc
+@@ -95,7 +95,8 @@
+   }
+   mojo::RemoteSetElementId manager_id =
+       trusted_socket_managers_.Add(std::move(trusted_socket_manager));
+-  frame_host_to_socket_manager_id_.emplace(render_frame_host_id, manager_id);
++  frame_host_to_socket_manager_id_.insert_or_assign(render_frame_host_id,
++                                                     manager_id);
+ }
+ 
+ void P2PSocketDispatcherHost::PauseSocketManagerForRenderFrameHost(
+--- a/net/proxy_resolution/configured_proxy_resolution_service.cc
++++ b/net/proxy_resolution/configured_proxy_resolution_service.cc
+@@ -978,6 +978,13 @@
+ 
+   net_log.BeginEvent(NetLogEventType::PROXY_RESOLUTION_SERVICE);
+ 
++  if (network_requests_blocked_) {
++    net_log.EndEventWithNetErrorCode(
++        NetLogEventType::PROXY_RESOLUTION_SERVICE,
++        ERR_NETWORK_ACCESS_REVOKED);
++    return ERR_NETWORK_ACCESS_REVOKED;
++  }
++
+   // Notify our polling-based dependencies that a resolve is taking place.
+   // This way they can schedule their polls in response to network activity.
+   config_service_->OnLazyPoll();
+@@ -1162,12 +1169,17 @@
+       req->StartAndCompleteCheckingForSynchronous();
+       if (!weak_this)
+         return;  // Synchronous callback deleted |this|
++      if (network_requests_blocked_)
++        return;  // Synchronous callback started a network identity transition.
+     }
+   }
+ }
+ 
+ void ConfiguredProxyResolutionService::ApplyProxyConfigIfAvailable() {
+   DCHECK_EQ(STATE_NONE, current_state_);
++  if (network_requests_blocked_) {
++    return;
++  }
+ 
+   config_service_->OnLazyPoll();
+ 
+@@ -1191,6 +1203,9 @@
+ }
+ 
+ void ConfiguredProxyResolutionService::OnInitProxyResolverComplete(int result) {
++  if (network_requests_blocked_) {
++    return;
++  }
+   DCHECK_EQ(STATE_WAITING_FOR_INIT_PROXY_RESOLVER, current_state_);
+   DCHECK(init_proxy_resolver_.get());
+   DCHECK(fetched_config_);
+@@ -1269,6 +1284,15 @@
+     const NetLogWithSource& net_log) {
+   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+ 
++  if (result_code == ERR_NETWORK_ACCESS_REVOKED) {
++    net_log.AddEventWithNetErrorCode(
++        NetLogEventType::PROXY_RESOLUTION_SERVICE_RESOLVED_PROXY_LIST,
++        result_code);
++    net_log.EndEventWithNetErrorCode(
++        NetLogEventType::PROXY_RESOLUTION_SERVICE, result_code);
++    return result_code;
++  }
++
+   // Log the result of the proxy resolution.
+   if (result_code == OK) {
+     // Allow the proxy delegate to interpose on the resolution decision,
+@@ -1473,6 +1497,9 @@
+ }
+ 
+ void ConfiguredProxyResolutionService::HandlePacScriptLoadError() {
++  if (network_requests_blocked_) {
++    return;
++  }
+   // Delegate scheduling to the throttler (clears per-load flag on timer fire
+   // and triggers ForceReloadProxyConfig via WeakPtr).
+   pac_retry_throttler_.OnRuntimeFailure(weak_ptr_factory_.GetWeakPtr());
+@@ -1520,16 +1547,47 @@
+ 
+ void ConfiguredProxyResolutionService::OnRetryScheduleTimerFired() {
+   pac_retry_throttler_.OnRetryScheduleTimerFired();
++  if (network_requests_blocked_) {
++    return;
++  }
+   ForceReloadProxyConfig();
+ }
+ 
+ void ConfiguredProxyResolutionService::ForceReloadProxyConfig() {
+   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
++  if (network_requests_blocked_) {
++    return;
++  }
+   preserve_pac_retry_state_for_next_reset_ = true;
+   ResetProxyConfig(false, /*reset_pac_retry_state=*/false);
+   ApplyProxyConfigIfAvailable();
+ }
+ 
++void ConfiguredProxyResolutionService::SetNetworkRequestsBlocked(bool blocked) {
++  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
++  if (network_requests_blocked_ == blocked) {
++    return;
++  }
++  network_requests_blocked_ = blocked;
++  if (!blocked) {
++    // Resume lazily from the next ResolveProxy(). Applying synchronously here
++    // could start PAC/WPAD traffic in the Persona gate release call stack.
++    return;
++  }
++
++  preserve_pac_retry_state_for_next_reset_ = false;
++  ResetProxyConfig(false);
++  base::WeakPtr<ConfiguredProxyResolutionService> weak_this =
++      weak_ptr_factory_.GetWeakPtr();
++  while (!pending_requests_.empty()) {
++    ConfiguredProxyResolutionRequest* request = *pending_requests_.begin();
++    request->QueryComplete(ERR_NETWORK_ACCESS_REVOKED);
++    if (!weak_this || !network_requests_blocked_) {
++      return;
++    }
++  }
++}
++
+ bool ConfiguredProxyResolutionService::IsReady() const {
+   return current_state_ == STATE_READY;
+ }
+@@ -1603,6 +1661,10 @@
+   // Set the new configuration as the most recently fetched one.
+   fetched_config_ = effective_config;
+ 
++  if (network_requests_blocked_) {
++    return;
++  }
++
+   InitializeUsingLastFetchedConfig();
+ }
+ 
+@@ -1619,6 +1681,9 @@
+ }
+ 
+ void ConfiguredProxyResolutionService::InitializeUsingLastFetchedConfig() {
++  if (network_requests_blocked_) {
++    return;
++  }
+   ResetProxyConfig(false, ShouldResetPacRetryStateForNextReset());
+ 
+   DCHECK(fetched_config_);
+@@ -1652,6 +1717,9 @@
+     int decider_result,
+     const PacFileDataWithSource& script_data,
+     const ProxyConfigWithAnnotation& effective_config) {
++  if (network_requests_blocked_) {
++    return;
++  }
+   DCHECK(fetched_config_);
+   DCHECK(fetched_config_->value().HasAutomaticSettings());
+ 
+@@ -1755,6 +1823,9 @@
+   // See the comment block by |kDelayAfterNetworkChangesMs| for info.
+   stall_proxy_autoconfig_until_ =
+       TimeTicks::Now() + stall_proxy_auto_config_delay_;
++  if (network_requests_blocked_) {
++    return;
++  }
+ 
+   // With a new network connection, using the proper proxy configuration for the
+   // new connection may be essential for URL requests to work properly. Reset
+@@ -1767,6 +1838,9 @@
+ }
+ 
+ void ConfiguredProxyResolutionService::OnDNSChanged() {
++  if (network_requests_blocked_) {
++    return;
++  }
+   // Do not fully reset proxy config on DNS change notifications. Instead,
+   // inform the poller that it would be a good time to check for changes.
+   //
+--- a/net/proxy_resolution/configured_proxy_resolution_service.h
++++ b/net/proxy_resolution/configured_proxy_resolution_service.h
+@@ -187,6 +187,11 @@
+   // to downloading and testing the PAC files.
+   void ForceReloadProxyConfig();
+ 
++  // Suspends PAC/WPAD initialization, polling, retries, DNS override probes,
++  // and proxy resolution requests for a Persona identity transition. The most
++  // recently fetched config is retained and applied after release.
++  void SetNetworkRequestsBlocked(bool blocked) override;
++
+   // Returns true if the service is fully ready to handle proxy resolution
+   // requests and is not, e.g., currently fetching and resolving a new
+   // configuration.
+@@ -611,6 +616,8 @@
+   // as a successful DIRECT fallback.
+   bool in_destruction_ = false;
+ 
++  bool network_requests_blocked_ = false;
++
+   // WeakPtrFactory must be the last member. Used by SetReady() to detect
+   // deletion by synchronous callbacks.
+   base::WeakPtrFactory<ConfiguredProxyResolutionService> weak_ptr_factory_{
+--- a/net/proxy_resolution/configured_proxy_resolution_service_unittest.cc
++++ b/net/proxy_resolution/configured_proxy_resolution_service_unittest.cc
+@@ -460,6 +460,48 @@
+ 
+ }  // namespace
+ 
++TEST_F(ConfiguredProxyResolutionServiceTest,
++       NetworkTransitionCancelsPendingAndResumesPacLazily) {
++  auto config_service =
++      std::make_unique<MockProxyConfigService>("http://foopy/proxy.pac");
++  auto factory = std::make_unique<MockAsyncProxyResolverFactory>(false);
++  auto* factory_ptr = factory.get();
++  ConfiguredProxyResolutionService service(
++      std::move(config_service), std::move(factory),
++      /*host_resolver_for_override_rules=*/nullptr, /*net_log=*/nullptr,
++      /*quick_check_enabled=*/true);
++
++  ProxyInfo first_info;
++  TestCompletionCallback first_callback;
++  std::unique_ptr<ProxyResolutionRequest> first_request;
++  EXPECT_THAT(
++      service.ResolveProxy(GURL("http://first.test/"), std::string(),
++                           NetworkAnonymizationKey(), &first_info,
++                           first_callback.callback(), &first_request,
++                           NetLogWithSource(), DEFAULT_PRIORITY),
++      IsError(ERR_IO_PENDING));
++  ASSERT_EQ(1u, factory_ptr->pending_requests().size());
++
++  service.SetNetworkRequestsBlocked(true);
++  EXPECT_EQ(ERR_NETWORK_ACCESS_REVOKED, first_callback.WaitForResult());
++  EXPECT_TRUE(factory_ptr->pending_requests().empty());
++
++  service.SetNetworkRequestsBlocked(false);
++  EXPECT_TRUE(factory_ptr->pending_requests().empty());
++  EXPECT_FALSE(service.IsReady());
++
++  ProxyInfo second_info;
++  TestCompletionCallback second_callback;
++  std::unique_ptr<ProxyResolutionRequest> second_request;
++  EXPECT_THAT(
++      service.ResolveProxy(GURL("http://second.test/"), std::string(),
++                           NetworkAnonymizationKey(), &second_info,
++                           second_callback.callback(), &second_request,
++                           NetLogWithSource(), DEFAULT_PRIORITY),
++      IsError(ERR_IO_PENDING));
++  EXPECT_EQ(1u, factory_ptr->pending_requests().size());
++}
++
+ // When a PAC runtime error occurs (ERR_PAC_SCRIPT_FAILED), subsequent
+ // resolutions during the backoff window should not invoke the resolver. For a
+ // non-mandatory PAC, they should return DIRECT synchronously.
+@@ -955,6 +997,31 @@
+ template <typename T>
+ DeletingCallback<T>::~DeletingCallback() = default;
+ 
++TEST_F(ConfiguredProxyResolutionServiceTest,
++       NetworkTransitionCallbackCanDeleteService) {
++  auto config_service =
++      std::make_unique<MockProxyConfigService>("http://foopy/proxy.pac");
++  auto factory = std::make_unique<MockAsyncProxyResolverFactory>(false);
++  std::unique_ptr<ConfiguredProxyResolutionService> service =
++      std::make_unique<ConfiguredProxyResolutionService>(
++          std::move(config_service), std::move(factory),
++          /*host_resolver_for_override_rules=*/nullptr, /*net_log=*/nullptr,
++          /*quick_check_enabled=*/true);
++
++  ProxyInfo info;
++  DeletingCallback<ConfiguredProxyResolutionService> callback(&service);
++  std::unique_ptr<ProxyResolutionRequest> request;
++  EXPECT_THAT(
++      service->ResolveProxy(GURL("http://delete.test/"), std::string(),
++                            NetworkAnonymizationKey(), &info,
++                            callback.callback(), &request, NetLogWithSource(),
++                            DEFAULT_PRIORITY),
++      IsError(ERR_IO_PENDING));
++
++  service->SetNetworkRequestsBlocked(true);
++  EXPECT_FALSE(service);
++}
++
+ // Test that the ConfiguredProxyResolutionService correctly handles the case
+ // where a request callback deletes another request.
+ TEST_F(ConfiguredProxyResolutionServiceTest, CallbackDeletesRequest) {
+--- a/net/proxy_resolution/mac/mac_system_proxy_resolution_request.cc
++++ b/net/proxy_resolution/mac/mac_system_proxy_resolution_request.cc
+@@ -86,6 +86,11 @@
+   proxy_resolution_request_.reset();
+ }
+ 
++void MacSystemProxyResolutionRequest::CancelPlatformRequest() {
++  CancelResolveRequest();
++  mac_service_ = nullptr;
++}
++
+ void MacSystemProxyResolutionRequest::ProxyResolutionComplete(
+     const ProxyList& proxy_list,
+     MacProxyResolutionStatus mac_status,
+--- a/net/proxy_resolution/mac/mac_system_proxy_resolution_request.h
++++ b/net/proxy_resolution/mac/mac_system_proxy_resolution_request.h
+@@ -61,6 +61,8 @@
+   void ResetProxyResolutionRequestForTesting();
+ 
+  private:
++  void CancelPlatformRequest() override;
++
+   // Cancels the callback from the resolver for a previously started proxy
+   // resolution.
+   void CancelResolveRequest();
+--- a/net/proxy_resolution/mac/mac_system_proxy_resolution_service.cc
++++ b/net/proxy_resolution/mac/mac_system_proxy_resolution_service.cc
+@@ -71,6 +71,12 @@
+   DCHECK(request);
+ 
+   net_log.BeginEvent(NetLogEventType::PROXY_RESOLUTION_SERVICE);
++  if (network_requests_blocked()) {
++    net_log.EndEventWithNetErrorCode(
++        NetLogEventType::PROXY_RESOLUTION_SERVICE,
++        ERR_NETWORK_ACCESS_REVOKED);
++    return ERR_NETWORK_ACCESS_REVOKED;
++  }
+ 
+   // Once it's created, the MacSystemProxyResolutionRequest immediately
+   // kicks off proxy resolution in a separate process.
+--- a/net/proxy_resolution/proxy_resolution_service.h
++++ b/net/proxy_resolution/proxy_resolution_service.h
+@@ -78,6 +78,10 @@
+   // before the ProxyResolutionService itself.
+   virtual void OnShutdown() = 0;
+ 
++  // Cancels identity-bound resolution work and rejects new resolutions while
++  // a Persona network identity transition is in progress.
++  virtual void SetNetworkRequestsBlocked(bool blocked) {}
++
+   // Clears the list of bad proxy servers that has been cached.
+   virtual void ClearBadProxiesCache() = 0;
+ 
+--- a/net/proxy_resolution/system_proxy_resolution_request.cc
++++ b/net/proxy_resolution/system_proxy_resolution_request.cc
+@@ -7,6 +7,7 @@
+ #include <utility>
+ 
+ #include "base/check.h"
++#include "net/base/net_errors.h"
+ #include "net/log/net_log_event_type.h"
+ #include "net/proxy_resolution/system_proxy_resolution_service.h"
+ 
+@@ -55,6 +56,20 @@
+   service_ = nullptr;
+ }
+ 
++void SystemProxyResolutionRequest::CompleteForNetworkTransition() {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  DCHECK(service_);
++  DCHECK(!user_callback_.is_null());
++
++  CancelPlatformRequest();
++  CompletionOnceCallback callback = std::move(user_callback_);
++  MarkCompleted();
++  net_log_.EndEventWithNetErrorCode(
++      NetLogEventType::PROXY_RESOLUTION_SERVICE,
++      ERR_NETWORK_ACCESS_REVOKED);
++  std::move(callback).Run(ERR_NETWORK_ACCESS_REVOKED);
++}
++
+ LoadState SystemProxyResolutionRequest::GetLoadState() const {
+   // TODO(crbug.com/40111093): Consider adding a LoadState for "We're
+   // waiting on system APIs to do their thing".
+--- a/net/proxy_resolution/system_proxy_resolution_request.h
++++ b/net/proxy_resolution/system_proxy_resolution_request.h
+@@ -41,6 +41,10 @@
+   // ProxyResolutionRequest:
+   LoadState GetLoadState() const override;
+ 
++  // Cancels the platform request and completes the caller with
++  // ERR_NETWORK_ACCESS_REVOKED.
++  void CompleteForNetworkTransition();
++
+  protected:
+   SystemProxyResolutionRequest(
+       SystemProxyResolutionService* service,
+@@ -61,6 +65,8 @@
+   // the cancellation path.
+   void MarkCompleted();
+ 
++  virtual void CancelPlatformRequest() = 0;
++
+   // Protected for derived class access. Platform subclasses need direct field
+   // access to these members in their completion callbacks (e.g.,
+   // ProxyResolutionComplete) where they read url_, method_, results_, etc.
+--- a/net/proxy_resolution/system_proxy_resolution_service.cc
++++ b/net/proxy_resolution/system_proxy_resolution_service.cc
+@@ -8,6 +8,7 @@
+ #include "base/values.h"
+ #include "net/base/net_info_source_list.h"
+ #include "net/proxy_resolution/proxy_info.h"
++#include "net/proxy_resolution/system_proxy_resolution_request.h"
+ 
+ namespace net {
+ 
+@@ -39,6 +40,25 @@
+   // this so OnShutdown() can be removed.
+ }
+ 
++void SystemProxyResolutionService::SetNetworkRequestsBlocked(bool blocked) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  if (network_requests_blocked_ == blocked)
++    return;
++
++  network_requests_blocked_ = blocked;
++  if (!blocked)
++    return;
++
++  base::WeakPtr<SystemProxyResolutionService> weak_this =
++      weak_factory_.GetWeakPtr();
++  while (!pending_requests_.empty()) {
++    SystemProxyResolutionRequest* request = *pending_requests_.begin();
++    request->CompleteForNetworkTransition();
++    if (!weak_this || !network_requests_blocked_)
++      return;
++  }
++}
++
+ void SystemProxyResolutionService::ClearBadProxiesCache() {
+   proxy_retry_info_.clear();
+ }
+--- a/net/proxy_resolution/system_proxy_resolution_service.h
++++ b/net/proxy_resolution/system_proxy_resolution_service.h
+@@ -8,6 +8,7 @@
+ #include <set>
+ 
+ #include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
+ #include "base/sequence_checker.h"
+ #include "base/values.h"
+ #include "net/base/net_export.h"
+@@ -44,6 +45,7 @@
+   void ReportSuccess(const ProxyInfo& proxy_info) override;
+   void SetProxyDelegate(ProxyDelegate* delegate) override;
+   void OnShutdown() override;
++  void SetNetworkRequestsBlocked(bool blocked) override;
+   void ClearBadProxiesCache() override;
+   const ProxyRetryInfoMap& proxy_retry_info() const override;
+   base::DictValue GetProxyNetLogValues() override;
+@@ -67,6 +69,9 @@
+   size_t PendingRequestSizeForTesting() const {
+     return pending_requests_.size();
+   }
++  bool network_requests_blocked() const {
++    return network_requests_blocked_;
++  }
+ 
+   // Platform subclass must supply the "proxy settings" description for NetLog.
+   // This is called by GetProxyNetLogValues() to build the complete net log
+@@ -87,9 +92,12 @@
+   // Optional delegate for customizing proxy resolution behavior and receiving
+   // proxy-related callbacks.
+   raw_ptr<ProxyDelegate> proxy_delegate_ = nullptr;
++  bool network_requests_blocked_ = false;
+ 
+   // Ensures all method calls are made on the same sequence.
+   SEQUENCE_CHECKER(sequence_checker_);
++
++  base::WeakPtrFactory<SystemProxyResolutionService> weak_factory_{this};
+ };
+ 
+ }  // namespace net
+--- a/net/proxy_resolution/system_proxy_resolution_service_unittest-inl.h
++++ b/net/proxy_resolution/system_proxy_resolution_service_unittest-inl.h
+@@ -23,6 +23,7 @@
+ #include "base/test/metrics/histogram_tester.h"
+ #include "base/time/time.h"
+ #include "net/base/fake_proxy_delegate.h"
++#include "net/base/net_errors.h"
+ #include "net/base/network_isolation_key.h"
+ #include "net/base/proxy_chain.h"
+ #include "net/base/proxy_delegate.h"
+@@ -174,6 +175,35 @@
+   EXPECT_FALSE(callback.have_result());
+ }
+ 
++TYPED_TEST_P(SystemProxyResolutionServiceTest,
++             NetworkTransitionCancelsAndRejectsRequests) {
++  ProxyInfo info;
++  TestCompletionCallback callback;
++  std::unique_ptr<ProxyResolutionRequest> request;
++  int result = this->service()->ResolveProxy(
++      kResourceUrl, std::string(), NetworkAnonymizationKey(), &info,
++      callback.callback(), &request, NetLogWithSource(), DEFAULT_PRIORITY);
++  ASSERT_THAT(result, IsError(ERR_IO_PENDING));
++  ASSERT_NE(request, nullptr);
++
++  this->service()->SetNetworkRequestsBlocked(true);
++  EXPECT_THAT(callback.WaitForResult(),
++              IsError(ERR_NETWORK_ACCESS_REVOKED));
++
++  ProxyInfo blocked_info;
++  TestCompletionCallback blocked_callback;
++  std::unique_ptr<ProxyResolutionRequest> blocked_request;
++  EXPECT_THAT(this->service()->ResolveProxy(
++                  kResourceUrl, std::string(), NetworkAnonymizationKey(),
++                  &blocked_info, blocked_callback.callback(), &blocked_request,
++                  NetLogWithSource(), DEFAULT_PRIORITY),
++              IsError(ERR_NETWORK_ACCESS_REVOKED));
++  EXPECT_FALSE(blocked_callback.have_result());
++  EXPECT_EQ(nullptr, blocked_request);
++
++  this->service()->SetNetworkRequestsBlocked(false);
++}
++
+ TYPED_TEST_P(SystemProxyResolutionServiceTest, ResolveProxyEmptyResults) {
+   ProxyList expected_proxy_list;
+   this->DoResolveProxyTest(expected_proxy_list);
+@@ -614,6 +644,7 @@
+     SystemProxyResolutionServiceTest,
+     CreateWithNullResolver,
+     ResolveProxyCancelled,
++    NetworkTransitionCancelsAndRejectsRequests,
+     ResolveProxyEmptyResults,
+     MultipleProxyResolutionRequests,
+     ProxyResolutionServiceDestructionWithInFlightRequests,
+--- a/net/proxy_resolution/win/windows_system_proxy_resolution_request.cc
++++ b/net/proxy_resolution/win/windows_system_proxy_resolution_request.cc
+@@ -93,6 +93,10 @@
+   proxy_resolution_request_.reset();
+ }
+ 
++void WindowsSystemProxyResolutionRequest::CancelPlatformRequest() {
++  CancelResolveRequest();
++}
++
+ void WindowsSystemProxyResolutionRequest::ProxyResolutionComplete(
+     const ProxyList& proxy_list,
+     WinHttpStatus winhttp_status,
+--- a/net/proxy_resolution/win/windows_system_proxy_resolution_request.h
++++ b/net/proxy_resolution/win/windows_system_proxy_resolution_request.h
+@@ -59,6 +59,9 @@
+   WindowsSystemProxyResolver::Request* GetProxyResolutionRequestForTesting();
+   void ResetProxyResolutionRequestForTesting();
+ 
++ protected:
++  void CancelPlatformRequest() override;
++
+  private:
+   // Cancels the callback from the resolver for a previously started proxy
+   // resolution.
+--- a/net/proxy_resolution/win/windows_system_proxy_resolution_service.cc
++++ b/net/proxy_resolution/win/windows_system_proxy_resolution_service.cc
+@@ -86,6 +86,12 @@
+   DCHECK(request);
+ 
+   net_log.BeginEvent(NetLogEventType::PROXY_RESOLUTION_SERVICE);
++  if (network_requests_blocked()) {
++    net_log.EndEventWithNetErrorCode(
++        NetLogEventType::PROXY_RESOLUTION_SERVICE,
++        ERR_NETWORK_ACCESS_REVOKED);
++    return ERR_NETWORK_ACCESS_REVOKED;
++  }
+ 
+   // Once it's created, the WindowsSystemProxyResolutionRequest immediately
+   // kicks off proxy resolution in a separate process.
+--- a/net/reporting/reporting_cache.cc
++++ b/net/reporting/reporting_cache.cc
+@@ -17,4 +17,9 @@
+ 
+ ReportingCache::~ReportingCache() = default;
+ 
++void ReportingCache::ResetForNetworkTransition() {
++  RemoveAllReports();
++  RemoveAllClients();
++}
++
+ }  // namespace net
+--- a/net/reporting/reporting_cache.h
++++ b/net/reporting/reporting_cache.h
+@@ -208,6 +208,12 @@
+   // Remove all clients, groups, and endpoints from the cache.
+   virtual void RemoveAllClients() = 0;
+ 
++  // Removes all web-origin reporting state before a Persona network identity
++  // transition. Enterprise endpoints are profile policy and are preserved.
++  // The default implementation covers caches that only implement the V0 API;
++  // the production cache also clears document-scoped V1 state.
++  virtual void ResetForNetworkTransition();
++
+   // Remove the endpoint group matching |group_key|, and remove
+   // all endpoints for that group. May cause the client it was associated with
+   // to be deleted if it becomes empty.
+--- a/net/reporting/reporting_cache_impl.cc
++++ b/net/reporting/reporting_cache_impl.cc
+@@ -536,6 +536,29 @@
+   context_->NotifyCachedClientsUpdated();
+ }
+ 
++void ReportingCacheImpl::ResetForNetworkTransition() {
++  base::flat_set<url::Origin> document_origins;
++  for (const auto& [reporting_source, endpoints] : document_endpoints_) {
++    for (const ReportingEndpoint& endpoint : endpoints) {
++      DCHECK(endpoint.group_key.origin.has_value());
++      if (endpoint.group_key.origin.has_value()) {
++        document_origins.insert(endpoint.group_key.origin.value());
++      }
++    }
++  }
++
++  RemoveAllReports();
++  RemoveAllClients();
++  document_endpoints_.clear();
++  isolation_info_.clear();
++  expired_sources_.clear();
++
++  for (const url::Origin& origin : document_origins) {
++    context_->NotifyEndpointsUpdatedForOrigin(
++        FilterEndpointsByOrigin(document_endpoints_, origin));
++  }
++}
++
+ void ReportingCacheImpl::RemoveEndpointGroup(
+     const ReportingEndpointGroupKey& group_key) {
+   ConsistencyCheckClients();
+--- a/net/reporting/reporting_cache_impl.h
++++ b/net/reporting/reporting_cache_impl.h
+@@ -105,6 +105,7 @@
+                     const url::Origin& origin) override;
+   void RemoveClientsForOrigin(const url::Origin& origin) override;
+   void RemoveAllClients() override;
++  void ResetForNetworkTransition() override;
+   void RemoveEndpointGroup(const ReportingEndpointGroupKey& group_key) override;
+   void RemoveEndpointsForUrl(const GURL& url) override;
+   void RemoveSourceAndEndpoints(
+--- a/net/reporting/reporting_cache_unittest.cc
++++ b/net/reporting/reporting_cache_unittest.cc
+@@ -875,6 +875,34 @@
+   }
+ }
+ 
++TEST_P(ReportingCacheTest, ResetForNetworkTransitionClearsWebState) {
++  LoadReportingClients();
++
++  const ReportingEndpointGroupKey enterprise_group_key(
++      kIsolationInfo1_.network_anonymization_key(), *kReportingSource_,
++      /*origin=*/std::nullopt, kGroup1_, ReportingTargetType::kEnterprise);
++
++  ASSERT_TRUE(SetEndpointInCache(kGroupKey11_, kEndpoint1_, kExpires1_));
++  cache()->SetV1EndpointForTesting(
++      ReportingEndpointGroupKey(
++          kIsolationInfo1_.network_anonymization_key(), *kReportingSource_,
++          kOrigin1_, kGroup1_, ReportingTargetType::kDeveloper),
++      *kReportingSource_, kIsolationInfo1_, kUrl1_);
++  cache()->SetExpiredSource(*kReportingSource_);
++  cache()->SetEnterpriseEndpointForTesting(enterprise_group_key, kEndpoint2_);
++
++  cache()->ResetForNetworkTransition();
++
++  EXPECT_EQ(0u, cache()->GetEndpointCount());
++  EXPECT_EQ(0u, cache()->GetClientCountForTesting());
++  EXPECT_EQ(0u, cache()->GetReportingSourceCountForTesting());
++  EXPECT_TRUE(cache()->GetExpiredSources().empty());
++  EXPECT_TRUE(cache()->GetV1ReportingEndpointsByOrigin().empty());
++  EXPECT_EQ(
++      1u,
++      cache()->GetCandidateEndpointsForDelivery(enterprise_group_key).size());
++}
++
+ TEST_P(ReportingCacheTest, RemoveEndpointGroup) {
+   LoadReportingClients();
+ 
+--- a/net/reporting/reporting_context.cc
++++ b/net/reporting/reporting_context.cc
+@@ -111,6 +111,10 @@
+   uploader_->OnShutdown();
+ }
+ 
++void ReportingContext::SetNetworkRequestsBlocked(bool blocked) {
++  delivery_agent_->SetNetworkRequestsBlocked(blocked);
++}
++
+ ReportingContext::ReportingContext(
+     const ReportingPolicy& policy,
+     base::Clock* clock,
+--- a/net/reporting/reporting_context.h
++++ b/net/reporting/reporting_context.h
+@@ -78,6 +78,7 @@
+   bool IsClientDataPersisted() const;
+ 
+   void OnShutdown();
++  void SetNetworkRequestsBlocked(bool blocked);
+ 
+  protected:
+   ReportingContext(const ReportingPolicy& policy,
+--- a/net/reporting/reporting_delivery_agent.cc
++++ b/net/reporting/reporting_delivery_agent.cc
+@@ -5,6 +5,7 @@
+ #include "net/reporting/reporting_delivery_agent.h"
+ 
+ #include <algorithm>
++#include <cstdint>
+ #include <map>
+ #include <set>
+ #include <string>
+@@ -290,6 +291,9 @@
+ 
+   void SendReportsForSource(base::UnguessableToken reporting_source) override {
+     DCHECK(!reporting_source.is_empty());
++    if (network_requests_blocked_) {
++      return;
++    }
+     ReportList reports =
+         cache()->GetReportsToDeliverForSource(reporting_source);
+     if (reports.empty())
+@@ -297,8 +301,36 @@
+     DoSendReports(std::move(reports));
+   }
+ 
++  void SetNetworkRequestsBlocked(bool blocked) override {
++    if (network_requests_blocked_ == blocked) {
++      return;
++    }
++    network_requests_blocked_ = blocked;
++    const uint64_t generation = ++network_request_generation_;
++    if (!blocked) {
++      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++          FROM_HERE,
++          base::BindOnce(
++              &ReportingDeliveryAgentImpl::ResumeAfterNetworkTransition,
++              weak_factory_.GetWeakPtr(), generation));
++      return;
++    }
++
++    timer_->Stop();
++    weak_factory_.InvalidateWeakPtrs();
++    uploader()->CancelPendingUploadsForNetworkTransition();
++
++    ReportList reports;
++    cache()->GetReports(&reports);
++    ClearReportsPendingIfNeeded(reports);
++    pending_groups_.clear();
++  }
++
+   // ReportingCacheObserver implementation:
+   void OnReportsUpdated() override {
++    if (network_requests_blocked_) {
++      return;
++    }
+     if (CacheHasReports() && !timer_->IsRunning()) {
+       SendReports();
+       StartTimer();
+@@ -312,6 +344,26 @@
+     return !reports.empty();
+   }
+ 
++  void ClearReportsPendingIfNeeded(const ReportList& reports) {
++    ReportList pending_reports;
++    for (const ReportingReport* report : reports) {
++      if (report->IsUploadPending()) {
++        pending_reports.push_back(report);
++      }
++    }
++    if (!pending_reports.empty()) {
++      cache()->ClearReportsPending(pending_reports);
++    }
++  }
++
++  void ResumeAfterNetworkTransition(uint64_t generation) {
++    if (network_requests_blocked_ ||
++        generation != network_request_generation_) {
++      return;
++    }
++    OnReportsUpdated();
++  }
++
+   void StartTimer() {
+     timer_->Start(FROM_HERE, policy().delivery_interval,
+                   base::BindOnce(&ReportingDeliveryAgentImpl::OnTimerFired,
+@@ -319,6 +371,9 @@
+   }
+ 
+   void OnTimerFired() {
++    if (network_requests_blocked_) {
++      return;
++    }
+     if (CacheHasReports()) {
+       SendReports();
+       StartTimer();
+@@ -326,6 +381,9 @@
+   }
+ 
+   void SendReports() {
++    if (network_requests_blocked_) {
++      return;
++    }
+     ReportList reports = cache()->GetReportsToDeliver();
+     if (reports.empty())
+       return;
+@@ -335,6 +393,10 @@
+   void SendReportsForTesting() override { SendReports(); }
+ 
+   void DoSendReports(ReportList reports) {
++    if (network_requests_blocked_) {
++      ClearReportsPendingIfNeeded(reports);
++      return;
++    }
+     // First determine which origins we're allowed to upload reports about.
+     std::set<url::Origin> report_origins;
+     for (const ReportingReport* report : reports) {
+@@ -348,6 +410,10 @@
+ 
+   void OnSendPermissionsChecked(ReportList reports,
+                                 std::set<url::Origin> allowed_report_origins) {
++    if (network_requests_blocked_) {
++      ClearReportsPendingIfNeeded(reports);
++      return;
++    }
+     DCHECK(!reports.empty());
+     std::map<Delivery::Target, std::unique_ptr<Delivery>> deliveries;
+ 
+@@ -466,6 +532,10 @@
+ 
+   void OnUploadComplete(std::unique_ptr<Delivery> delivery,
+                         ReportingUploader::Outcome outcome) {
++    if (network_requests_blocked_) {
++      ClearReportsPendingIfNeeded(delivery->reports());
++      return;
++    }
+     bool success = outcome == ReportingUploader::Outcome::SUCCESS;
+     delivery->ProcessOutcome(cache(), success);
+ 
+@@ -501,6 +571,9 @@
+   // Tracks endpoint groups for which there is a pending delivery running.
+   std::set<ReportingEndpointGroupKey> pending_groups_;
+ 
++  bool network_requests_blocked_ = false;
++  uint64_t network_request_generation_ = 0;
++
+   std::unique_ptr<ReportingEndpointManager> endpoint_manager_;
+ 
+   base::WeakPtrFactory<ReportingDeliveryAgentImpl> weak_factory_{this};
+--- a/net/reporting/reporting_delivery_agent.h
++++ b/net/reporting/reporting_delivery_agent.h
+@@ -73,6 +73,8 @@
+   virtual void SendReportsForSource(
+       base::UnguessableToken reporting_source) = 0;
+ 
++  virtual void SetNetworkRequestsBlocked(bool blocked) = 0;
++
+  private:
+   // Bypasses the schedule to attempt delivery of all outstanding reports.
+   virtual void SendReportsForTesting() = 0;
+--- a/net/reporting/reporting_delivery_agent_unittest.cc
++++ b/net/reporting/reporting_delivery_agent_unittest.cc
+@@ -1102,4 +1102,25 @@
+   EXPECT_EQ(histograms.GetTotalSum("Net.Reporting.FilteredReportsCount"), 2);
+ }
+ 
++TEST_F(ReportingDeliveryAgentTest,
++       NetworkTransitionCancelsUploadAndInvalidatesStaleResume) {
++  ASSERT_TRUE(SetEndpointInCache(kGroupKey_, kEndpoint_, kExpires_));
++  AddReport(std::nullopt, kNak_, kUrl_, kGroup_);
++  ASSERT_EQ(1u, pending_uploads().size());
++
++  delivery_agent()->SetNetworkRequestsBlocked(true);
++  EXPECT_TRUE(pending_uploads().empty());
++  EXPECT_EQ(1u, cache()->GetReportCountWithStatusForTesting(
++                    ReportingReport::Status::QUEUED));
++
++  delivery_agent()->SetNetworkRequestsBlocked(false);
++  delivery_agent()->SetNetworkRequestsBlocked(true);
++  RunUntilIdle();
++  EXPECT_TRUE(pending_uploads().empty());
++
++  delivery_agent()->SetNetworkRequestsBlocked(false);
++  RunUntilIdle();
++  EXPECT_EQ(1u, pending_uploads().size());
++}
++
+ }  // namespace net
+--- a/net/reporting/reporting_service.cc
++++ b/net/reporting/reporting_service.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "net/reporting/reporting_service.h"
+ 
++#include <cstdint>
+ #include <optional>
+ #include <utility>
+ 
+@@ -66,7 +67,7 @@
+       const IsolationInfo& isolation_info,
+       const base::flat_map<std::string, std::string>& endpoints) override {
+     DCHECK(!reporting_source.is_empty());
+-    DoOrBacklogTask(
++    DoOrBacklogNetworkTask(
+         base::BindOnce(&ReportingServiceImpl::DoSetDocumentReportingEndpoints,
+                        base::Unretained(this), reporting_source, isolation_info,
+                        FixupNetworkAnonymizationKey(
+@@ -80,7 +81,7 @@
+     // Queue expiration of the reporting sources as backlog tasks if the
+     // reporting service is not yet initialized, so that reports and expirations
+     // remain well-ordered.
+-    DoOrBacklogTask(
++    DoOrBacklogNetworkTask(
+         base::BindOnce(&ReportingServiceImpl::DoSendReportsAndRemoveSource,
+                        base::Unretained(this), reporting_source));
+   }
+@@ -118,7 +119,7 @@
+ 
+     // base::Unretained is safe because the callback is stored in
+     // |task_backlog_| which will not outlive |this|.
+-    DoOrBacklogTask(
++    DoOrBacklogNetworkTask(
+         base::BindOnce(&ReportingServiceImpl::DoQueueReport,
+                        base::Unretained(this), reporting_source,
+                        FixupNetworkAnonymizationKey(network_anonymization_key),
+@@ -140,7 +141,7 @@
+       return;
+ 
+     DVLOG(1) << "Received Reporting policy for " << origin;
+-    DoOrBacklogTask(base::BindOnce(
++    DoOrBacklogNetworkTask(base::BindOnce(
+         &ReportingServiceImpl::DoProcessReportToHeader, base::Unretained(this),
+         FixupNetworkAnonymizationKey(network_anonymization_key), origin,
+         std::move(header_value).value()));
+@@ -166,6 +167,20 @@
+     context_->OnShutdown();
+   }
+ 
++  void SetNetworkRequestsBlocked(bool blocked) override {
++    if (network_requests_blocked_ == blocked)
++      return;
++
++    network_requests_blocked_ = blocked;
++    ++network_request_generation_;
++    context_->SetNetworkRequestsBlocked(blocked);
++    if (blocked) {
++      FetchAllClientsFromStoreIfNecessary();
++      context_->cache()->ResetForNetworkTransition();
++      context_->cache()->Flush();
++    }
++  }
++
+   const ReportingPolicy& GetPolicy() const override {
+     return context_->policy();
+   }
+@@ -204,6 +219,11 @@
+   }
+ 
+  private:
++  struct BacklogTask {
++    base::OnceClosure task;
++    std::optional<uint64_t> network_generation;
++  };
++
+   void DoSendReportsAndRemoveSource(
+       const base::UnguessableToken& reporting_source) {
+     context_->delivery_agent()->SendReportsForSource(reporting_source);
+@@ -217,7 +237,22 @@
+     FetchAllClientsFromStoreIfNecessary();
+ 
+     if (!initialized_) {
+-      task_backlog_.push_back(std::move(task));
++      task_backlog_.push_back({std::move(task), std::nullopt});
++      return;
++    }
++
++    std::move(task).Run();
++  }
++
++  void DoOrBacklogNetworkTask(base::OnceClosure task) {
++    if (shut_down_ || network_requests_blocked_)
++      return;
++
++    FetchAllClientsFromStoreIfNecessary();
++
++    if (!initialized_) {
++      task_backlog_.push_back(
++          {std::move(task), network_request_generation_});
+       return;
+     }
+ 
+@@ -285,8 +320,13 @@
+     if (shut_down_)
+       return;
+ 
+-    for (base::OnceClosure& task : task_backlog_) {
+-      std::move(task).Run();
++    for (BacklogTask& backlog_task : task_backlog_) {
++      if (backlog_task.network_generation.has_value() &&
++          (network_requests_blocked_ ||
++           *backlog_task.network_generation != network_request_generation_)) {
++        continue;
++      }
++      std::move(backlog_task.task).Run();
+     }
+     task_backlog_.clear();
+   }
+@@ -304,15 +344,22 @@
+     DCHECK(!initialized_);
+ 
+     context_->store()->LoadReportingClients(base::BindOnce(
+-        &ReportingServiceImpl::OnClientsLoaded, weak_factory_.GetWeakPtr()));
++        &ReportingServiceImpl::OnClientsLoaded, weak_factory_.GetWeakPtr(),
++        network_request_generation_));
+   }
+ 
+   void OnClientsLoaded(
++      uint64_t load_generation,
+       std::vector<ReportingEndpoint> loaded_endpoints,
+       std::vector<CachedReportingEndpointGroup> loaded_endpoint_groups) {
+     initialized_ = true;
+     context_->cache()->AddClientsLoadedFromStore(
+         std::move(loaded_endpoints), std::move(loaded_endpoint_groups));
++    if (network_requests_blocked_ ||
++        load_generation != network_request_generation_) {
++      context_->cache()->RemoveAllClients();
++      context_->cache()->Flush();
++    }
+     ExecuteBacklog();
+   }
+ 
+@@ -331,7 +378,9 @@
+   bool shut_down_ = false;
+   bool started_loading_from_store_ = false;
+   bool initialized_ = false;
+-  std::vector<base::OnceClosure> task_backlog_;
++  std::vector<BacklogTask> task_backlog_;
++  bool network_requests_blocked_ = false;
++  uint64_t network_request_generation_ = 0;
+ 
+   bool respect_network_anonymization_key_ =
+       NetworkAnonymizationKey::IsPartitioningEnabled();
+@@ -345,6 +394,8 @@
+ 
+ }  // namespace
+ 
++void ReportingService::SetNetworkRequestsBlocked(bool) {}
++
+ ReportingService::~ReportingService() = default;
+ 
+ // static
+--- a/net/reporting/reporting_service.h
++++ b/net/reporting/reporting_service.h
+@@ -131,6 +131,12 @@
+   // processed, and pending uploads are cancelled.
+   virtual void OnShutdown() = 0;
+ 
++  // Stops network delivery for a Persona identity transition and removes
++  // web-origin reports and endpoint configuration so old and new identities
++  // cannot be linked through Reporting state. The default implementation is a
++  // no-op for lightweight test services that do not own a ReportingContext.
++  virtual void SetNetworkRequestsBlocked(bool blocked);
++
+   virtual const ReportingPolicy& GetPolicy() const = 0;
+ 
+   virtual base::Value StatusAsValue() const;
+--- a/net/reporting/reporting_service_unittest.cc
++++ b/net/reporting/reporting_service_unittest.cc
+@@ -356,6 +356,57 @@
+       context()->cache()->GetExpiredSources().contains(*kReportingSource_));
+ }
+ 
++TEST_P(ReportingServiceTest, NetworkTransitionDropsQueuedAndCachedReports) {
++  service()->QueueReport(kUrl_, kReportingSource_, kNak_, kUserAgent_, kGroup_,
++                         kType_, base::DictValue(), 0,
++                         ReportingTargetType::kDeveloper);
++  service()->SendReportsAndRemoveSource(*kReportingSource_);
++
++  service()->SetNetworkRequestsBlocked(true);
++  service()->QueueReport(kUrl2_, kReportingSource_, kNak2_, kUserAgent_,
++                         kGroup2_, kType_, base::DictValue(), 0,
++                         ReportingTargetType::kDeveloper);
++  service()->SetNetworkRequestsBlocked(false);
++  FinishLoading(true /* load_success */);
++
++  std::vector<raw_ptr<const ReportingReport, VectorExperimental>> reports;
++  context()->cache()->GetReports(&reports);
++  EXPECT_TRUE(reports.empty());
++  EXPECT_FALSE(
++      context()->cache()->GetExpiredSources().contains(*kReportingSource_));
++
++  service()->QueueReport(kUrl2_, kReportingSource_, kNak2_, kUserAgent_,
++                         kGroup2_, kType_, base::DictValue(), 0,
++                         ReportingTargetType::kDeveloper);
++  context()->cache()->GetReports(&reports);
++  ASSERT_EQ(1u, reports.size());
++
++  service()->SetNetworkRequestsBlocked(true);
++  context()->cache()->GetReports(&reports);
++  EXPECT_TRUE(reports.empty());
++}
++
++TEST_P(ReportingServiceTest, NetworkTransitionPurgesStoreBeforeFirstUse) {
++  if (!store()) {
++    GTEST_SKIP();
++  }
++
++  ReportingEndpoint endpoint(kGroupKey_,
++                             ReportingEndpoint::EndpointInfo{kEndpoint_});
++  CachedReportingEndpointGroup group(
++      kGroupKey_, OriginSubdomains::DEFAULT, base::Time::Max(), base::Time());
++  store()->SetPrestoredClients({endpoint}, {group});
++
++  service()->SetNetworkRequestsBlocked(true);
++  service()->SetNetworkRequestsBlocked(false);
++  FinishLoading(true /* load_success */);
++
++  EXPECT_EQ(0u, context()->cache()->GetEndpointCount());
++  EXPECT_EQ(0u, context()->cache()->GetClientCountForTesting());
++  EXPECT_EQ(0, store()->StoredEndpointsCount());
++  EXPECT_EQ(0, store()->StoredEndpointGroupsCount());
++}
++
+ // Flaky in ChromeOS: crbug.com/1356127
+ #if BUILDFLAG(IS_CHROMEOS)
+ #define MAYBE_SendReportsAndRemoveSourceWithPendingReports \
+--- a/net/reporting/reporting_test_util.cc
++++ b/net/reporting/reporting_test_util.cc
+@@ -122,6 +122,10 @@
+   pending_uploads_.clear();
+ }
+ 
++void TestReportingUploader::CancelPendingUploadsForNetworkTransition() {
++  pending_uploads_.clear();
++}
++
+ int TestReportingUploader::GetPendingUploadCountForTesting() const {
+   return pending_uploads_.size();
+ }
+--- a/net/reporting/reporting_test_util.h
++++ b/net/reporting/reporting_test_util.h
+@@ -97,6 +97,7 @@
+                    UploadCallback callback) override;
+ 
+   void OnShutdown() override;
++  void CancelPendingUploadsForNetworkTransition() override;
+ 
+   int GetPendingUploadCountForTesting() const override;
+ 
+--- a/net/reporting/reporting_uploader.cc
++++ b/net/reporting/reporting_uploader.cc
+@@ -150,6 +150,10 @@
+     uploads_.clear();
+   }
+ 
++  void CancelPendingUploadsForNetworkTransition() override {
++    uploads_.clear();
++  }
++
+   void StartPreflightRequest(std::unique_ptr<PendingUpload> upload) {
+     DCHECK(upload->state == PendingUpload::CREATED);
+ 
+--- a/net/reporting/reporting_uploader.h
++++ b/net/reporting/reporting_uploader.h
+@@ -52,6 +52,10 @@
+   // Cancels pending uploads.
+   virtual void OnShutdown() = 0;
+ 
++  // Cancels pending uploads without recording a delivery outcome. Cached
++  // reports are returned to the queue by ReportingDeliveryAgent.
++  virtual void CancelPendingUploadsForNetworkTransition() = 0;
++
+   // Creates a real implementation of |ReportingUploader| that uploads reports
+   // using |context|.
+   static std::unique_ptr<ReportingUploader> Create(
+--- a/services/network/mdns_responder.cc
++++ b/services/network/mdns_responder.cc
+@@ -822,31 +822,74 @@
+ // static
+ constexpr base::TimeDelta MdnsResponderManager::kManagerStartThrottleDelay;
+ 
+-MdnsResponderManager::MdnsResponderManager() : MdnsResponderManager(nullptr) {}
++MdnsResponderManager::MdnsResponderManager()
++    : MdnsResponderManager(nullptr, false) {}
+ 
+ MdnsResponderManager::MdnsResponderManager(
+     net::MDnsSocketFactory* socket_factory)
++    : MdnsResponderManager(socket_factory, false) {}
++
++MdnsResponderManager::MdnsResponderManager(
++    net::MDnsSocketFactory* socket_factory,
++    bool network_requests_blocked)
+     : socket_factory_(socket_factory),
+-      name_generator_(std::make_unique<RandomUuidNameGenerator>()) {
++      name_generator_(std::make_unique<RandomUuidNameGenerator>()),
++      network_requests_blocked_(network_requests_blocked) {
+   if (!socket_factory_) {
+     owned_socket_factory_ = net::MDnsSocketFactory::CreateDefault();
+     socket_factory_ = owned_socket_factory_.get();
+   }
+-  StartIfNeeded();
++  if (!network_requests_blocked_) {
++    StartIfNeeded();
++  }
+ }
+ 
+ MdnsResponderManager::~MdnsResponderManager() {
+   // Note that sending the goodbye is best-effort since it may have a non-zero
+   // delay because of backlogged responses from rate-limiting. Delayed send will
+   // be cancelled after the manager is destroyed.
+-  SendGoodbyePacketForMdnsNameGeneratorServiceIfNecessary();
++  if (!network_requests_blocked_) {
++    SendGoodbyePacketForMdnsNameGeneratorServiceIfNecessary();
++  }
+   // When destroyed, each responder will send out Goodbye messages for owned
+   // names via the back pointer to the manager. As a result, we should destroy
+   // the remaining responders before the manager is destroyed.
+   responders_.clear();
+ }
+ 
++void MdnsResponderManager::SetNetworkRequestsBlocked(bool blocked) {
++  if (network_requests_blocked_ == blocked) {
++    return;
++  }
++  network_requests_blocked_ = blocked;
++  if (!blocked) {
++    StartIfNeeded();
++    // Old responder pipes have no generation field. Close them only after the
++    // new socket epoch is ready so the renderer can reconnect without carrying
++    // queued calls across the transition.
++    responders_.clear();
++    return;
++  }
++
++  weak_factory_.InvalidateWeakPtrs();
++  // Close sockets and cancel their schedulers before retiring responders. This
++  // makes responder teardown silent instead of emitting identity-crossing
++  // goodbye packets.
++  socket_handler_by_id_.clear();
++  for (const auto& responder : responders_) {
++    responder->RetireForNetworkPersonaTransition();
++  }
++  names_.clear();
++  names_in_last_generator_response_.clear();
++  should_respond_to_generator_service_query_ = true;
++  start_result_ = SocketHandlerStartResult::UNSPECIFIED;
++  throttled_start_end_ = base::TimeTicks();
++}
++
+ void MdnsResponderManager::StartIfNeeded() {
++  if (network_requests_blocked_) {
++    return;
++  }
+   if (start_result_ == SocketHandlerStartResult::ALL_SUCCESS ||
+       start_result_ == SocketHandlerStartResult::PARTIAL_SUCCESS) {
+     // Start not needed.
+@@ -908,12 +951,14 @@
+ 
+ void MdnsResponderManager::CreateMdnsResponder(
+     mojo::PendingReceiver<mojom::MdnsResponder> receiver) {
+-  StartIfNeeded();
+-  if (start_result_ == SocketHandlerStartResult::UNSPECIFIED ||
+-      start_result_ == SocketHandlerStartResult::ALL_FAILURE) {
+-    LOG(ERROR) << "The mDNS responder manager is not started yet.";
+-    receiver = mojo::NullReceiver();
+-    return;
++  if (!network_requests_blocked_) {
++    StartIfNeeded();
++    if (start_result_ == SocketHandlerStartResult::UNSPECIFIED ||
++        start_result_ == SocketHandlerStartResult::ALL_FAILURE) {
++      LOG(ERROR) << "The mDNS responder manager is not started yet.";
++      receiver = mojo::NullReceiver();
++      return;
++    }
+   }
+   auto responder = std::make_unique<MdnsResponder>(std::move(receiver), this);
+   responders_.insert(std::move(responder));
+@@ -922,6 +967,9 @@
+ bool MdnsResponderManager::Send(scoped_refptr<net::IOBufferWithSize> buf,
+                                 scoped_refptr<MdnsResponseSendOption> option) {
+   DCHECK(buf != nullptr);
++  if (network_requests_blocked_) {
++    return false;
++  }
+   bool all_success = true;
+   if (option->send_socket_handler_ids.empty()) {
+     for (auto& id_handler_pair : socket_handler_by_id_)
+@@ -959,6 +1007,9 @@
+ 
+ void MdnsResponderManager::HandleAddressNameConflictIfAny(
+     const std::map<std::string, std::set<net::IPAddress>>& external_maps) {
++  if (network_requests_blocked_) {
++    return;
++  }
+   // Handle conflicts in names for address records.
+   for (const auto& name_to_addresses : external_maps) {
+     for (auto& responder : responders_) {
+@@ -978,6 +1029,9 @@
+ }
+ 
+ void MdnsResponderManager::HandleTxtNameConflict() {
++  if (network_requests_blocked_) {
++    return;
++  }
+   // We will no longer respond to queries to list the generated names. This also
+   // cancels the scheduled responses.
+   LOG(ERROR)
+@@ -989,6 +1043,9 @@
+ void MdnsResponderManager::OnMdnsQueryReceived(
+     const net::DnsQuery& query,
+     uint16_t recv_socket_handler_id) {
++  if (network_requests_blocked_) {
++    return;
++  }
+   // TODO(qingsi): Ideally we should consolidate the handling of the service
+   // query using the same responder mechanism as after this block (i.e. there
+   // would be a responder owning the service instance name). The current
+@@ -1012,6 +1069,9 @@
+ 
+ void MdnsResponderManager::OnSocketHandlerReadError(uint16_t socket_handler_id,
+                                                     int result) {
++  if (network_requests_blocked_) {
++    return;
++  }
+   VLOG(1) << "Socket read error, socket=" << socket_handler_id
+           << ", error=" << result;
+ 
+@@ -1173,13 +1233,18 @@
+     MdnsResponderManager* manager)
+     : receiver_(this, std::move(receiver)),
+       manager_(manager),
+-      name_generator_(manager_->name_generator()) {
++      name_generator_(manager_->name_generator()),
++      retired_for_network_persona_transition_(
++          manager_->network_requests_blocked()) {
+   receiver_.set_disconnect_handler(
+       base::BindOnce(&MdnsResponderManager::OnMojoConnectionError,
+                      base::Unretained(manager_), this));
+ }
+ 
+ MdnsResponder::~MdnsResponder() {
++  if (retired_for_network_persona_transition_) {
++    return;
++  }
+   for (const auto& name_addr_pair : name_addr_map_) {
+     bool rv = manager_->RemoveName(name_addr_pair.first);
+     DCHECK(rv);
+@@ -1190,6 +1255,11 @@
+ void MdnsResponder::CreateNameForAddress(
+     const net::IPAddress& address,
+     mojom::MdnsResponder::CreateNameForAddressCallback callback) {
++  if (retired_for_network_persona_transition_ ||
++      manager_->network_requests_blocked()) {
++    std::move(callback).Run(std::string(), false);
++    return;
++  }
+   DCHECK(address.IsValid() || address.empty());
+   if (!address.IsValid()) {
+     LOG(ERROR) << "Invalid IP address to create a name for";
+@@ -1236,6 +1306,11 @@
+ void MdnsResponder::RemoveNameForAddress(
+     const net::IPAddress& address,
+     mojom::MdnsResponder::RemoveNameForAddressCallback callback) {
++  if (retired_for_network_persona_transition_ ||
++      manager_->network_requests_blocked()) {
++    std::move(callback).Run(false, false);
++    return;
++  }
+   DCHECK(address.IsValid() || address.empty());
+   auto it = FindNameCreatedForAddress(address);
+   if (it == name_addr_map_.end()) {
+@@ -1261,6 +1336,9 @@
+ 
+ void MdnsResponder::OnMdnsQueryReceived(const net::DnsQuery& query,
+                                         uint16_t recv_socket_handler_id) {
++  if (retired_for_network_persona_transition_) {
++    return;
++  }
+   // Currently we only support a single question in DnsQuery.
+   std::optional<std::string> dotted_name_to_resolve =
+       net::dns_names_util::NetworkToDottedName(query.qname());
+@@ -1304,6 +1382,9 @@
+ bool MdnsResponder::HasConflictWithExternalResolution(
+     const std::string& name,
+     const std::set<net::IPAddress>& external_mapped_addreses) {
++  if (retired_for_network_persona_transition_) {
++    return false;
++  }
+   DCHECK(!external_mapped_addreses.empty());
+   auto matching_record_it = name_addr_map_.find(name);
+   if (matching_record_it == name_addr_map_.end())
+@@ -1323,9 +1404,21 @@
+     scoped_refptr<net::IOBufferWithSize> response,
+     scoped_refptr<MdnsResponseSendOption> option) {
+   DCHECK_NE(MdnsResponseSendOption::ResponseClass::UNSPECIFIED, option->klass);
++  if (retired_for_network_persona_transition_) {
++    return false;
++  }
+   return manager_->Send(std::move(response), std::move(option));
+ }
+ 
++void MdnsResponder::RetireForNetworkPersonaTransition() {
++  if (retired_for_network_persona_transition_) {
++    return;
++  }
++  retired_for_network_persona_transition_ = true;
++  name_addr_map_.clear();
++  name_refcount_map_.clear();
++}
++
+ bool MdnsResponder::SendGoodbyePacketForNameAddressMap(
+     const std::map<std::string, net::IPAddress>& name_addr_map) {
+   if (name_addr_map.empty())
+--- a/services/network/mdns_responder.h
++++ b/services/network/mdns_responder.h
+@@ -146,12 +146,20 @@
+ 
+   MdnsResponderManager();
+   explicit MdnsResponderManager(net::MDnsSocketFactory* socket_factory);
++  MdnsResponderManager(net::MDnsSocketFactory* socket_factory,
++                       bool network_requests_blocked);
+ 
+   MdnsResponderManager(const MdnsResponderManager&) = delete;
+   MdnsResponderManager& operator=(const MdnsResponderManager&) = delete;
+ 
+   ~MdnsResponderManager();
+ 
++  // Stops all mDNS I/O without emitting goodbye packets. Existing responders
++  // stay connected and inert while blocked, then disconnect on release so the
++  // renderer obtains a new pipe for the new identity epoch.
++  void SetNetworkRequestsBlocked(bool blocked);
++  bool network_requests_blocked() const { return network_requests_blocked_; }
++
+   // Creates an instance of MdnsResponder for the receiver.
+   void CreateMdnsResponder(
+       mojo::PendingReceiver<mojom::MdnsResponder> receiver);
+@@ -260,6 +268,7 @@
+   // The names used to create the last response to a generator service query.
+   std::set<std::string> names_in_last_generator_response_;
+   bool should_respond_to_generator_service_query_ = true;
++  bool network_requests_blocked_ = false;
+ 
+   std::set<std::unique_ptr<MdnsResponder>, base::UniquePtrComparator>
+       responders_;
+@@ -312,6 +321,8 @@
+     name_generator_ = name_generator;
+   }
+ 
++  void RetireForNetworkPersonaTransition();
++
+  private:
+   // Returns true if the response is successfully scheduled to send on all
+   // successfully bound interfaces after rate limiting, and false otherwise. See
+@@ -342,6 +353,7 @@
+   std::map<std::string, net::IPAddress> name_addr_map_;
+   std::map<std::string, uint16_t> name_refcount_map_;
+   raw_ptr<MdnsResponderManager::NameGenerator> name_generator_;
++  bool retired_for_network_persona_transition_ = false;
+ };
+ 
+ }  // namespace network
+--- a/services/network/mdns_responder_unittest.cc
++++ b/services/network/mdns_responder_unittest.cc
+@@ -25,6 +25,7 @@
+ #include "base/test/metrics/histogram_tester.h"
+ #include "base/test/scoped_feature_list.h"
+ #include "base/test/task_environment.h"
++#include "base/test/test_future.h"
+ #include "mojo/public/cpp/bindings/connector.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "net/base/ip_address.h"
+@@ -507,6 +508,47 @@
+   EXPECT_EQ(name1, CreateNameForAddress(0, addr1));
+ }
+ 
++TEST_F(MdnsResponderTest,
++       NetworkTransitionReplacesResponderWithoutSendingGoodbye) {
++  CreateNameForAddress(0, kPublicAddrs[0]);
++  RunUntilNoTasksRemain();
++  testing::Mock::VerifyAndClearExpectations(&socket_factory_);
++  EXPECT_CALL(socket_factory_, OnSendTo(_)).Times(0);
++
++  host_manager_->SetNetworkRequestsBlocked(true);
++  base::test::TestFuture<const std::string&, bool> blocked_create;
++  client_[0]->CreateNameForAddress(kPublicAddrs[1],
++                                   blocked_create.GetCallback());
++  EXPECT_TRUE(blocked_create.Get<0>().empty());
++  EXPECT_FALSE(blocked_create.Get<1>());
++  client_[0].FlushForTesting();
++  EXPECT_TRUE(client_[0].is_connected());
++
++  host_manager_->SetNetworkRequestsBlocked(false);
++  RunUntilNoTasksRemain();
++  EXPECT_FALSE(client_[0].is_connected());
++  testing::Mock::VerifyAndClearExpectations(&socket_factory_);
++
++  CreateMdnsResponders();
++  EXPECT_FALSE(CreateNameForAddress(0, kPublicAddrs[1]).empty());
++}
++
++TEST_F(MdnsResponderTest, InitiallyBlockedManagerCreatesInertResponder) {
++  EXPECT_CALL(failing_socket_factory_, CreateSockets(_)).Times(0);
++  auto manager = std::make_unique<MdnsResponderManager>(
++      &failing_socket_factory_, /*network_requests_blocked=*/true);
++  mojo::Remote<mojom::MdnsResponder> responder;
++  manager->CreateMdnsResponder(responder.BindNewPipeAndPassReceiver());
++
++  base::test::TestFuture<const std::string&, bool> create_result;
++  responder->CreateNameForAddress(kPublicAddrs[0],
++                                  create_result.GetCallback());
++  EXPECT_TRUE(create_result.Get<0>().empty());
++  EXPECT_FALSE(create_result.Get<1>());
++  responder.FlushForTesting();
++  EXPECT_TRUE(responder.is_connected());
++}
++
+ // Test that a name-to-address map can be removed when reaching zero refcount
+ // and can be updated afterwards.
+ TEST_F(MdnsResponderTest, NameAddressMapCanBeRemovedByOwningClient) {
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -849,6 +849,13 @@
+ #endif
+   socket_factory_->SetNetworkPersonaRequestsBlocked(
+       network_persona_requests_blocked_);
++  SetProxyResolutionNetworkRequestsBlocked(network_persona_requests_blocked_);
++#if BUILDFLAG(ENABLE_REPORTING)
++  if (url_request_context_->reporting_service()) {
++    url_request_context_->reporting_service()->SetNetworkRequestsBlocked(
++        network_persona_requests_blocked_);
++  }
++#endif  // BUILDFLAG(ENABLE_REPORTING)
+   resource_scheduler_ = std::make_unique<ResourceScheduler>();
+ 
+   if (params_->http_auth_static_network_context_params) {
+@@ -1945,6 +1952,26 @@
+ 
+   network_persona_requests_blocked_ = true;
+   socket_factory_->SetNetworkPersonaRequestsBlocked(true);
++  SetProxyResolutionNetworkRequestsBlocked(true);
++#if BUILDFLAG(ENABLE_REPORTING)
++  if (url_request_context_->reporting_service()) {
++    url_request_context_->reporting_service()->SetNetworkRequestsBlocked(true);
++  }
++#endif  // BUILDFLAG(ENABLE_REPORTING)
++  if (domain_reliability_monitor_) {
++    domain_reliability_monitor_->SetNetworkRequestsBlocked(true);
++  }
++#if BUILDFLAG(IS_P2P_ENABLED)
++  for (const auto& entry : socket_managers_) {
++    entry.second->SetNetworkRequestsBlocked(true);
++  }
++#endif  // BUILDFLAG(IS_P2P_ENABLED)
++#if BUILDFLAG(ENABLE_MDNS)
++  if (mdns_responder_manager_) {
++    mdns_responder_manager_->SetNetworkRequestsBlocked(true);
++  }
++#endif  // BUILDFLAG(ENABLE_MDNS)
++  CancelURLRequestsForNetworkPersonaTransition();
+ 
+   ohttp_handler_.AbortAllRequestsForNetworkPersonaTransition();
+   proxy_resolving_socket_factories_.Clear();
+@@ -2067,6 +2094,26 @@
+     bool was_blocked) {
+   network_persona_requests_blocked_ = false;
+   socket_factory_->SetNetworkPersonaRequestsBlocked(false);
++  SetProxyResolutionNetworkRequestsBlocked(false);
++#if BUILDFLAG(ENABLE_REPORTING)
++  if (url_request_context_->reporting_service()) {
++    url_request_context_->reporting_service()->SetNetworkRequestsBlocked(false);
++  }
++#endif  // BUILDFLAG(ENABLE_REPORTING)
++  if (domain_reliability_monitor_) {
++    domain_reliability_monitor_->SetNetworkRequestsBlocked(false);
++  }
++#if BUILDFLAG(IS_P2P_ENABLED)
++  // Old manager pipes can contain calls queued under the previous identity.
++  // Drop them only after opening the local gate so Blink reconnects once into
++  // the new epoch instead of entering a blocked reconnect loop.
++  socket_managers_.clear();
++#endif  // BUILDFLAG(IS_P2P_ENABLED)
++#if BUILDFLAG(ENABLE_MDNS)
++  if (mdns_responder_manager_) {
++    mdns_responder_manager_->SetNetworkRequestsBlocked(false);
++  }
++#endif  // BUILDFLAG(ENABLE_MDNS)
+   if (internal_host_resolver_) {
+     internal_host_resolver_->SetNetworkRequestsBlocked(false);
+   }
+@@ -2081,6 +2128,40 @@
+   }
+ }
+ 
++void NetworkContext::CancelURLRequestsForNetworkPersonaTransition() {
++  if (!url_request_context_) {
++    return;
++  }
++
++  base::WeakPtr<NetworkContext> weak_this = weak_factory_.GetWeakPtr();
++  while (true) {
++    net::URLRequest* pending_request = nullptr;
++    for (const net::URLRequest* request :
++         *url_request_context_->url_requests()) {
++      if (request->is_pending()) {
++        pending_request = const_cast<net::URLRequest*>(request);
++        break;
++      }
++    }
++    if (!pending_request) {
++      return;
++    }
++
++    pending_request->CancelWithError(net::ERR_NETWORK_ACCESS_REVOKED);
++    if (!weak_this) {
++      return;
++    }
++  }
++}
++
++void NetworkContext::SetProxyResolutionNetworkRequestsBlocked(bool blocked) {
++  if (url_request_context_ &&
++      url_request_context_->proxy_resolution_service()) {
++    url_request_context_->proxy_resolution_service()
++        ->SetNetworkRequestsBlocked(blocked);
++  }
++}
++
+ void NetworkContext::UpdateNetworkPersona(
+     mojom::NetworkPersonaConfigPtr config,
+     UpdateNetworkPersonaCallback callback) {
+@@ -2877,6 +2958,8 @@
+           base::BindRepeating(&NetworkContext::DestroySocketManager,
+                               base::Unretained(this)),
+           url_request_context_);
++  socket_manager->SetNetworkRequestsBlocked(
++      network_persona_requests_blocked_);
+   socket_managers_[socket_manager.get()] = std::move(socket_manager);
+ }
+ #endif  // BUILDFLAG(IS_P2P_ENABLED)
+@@ -2885,7 +2968,8 @@
+     mojo::PendingReceiver<mojom::MdnsResponder> responder_receiver) {
+ #if BUILDFLAG(ENABLE_MDNS)
+   if (!mdns_responder_manager_) {
+-    mdns_responder_manager_ = std::make_unique<MdnsResponderManager>();
++    mdns_responder_manager_ = std::make_unique<MdnsResponderManager>(
++        nullptr, network_persona_requests_blocked_);
+   }
+ 
+   mdns_responder_manager_->CreateMdnsResponder(std::move(responder_receiver));
+@@ -3597,6 +3681,8 @@
+     domain_reliability_monitor_->AddBakedInConfigs();
+     domain_reliability_monitor_->SetDiscardUploads(
+         params_->discard_domain_reliablity_uploads);
++    domain_reliability_monitor_->SetNetworkRequestsBlocked(
++        network_persona_requests_blocked_);
+   }
+ 
+   return result;
+@@ -3743,17 +3829,28 @@
+   // some reason, just return `false`. This could occur in the case of CCT for
+   // captive portal -- see crbug.com/446496025 for more details, do the similar
+   // check to CanSendSCTAuditingReport().
+-  if (!client_) {
++  if (network_persona_requests_blocked_ || !client_) {
+     std::move(callback).Run(false);
+     return;
+   }
++  const uint64_t network_access_generation =
++      cert_network_access_generation_;
+   client_->OnCanSendDomainReliabilityUpload(
+       origin,
+-      base::BindOnce([](base::OnceCallback<void(bool)> callback,
+-                        bool allowed) { std::move(callback).Run(allowed); },
++      base::BindOnce(&NetworkContext::OnCanUploadDomainReliabilityComplete,
++                     weak_factory_.GetWeakPtr(), network_access_generation,
+                      std::move(callback)));
+ }
+ 
++void NetworkContext::OnCanUploadDomainReliabilityComplete(
++    uint64_t network_access_generation,
++    base::OnceCallback<void(bool)> callback,
++    bool allowed) {
++  std::move(callback).Run(
++      allowed && !network_persona_requests_blocked_ &&
++      network_access_generation == cert_network_access_generation_);
++}
++
+ void NetworkContext::OnVerifyCertComplete(uint64_t cert_verify_id, int result) {
+   auto iter = cert_verifier_requests_.find(cert_verify_id);
+   CHECK(iter != cert_verifier_requests_.end());
+--- a/services/network/network_context.h
++++ b/services/network/network_context.h
+@@ -689,6 +689,9 @@
+   bool network_persona_requests_blocked() const {
+     return network_persona_requests_blocked_;
+   }
++  uint64_t network_persona_request_generation() const {
++    return cert_network_access_generation_;
++  }
+   uint64_t cert_network_access_generation_for_testing() const {
+     return cert_network_access_generation_;
+   }
+@@ -824,6 +827,8 @@
+       SetNetworkPersonaRequestsBlockedCallback callback,
+       bool accepted);
+   void ReleaseNetworkPersonaRequestGateLocally(bool was_blocked);
++  void CancelURLRequestsForNetworkPersonaTransition();
++  void SetProxyResolutionNetworkRequestsBlocked(bool blocked);
+ 
+   URLRequestContextOwner MakeURLRequestContext(
+       mojo::PendingRemote<mojom::URLLoaderFactory>
+@@ -874,6 +879,10 @@
+ 
+   void CanUploadDomainReliability(const url::Origin& origin,
+                                   base::OnceCallback<void(bool)> callback);
++  void OnCanUploadDomainReliabilityComplete(
++      uint64_t network_access_generation,
++      base::OnceCallback<void(bool)> callback,
++      bool allowed);
+ 
+   void VerifyCertInternal(
+       const scoped_refptr<net::X509Certificate>& certificate,
+@@ -1121,7 +1130,8 @@
+   // Published before covered active requests are aborted, so new URLLoader,
+   // WebSocket, WebTransport, direct socket, DNS, preconnect, and OHTTP work
+   // cannot enter while a Persona network identity transaction changes native
+-  // state. P2P, mDNS responders, and internal reporting are not covered.
++  // state. This also retires P2P/mDNS work, suspends PAC/WPAD, and pauses
++  // Reporting uploads for the current identity generation.
+   bool network_persona_requests_blocked_ = false;
+ 
+   // True if the Prefetch() method is enabled.
+--- a/services/network/network_context_unittest.cc
++++ b/services/network/network_context_unittest.cc
+@@ -889,6 +889,17 @@
+   EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED,
+             client->completion_status().error_code);
+ 
++  net::TestDelegate internal_request_delegate;
++  std::unique_ptr<net::URLRequest> internal_request =
++      network_context->url_request_context()->CreateRequest(
++          GURL("https://internal-blocked.example.test/"),
++          net::DEFAULT_PRIORITY, &internal_request_delegate,
++          TRAFFIC_ANNOTATION_FOR_TESTS);
++  internal_request->Start();
++  internal_request_delegate.RunUntilComplete();
++  EXPECT_THAT(internal_request_delegate.request_status(),
++              net::test::IsError(net::ERR_NETWORK_ACCESS_REVOKED));
++
+   mojo::Remote<mojom::RestrictedUDPSocket> restricted_socket;
+   base::test::TestFuture<int32_t, const std::optional<net::IPEndPoint>&>
+       restricted_result;
+@@ -1033,6 +1044,32 @@
+   EXPECT_TRUE(replacement_factory.is_connected());
+ }
+ 
++TEST_F(NetworkContextTest,
++       NetworkPersonaRequestGateCancelsInFlightInternalURLRequest) {
++  net::EmbeddedTestServer test_server;
++  net::test_server::ControllableHttpResponse response(&test_server,
++                                                      "/internal-hung");
++  ASSERT_TRUE(test_server.Start());
++
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(CreateNetworkContextParamsForTesting());
++  net::TestDelegate request_delegate;
++  std::unique_ptr<net::URLRequest> request =
++      network_context->url_request_context()->CreateRequest(
++          test_server.GetURL("/internal-hung"), net::DEFAULT_PRIORITY,
++          &request_delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
++  request->Start();
++  response.WaitForRequest();
++
++  base::test::TestFuture<bool> blocked;
++  network_context->SetNetworkPersonaRequestsBlocked(true,
++                                                    blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++  request_delegate.RunUntilComplete();
++  EXPECT_THAT(request_delegate.request_status(),
++              net::test::IsError(net::ERR_NETWORK_ACCESS_REVOKED));
++}
++
+ TEST_F(NetworkContextTest, NetworkPersonaRequestGateCancelsDirectSockets) {
+   std::unique_ptr<NetworkContext> network_context =
+       CreateContextWithParams(CreateNetworkContextParamsForTesting());
+--- a/services/network/network_service_network_delegate.cc
++++ b/services/network/network_service_network_delegate.cc
+@@ -90,6 +90,9 @@
+     net::CompletionOnceCallback callback,
+     GURL* new_url) {
+   DCHECK(request);
++  if (network_context_->network_persona_requests_blocked()) {
++    return net::ERR_NETWORK_ACCESS_REVOKED;
++  }
+ 
+   auto* const loader = URLLoader::ForRequest(*request);
+   const GURL* effective_url = nullptr;
+@@ -348,6 +351,8 @@
+ 
+ bool NetworkServiceNetworkDelegate::OnCanQueueReportingReport(
+     const url::Origin& origin) const {
++  if (network_context_->network_persona_requests_blocked())
++    return false;
+   return network_context_->cookie_manager()
+       ->cookie_settings()
+       .IsFullCookieAccessAllowed(
+@@ -358,6 +363,11 @@
+ void NetworkServiceNetworkDelegate::OnCanSendReportingReports(
+     std::set<url::Origin> origins,
+     base::OnceCallback<void(std::set<url::Origin>)> result_callback) const {
++  if (network_context_->network_persona_requests_blocked()) {
++    origins.clear();
++    std::move(result_callback).Run(std::move(origins));
++    return;
++  }
+   auto* client = network_context_->client();
+   if (!client) {
+     origins.clear();
+@@ -372,16 +382,21 @@
+ 
+   std::vector<url::Origin> origin_vector;
+   std::ranges::copy(origins, std::back_inserter(origin_vector));
++  const uint64_t network_access_generation =
++      network_context_->network_persona_request_generation();
+   client->OnCanSendReportingReports(
+       origin_vector,
+       base::BindOnce(
+           &NetworkServiceNetworkDelegate::FinishedCanSendReportingReports,
+-          weak_ptr_factory_.GetWeakPtr(), std::move(result_callback)));
++          weak_ptr_factory_.GetWeakPtr(), network_access_generation,
++          std::move(result_callback)));
+ }
+ 
+ bool NetworkServiceNetworkDelegate::OnCanSetReportingClient(
+     const url::Origin& origin,
+     const GURL& endpoint) const {
++  if (network_context_->network_persona_requests_blocked())
++    return false;
+   return network_context_->cookie_manager()
+       ->cookie_settings()
+       .IsFullCookieAccessAllowed(
+@@ -392,6 +407,8 @@
+ bool NetworkServiceNetworkDelegate::OnCanUseReportingClient(
+     const url::Origin& origin,
+     const GURL& endpoint) const {
++  if (network_context_->network_persona_requests_blocked())
++    return false;
+   return network_context_->cookie_manager()
+       ->cookie_settings()
+       .IsFullCookieAccessAllowed(
+@@ -450,8 +467,15 @@
+ }
+ 
+ void NetworkServiceNetworkDelegate::FinishedCanSendReportingReports(
++    uint64_t network_access_generation,
+     base::OnceCallback<void(std::set<url::Origin>)> result_callback,
+     const std::vector<url::Origin>& origins) {
++  if (network_context_->network_persona_requests_blocked() ||
++      network_access_generation !=
++          network_context_->network_persona_request_generation()) {
++    std::move(result_callback).Run({});
++    return;
++  }
+   std::set<url::Origin> origin_set(origins.begin(), origins.end());
+   std::move(result_callback).Run(origin_set);
+ }
+--- a/services/network/network_service_network_delegate.h
++++ b/services/network/network_service_network_delegate.h
+@@ -5,6 +5,7 @@
+ #ifndef SERVICES_NETWORK_NETWORK_SERVICE_NETWORK_DELEGATE_H_
+ #define SERVICES_NETWORK_NETWORK_SERVICE_NETWORK_DELEGATE_H_
+ 
++#include <cstdint>
+ #include <optional>
+ 
+ #include "base/component_export.h"
+@@ -111,6 +112,7 @@
+   void FinishedClearSiteData(base::WeakPtr<net::URLRequest> request,
+                              net::CompletionOnceCallback callback);
+   void FinishedCanSendReportingReports(
++      uint64_t network_access_generation,
+       base::OnceCallback<void(std::set<url::Origin>)> result_callback,
+       const std::vector<url::Origin>& origins);
+ 
+--- a/services/network/p2p/socket_manager.cc
++++ b/services/network/p2p/socket_manager.cc
+@@ -129,6 +129,13 @@
+       OnDone(result);
+   }
+ 
++  void CancelForNetworkPersonaTransition() {
++    request_.reset();
++    if (!done_callback_.is_null()) {
++      std::move(done_callback_).Run(net::IPAddressList());
++    }
++  }
++
+  private:
+   void OnDone(int result) {
+     net::IPAddressList list;
+@@ -187,19 +194,63 @@
+ 
+   sockets_.clear();
+   dns_requests_.clear();
++  default_local_address_requests_.clear();
+ 
+-  if (network_notification_client_)
++  if (observing_network_changes_) {
+     net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
++  }
+ 
+   proxy_resolving_socket_factory_.reset();
+ }
+ 
++void P2PSocketManager::SetNetworkRequestsBlocked(bool blocked) {
++  if (network_requests_blocked_ == blocked) {
++    return;
++  }
++  network_requests_blocked_ = blocked;
++
++  if (!blocked) {
++    if (network_notification_client_ && !observing_network_changes_) {
++      net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
++      observing_network_changes_ = true;
++      OnNetworkChanged(net::NetworkChangeNotifier::CONNECTION_NONE);
++    }
++    return;
++  }
++
++  // Complete renderer DNS callbacks before invalidating manager callbacks.
++  // Moving the set prevents OnAddressResolved() from mutating our iteration.
++  decltype(dns_requests_) dns_requests;
++  dns_requests.swap(dns_requests_);
++  base::WeakPtr<P2PSocketManager> weak_this = weak_factory_.GetWeakPtr();
++  for (const auto& request : dns_requests) {
++    request->CancelForNetworkPersonaTransition();
++    if (!weak_this || !network_requests_blocked_) {
++      return;
++    }
++  }
++
++  weak_factory_.InvalidateWeakPtrs();
++  sockets_.clear();
++  default_local_address_requests_.clear();
++  proxy_resolving_socket_factory_.reset();
++  pending_network_change_notification_ = false;
++  if (observing_network_changes_) {
++    net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
++    observing_network_changes_ = false;
++  }
++}
++
+ void P2PSocketManager::OnNetworkChanged(
+     net::NetworkChangeNotifier::ConnectionType type) {
+   // NetworkChangeNotifier always emits CONNECTION_NONE notification whenever
+   // network configuration changes. All other notifications can be ignored.
+   if (type != net::NetworkChangeNotifier::CONNECTION_NONE)
+     return;
++  if (network_requests_blocked_) {
++    pending_network_change_notification_ = true;
++    return;
++  }
+   if (notifications_paused_) {
+     pending_network_change_notification_ = true;
+     return;
+@@ -218,7 +269,7 @@
+ 
+ void P2PSocketManager::ResumeNetworkChangeNotifications() {
+   notifications_paused_ = false;
+-  if (pending_network_change_notification_) {
++  if (!network_requests_blocked_ && pending_network_change_notification_) {
+     pending_network_change_notification_ = false;
+     OnNetworkChanged(net::NetworkChangeNotifier::CONNECTION_NONE);
+   }
+@@ -232,6 +283,9 @@
+ 
+ void P2PSocketManager::DumpPacket(base::span<const uint8_t> packet,
+                                   bool incoming) {
++  if (network_requests_blocked_) {
++    return;
++  }
+   if ((incoming && !dump_incoming_rtp_packet_) ||
+       (!incoming && !dump_outgoing_rtp_packet_)) {
+     return;
+@@ -271,24 +325,38 @@
+ 
+ void P2PSocketManager::DoGetDefaultLocalAddresses(
+     net::NetworkInterfaceList list) {
+-  DefaultLocalAddresses* default_local_addresses = new DefaultLocalAddresses();
+-  GetDefaultLocalAddress(
+-      AF_INET,
+-      base::BindOnce(&P2PSocketManager::MaybeFinishDoGetDefaultLocalAddresses,
+-                     weak_factory_.GetWeakPtr(), default_local_addresses, list,
+-                     AF_INET));
+-  GetDefaultLocalAddress(
+-      AF_INET6,
+-      base::BindOnce(&P2PSocketManager::MaybeFinishDoGetDefaultLocalAddresses,
+-                     weak_factory_.GetWeakPtr(), default_local_addresses, list,
+-                     AF_INET6));
++  if (network_requests_blocked_) {
++    return;
++  }
++  auto request = std::make_unique<DefaultLocalAddresses>();
++  DefaultLocalAddresses* request_ptr = request.get();
++  default_local_address_requests_.insert(std::move(request));
++  GetDefaultLocalAddress(request_ptr, list, AF_INET);
++  GetDefaultLocalAddress(request_ptr, std::move(list), AF_INET6);
+ }
+ 
+ void P2PSocketManager::MaybeFinishDoGetDefaultLocalAddresses(
+     DefaultLocalAddresses* default_local_addresses,
+     net::NetworkInterfaceList list,
+     int family,
+-    net::IPAddress addr) {
++    int result) {
++  auto request_it =
++      default_local_address_requests_.find(default_local_addresses);
++  if (request_it == default_local_address_requests_.end()) {
++    return;
++  }
++
++  std::unique_ptr<net::DatagramClientSocket>& socket =
++      family == AF_INET ? default_local_addresses->ipv4_socket
++                        : default_local_addresses->ipv6_socket;
++  net::IPAddress addr;
++  if (result == net::OK) {
++    net::IPEndPoint local_address;
++    if (socket->GetLocalAddress(&local_address) == net::OK) {
++      addr = local_address.address();
++    }
++  }
++  socket.reset();
+   if (family == AF_INET) {
+     default_local_addresses->default_ipv4_local_address = addr;
+   } else {
+@@ -300,14 +368,18 @@
+     return;
+   }
+ 
+-  SendNetworkList(list,
+-                  default_local_addresses->default_ipv4_local_address.value(),
+-                  default_local_addresses->default_ipv6_local_address.value());
+-  delete default_local_addresses;
++  if (!network_requests_blocked_) {
++    SendNetworkList(
++        list, default_local_addresses->default_ipv4_local_address.value(),
++        default_local_addresses->default_ipv6_local_address.value());
++  }
++  default_local_address_requests_.erase(request_it);
+ }
+ 
+-void P2PSocketManager::GetDefaultLocalAddress(int family,
+-                                              GetDefaultCallback callback) {
++void P2PSocketManager::GetDefaultLocalAddress(
++    DefaultLocalAddresses* default_local_addresses,
++    net::NetworkInterfaceList list,
++    int family) {
+   DCHECK(family == AF_INET || family == AF_INET6);
+ 
+   auto socket =
+@@ -323,9 +395,15 @@
+   }
+ 
+   auto* socket_ptr = socket.get();
++  if (family == AF_INET) {
++    default_local_addresses->ipv4_socket = std::move(socket);
++  } else {
++    default_local_addresses->ipv6_socket = std::move(socket);
++  }
+   auto split_connect_callback = base::SplitOnceCallback(base::BindOnce(
+-      &P2PSocketManager::FinishGetDefaultLocalAddress,
+-      weak_factory_.GetWeakPtr(), std::move(socket), std::move(callback)));
++      &P2PSocketManager::MaybeFinishDoGetDefaultLocalAddresses,
++      weak_factory_.GetWeakPtr(), default_local_addresses, std::move(list),
++      family));
+   int rv = socket_ptr->ConnectAsync(net::IPEndPoint(ip_address, kPublicPort),
+                                     std::move(split_connect_callback.first));
+   // If ConnectAsync returns synchronously then it will never run the callback
+@@ -336,28 +414,13 @@
+   }
+ }
+ 
+-void P2PSocketManager::FinishGetDefaultLocalAddress(
+-    std::unique_ptr<net::DatagramClientSocket> socket,
+-    GetDefaultCallback callback,
+-    int result) {
+-  if (result != net::OK) {
+-    std::move(callback).Run(net::IPAddress());
+-    return;
+-  }
+-
+-  net::IPEndPoint local_address;
+-  if (socket->GetLocalAddress(&local_address) != net::OK) {
+-    std::move(callback).Run(net::IPAddress());
+-    return;
+-  }
+-
+-  std::move(callback).Run(local_address.address());
+-}
+-
+ void P2PSocketManager::SendNetworkList(
+     const net::NetworkInterfaceList& list,
+     net::IPAddress default_ipv4_local_address,
+     net::IPAddress default_ipv6_local_address) {
++  if (network_requests_blocked_ || !network_notification_client_) {
++    return;
++  }
+   network_notification_client_->NetworkListChanged(
+       list, default_ipv4_local_address, default_ipv6_local_address);
+ }
+@@ -370,9 +433,11 @@
+       &P2PSocketManager::NetworkNotificationClientConnectionError,
+       base::Unretained(this)));
+ 
+-  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
+-
+-  OnNetworkChanged(net::NetworkChangeNotifier::CONNECTION_NONE);
++  if (!network_requests_blocked_) {
++    net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
++    observing_network_changes_ = true;
++    OnNetworkChanged(net::NetworkChangeNotifier::CONNECTION_NONE);
++  }
+ }
+ 
+ void P2PSocketManager::GetHostAddress(
+@@ -380,6 +445,10 @@
+     std::optional<net::AddressFamily> address_family,
+     bool enable_mdns,
+     mojom::P2PSocketManager::GetHostAddressCallback callback) {
++  if (network_requests_blocked_) {
++    std::move(callback).Run(net::IPAddressList());
++    return;
++  }
+   auto request = std::make_unique<DnsRequest>(
+       url_request_context_->host_resolver(), enable_mdns);
+   DnsRequest* request_ptr = request.get();
+@@ -387,7 +456,8 @@
+   request_ptr->Resolve(
+       host_name, address_family, network_anonymization_key_,
+       base::BindOnce(&P2PSocketManager::OnAddressResolved,
+-                     base::Unretained(this), request_ptr, std::move(callback)));
++                     weak_factory_.GetWeakPtr(), request_ptr,
++                     std::move(callback)));
+ }
+ 
+ void P2PSocketManager::CreateSocket(
+@@ -399,6 +469,9 @@
+     const std::optional<base::UnguessableToken>& devtools_token,
+     mojo::PendingRemote<mojom::P2PSocketClient> client,
+     mojo::PendingReceiver<mojom::P2PSocket> receiver) {
++  if (network_requests_blocked_) {
++    return;
++  }
+   if (port_range.min_port > port_range.max_port ||
+       (port_range.min_port == 0 && port_range.max_port != 0)) {
+     trusted_socket_manager_client_->InvalidSocketPortRangeRequested();
+@@ -443,16 +516,24 @@
+ }
+ 
+ void P2PSocketManager::NetworkNotificationClientConnectionError() {
+-  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
++  if (observing_network_changes_) {
++    net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
++    observing_network_changes_ = false;
++  }
+ }
+ 
+ void P2PSocketManager::OnAddressResolved(
+     DnsRequest* request,
+     mojom::P2PSocketManager::GetHostAddressCallback callback,
+     const net::IPAddressList& addresses) {
+-  std::move(callback).Run(addresses);
+-
+-  dns_requests_.erase(dns_requests_.find(request));
++  std::unique_ptr<DnsRequest> completed_request;
++  auto request_it = dns_requests_.find(request);
++  if (request_it != dns_requests_.end()) {
++    auto request_node = dns_requests_.extract(request_it);
++    completed_request = std::move(request_node.value());
++  }
++  const bool blocked = network_requests_blocked_;
++  std::move(callback).Run(blocked ? net::IPAddressList() : addresses);
+ }
+ 
+ void P2PSocketManager::OnConnectionError() {
+--- a/services/network/p2p/socket_manager.h
++++ b/services/network/p2p/socket_manager.h
+@@ -53,6 +53,8 @@
+ 
+   std::optional<net::IPAddress> default_ipv4_local_address;
+   std::optional<net::IPAddress> default_ipv6_local_address;
++  std::unique_ptr<net::DatagramClientSocket> ipv4_socket;
++  std::unique_ptr<net::DatagramClientSocket> ipv6_socket;
+ };
+ 
+ // Owns all the P2P socket instances and dispatches Mojo calls from the
+@@ -84,6 +86,11 @@
+ 
+   ~P2PSocketManager() override;
+ 
++  // Makes the manager inert without disconnecting its Mojo manager pipes. This
++  // prevents renderer reconnect loops while a Persona identity transition is
++  // in progress. Existing managers are discarded after the transition opens.
++  void SetNetworkRequestsBlocked(bool blocked);
++
+   // net::NetworkChangeNotifier::NetworkChangeObserver overrides.
+   void OnNetworkChanged(
+       net::NetworkChangeNotifier::ConnectionType type) override;
+@@ -96,21 +103,19 @@
+ 
+   static net::NetworkInterfaceList DoGetNetworkList();
+ 
+-  using GetDefaultCallback = base::OnceCallback<void(net::IPAddress)>;
+   void DoGetDefaultLocalAddresses(net::NetworkInterfaceList list);
+   void MaybeFinishDoGetDefaultLocalAddresses(
+       DefaultLocalAddresses* default_local_addresses,
+       net::NetworkInterfaceList list,
+       int family,
+-      net::IPAddress addr);
++      int result);
+   // This connects a UDP socket to a public IP address and gets local
+   // address. Since it binds to the "any" address (0.0.0.0 or ::) internally, it
+   // retrieves the default local address.
+-  void GetDefaultLocalAddress(int family, GetDefaultCallback callback);
+-  void FinishGetDefaultLocalAddress(
+-      std::unique_ptr<net::DatagramClientSocket> socket,
+-      GetDefaultCallback callback,
+-      int result);
++  void GetDefaultLocalAddress(
++      DefaultLocalAddresses* default_local_addresses,
++      net::NetworkInterfaceList list,
++      int family);
+   void SendNetworkList(const net::NetworkInterfaceList& list,
+                        net::IPAddress default_ipv4_local_address,
+                        net::IPAddress default_ipv6_local_address);
+@@ -161,6 +166,9 @@
+ 
+   std::set<std::unique_ptr<DnsRequest>, base::UniquePtrComparator>
+       dns_requests_;
++  std::set<std::unique_ptr<DefaultLocalAddresses>,
++           base::UniquePtrComparator>
++      default_local_address_requests_;
+   P2PMessageThrottler throttler_;
+ 
+   bool dump_incoming_rtp_packet_ = false;
+@@ -168,6 +176,8 @@
+ 
+   bool notifications_paused_ = false;
+   bool pending_network_change_notification_ = false;
++  bool observing_network_changes_ = false;
++  bool network_requests_blocked_ = false;
+ 
+   // Used to call DoGetNetworkList, which may briefly block since getting the
+   // default local address involves creating a dummy socket.
+--- a/services/network/p2p/socket_manager_unittest.cc
++++ b/services/network/p2p/socket_manager_unittest.cc
+@@ -10,6 +10,7 @@
+ #include "base/test/bind.h"
+ #include "base/test/scoped_feature_list.h"
+ #include "base/test/task_environment.h"
++#include "base/test/test_future.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "net/base/features.h"
+@@ -90,4 +91,23 @@
+   EXPECT_TRUE(fake_notification_client->get_network_list_changed());
+ }
+ 
++TEST_F(P2PSocketManagerTest,
++       NetworkTransitionKeepsManagerConnectedAndRejectsDns) {
++  SetUpSocketManager();
++  socket_manager_->SetNetworkRequestsBlocked(true);
++  socket_manager_remote_.FlushForTesting();
++  EXPECT_TRUE(socket_manager_remote_.is_connected());
++
++  base::test::TestFuture<const net::IPAddressList&> addresses;
++  socket_manager_remote_->GetHostAddress(
++      "blocked.example.test", std::nullopt, /*enable_mdns=*/false,
++      addresses.GetCallback());
++  EXPECT_TRUE(addresses.Get().empty());
++  EXPECT_TRUE(socket_manager_remote_.is_connected());
++
++  socket_manager_->SetNetworkRequestsBlocked(false);
++  socket_manager_remote_.FlushForTesting();
++  EXPECT_TRUE(socket_manager_remote_.is_connected());
++}
++
+ }  // namespace network
+--- a/third_party/blink/renderer/platform/p2p/mdns_responder_adapter.cc
++++ b/third_party/blink/renderer/platform/p2p/mdns_responder_adapter.cc
+@@ -7,13 +7,12 @@
+ #include <string>
+ 
+ #include "components/webrtc/net_address_utils.h"
+-#include "mojo/public/cpp/bindings/pending_remote.h"
++#include "mojo/public/cpp/bindings/callback_helpers.h"
+ #include "net/base/ip_address.h"
+ #include "net/base/ip_endpoint.h"
+ #include "services/network/public/mojom/mdns_responder.mojom-blink.h"
+-#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
+-#include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/renderer/platform/mojo/mojo_binding_context.h"
++#include "third_party/blink/renderer/platform/p2p/socket_dispatcher.h"
+ #include "third_party/blink/renderer/platform/wtf/functional.h"
+ #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+ #include "third_party/webrtc/rtc_base/ip_address.h"
+@@ -41,29 +40,35 @@
+ 
+ }  // namespace
+ 
+-MdnsResponderAdapter::MdnsResponderAdapter(MojoBindingContext& context) {
+-  mojo::PendingRemote<network::mojom::blink::MdnsResponder> client;
+-  auto receiver = client.InitWithNewPipeAndPassReceiver();
+-  shared_remote_client_ =
+-      mojo::SharedRemote<network::mojom::blink::MdnsResponder>(
+-          std::move(client));
+-  context.GetBrowserInterfaceBroker().GetInterface(std::move(receiver));
+-}
++MdnsResponderAdapter::MdnsResponderAdapter(MojoBindingContext& context)
++    : socket_dispatcher_(&P2PSocketDispatcher::From(context)) {}
+ 
+ MdnsResponderAdapter::~MdnsResponderAdapter() = default;
+ 
+ void MdnsResponderAdapter::CreateNameForAddress(const webrtc::IPAddress& addr,
+                                                 NameCreatedCallback callback) {
+-  shared_remote_client_->CreateNameForAddress(
++  auto socket_dispatcher = socket_dispatcher_.Lock();
++  if (!socket_dispatcher) {
++    callback(addr, std::string());
++    return;
++  }
++  socket_dispatcher->GetMdnsResponder()->CreateNameForAddress(
+       webrtc::RtcIPAddressToNetIPAddress(addr),
+-      BindOnce(&OnNameCreatedForAddress, callback, addr));
++      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
++          BindOnce(&OnNameCreatedForAddress, callback, addr), String(), false));
+ }
+ 
+ void MdnsResponderAdapter::RemoveNameForAddress(const webrtc::IPAddress& addr,
+                                                 NameRemovedCallback callback) {
+-  shared_remote_client_->RemoveNameForAddress(
++  auto socket_dispatcher = socket_dispatcher_.Lock();
++  if (!socket_dispatcher) {
++    callback(false);
++    return;
++  }
++  socket_dispatcher->GetMdnsResponder()->RemoveNameForAddress(
+       webrtc::RtcIPAddressToNetIPAddress(addr),
+-      BindOnce(&OnNameRemovedForAddress, callback));
++      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
++          BindOnce(&OnNameRemovedForAddress, callback), false, false));
+ }
+ 
+ }  // namespace blink
+--- a/third_party/blink/renderer/platform/p2p/mdns_responder_adapter.h
++++ b/third_party/blink/renderer/platform/p2p/mdns_responder_adapter.h
+@@ -5,8 +5,7 @@
+ #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_P2P_MDNS_RESPONDER_ADAPTER_H_
+ #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_P2P_MDNS_RESPONDER_ADAPTER_H_
+ 
+-#include "mojo/public/cpp/bindings/shared_remote.h"
+-#include "services/network/public/mojom/mdns_responder.mojom-blink-forward.h"
++#include "third_party/blink/renderer/platform/heap/cross_thread_persistent.h"
+ #include "third_party/blink/renderer/platform/platform_export.h"
+ #include "third_party/webrtc/rtc_base/ip_address.h"
+ #include "third_party/webrtc/rtc_base/mdns_responder_interface.h"
+@@ -14,6 +13,7 @@
+ namespace blink {
+ 
+ class MojoBindingContext;
++class P2PSocketDispatcher;
+ 
+ // This class is created on the main thread but is used only on the WebRTC
+ // worker threads. The MdnsResponderAdapter implements the WebRTC mDNS responder
+@@ -36,8 +36,7 @@
+                             NameRemovedCallback callback) override;
+ 
+  private:
+-  mojo::SharedRemote<network::mojom::blink::MdnsResponder>
+-      shared_remote_client_;
++  CrossThreadWeakPersistent<P2PSocketDispatcher> socket_dispatcher_;
+ };
+ 
+ }  // namespace blink
+--- a/third_party/blink/renderer/platform/p2p/socket_dispatcher.cc
++++ b/third_party/blink/renderer/platform/p2p/socket_dispatcher.cc
+@@ -8,6 +8,7 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/types/pass_key.h"
+ #include "services/network/public/cpp/p2p_param_traits.h"
++#include "services/network/public/mojom/mdns_responder.mojom-blink.h"
+ #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
+ #include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+@@ -84,6 +85,30 @@
+   return p2p_socket_manager_;
+ }
+ 
++mojo::SharedRemote<network::mojom::blink::MdnsResponder>
++P2PSocketDispatcher::GetMdnsResponder() {
++  base::AutoLock lock(mdns_responder_lock_);
++  if (!mdns_responder_) {
++    mojo::PendingRemote<network::mojom::blink::MdnsResponder> mdns_responder;
++    mdns_responder_receiver_ =
++        mdns_responder.InitWithNewPipeAndPassReceiver();
++    mdns_responder_ = mojo::SharedRemote<network::mojom::blink::MdnsResponder>(
++        std::move(mdns_responder));
++    mdns_responder_.set_disconnect_handler(
++        ConvertToBaseOnceCallback(
++            CrossThreadBindOnce(&P2PSocketDispatcher::OnMdnsConnectionError,
++                                WrapCrossThreadWeakPersistent(this))),
++        main_task_runner_);
++  }
++
++  PostCrossThreadTask(
++      *main_task_runner_.get(), FROM_HERE,
++      CrossThreadBindOnce(
++          &P2PSocketDispatcher::RequestMdnsInterfaceIfNecessary,
++          WrapCrossThreadWeakPersistent(this)));
++  return mdns_responder_;
++}
++
+ void P2PSocketDispatcher::NetworkListChanged(
+     const Vector<net::NetworkInterface>& networks,
+     const net::IPAddress& default_ipv4_local_address,
+@@ -114,6 +139,15 @@
+       std::move(p2p_socket_manager_receiver_));
+ }
+ 
++void P2PSocketDispatcher::RequestMdnsInterfaceIfNecessary() {
++  DCHECK(main_task_runner_->BelongsToCurrentThread());
++  if (!mdns_responder_receiver_.is_valid())
++    return;
++
++  GetSupplementable()->GetBrowserInterfaceBroker().GetInterface(
++      std::move(mdns_responder_receiver_));
++}
++
+ void P2PSocketDispatcher::RequestNetworkEventsIfNecessary() {
+   if (network_notification_client_receiver_.is_bound()) {
+     // TODO(crbug.com/787254): Remove this helper when network_list_observer.h
+@@ -145,6 +179,11 @@
+                           WrapCrossThreadWeakPersistent(this)));
+ }
+ 
++void P2PSocketDispatcher::OnMdnsConnectionError() {
++  base::AutoLock lock(mdns_responder_lock_);
++  mdns_responder_.reset();
++}
++
+ void P2PSocketDispatcher::ReconnectP2PSocketManager() {
+   network_notification_client_receiver_.reset();
+   if (GetSupplementable()->IsContextDestroyed())
+--- a/third_party/blink/renderer/platform/p2p/socket_dispatcher.h
++++ b/third_party/blink/renderer/platform/p2p/socket_dispatcher.h
+@@ -33,6 +33,7 @@
+ #include "net/base/ip_address.h"
+ #include "net/base/network_interfaces.h"
+ #include "services/network/public/cpp/p2p_socket_type.h"
++#include "services/network/public/mojom/mdns_responder.mojom-blink-forward.h"
+ #include "services/network/public/mojom/p2p.mojom-blink.h"
+ #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+ #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
+@@ -75,6 +76,7 @@
+ 
+   mojo::SharedRemote<network::mojom::blink::P2PSocketManager>
+   GetP2PSocketManager();
++  mojo::SharedRemote<network::mojom::blink::MdnsResponder> GetMdnsResponder();
+ 
+   void Trace(Visitor*) const override;
+ 
+@@ -86,9 +88,11 @@
+       const net::IPAddress& default_ipv6_local_address) override;
+ 
+   void RequestInterfaceIfNecessary();
++  void RequestMdnsInterfaceIfNecessary();
+   void RequestNetworkEventsIfNecessary();
+ 
+   void OnConnectionError();
++  void OnMdnsConnectionError();
+   void ReconnectP2PSocketManager();
+ 
+   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
+@@ -104,6 +108,12 @@
+       p2p_socket_manager_ GUARDED_BY(p2p_socket_manager_lock_);
+   base::Lock p2p_socket_manager_lock_;
+ 
++  mojo::PendingReceiver<network::mojom::blink::MdnsResponder>
++      mdns_responder_receiver_;
++  mojo::SharedRemote<network::mojom::blink::MdnsResponder> mdns_responder_
++      GUARDED_BY(mdns_responder_lock_);
++  base::Lock mdns_responder_lock_;
++
+   // Cached from last |NetworkListChanged| call.
+   Vector<net::NetworkInterface> networks_;
+   net::IPAddress default_ipv4_local_address_;

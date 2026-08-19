@@ -2814,6 +2814,60 @@
     "message": "Overrides the WebGPU developer driver string. Leave empty to hide the real driver."
   },
   {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_ROUTE_SELECT",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label of the saved proxy route selector",
+    "message": "Saved route"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_NEW_ROUTE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button that starts creating a proxy route",
+    "message": "New route"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_ROUTE_NAME_LABEL",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label of the proxy route name input",
+    "message": "Route name"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_ROUTE_IN_USE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Message shown when a proxy route cannot be edited because it is active or part of a transaction",
+    "message": "This route is in use. Activate a different route before editing or deleting it."
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_DELETE_ROUTE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Button that deletes a saved proxy route",
+    "message": "Delete route"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_DIRECT_ROUTE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona network route option that uses no proxy",
+    "message": "Direct connection"
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_SYSTEM_ROUTE_UNSUPPORTED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Error shown when authenticated profile proxy credentials cannot be applied to browser-wide traffic",
+    "message": "Browser traffic cannot use an authenticated profile route. Keep this option off for routes with credentials."
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_SYSTEM_ROUTE_CONTROLLED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Error shown when browser-wide proxy settings are controlled by policy, an extension, or the command line",
+    "message": "Browser traffic proxy settings are controlled externally. Remove that policy, extension, or command-line setting before enabling this route."
+  },
+  {
+    "name": "IDS_SETTINGS_NITROUS_PROXY_CLEAR_PASSWORD",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Checkbox that removes a saved proxy password when the route is saved",
+    "message": "Clear saved password"
+  },
+  {
     "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
     "source": "chrome/app/generated_resources.grd",
     "context": "The name of the macOS system Translate command in the content area context menu",

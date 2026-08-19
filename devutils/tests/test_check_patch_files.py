@@ -238,6 +238,45 @@ def test_check_persona_settings_i18n_key_coverage_accepts_later_provider_mapping
         assert not check_persona_settings_i18n_key_coverage(patches_dir)
 
 
+def test_check_persona_settings_i18n_key_coverage_ignores_indent_only_changes():
+    """Reformatting a multiline mapping must not detach its ID from its key."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        patches_dir = Path(tmpdirname)
+        provider_patch = 'services-prefs.patch'
+        ui_patch = 'persona-settings-ui.patch'
+        reformat_patch = 'persona-provider-reformat.patch'
+        entries = [
+            f'helium/core/{provider_patch}',
+            f'helium/core/{ui_patch}',
+            f'helium/core/{reformat_patch}',
+        ]
+        ui_html = 'chrome/browser/resources/settings/privacy_page/persona_page.html'
+        provider_cc = ('chrome/browser/ui/webui/settings/'
+                       'settings_localized_strings_provider.cc')
+        _write_multi_file_patch(
+            patches_dir, {
+                provider_cc: '\n'.join((
+                    '{"personaTitle",',
+                    '        IDS_SETTINGS_PERSONA_TITLE},',
+                    '{"personaOther", IDS_SETTINGS_PERSONA_OTHER},',
+                )),
+            }, provider_patch, entries)
+        _write_multi_file_patch(patches_dir, {
+            ui_html: '<div>$i18n{personaTitle}</div>',
+        }, ui_patch, entries)
+        patch_dir = patches_dir / 'helium' / 'core'
+        (patch_dir / reformat_patch).write_text(
+            f'--- a/{provider_cc}\n'
+            f'+++ b/{provider_cc}\n'
+            '@@ -1,2 +1,2 @@\n'
+            ' {"personaTitle",\n'
+            '-        IDS_SETTINGS_PERSONA_TITLE},\n'
+            '+       IDS_SETTINGS_PERSONA_TITLE},\n',
+            encoding=ENCODING)
+
+        assert not check_persona_settings_i18n_key_coverage(patches_dir)
+
+
 def test_check_persona_profile_management_coverage():
     """Test persona profile management coverage guard."""
 

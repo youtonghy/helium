@@ -1,0 +1,198 @@
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -1077,6 +1077,11 @@
+ 
+ void NetworkContext::CreateURLLoaderFactoryForCertNetFetcher(
+     mojo::PendingReceiver<mojom::URLLoaderFactory> factory_receiver) {
++  if (network_persona_requests_blocked_) {
++    pending_cert_net_fetcher_receivers_.push_back(std::move(factory_receiver));
++    return;
++  }
++
+   // TODO(crbug.com/40695068): investigate changing these params.
+   auto url_loader_factory_params = mojom::URLLoaderFactoryParams::New();
+   url_loader_factory_params->is_trusted = true;
+@@ -1900,6 +1905,14 @@
+     if (was_blocked && doh_probes_activation_requested_) {
+       ActivateDohProbes();
+     }
++    if (was_blocked && prefetch_enabled_) {
++      InitializePrefetchURLLoaderFactory();
++    }
++    auto pending_cert_receivers =
++        std::move(pending_cert_net_fetcher_receivers_);
++    for (auto& receiver : pending_cert_receivers) {
++      CreateURLLoaderFactoryForCertNetFetcher(std::move(receiver));
++    }
+     std::move(callback).Run(true);
+     return;
+   }
+@@ -1941,6 +1954,10 @@
+       factory->ClearBindings();
+     }
+   }
++  if (prefetch_cache_) {
++    prefetch_cache_->Clear();
++  }
++  prefetch_url_loader_factory_remote_.reset();
+ #if BUILDFLAG(ENABLE_WEBSOCKETS)
+   websocket_factory_.reset();
+ #endif
+@@ -3887,6 +3904,9 @@
+   if (!prefetch_enabled_) {
+     return;
+   }
++  if (network_persona_requests_blocked_) {
++    return;
++  }
+ 
+   PrefetchURLLoaderClient* client = prefetch_cache_->Emplace(request);
+   if (!client) {
+@@ -4079,6 +4099,10 @@
+ }
+ 
+ void NetworkContext::InitializePrefetchURLLoaderFactory() {
++  if (network_persona_requests_blocked_ ||
++      prefetch_url_loader_factory_remote_.is_bound()) {
++    return;
++  }
+   auto pending_receiver =
+       prefetch_url_loader_factory_remote_.BindNewPipeAndPassReceiver();
+   CreateURLLoaderFactory(std::move(pending_receiver),
+--- a/services/network/network_context.h
++++ b/services/network/network_context.h
+@@ -680,6 +680,9 @@
+   size_t num_url_loader_factories_for_testing() const {
+     return url_loader_factories_.size();
+   }
++  size_t num_pending_cert_net_fetcher_receivers_for_testing() const {
++    return pending_cert_net_fetcher_receivers_.size();
++  }
+   bool network_persona_requests_blocked() const {
+     return network_persona_requests_blocked_;
+   }
+@@ -1047,6 +1050,12 @@
+   std::map<uint64_t, std::unique_ptr<PendingCertVerify>>
+       cert_verifier_requests_;
+ 
++  // CertVerifier can ask for a replacement factory while the Persona network
++  // gate is closed. Keep the receiver pending and bind it after the gate is
++  // released instead of opening a request path during the transition.
++  std::vector<mojo::PendingReceiver<mojom::URLLoaderFactory>>
++      pending_cert_net_fetcher_receivers_;
++
+   // Manages allowed origin access lists.
+   cors::OriginAccessList cors_origin_access_list_;
+ 
+--- a/services/network/network_context_unittest.cc
++++ b/services/network/network_context_unittest.cc
+@@ -912,6 +912,27 @@
+ }
+ 
+ TEST_F(NetworkContextTest,
++       InitialNetworkPersonaRequestGateRestoresCertNetFetcherFactory) {
++  mojom::NetworkContextParamsPtr params =
++      CreateNetworkContextParamsForTesting();
++  params->block_network_persona_requests = true;
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(std::move(params));
++
++  EXPECT_GE(
++      network_context->num_pending_cert_net_fetcher_receivers_for_testing(),
++      1u);
++  base::test::TestFuture<bool> released;
++  network_context->SetNetworkPersonaRequestsBlocked(false,
++                                                    released.GetCallback());
++  EXPECT_TRUE(released.Get());
++  EXPECT_EQ(
++      network_context->num_pending_cert_net_fetcher_receivers_for_testing(),
++      0u);
++  EXPECT_GE(network_context->num_url_loader_factories_for_testing(), 1u);
++}
++
++TEST_F(NetworkContextTest,
+        NetworkPersonaRequestGateCancelsLoaderAndInvalidatesFactory) {
+   net::EmbeddedTestServer test_server;
+   net::test_server::ControllableHttpResponse response(&test_server, "/hung");
+@@ -10527,6 +10548,49 @@
+       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
+ 
+   auto received_request = future.Take();
++  EXPECT_EQ(received_request.GetURL(), url);
++  EXPECT_EQ(received_request.method, net::test_server::METHOD_GET);
++}
++
++TEST_F(NetworkContextTest, PrefetchRestoresAfterNetworkPersonaRequestGate) {
++  base::test::ScopedFeatureList feature_list;
++  feature_list.InitAndEnableFeature(features::kNetworkContextPrefetch);
++
++  net::EmbeddedTestServer test_server;
++  net::test_server::RegisterDefaultHandlers(&test_server);
++  base::test::TestFuture<const net::test_server::HttpRequest&> future;
++  test_server.RegisterRequestMonitor(
++      future.GetSequenceBoundRepeatingCallback());
++  ASSERT_TRUE(test_server.Start());
++
++  mojom::NetworkContextParamsPtr params =
++      CreateNetworkContextParamsForTesting();
++  params->block_network_persona_requests = true;
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(std::move(params));
++
++  const auto url = test_server.GetURL("/echo");
++  auto origin = url::Origin::Create(test_server.GetURL("/"));
++  auto isolation_info = net::IsolationInfo::CreateForInternalRequest(origin);
++  ResourceRequest request = CreateResourceRequest("GET", url);
++  request.trusted_params = ResourceRequest::TrustedParams();
++  request.trusted_params->isolation_info = isolation_info;
++  request.site_for_cookies = isolation_info.site_for_cookies();
++
++  network_context->Prefetch(
++      /*request_id=*/0, mojom::kURLLoadOptionNone, request,
++      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
++  EXPECT_FALSE(future.IsReady());
++
++  base::test::TestFuture<bool> released;
++  network_context->SetNetworkPersonaRequestsBlocked(false,
++                                                    released.GetCallback());
++  EXPECT_TRUE(released.Get());
++  network_context->Prefetch(
++      /*request_id=*/1, mojom::kURLLoadOptionNone, request,
++      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
++
++  auto received_request = future.Take();
+   EXPECT_EQ(received_request.GetURL(), url);
+   EXPECT_EQ(received_request.method, net::test_server::METHOD_GET);
+ }
+--- a/services/network/prefetch_cache.cc
++++ b/services/network/prefetch_cache.cc
+@@ -140,6 +140,17 @@
+   EraseFromStorage(client);
+ }
+ 
++void PrefetchCache::Clear() {
++  weak_factory_.InvalidateWeakPtrs();
++  expiry_timer_.Stop();
++  while (!delayed_erase_queue_.empty()) {
++    delayed_erase_queue_.pop();
++  }
++  while (!list_.empty()) {
++    Erase(list_.head()->value());
++  }
++}
++
+ void PrefetchCache::DelayedErase(PrefetchURLLoaderClient* client) {
+   const auto now = base::TimeTicks::Now();
+   PendingErasure pending_erasure = {client->network_isolation_key(),
+--- a/services/network/prefetch_cache.h
++++ b/services/network/prefetch_cache.h
+@@ -75,6 +75,9 @@
+   // created by Emplace() and not already erased.
+   void Erase(PrefetchURLLoaderClient* client);
+ 
++  // Removes every in-flight prefetch at a Persona network identity boundary.
++  void Clear();
++
+   // Erases `client` after `kEraseGraceTime` has expired. The purpose is to
+   // permit a new transaction from a renderer to reach the HttpCache code before
+   // this client is erased, so that it can take over the cache lock if possible,

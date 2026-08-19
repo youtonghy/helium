@@ -219,3 +219,15 @@ helium/core/persona-client-rect-noise.patch
 helium/core/persona-build-fixes.patch
 helium/core/persona-final-compile-fixes.patch
 helium/core/persona-webgpu-adapter-info-coverage.patch
+helium/core/persona-test-baseline-repair.patch
+helium/core/persona-activation-transaction.patch
+helium/core/persona-assurance-hardening.patch
+helium/core/persona-network-exit-gate.patch
+helium/core/persona-network-exit-gate-followup.patch
+helium/core/persona-network-exit-gate-cert-fix.patch
+helium/core/persona-assurance-completion.patch
+helium/core/persona-assurance-residual-gates.patch
+helium/core/persona-worker-runtime-attestation.patch
+helium/core/persona-output-surface-hardening.patch
+helium/core/persona-output-surface-assurance.patch
+helium/core/persona-runtime-capability-assurance.patch

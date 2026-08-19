@@ -1,0 +1,2073 @@
+--- a/content/browser/renderer_host/media/media_devices_manager.cc
++++ b/content/browser/renderer_host/media/media_devices_manager.cc
+@@ -13,6 +13,7 @@
+ #include <string>
+ #include <vector>
+ 
++#include "base/check.h"
+ #include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+@@ -226,17 +227,28 @@
+ // behaviour: TranslateMediaDeviceInfo blanks them when the site lacks
+ // permission, matching real browsers.
+ blink::WebMediaDeviceInfoArray BuildPersonaAudioDevices(
++    MediaDeviceType type,
+     int count,
+     const std::vector<std::string>& labels) {
++  CHECK(type == MediaDeviceType::kMediaAudioInput ||
++        type == MediaDeviceType::kMediaAudioOutput);
++  const bool is_output = type == MediaDeviceType::kMediaAudioOutput;
++  const std::string id_prefix =
++      is_output ? "persona_audio_output_" : "persona_audio_input_";
++  const std::string group_id = is_output ? "persona_audio_output_group"
++                                         : "persona_audio_input_group";
+   blink::WebMediaDeviceInfoArray devices;
+   for (int i = 0; i < count; ++i) {
+-    std::string label =
+-        labels.empty()
+-            ? (i == 0 ? "Default Audio Input"
+-                      : "Microphone " + base::NumberToString(i + 1))
+-            : labels[i % labels.size()];
+-    devices.emplace_back("persona_audio_input_" + base::NumberToString(i),
+-                         label, "persona_audio_group");
++    std::string label;
++    if (!labels.empty()) {
++      label = labels[i % labels.size()];
++    } else if (i == 0) {
++      label = is_output ? "Default Audio Output" : "Default Audio Input";
++    } else {
++      label = (is_output ? "Speaker " : "Microphone ") +
++              base::NumberToString(i + 1);
++    }
++    devices.emplace_back(id_prefix + base::NumberToString(i), label, group_id);
+   }
+   return devices;
+ }
+@@ -276,29 +288,38 @@
+   ContentBrowserClient* content_client_browser = GetContentClient()->browser();
+   auto ranked_enumeration = enumeration;
+ 
+-  // Persona: when the active persona overrides media device enumeration,
+-  // substitute the reported device list so sites see a consistent fake set of
+-  // audio/video input/output devices matching the persona's platform. The
+-  // default (1 input / 1 output, no labels) means "use real devices".
++  // Persona: an enabled snapshot always substitutes the host device list. The
++  // default 1/1/1 counts describe a synthetic device set, not permission to
++  // expose the machine's real hardware.
+   const blink::HeliumPersonaSnapshot persona_snapshot =
+       content_client_browser->GetHeliumPersonaSnapshot(browser_context);
+-  if (persona_snapshot.IsEnabled() &&
+-      (persona_snapshot.media_devices_audio_input_count != 1 ||
+-       persona_snapshot.media_devices_video_input_count != 1 ||
+-       persona_snapshot.media_devices_audio_output_count != 1 ||
+-       !persona_snapshot.media_device_labels.empty())) {
+-    ranked_enumeration[static_cast<size_t>(MediaDeviceType::kMediaAudioInput)] =
+-        BuildPersonaAudioDevices(
+-            persona_snapshot.media_devices_audio_input_count,
+-            persona_snapshot.media_device_labels);
+-    ranked_enumeration[static_cast<size_t>(MediaDeviceType::kMediaVideoInput)] =
+-        BuildPersonaVideoDevices(
+-            persona_snapshot.media_devices_video_input_count,
+-            persona_snapshot.media_device_labels);
+-    ranked_enumeration[static_cast<size_t>(MediaDeviceType::kMediaAudioOutput)] =
+-        BuildPersonaAudioDevices(
+-            persona_snapshot.media_devices_audio_output_count,
+-            persona_snapshot.media_device_labels);
++  if (persona_snapshot.IsEnabled()) {
++    const size_t audio_input_index =
++        static_cast<size_t>(MediaDeviceType::kMediaAudioInput);
++    const size_t video_input_index =
++        static_cast<size_t>(MediaDeviceType::kMediaVideoInput);
++    const size_t audio_output_index =
++        static_cast<size_t>(MediaDeviceType::kMediaAudioOutput);
++    ranked_enumeration[audio_input_index] =
++        requested_types[audio_input_index]
++            ? BuildPersonaAudioDevices(
++                  MediaDeviceType::kMediaAudioInput,
++                  persona_snapshot.media_devices_audio_input_count,
++                  persona_snapshot.media_device_labels)
++            : blink::WebMediaDeviceInfoArray();
++    ranked_enumeration[video_input_index] =
++        requested_types[video_input_index]
++            ? BuildPersonaVideoDevices(
++                  persona_snapshot.media_devices_video_input_count,
++                  persona_snapshot.media_device_labels)
++            : blink::WebMediaDeviceInfoArray();
++    ranked_enumeration[audio_output_index] =
++        requested_types[audio_output_index]
++            ? BuildPersonaAudioDevices(
++                  MediaDeviceType::kMediaAudioOutput,
++                  persona_snapshot.media_devices_audio_output_count,
++                  persona_snapshot.media_device_labels)
++            : blink::WebMediaDeviceInfoArray();
+     std::move(callback).Run(ranked_enumeration);
+     return;
+   }
+--- a/content/browser/renderer_host/media/media_devices_manager_unittest.cc
++++ b/content/browser/renderer_host/media/media_devices_manager_unittest.cc
+@@ -19,6 +19,7 @@
+ #include "base/test/bind.h"
+ #include "base/test/metrics/histogram_tester.h"
+ #include "base/test/scoped_feature_list.h"
++#include "base/test/test_future.h"
+ #include "base/test/test_timeouts.h"
+ #include "base/time/time.h"
+ #include "build/build_config.h"
+@@ -320,6 +321,15 @@
+ 
+ class MockBrowserClient : public ContentBrowserClient {
+  public:
++  blink::HeliumPersonaSnapshot GetHeliumPersonaSnapshot(
++      BrowserContext*) override {
++    return persona_snapshot_;
++  }
++
++  void SetHeliumPersonaSnapshot(blink::HeliumPersonaSnapshot snapshot) {
++    persona_snapshot_ = std::move(snapshot);
++  }
++
+   MOCK_METHOD(void,
+               PreferenceRankAudioDeviceInfos,
+               (BrowserContext * browser_context,
+@@ -330,6 +340,9 @@
+               (BrowserContext * browser_context,
+                blink::WebMediaDeviceInfoArray& infos),
+               (override));
++
++ private:
++  blink::HeliumPersonaSnapshot persona_snapshot_;
+ };
+ 
+ }  // namespace
+@@ -677,6 +690,82 @@
+   }
+ }
+ 
++TEST_F(MediaDevicesManagerTest, DefaultPersonaMediaDevicesAreSynthetic) {
++  InitializeRenderFrameHost();
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
++
++  EXPECT_CALL(*audio_manager_, MockGetAudioInputDeviceNames(_)).Times(1);
++  EXPECT_CALL(*video_capture_device_factory_, MockGetDevicesInfo()).Times(1);
++  EXPECT_CALL(*audio_manager_, MockGetAudioOutputDeviceNames(_)).Times(1);
++  EXPECT_CALL(media_devices_manager_client_, InputDevicesChangedUI(_, _))
++      .Times(AtLeast(1));
++
++  MediaDevicesManager::BoolDeviceTypes requested_types;
++  requested_types.fill(true);
++  base::test::TestFuture<MediaDeviceEnumeration> future;
++  media_devices_manager_->EnumerateAndRankDevices(
++      render_frame_host_->GetGlobalId(), requested_types,
++      future.GetCallback<const MediaDeviceEnumeration&>());
++  const auto& devices = future.Get();
++  const auto& audio_inputs =
++      devices[static_cast<size_t>(MediaDeviceType::kMediaAudioInput)];
++  const auto& video_inputs =
++      devices[static_cast<size_t>(MediaDeviceType::kMediaVideoInput)];
++  const auto& audio_outputs =
++      devices[static_cast<size_t>(MediaDeviceType::kMediaAudioOutput)];
++
++  ASSERT_EQ(audio_inputs.size(), 1u);
++  EXPECT_EQ(audio_inputs[0].device_id, "persona_audio_input_0");
++  EXPECT_EQ(audio_inputs[0].label, "Default Audio Input");
++  EXPECT_EQ(audio_inputs[0].group_id, "persona_audio_input_group");
++  ASSERT_EQ(video_inputs.size(), 1u);
++  EXPECT_EQ(video_inputs[0].device_id, "persona_video_input_0");
++  EXPECT_EQ(video_inputs[0].label, "Default Video Camera");
++  ASSERT_EQ(audio_outputs.size(), 1u);
++  EXPECT_EQ(audio_outputs[0].device_id, "persona_audio_output_0");
++  EXPECT_EQ(audio_outputs[0].label, "Default Audio Output");
++  EXPECT_EQ(audio_outputs[0].group_id, "persona_audio_output_group");
++}
++
++TEST_F(MediaDevicesManagerTest, PersonaMediaDevicesHonorRequestedCustomCount) {
++  InitializeRenderFrameHost();
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  snapshot.media_devices_audio_input_count = 3;
++  snapshot.media_devices_video_input_count = 2;
++  snapshot.media_devices_audio_output_count = 2;
++  snapshot.media_device_labels = {"Studio A", "Studio B"};
++  browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
++
++  EXPECT_CALL(*audio_manager_, MockGetAudioInputDeviceNames(_)).Times(0);
++  EXPECT_CALL(*video_capture_device_factory_, MockGetDevicesInfo()).Times(0);
++  EXPECT_CALL(*audio_manager_, MockGetAudioOutputDeviceNames(_)).Times(1);
++
++  MediaDevicesManager::BoolDeviceTypes requested_types;
++  requested_types.fill(false);
++  requested_types[static_cast<size_t>(MediaDeviceType::kMediaAudioOutput)] =
++      true;
++  base::test::TestFuture<MediaDeviceEnumeration> future;
++  media_devices_manager_->EnumerateAndRankDevices(
++      render_frame_host_->GetGlobalId(), requested_types,
++      future.GetCallback<const MediaDeviceEnumeration&>());
++  const auto& devices = future.Get();
++  EXPECT_TRUE(devices[static_cast<size_t>(
++                          MediaDeviceType::kMediaAudioInput)]
++                  .empty());
++  EXPECT_TRUE(devices[static_cast<size_t>(MediaDeviceType::kMediaVideoInput)]
++                  .empty());
++  const auto& audio_outputs =
++      devices[static_cast<size_t>(MediaDeviceType::kMediaAudioOutput)];
++  ASSERT_EQ(audio_outputs.size(), 2u);
++  EXPECT_EQ(audio_outputs[0].device_id, "persona_audio_output_0");
++  EXPECT_EQ(audio_outputs[0].label, "Studio A");
++  EXPECT_EQ(audio_outputs[1].device_id, "persona_audio_output_1");
++  EXPECT_EQ(audio_outputs[1].label, "Studio B");
++}
++
+ TEST_F(MediaDevicesManagerTest, EnumerateNoCacheVideoInputRanked) {
+   InitializeRenderFrameHost();
+   EXPECT_CALL(*video_capture_device_factory_, MockGetDevicesInfo())
+--- a/services/cert_verifier/cert_net_url_loader/cert_net_fetcher_test.cc
++++ b/services/cert_verifier/cert_net_url_loader/cert_net_fetcher_test.cc
+@@ -28,7 +28,9 @@
+ CertNetFetcherTestUtil::~CertNetFetcherTestUtil() = default;
+ 
+ void CertNetFetcherTestUtil::RebindURLLoaderFactoryTrampoline(
++    uint64_t network_access_generation,
+     mojo::PendingReceiver<network::mojom::URLLoaderFactory> pending_receiver) {
++  last_rebind_network_access_generation_ = network_access_generation;
+   RebindURLLoaderFactory(std::move(pending_receiver));
+ }
+ 
+--- a/services/cert_verifier/cert_net_url_loader/cert_net_fetcher_test.h
++++ b/services/cert_verifier/cert_net_url_loader/cert_net_fetcher_test.h
+@@ -5,6 +5,8 @@
+ #ifndef SERVICES_CERT_VERIFIER_CERT_NET_URL_LOADER_CERT_NET_FETCHER_TEST_H_
+ #define SERVICES_CERT_VERIFIER_CERT_NET_URL_LOADER_CERT_NET_FETCHER_TEST_H_
+ 
++#include <stdint.h>
++
+ #include <memory>
+ 
+ #include "base/memory/scoped_refptr.h"
+@@ -32,6 +34,9 @@
+   virtual void ResetURLLoaderFactory() = 0;
+ 
+   scoped_refptr<CertNetFetcherURLLoader>& fetcher() { return fetcher_; }
++  uint64_t last_rebind_network_access_generation() const {
++    return last_rebind_network_access_generation_;
++  }
+ 
+  protected:
+   // Binds |pending_receiver| to an existing URLLoaderFactory. Used as a
+@@ -53,10 +58,12 @@
+   // don't have to reference a virtual function in the constructor when we
+   // instantiate the CertNetFetcherURLLoader.
+   void RebindURLLoaderFactoryTrampoline(
++      uint64_t network_access_generation,
+       mojo::PendingReceiver<network::mojom::URLLoaderFactory> pending_receiver);
+ 
+   scoped_refptr<CertNetFetcherURLLoader> fetcher_;
+   mojo::PendingReceiver<network::mojom::URLLoaderFactory> pending_receiver_;
++  uint64_t last_rebind_network_access_generation_ = 0;
+ };
+ 
+ class CertNetFetcherTestUtilFakeLoader : public CertNetFetcherTestUtil {
+--- a/services/cert_verifier/cert_net_url_loader/cert_net_fetcher_url_loader.cc
++++ b/services/cert_verifier/cert_net_url_loader/cert_net_fetcher_url_loader.cc
+@@ -127,6 +127,7 @@
+ using JobSet = std::map<Job*, std::unique_ptr<Job>, JobComparator>;
+ 
+ using BindNewURLLoaderFactoryCallback = base::RepeatingCallback<void(
++    uint64_t,
+     mojo::PendingReceiver<network::mojom::URLLoaderFactory>)>;
+ 
+ }  // namespace
+@@ -171,10 +172,13 @@
+   // corresponding RequestCores that the requests have completed.
+   void Shutdown();
+ 
++  // Cancels work and disconnects the factory at an identity epoch boundary.
++  void ResetForNetworkAccessTransition();
++
+  private:
+   // Attempts to use |bind_new_url_loader_factory_cb_| to reconnect |factory_|.
+   // There's no guarantee that |bind_new_url_loader_factory_cb_| will succeed.
+-  void RebindURLLoaderFactory();
++  void RebindURLLoaderFactory(uint64_t network_access_generation);
+ 
+   // Finds a job with a matching RequestPararms or returns nullptr if there was
+   // no match.
+@@ -327,6 +331,10 @@
+   // If set to a value == 0 then means "no timeout".
+   base::TimeDelta timeout;
+ 
++  // Captured on the caller thread before this request is posted to the
++  // creation thread.
++  uint64_t network_access_generation = 0;
++
+   // IMPORTANT: When adding fields to this structure, update operator<().
+ };
+ 
+@@ -335,9 +343,10 @@
+ 
+ bool CertNetFetcherURLLoader::RequestParams::operator<(
+     const RequestParams& other) const {
+-  return std::tie(url, http_method, max_response_bytes, timeout) <
++  return std::tie(url, http_method, max_response_bytes, timeout,
++                  network_access_generation) <
+          std::tie(other.url, other.http_method, other.max_response_bytes,
+-                  other.timeout);
++                  other.timeout, other.network_access_generation);
+ }
+ 
+ namespace {
+@@ -650,8 +659,12 @@
+     return;
+   }
+ 
+-  if (!factory_.is_connected()) {
+-    RebindURLLoaderFactory();
++  if (!factory_.is_bound() || !factory_.is_connected()) {
++    RebindURLLoaderFactory(request_params->network_access_generation);
++  }
++  if (!factory_.is_bound()) {
++    request->SignalImmediateError();
++    return;
+   }
+ 
+   job = new Job(std::move(request_params), this);
+@@ -675,18 +688,26 @@
+ }
+ 
+ void CertNetFetcherURLLoader::AsyncCertNetFetcherURLLoader::
+-    RebindURLLoaderFactory() {
++    ResetForNetworkAccessTransition() {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  for (const auto& job : jobs_) {
++    job.first->Cancel();
++  }
++  jobs_.clear();
++  factory_.reset();
++}
++
++void CertNetFetcherURLLoader::AsyncCertNetFetcherURLLoader::
++    RebindURLLoaderFactory(uint64_t network_access_generation) {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+-  // If Shutdown() was called, the AsyncCertNetFetcherURLLoader should not be
+-  // trying to reconnect a URLLoaderFactory.
+-  DCHECK(factory_);
+ 
+   if (!bind_new_url_loader_factory_cb_) {
+     return;
+   }
+ 
+   factory_.reset();
+-  bind_new_url_loader_factory_cb_.Run(factory_.BindNewPipeAndPassReceiver());
++  bind_new_url_loader_factory_cb_.Run(
++      network_access_generation, factory_.BindNewPipeAndPassReceiver());
+ }
+ 
+ namespace {
+@@ -759,14 +780,32 @@
+ 
+ void CertNetFetcherURLLoader::SetURLLoaderFactoryAndReconnector(
+     mojo::PendingRemote<network::mojom::URLLoaderFactory> factory,
+-    base::RepeatingCallback<
+-        void(mojo::PendingReceiver<network::mojom::URLLoaderFactory>)>
++    base::RepeatingCallback<void(
++        uint64_t,
++        mojo::PendingReceiver<network::mojom::URLLoaderFactory>)>
+         bind_new_url_loader_factory_cb) {
+   DCHECK(!impl_);
+   impl_ = std::make_unique<AsyncCertNetFetcherURLLoader>(
+       std::move(factory), std::move(bind_new_url_loader_factory_cb));
+ }
+ 
++void CertNetFetcherURLLoader::SetNetworkAccessState(
++    uint64_t network_access_generation,
++    bool blocked) {
++  DCHECK(task_runner_->RunsTasksInCurrentSequence());
++  bool changed = false;
++  {
++    base::AutoLock lock(network_access_lock_);
++    changed = network_access_generation_ != network_access_generation ||
++              network_access_blocked_ != blocked;
++    network_access_generation_ = network_access_generation;
++    network_access_blocked_ = blocked;
++  }
++  if (changed && impl_) {
++    impl_->ResetForNetworkAccessTransition();
++  }
++}
++
+ // static
+ base::TimeDelta CertNetFetcherURLLoader::GetDefaultTimeoutForTesting() {
+   return GetTimeout(CertNetFetcher::DEFAULT);
+@@ -834,7 +873,8 @@
+     scoped_refptr<RequestCore> request) {
+   DCHECK(task_runner_->RunsTasksInCurrentSequence());
+ 
+-  if (!impl_) {
++  if (!impl_ ||
++      !IsNetworkAccessAllowed(request_params->network_access_generation)) {
+     // |SetURLLoaderFactoryAndReconnector| may not have been called yet, or the
+     // fetcher might have been shutdown between when this task was posted and
+     // when it is running. In this case, signal the request and do not start a
+@@ -854,6 +894,16 @@
+ 
+   auto request_core = base::MakeRefCounted<RequestCore>(task_runner_);
+ 
++  {
++    base::AutoLock lock(network_access_lock_);
++    if (network_access_blocked_) {
++      request_core->SignalImmediateError();
++      return std::make_unique<CertNetFetcherRequestImpl>(
++          std::move(request_core));
++    }
++    request_params->network_access_generation = network_access_generation_;
++  }
++
+   // If the fetcher has already been shutdown, DoFetchOnTaskRunner will
+   // signal the request with an error. However, if the fetcher shuts down
+   // before DoFetchOnTaskRunner runs and PostTask still returns true,
+@@ -868,4 +918,11 @@
+   return std::make_unique<CertNetFetcherRequestImpl>(std::move(request_core));
+ }
+ 
++bool CertNetFetcherURLLoader::IsNetworkAccessAllowed(
++    uint64_t network_access_generation) const {
++  base::AutoLock lock(network_access_lock_);
++  return !network_access_blocked_ &&
++         network_access_generation_ == network_access_generation;
++}
++
+ }  // namespace cert_verifier
+--- a/services/cert_verifier/cert_net_url_loader/cert_net_fetcher_url_loader.h
++++ b/services/cert_verifier/cert_net_url_loader/cert_net_fetcher_url_loader.h
+@@ -5,9 +5,12 @@
+ #ifndef SERVICES_CERT_VERIFIER_CERT_NET_URL_LOADER_CERT_NET_FETCHER_URL_LOADER_H_
+ #define SERVICES_CERT_VERIFIER_CERT_NET_URL_LOADER_CERT_NET_FETCHER_URL_LOADER_H_
+ 
++#include <stdint.h>
++
+ #include "base/component_export.h"
+ #include "base/functional/callback_forward.h"
+ #include "base/memory/scoped_refptr.h"
++#include "base/synchronization/lock.h"
+ #include "net/cert/cert_net_fetcher.h"
+ #include "services/network/public/mojom/url_loader_factory.mojom.h"
+ 
+@@ -41,10 +44,16 @@
+   // functional |bind_new_url_loader_factory_cb|.
+   void SetURLLoaderFactoryAndReconnector(
+       mojo::PendingRemote<network::mojom::URLLoaderFactory> factory,
+-      base::RepeatingCallback<
+-          void(mojo::PendingReceiver<network::mojom::URLLoaderFactory>)>
++      base::RepeatingCallback<void(
++          uint64_t,
++          mojo::PendingReceiver<network::mojom::URLLoaderFactory>)>
+           bind_new_url_loader_factory_cb);
+ 
++  // Changes the epoch used by future certificate fetches. This is called on
++  // the creation thread. Fetches capture the epoch on their caller thread, so
++  // work queued before a transition cannot be relabeled after it.
++  void SetNetworkAccessState(uint64_t network_access_generation, bool blocked);
++
+   // Returns the default timeout value. Intended for test use only.
+   static base::TimeDelta GetDefaultTimeoutForTesting();
+ 
+@@ -70,12 +79,18 @@
+   void DoFetchOnTaskRunner(std::unique_ptr<RequestParams> request_params,
+                            scoped_refptr<RequestCore> request);
+ 
++  bool IsNetworkAccessAllowed(uint64_t network_access_generation) const;
++
+   std::unique_ptr<Request> DoFetch(
+       std::unique_ptr<RequestParams> request_params);
+ 
+   // The task runner of the creation thread.
+   scoped_refptr<base::SequencedTaskRunner> task_runner_;
+ 
++  mutable base::Lock network_access_lock_;
++  uint64_t network_access_generation_ GUARDED_BY(network_access_lock_) = 0;
++  bool network_access_blocked_ GUARDED_BY(network_access_lock_) = false;
++
+   std::unique_ptr<AsyncCertNetFetcherURLLoader> impl_;
+ };
+ 
+--- a/services/cert_verifier/cert_net_url_loader/cert_net_fetcher_url_loader_unittest.cc
++++ b/services/cert_verifier/cert_net_url_loader/cert_net_fetcher_url_loader_unittest.cc
+@@ -187,6 +187,57 @@
+     done.Wait();
+   }
+ 
++  void SetNetworkAccessStateOnNetworkThread(
++      uint64_t network_access_generation,
++      bool blocked,
++      base::WaitableEvent* done) {
++    test_util_->fetcher()->SetNetworkAccessState(network_access_generation,
++                                                 blocked);
++    done->Signal();
++  }
++
++  void SetNetworkAccessState(uint64_t network_access_generation,
++                             bool blocked) {
++    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::MANUAL,
++                             base::WaitableEvent::InitialState::NOT_SIGNALED);
++    creation_thread_->task_runner()->PostTask(
++        FROM_HERE,
++        base::BindOnce(
++            &CertNetFetcherURLLoaderTest::SetNetworkAccessStateOnNetworkThread,
++            base::Unretained(this), network_access_generation, blocked,
++            &done));
++    done.Wait();
++  }
++
++  void DelayThenSetNetworkAccessStateOnNetworkThread(
++      uint64_t network_access_generation,
++      bool blocked,
++      base::WaitableEvent* entered,
++      base::WaitableEvent* proceed) {
++    entered->Signal();
++    proceed->Wait();
++    test_util_->fetcher()->SetNetworkAccessState(network_access_generation,
++                                                 blocked);
++  }
++
++  uint64_t LastRebindNetworkAccessGeneration() {
++    uint64_t generation = 0;
++    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::MANUAL,
++                             base::WaitableEvent::InitialState::NOT_SIGNALED);
++    creation_thread_->task_runner()->PostTask(
++        FROM_HERE,
++        base::BindOnce(
++            [](CertNetFetcherTestUtil* test_util, uint64_t* generation,
++               base::WaitableEvent* done) {
++              *generation =
++                  test_util->last_rebind_network_access_generation();
++              done->Signal();
++            },
++            base::Unretained(test_util_.get()), &generation, &done));
++    done.Wait();
++    return generation;
++  }
++
+   void TeardownOnNetworkThread() {
+     if (!test_util_)
+       return;
+@@ -519,6 +570,39 @@
+   VerifySuccess("-root.crl-\n", request5.get());
+ }
+ 
++TEST_F(CertNetFetcherURLLoaderTest,
++       NetworkAccessTransitionRejectsQueuedOldGeneration) {
++  ASSERT_TRUE(test_server_.Start());
++  CreateFetcher();
++
++  base::WaitableEvent transition_entered(
++      base::WaitableEvent::ResetPolicy::MANUAL,
++      base::WaitableEvent::InitialState::NOT_SIGNALED);
++  base::WaitableEvent run_transition(
++      base::WaitableEvent::ResetPolicy::MANUAL,
++      base::WaitableEvent::InitialState::NOT_SIGNALED);
++  creation_thread_->task_runner()->PostTask(
++      FROM_HERE,
++      base::BindOnce(
++          &CertNetFetcherURLLoaderTest::
++              DelayThenSetNetworkAccessStateOnNetworkThread,
++          base::Unretained(this), 1, /*blocked=*/true, &transition_entered,
++          &run_transition));
++  transition_entered.Wait();
++
++  std::unique_ptr<net::CertNetFetcher::Request> stale_request =
++      StartRequest(fetcher(), test_server_.GetURL("/cert.crt"));
++  run_transition.Signal();
++  VerifyFailure(net::ERR_ABORTED, stale_request.get());
++  EXPECT_EQ(0, NumCreatedRequests());
++
++  SetNetworkAccessState(2, /*blocked=*/false);
++  std::unique_ptr<net::CertNetFetcher::Request> fresh_request =
++      StartRequest(fetcher(), test_server_.GetURL("/cert.crt"));
++  VerifySuccess("-cert.crt-\n", fresh_request.get());
++  EXPECT_EQ(2u, LastRebindNetworkAccessGeneration());
++}
++
+ // Start a few requests, and cancel one of them before running the message loop
+ // again.
+ TEST_F(CertNetFetcherURLLoaderTest, CancelBeforeRunningMessageLoop) {
+--- a/services/cert_verifier/cert_verifier_service.cc
++++ b/services/cert_verifier/cert_verifier_service.cc
+@@ -7,6 +7,7 @@
+ #include "base/functional/bind.h"
+ #include "base/logging.h"
+ #include "base/memory/scoped_refptr.h"
++#include "mojo/public/cpp/bindings/callback_helpers.h"
+ #include "mojo/public/cpp/bindings/message.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "net/base/completion_once_callback.h"
+@@ -80,12 +81,6 @@
+   std::unique_ptr<net::CertVerifier::Request> local_request_;
+ };
+ 
+-void ReconnectURLLoaderFactory(
+-    mojo::Remote<mojom::URLLoaderFactoryConnector>* reconnector,
+-    mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver) {
+-  (*reconnector)->CreateURLLoaderFactory(std::move(receiver));
+-}
+-
+ }  // namespace
+ 
+ CertVerifierServiceImpl::CertVerifierServiceImpl(
+@@ -127,17 +122,138 @@
+ }
+ 
+ void CertVerifierServiceImpl::EnableNetworkAccess(
++    uint64_t network_access_generation,
++    bool network_access_blocked,
+     mojo::PendingRemote<network::mojom::URLLoaderFactory> url_loader_factory,
+     mojo::PendingRemote<mojom::URLLoaderFactoryConnector> reconnector) {
++  network_access_generation_ = network_access_generation;
++  network_access_blocked_ = network_access_blocked;
+   if (cert_net_fetcher_) {
+-    auto reconnect_cb =
+-        std::make_unique<mojo::Remote<mojom::URLLoaderFactoryConnector>>(
+-            std::move(reconnector));
++    if (reconnector.is_valid()) {
++      url_loader_factory_reconnector_.Bind(std::move(reconnector));
++    }
++    cert_net_fetcher_->SetNetworkAccessState(network_access_generation,
++                                             network_access_blocked);
+     cert_net_fetcher_->SetURLLoaderFactoryAndReconnector(
+         std::move(url_loader_factory),
+-        base::BindRepeating(&ReconnectURLLoaderFactory,
+-                            base::Owned(std::move(reconnect_cb))));
++        base::BindRepeating(
++            &CertVerifierServiceImpl::ReconnectURLLoaderFactory,
++            weak_factory_.GetWeakPtr()));
++  }
++}
++
++void CertVerifierServiceImpl::SetNetworkAccessState(
++    uint64_t network_access_generation,
++    bool network_access_blocked,
++    SetNetworkAccessStateCallback callback) {
++  if (network_access_generation < network_access_generation_ ||
++      (network_access_generation > network_access_generation_ &&
++       !network_access_blocked)) {
++    std::move(callback).Run(false);
++    return;
++  }
++  const uint64_t operation_id = ++network_access_operation_id_;
++  CHECK_NE(0u, operation_id);
++  RejectQueuedVerifyRequestsForNetworkAccessTransition();
++  network_access_generation_ = network_access_generation;
++  network_access_blocked_ = true;
++
++  if (!cert_net_fetcher_) {
++    network_access_blocked_ = network_access_blocked;
++    std::move(callback).Run(true);
++    return;
++  }
++
++  if (!network_access_blocked && !url_loader_factory_reconnector_) {
++    std::move(callback).Run(false);
++    return;
++  }
++
++  if (!ReplaceCertNetFetcherForNetworkAccessTransition(
++          network_access_generation, network_access_blocked)) {
++    std::move(callback).Run(false);
++    return;
++  }
++
++  if (network_access_blocked) {
++    std::move(callback).Run(true);
++    return;
++  }
++
++  mojo::PendingRemote<network::mojom::URLLoaderFactory> url_loader_factory;
++  auto url_loader_factory_receiver =
++      url_loader_factory.InitWithNewPipeAndPassReceiver();
++  scoped_refptr<CertNetFetcherURLLoader> cert_net_fetcher = cert_net_fetcher_;
++  cert_net_fetcher->SetURLLoaderFactoryAndReconnector(
++      std::move(url_loader_factory),
++      base::BindRepeating(&CertVerifierServiceImpl::ReconnectURLLoaderFactory,
++                          weak_factory_.GetWeakPtr()));
++  url_loader_factory_reconnector_->CreateURLLoaderFactory(
++      network_access_generation, std::move(url_loader_factory_receiver),
++      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
++          base::BindOnce(
++              &CertVerifierServiceImpl::OnNetworkAccessFactoryReady,
++              weak_factory_.GetWeakPtr(), network_access_generation,
++              operation_id, std::move(cert_net_fetcher), std::move(callback)),
++          false));
++}
++
++bool CertVerifierServiceImpl::ReplaceCertNetFetcherForNetworkAccessTransition(
++    uint64_t network_access_generation,
++    bool network_access_blocked) {
++  cert_net_fetcher_->SetNetworkAccessState(network_access_generation,
++                                           /*blocked=*/true);
++  cert_net_fetcher_->Shutdown();
++  if (!service_factory_impl_) {
++    return false;
+   }
++
++  cert_net_fetcher_ = base::MakeRefCounted<CertNetFetcherURLLoader>();
++  cert_net_fetcher_->SetNetworkAccessState(network_access_generation,
++                                           network_access_blocked);
++  verifier_->UpdateVerifyProcData(cert_net_fetcher_,
++                                  service_factory_impl_->get_impl_params(),
++                                  instance_params_);
++  return true;
++}
++
++void CertVerifierServiceImpl::OnNetworkAccessFactoryReady(
++    uint64_t network_access_generation,
++    uint64_t operation_id,
++    scoped_refptr<CertNetFetcherURLLoader> cert_net_fetcher,
++    SetNetworkAccessStateCallback callback,
++    bool accepted) {
++  if (!accepted || operation_id != network_access_operation_id_ ||
++      network_access_generation != network_access_generation_ ||
++      cert_net_fetcher != cert_net_fetcher_) {
++    std::move(callback).Run(false);
++    return;
++  }
++  network_access_blocked_ = false;
++  std::move(callback).Run(true);
++}
++
++void CertVerifierServiceImpl::
++    RejectQueuedVerifyRequestsForNetworkAccessTransition() {
++  for (QueuedCertVerifyRequest& request : queued_requests_) {
++    mojo::Remote<mojom::CertVerifierRequest> remote(
++        std::move(request.cert_verifier_request));
++    remote->Complete(net::CertVerifyResult(),
++                     net::ERR_NETWORK_ACCESS_REVOKED);
++  }
++  queued_requests_.clear();
++}
++
++void CertVerifierServiceImpl::ReconnectURLLoaderFactory(
++    uint64_t network_access_generation,
++    mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver) {
++  if (!url_loader_factory_reconnector_ || network_access_blocked_ ||
++      network_access_generation != network_access_generation_) {
++    return;
++  }
++  url_loader_factory_reconnector_->CreateURLLoaderFactory(
++      network_access_generation, std::move(receiver),
++      base::BindOnce([](bool) {}));
+ }
+ 
+ void CertVerifierServiceImpl::UpdateAdditionalCertificates(
+@@ -201,6 +317,11 @@
+   DVLOG(3) << "Received certificate validation request for hostname: "
+            << params.hostname();
+ 
++  if (network_access_blocked_) {
++    VerifyHelper(params, net_log_source, std::move(cert_verifier_request));
++    return;
++  }
++
+   if (waiting_for_update_) {
+     DVLOG(3)
+         << "initial cert update not received, queueing request for hostname: "
+@@ -220,6 +341,13 @@
+     const net::CertVerifier::RequestParams& params,
+     const net::NetLogSource& net_log_source,
+     mojo::PendingRemote<mojom::CertVerifierRequest> cert_verifier_request) {
++  if (network_access_blocked_) {
++    mojo::Remote<mojom::CertVerifierRequest> remote(
++        std::move(cert_verifier_request));
++    remote->Complete(net::CertVerifyResult(),
++                     net::ERR_NETWORK_ACCESS_REVOKED);
++    return;
++  }
+   DVLOG(3) << "Running certificate validation request for hostname: "
+            << params.hostname();
+   auto result = std::make_unique<net::CertVerifyResult>();
+@@ -266,6 +394,10 @@
+     const net::NetLogSource& net_log_source,
+     base::OnceCallback<void(const scoped_refptr<net::X509Certificate>&)>
+         callback) {
++  if (network_access_blocked_) {
++    std::move(callback).Run(nullptr);
++    return;
++  }
+   verifier_->Verify2QwacBinding(
+       binding, hostname, tls_cert, std::move(callback),
+       net::NetLogWithSource::Make(net::NetLog::Get(), net_log_source));
+--- a/services/cert_verifier/cert_verifier_service.h
++++ b/services/cert_verifier/cert_verifier_service.h
+@@ -5,6 +5,8 @@
+ #ifndef SERVICES_CERT_VERIFIER_CERT_VERIFIER_SERVICE_H_
+ #define SERVICES_CERT_VERIFIER_CERT_VERIFIER_SERVICE_H_
+ 
++#include <stdint.h>
++
+ #include <memory>
+ 
+ #include "base/memory/scoped_refptr.h"
+@@ -68,9 +70,15 @@
+           callback) override;
+   void SetConfig(const net::CertVerifier::Config& config) override;
+   void EnableNetworkAccess(
++      uint64_t network_access_generation,
++      bool network_access_blocked,
+       mojo::PendingRemote<network::mojom::URLLoaderFactory>,
+       mojo::PendingRemote<mojom::URLLoaderFactoryConnector> reconnector)
+       override;
++  void SetNetworkAccessState(
++      uint64_t network_access_generation,
++      bool network_access_blocked,
++      SetNetworkAccessStateCallback callback) override;
+ 
+   // mojom::CertVerifierServiceUpdater implementation:
+   void UpdateAdditionalCertificates(
+@@ -114,18 +122,39 @@
+       const net::NetLogSource& net_log_source,
+       mojo::PendingRemote<mojom::CertVerifierRequest> cert_verifier_request);
+ 
++  void ReconnectURLLoaderFactory(
++      uint64_t network_access_generation,
++      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver);
++  bool ReplaceCertNetFetcherForNetworkAccessTransition(
++      uint64_t network_access_generation,
++      bool network_access_blocked);
++  void OnNetworkAccessFactoryReady(
++      uint64_t network_access_generation,
++      uint64_t operation_id,
++      scoped_refptr<CertNetFetcherURLLoader> cert_net_fetcher,
++      SetNetworkAccessStateCallback callback,
++      bool accepted);
++  void RejectQueuedVerifyRequestsForNetworkAccessTransition();
++
+   net::CertVerifyProc::InstanceParams instance_params_;
+   std::unique_ptr<net::CertVerifierWithUpdatableProc> verifier_;
+   mojo::Receiver<mojom::CertVerifierService> service_receiver_;
+   mojo::Receiver<mojom::CertVerifierServiceUpdater> updater_receiver_;
+   mojo::Remote<mojom::CertVerifierServiceClient> client_;
+   scoped_refptr<CertNetFetcherURLLoader> cert_net_fetcher_;
++  mojo::Remote<mojom::URLLoaderFactoryConnector>
++      url_loader_factory_reconnector_;
++  uint64_t network_access_generation_ = 0;
++  uint64_t network_access_operation_id_ = 0;
++  bool network_access_blocked_ = false;
+   base::WeakPtr<cert_verifier::CertVerifierServiceFactoryImpl>
+       service_factory_impl_;
+   // Will queue requests for processing until this is false.
+   bool waiting_for_update_;
+   std::vector<QueuedCertVerifyRequest> queued_requests_;
+   WaitUntilNextUpdateForTestingCallback update_complete_callback_;
++
++  base::WeakPtrFactory<CertVerifierServiceImpl> weak_factory_{this};
+ };
+ 
+ }  // namespace internal
+--- a/services/cert_verifier/cert_verifier_service_factory.cc
++++ b/services/cert_verifier/cert_verifier_service_factory.cc
+@@ -273,10 +273,12 @@
+     mojom::CertVerifierCreationParamsPtr creation_params,
+     scoped_refptr<CertNetFetcherURLLoader>* cert_net_fetcher_ptr) {
+   InitializeRootStoreDataIfNecessary();
+-  GetNewCertVerifierImpl(std::move(service_receiver),
+-                         std::move(updater_receiver), std::move(client),
+-                         std::move(creation_params), proc_params_,
+-                         cert_net_fetcher_ptr);
++  internal::CertVerifierServiceImpl* service_impl = GetNewCertVerifierImpl(
++      std::move(service_receiver), std::move(updater_receiver),
++      std::move(client), std::move(creation_params), proc_params_,
++      cert_net_fetcher_ptr);
++  verifier_services_.insert(service_impl);
++  service_impl->SetCertVerifierServiceFactory(weak_factory_.GetWeakPtr());
+ }
+ 
+ void CertVerifierServiceFactoryImpl::UpdateCRLSet(
+--- a/services/cert_verifier/cert_verifier_service_unittest.cc
++++ b/services/cert_verifier/cert_verifier_service_unittest.cc
+@@ -11,6 +11,7 @@
+ #include <string>
+ #include <string_view>
+ #include <tuple>
++#include <vector>
+ 
+ #include "base/containers/adapters.h"
+ #include "base/functional/callback_helpers.h"
+@@ -126,6 +127,8 @@
+       scoped_refptr<net::CertNetFetcher> cert_net_fetcher,
+       const net::CertVerifyProc::ImplParams& impl_params,
+       const net::CertVerifyProc::InstanceParams& instance_params) override {
++    last_cert_net_fetcher_ = std::move(cert_net_fetcher);
++    ++update_verify_proc_data_count_;
+     has_updated_proc_data_ = true;
+   }
+ 
+@@ -151,6 +154,14 @@
+ 
+   bool HasUpdatedProcData() { return has_updated_proc_data_; }
+ 
++  int update_verify_proc_data_count() const {
++    return update_verify_proc_data_count_;
++  }
++
++  scoped_refptr<net::CertNetFetcher> last_cert_net_fetcher() const {
++    return last_cert_net_fetcher_;
++  }
++
+   bool WasRequestCancelled(const net::CertVerifier::RequestParams& params) {
+     return cancelled_requests_.find(params) != cancelled_requests_.end();
+   }
+@@ -179,10 +190,45 @@
+       request_netlogs_;
+ 
+   net::CertVerifier::Config config_;
++  scoped_refptr<net::CertNetFetcher> last_cert_net_fetcher_;
+   raw_ptr<CertVerifier::Observer> observer_ = nullptr;
++  int update_verify_proc_data_count_ = 0;
+   bool has_updated_proc_data_ = false;
+ };
+ 
++class AcceptingURLLoaderFactoryConnector
++    : public mojom::URLLoaderFactoryConnector {
++ public:
++  mojo::PendingRemote<mojom::URLLoaderFactoryConnector>
++  BindNewPipeAndPassRemote() {
++    return receiver_.BindNewPipeAndPassRemote();
++  }
++
++  void CreateURLLoaderFactory(
++      uint64_t network_access_generation,
++      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
++      CreateURLLoaderFactoryCallback callback) override {
++    last_network_access_generation_ = network_access_generation;
++    if (accept_) {
++      receivers_.push_back(std::move(receiver));
++    }
++    std::move(callback).Run(accept_);
++  }
++
++  void set_accept(bool accept) { accept_ = accept; }
++
++  uint64_t last_network_access_generation() const {
++    return last_network_access_generation_;
++  }
++
++ private:
++  bool accept_ = true;
++  uint64_t last_network_access_generation_ = 0;
++  std::vector<mojo::PendingReceiver<network::mojom::URLLoaderFactory>>
++      receivers_;
++  mojo::Receiver<mojom::URLLoaderFactoryConnector> receiver_{this};
++};
++
+ struct DummyCVServiceRequest : public mojom::CertVerifierRequest {
+   void Complete(const net::CertVerifyResult& result_param,
+                 int32_t net_error_param) override {
+@@ -224,7 +270,9 @@
+             std::make_unique<CertVerifierServiceFactoryImpl>(
+                 cv_service_factory_remote_.BindNewPipeAndPassReceiver())) {}
+ 
+-  void CreateImpl(bool wait_for_update) {
++  void CreateImpl(
++      bool wait_for_update,
++      scoped_refptr<CertNetFetcherURLLoader> cert_net_fetcher = nullptr) {
+     dummy_cv_ = new DummyCertVerifier;
+     // NOTE: CertVerifierServiceImpl is self-deleting.
+     auto* cvs_impl = new internal::CertVerifierServiceImpl(
+@@ -232,7 +280,7 @@
+         cv_service_remote_.BindNewPipeAndPassReceiver(),
+         cv_service_updater_remote_.BindNewPipeAndPassReceiver(),
+         cv_service_client_.BindNewPipeAndPassRemote(),
+-        /*cert_net_fetcher=*/nullptr,
++        std::move(cert_net_fetcher),
+         /*instance_params=*/{},
+         /*wait_for_update=*/wait_for_update);
+ 
+@@ -431,6 +479,214 @@
+   ASSERT_TRUE(dummy_cv()->WasRequestCancelled(dummy_params));
+ }
+ 
++TEST_F(CertVerifierServiceTest, NetworkAccessTransitionRotatesCertNetFetcher) {
++  auto initial_cert_net_fetcher =
++      base::MakeRefCounted<CertNetFetcherURLLoader>();
++  CreateImpl(/*wait_for_update=*/false, initial_cert_net_fetcher);
++
++  mojo::PendingRemote<network::mojom::URLLoaderFactory> initial_factory;
++  auto initial_factory_receiver =
++      initial_factory.InitWithNewPipeAndPassReceiver();
++  EXPECT_TRUE(initial_factory_receiver.is_valid());
++  AcceptingURLLoaderFactoryConnector connector;
++  cv_service_remote()->EnableNetworkAccess(
++      /*network_access_generation=*/0,
++      /*network_access_blocked=*/false, std::move(initial_factory),
++      connector.BindNewPipeAndPassRemote());
++  cv_service_remote().FlushForTesting();
++
++  base::test::TestFuture<bool> blocked;
++  cv_service_remote()->SetNetworkAccessState(
++      /*network_access_generation=*/1,
++      /*network_access_blocked=*/true, blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++  ASSERT_EQ(dummy_cv()->update_verify_proc_data_count(), 1);
++  scoped_refptr<net::CertNetFetcher> blocked_fetcher =
++      dummy_cv()->last_cert_net_fetcher();
++  ASSERT_TRUE(blocked_fetcher);
++  EXPECT_NE(blocked_fetcher.get(), initial_cert_net_fetcher.get());
++
++  base::test::TestFuture<bool> released;
++  cv_service_remote()->SetNetworkAccessState(
++      /*network_access_generation=*/1,
++      /*network_access_blocked=*/false, released.GetCallback());
++  EXPECT_TRUE(released.Get());
++  ASSERT_EQ(dummy_cv()->update_verify_proc_data_count(), 2);
++  scoped_refptr<net::CertNetFetcher> released_fetcher =
++      dummy_cv()->last_cert_net_fetcher();
++  ASSERT_TRUE(released_fetcher);
++  EXPECT_NE(released_fetcher.get(), blocked_fetcher.get());
++  EXPECT_EQ(connector.last_network_access_generation(), 1u);
++}
++
++TEST_F(CertVerifierServiceTest,
++       NetworkAccessReleaseRequiresAcceptedFactory) {
++  auto initial_cert_net_fetcher =
++      base::MakeRefCounted<CertNetFetcherURLLoader>();
++  CreateImpl(/*wait_for_update=*/false, initial_cert_net_fetcher);
++
++  mojo::PendingRemote<network::mojom::URLLoaderFactory> initial_factory;
++  auto initial_factory_receiver =
++      initial_factory.InitWithNewPipeAndPassReceiver();
++  EXPECT_TRUE(initial_factory_receiver.is_valid());
++  AcceptingURLLoaderFactoryConnector connector;
++  cv_service_remote()->EnableNetworkAccess(
++      /*network_access_generation=*/0,
++      /*network_access_blocked=*/false, std::move(initial_factory),
++      connector.BindNewPipeAndPassRemote());
++  cv_service_remote().FlushForTesting();
++
++  base::test::TestFuture<bool> blocked;
++  cv_service_remote()->SetNetworkAccessState(
++      /*network_access_generation=*/1,
++      /*network_access_blocked=*/true, blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++
++  connector.set_accept(false);
++  base::test::TestFuture<bool> released;
++  cv_service_remote()->SetNetworkAccessState(
++      /*network_access_generation=*/1,
++      /*network_access_blocked=*/false, released.GetCallback());
++  EXPECT_FALSE(released.Get());
++
++  net::CertVerifier::RequestParams params(GetTestCert(), "example.com", 0,
++                                          /*ocsp_response=*/std::string(),
++                                          /*sct_list=*/std::string());
++  DummyCVServiceRequest request;
++  mojo::Receiver<mojom::CertVerifierRequest> receiver(&request);
++  cv_service_remote()->Verify(
++      params,
++      net::NetLogSource(net::NetLogSourceType::CERT_VERIFIER_JOB, 1234,
++                        base::TimeTicks::Now()),
++      receiver.BindNewPipeAndPassRemote());
++  cv_service_remote().FlushForTesting();
++  EXPECT_TRUE(request.is_completed);
++  EXPECT_EQ(request.net_error, net::ERR_NETWORK_ACCESS_REVOKED);
++}
++
++TEST_F(CertVerifierServiceTest, NetworkAccessStateRejectsInvalidGeneration) {
++  auto initial_cert_net_fetcher =
++      base::MakeRefCounted<CertNetFetcherURLLoader>();
++  CreateImpl(/*wait_for_update=*/false, initial_cert_net_fetcher);
++
++  mojo::PendingRemote<network::mojom::URLLoaderFactory> initial_factory;
++  auto initial_factory_receiver =
++      initial_factory.InitWithNewPipeAndPassReceiver();
++  EXPECT_TRUE(initial_factory_receiver.is_valid());
++  AcceptingURLLoaderFactoryConnector connector;
++  cv_service_remote()->EnableNetworkAccess(
++      /*network_access_generation=*/0,
++      /*network_access_blocked=*/false, std::move(initial_factory),
++      connector.BindNewPipeAndPassRemote());
++  cv_service_remote().FlushForTesting();
++
++  base::test::TestFuture<bool> skipped_block;
++  cv_service_remote()->SetNetworkAccessState(
++      /*network_access_generation=*/2,
++      /*network_access_blocked=*/false, skipped_block.GetCallback());
++  EXPECT_FALSE(skipped_block.Get());
++  EXPECT_EQ(dummy_cv()->update_verify_proc_data_count(), 0);
++
++  base::test::TestFuture<bool> blocked;
++  cv_service_remote()->SetNetworkAccessState(
++      /*network_access_generation=*/2,
++      /*network_access_blocked=*/true, blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++  EXPECT_EQ(dummy_cv()->update_verify_proc_data_count(), 1);
++
++  base::test::TestFuture<bool> stale;
++  cv_service_remote()->SetNetworkAccessState(
++      /*network_access_generation=*/1,
++      /*network_access_blocked=*/true, stale.GetCallback());
++  EXPECT_FALSE(stale.Get());
++  EXPECT_EQ(dummy_cv()->update_verify_proc_data_count(), 1);
++}
++
++TEST_F(CertVerifierServiceTest,
++       NetworkAccessWithoutReconnectorStaysBlocked) {
++  auto initial_cert_net_fetcher =
++      base::MakeRefCounted<CertNetFetcherURLLoader>();
++  CreateImpl(/*wait_for_update=*/false, initial_cert_net_fetcher);
++  mojo::PendingRemote<network::mojom::URLLoaderFactory> initial_factory;
++  auto initial_factory_receiver =
++      initial_factory.InitWithNewPipeAndPassReceiver();
++  EXPECT_TRUE(initial_factory_receiver.is_valid());
++  cv_service_remote()->EnableNetworkAccess(
++      /*network_access_generation=*/0,
++      /*network_access_blocked=*/false, std::move(initial_factory),
++      mojo::NullRemote());
++  cv_service_remote().FlushForTesting();
++
++  base::test::TestFuture<bool> blocked;
++  cv_service_remote()->SetNetworkAccessState(
++      /*network_access_generation=*/1,
++      /*network_access_blocked=*/true, blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++
++  base::test::TestFuture<bool> released;
++  cv_service_remote()->SetNetworkAccessState(
++      /*network_access_generation=*/1,
++      /*network_access_blocked=*/false, released.GetCallback());
++  EXPECT_FALSE(released.Get());
++}
++
++TEST_F(CertVerifierServiceTest, NetworkAccessGateRejectsNewVerifyRequests) {
++  CreateImpl(/*wait_for_update=*/false);
++  base::test::TestFuture<bool> blocked;
++  cv_service_remote()->SetNetworkAccessState(
++      /*network_access_generation=*/1,
++      /*network_access_blocked=*/true, blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++
++  net::CertVerifier::RequestParams params(GetTestCert(), "example.com", 0,
++                                          /*ocsp_response=*/std::string(),
++                                          /*sct_list=*/std::string());
++  DummyCVServiceRequest request;
++  mojo::Receiver<mojom::CertVerifierRequest> receiver(&request);
++  cv_service_remote()->Verify(
++      params,
++      net::NetLogSource(net::NetLogSourceType::CERT_VERIFIER_JOB, 1234,
++                        base::TimeTicks::Now()),
++      receiver.BindNewPipeAndPassRemote());
++  cv_service_remote().FlushForTesting();
++
++  EXPECT_TRUE(request.is_completed);
++  EXPECT_EQ(request.net_error, net::ERR_NETWORK_ACCESS_REVOKED);
++  EXPECT_FALSE(dummy_cv()->HasPendingAsyncRequest(params));
++}
++
++TEST_F(CertVerifierServiceTest,
++       NetworkAccessTransitionRejectsQueuedVerifyRequests) {
++  CreateImpl(/*wait_for_update=*/true);
++  net::CertVerifier::RequestParams params(GetTestCert(), "example.com", 0,
++                                          /*ocsp_response=*/std::string(),
++                                          /*sct_list=*/std::string());
++  DummyCVServiceRequest request;
++  mojo::Receiver<mojom::CertVerifierRequest> receiver(&request);
++  cv_service_remote()->Verify(
++      params,
++      net::NetLogSource(net::NetLogSourceType::CERT_VERIFIER_JOB, 1234,
++                        base::TimeTicks::Now()),
++      receiver.BindNewPipeAndPassRemote());
++  cv_service_remote().FlushForTesting();
++  EXPECT_FALSE(request.is_completed);
++  EXPECT_FALSE(dummy_cv()->HasPendingAsyncRequest(params));
++
++  base::test::TestFuture<bool> blocked;
++  cv_service_remote()->SetNetworkAccessState(
++      /*network_access_generation=*/1,
++      /*network_access_blocked=*/true, blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++  cv_service_remote().FlushForTesting();
++
++  EXPECT_TRUE(request.is_completed);
++  EXPECT_EQ(request.net_error, net::ERR_NETWORK_ACCESS_REVOKED);
++  cv_service_updater_remote()->UpdateAdditionalCertificates(
++      cert_verifier::mojom::AdditionalCertificates::New());
++  cv_service_updater_remote().FlushForTesting();
++  EXPECT_FALSE(dummy_cv()->HasPendingAsyncRequest(params));
++}
++
+ TEST_F(CertVerifierServiceTest, TestCVServiceDisconnection) {
+   CreateImpl(/*wait_for_update=*/false);
+   net::CertVerifier::RequestParams dummy_params(GetTestCert(), "example.com", 0,
+--- a/services/cert_verifier/integration_tests/network_service_unittest.cc
++++ b/services/cert_verifier/integration_tests/network_service_unittest.cc
+@@ -11,6 +11,7 @@
+ #include "base/test/bind.h"
+ #include "base/test/scoped_feature_list.h"
+ #include "base/test/task_environment.h"
++#include "base/test/test_future.h"
+ #include "build/build_config.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+@@ -148,6 +149,26 @@
+   mojo::Remote<network::mojom::URLLoader> loader_;
+ };
+ 
++TEST_F(NetworkServiceIntegrationTest,
++       NetworkPersonaRequestGateTransitionsCertVerifierService) {
++  CreateNetworkContext(CreateNetworkContextParams());
++  if (!cert_net_fetcher_url_loader()) {
++    GTEST_SKIP() << "This platform does not use CertNetFetcherURLLoader";
++  }
++
++  base::test::TestFuture<bool> blocked;
++  network_context_remote()->SetNetworkPersonaRequestsBlocked(
++      true, blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++  EXPECT_TRUE(network_context()->network_persona_requests_blocked());
++
++  base::test::TestFuture<bool> released;
++  network_context_remote()->SetNetworkPersonaRequestsBlocked(
++      false, released.GetCallback());
++  EXPECT_TRUE(released.Get());
++  EXPECT_FALSE(network_context()->network_persona_requests_blocked());
++}
++
+ class NetworkServiceAIATest : public NetworkServiceIntegrationTest {
+  public:
+   NetworkServiceAIATest() : test_server_(net::EmbeddedTestServer::TYPE_HTTPS) {}
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -881,7 +881,9 @@
+ #endif  // BUILDFLAG(IS_ANDROID)
+ 
+   CreateURLLoaderFactoryForCertNetFetcher(
+-      std::move(url_loader_factory_for_cert_net_fetcher_receiver));
++      cert_network_access_generation_,
++      std::move(url_loader_factory_for_cert_net_fetcher_receiver),
++      base::BindOnce([](bool) {}));
+ 
+   SetBlockTrustTokens(params_->block_trust_tokens);
+ 
+@@ -1076,9 +1078,19 @@
+ }
+ 
+ void NetworkContext::CreateURLLoaderFactoryForCertNetFetcher(
+-    mojo::PendingReceiver<mojom::URLLoaderFactory> factory_receiver) {
+-  if (network_persona_requests_blocked_) {
+-    pending_cert_net_fetcher_receivers_.push_back(std::move(factory_receiver));
++    uint64_t network_access_generation,
++    mojo::PendingReceiver<mojom::URLLoaderFactory> factory_receiver,
++    base::OnceCallback<void(bool)> callback) {
++  const bool preparing_release =
++      cert_network_access_release_generation_.has_value() &&
++      *cert_network_access_release_generation_ == network_access_generation;
++  if ((network_persona_requests_blocked_ && !preparing_release) ||
++      network_access_generation != cert_network_access_generation_) {
++    // Dropping the receiver forces CertNetFetcherURLLoader to reconnect on a
++    // later request. The generation check also rejects connector messages sent
++    // during the transition but delivered after the next identity is
++    // published.
++    std::move(callback).Run(false);
+     return;
+   }
+ 
+@@ -1096,8 +1108,19 @@
+     // http://crrev.com/c/5899528.
+     url_loader_factory_params->disable_web_security = true;
+   }
+-  CreateURLLoaderFactory(std::move(factory_receiver),
+-                         std::move(url_loader_factory_params));
++  scoped_refptr<ResourceSchedulerClient> resource_scheduler_client =
++      base::MakeRefCounted<ResourceSchedulerClient>(
++          ResourceScheduler::ClientId::Create(),
++          /*is_browser_initiated=*/true, resource_scheduler_.get(),
++          url_request_context_->network_quality_estimator());
++  // The factory may be bound while preparing a release, but every request it
++  // receives still checks NetworkContext::network_persona_requests_blocked().
++  url_loader_factories_.emplace(
++      std::make_unique<PrefetchMatchingURLLoaderFactory>(
++          this, std::move(url_loader_factory_params),
++          std::move(resource_scheduler_client), std::move(factory_receiver),
++          &cors_origin_access_list_, prefetch_cache_.get()));
++  std::move(callback).Run(true);
+ }
+ 
+ void NetworkContext::ActivateDohProbes() {
+@@ -1893,30 +1916,36 @@
+     bool blocked,
+     SetNetworkPersonaRequestsBlockedCallback callback) {
+   const bool was_blocked = network_persona_requests_blocked_;
+-  network_persona_requests_blocked_ = blocked;
+-  socket_factory_->SetNetworkPersonaRequestsBlocked(blocked);
++  if (!blocked && !was_blocked) {
++    std::move(callback).Run(true);
++    return;
++  }
++  cert_network_access_release_generation_.reset();
++  const uint64_t network_access_generation =
++      ++cert_network_access_generation_;
++  CHECK_NE(0u, network_access_generation);
+   if (!blocked) {
+-    if (internal_host_resolver_) {
+-      internal_host_resolver_->SetNetworkRequestsBlocked(false);
+-    }
+-    for (const auto& resolver : host_resolvers_) {
+-      resolver->SetNetworkRequestsBlocked(false);
+-    }
+-    if (was_blocked && doh_probes_activation_requested_) {
+-      ActivateDohProbes();
+-    }
+-    if (was_blocked && prefetch_enabled_) {
+-      InitializePrefetchURLLoaderFactory();
+-    }
+-    auto pending_cert_receivers =
+-        std::move(pending_cert_net_fetcher_receivers_);
+-    for (auto& receiver : pending_cert_receivers) {
+-      CreateURLLoaderFactoryForCertNetFetcher(std::move(receiver));
++    if (!mojo_cert_verifier_) {
++      ReleaseNetworkPersonaRequestGateLocally(was_blocked);
++      std::move(callback).Run(
++          network_access_generation == cert_network_access_generation_ &&
++          !network_persona_requests_blocked_);
++      return;
+     }
+-    std::move(callback).Run(true);
++    // Move the certificate fetcher to the new epoch while it remains blocked.
++    // Only after that acknowledgement is it safe to open the local gate.
++    mojo_cert_verifier_->SetNetworkAccessState(
++        network_access_generation, /*network_access_blocked=*/true,
++        base::BindOnce(
++            &NetworkContext::OnCertNetworkAccessPreparedForRelease,
++            weak_factory_.GetWeakPtr(), network_access_generation, was_blocked,
++            std::move(callback)));
+     return;
+   }
+ 
++  network_persona_requests_blocked_ = true;
++  socket_factory_->SetNetworkPersonaRequestsBlocked(true);
++
+   ohttp_handler_.AbortAllRequestsForNetworkPersonaTransition();
+   proxy_resolving_socket_factories_.Clear();
+   while (!proxy_lookup_requests_.empty()) {
+@@ -1962,6 +1991,10 @@
+   websocket_factory_.reset();
+ #endif
+   web_transports_.clear();
++  while (!cert_verifier_requests_.empty()) {
++    OnVerifyCertComplete(cert_verifier_requests_.begin()->first,
++                         net::ERR_NETWORK_ACCESS_REVOKED);
++  }
+ 
+   if (url_request_context_ &&
+       url_request_context_->http_transaction_factory()) {
+@@ -1970,9 +2003,84 @@
+         ->CloseAllConnections(net::ERR_NETWORK_ACCESS_REVOKED,
+                               "Persona network identity transition");
+   }
++  if (!mojo_cert_verifier_) {
++    std::move(callback).Run(network_access_generation ==
++                            cert_network_access_generation_);
++    return;
++  }
++  mojo_cert_verifier_->SetNetworkAccessState(
++      network_access_generation, blocked,
++      base::BindOnce(&NetworkContext::OnCertNetworkAccessGenerationSynced,
++                     weak_factory_.GetWeakPtr(), network_access_generation,
++                     std::move(callback)));
++}
++
++void NetworkContext::OnCertNetworkAccessGenerationSynced(
++    uint64_t network_access_generation,
++    SetNetworkPersonaRequestsBlockedCallback callback,
++    bool accepted) {
++  if (!accepted ||
++      network_access_generation != cert_network_access_generation_) {
++    std::move(callback).Run(false);
++    return;
++  }
+   std::move(callback).Run(true);
+ }
+ 
++void NetworkContext::OnCertNetworkAccessPreparedForRelease(
++    uint64_t network_access_generation,
++    bool was_blocked,
++    SetNetworkPersonaRequestsBlockedCallback callback,
++    bool accepted) {
++  if (!accepted ||
++      network_access_generation != cert_network_access_generation_) {
++    std::move(callback).Run(false);
++    return;
++  }
++
++  cert_network_access_release_generation_ = network_access_generation;
++  mojo_cert_verifier_->SetNetworkAccessState(
++      network_access_generation, /*network_access_blocked=*/false,
++      base::BindOnce(&NetworkContext::OnCertNetworkAccessReleased,
++                     weak_factory_.GetWeakPtr(), network_access_generation,
++                     was_blocked, std::move(callback)));
++}
++
++void NetworkContext::OnCertNetworkAccessReleased(
++    uint64_t network_access_generation,
++    bool was_blocked,
++    SetNetworkPersonaRequestsBlockedCallback callback,
++    bool accepted) {
++  if (cert_network_access_release_generation_ == network_access_generation) {
++    cert_network_access_release_generation_.reset();
++  }
++  if (accepted &&
++      network_access_generation == cert_network_access_generation_) {
++    ReleaseNetworkPersonaRequestGateLocally(was_blocked);
++    std::move(callback).Run(true);
++    return;
++  }
++  std::move(callback).Run(false);
++}
++
++void NetworkContext::ReleaseNetworkPersonaRequestGateLocally(
++    bool was_blocked) {
++  network_persona_requests_blocked_ = false;
++  socket_factory_->SetNetworkPersonaRequestsBlocked(false);
++  if (internal_host_resolver_) {
++    internal_host_resolver_->SetNetworkRequestsBlocked(false);
++  }
++  for (const auto& resolver : host_resolvers_) {
++    resolver->SetNetworkRequestsBlocked(false);
++  }
++  if (was_blocked && doh_probes_activation_requested_) {
++    ActivateDohProbes();
++  }
++  if (was_blocked && prefetch_enabled_) {
++    InitializePrefetchURLLoaderFactory();
++  }
++}
++
+ void NetworkContext::UpdateNetworkPersona(
+     mojom::NetworkPersonaConfigPtr config,
+     UpdateNetworkPersonaCallback callback) {
+@@ -2401,6 +2509,11 @@
+     const std::string& sct_list,
+     CTVerificationMode ct_verification_mode,
+     VerifyCertCallback callback) {
++  if (network_persona_requests_blocked_) {
++    std::move(callback).Run(net::ERR_NETWORK_ACCESS_REVOKED,
++                            net::CertVerifyResult(), false);
++    return;
++  }
+   uint64_t cert_verify_id = ++next_cert_verify_id_;
+   CHECK_NE(0u, next_cert_verify_id_);  // The request ID should not wrap around.
+   auto pending_cert_verify = std::make_unique<PendingCertVerify>();
+@@ -2460,6 +2573,10 @@
+     const std::string& hostname,
+     const scoped_refptr<net::X509Certificate>& tls_certificate,
+     Verify2QwacCertBindingCallback callback) {
++  if (network_persona_requests_blocked_) {
++    std::move(callback).Run(nullptr);
++    return;
++  }
+   net::CertVerifier* cert_verifier =
+       g_cert_verifier_for_testing ? g_cert_verifier_for_testing
+                                   : url_request_context_->cert_verifier();
+@@ -2989,14 +3106,19 @@
+     // TODO(crbug.com/40693524): this cert verifier should deal with
+     // disconnections if the CertVerifierService is run outside of the browser
+     // process.
+-    cert_verifier = std::make_unique<cert_verifier::MojoCertVerifier>(
+-        std::move(params_->cert_verifier_params->cert_verifier_service),
+-        std::move(params_->cert_verifier_params
+-                      ->cert_verifier_service_client_receiver),
+-        std::move(url_loader_factory_for_cert_net_fetcher),
+-        base::BindRepeating(
+-            &NetworkContext::CreateURLLoaderFactoryForCertNetFetcher,
+-            base::Unretained(this)));
++    auto mojo_cert_verifier =
++        std::make_unique<cert_verifier::MojoCertVerifier>(
++            std::move(params_->cert_verifier_params->cert_verifier_service),
++            std::move(params_->cert_verifier_params
++                          ->cert_verifier_service_client_receiver),
++            cert_network_access_generation_,
++            network_persona_requests_blocked_,
++            std::move(url_loader_factory_for_cert_net_fetcher),
++            base::BindRepeating(
++                &NetworkContext::CreateURLLoaderFactoryForCertNetFetcher,
++                base::Unretained(this)));
++    mojo_cert_verifier_ = mojo_cert_verifier.get();
++    cert_verifier = std::move(mojo_cert_verifier);
+ 
+     // Whether the cert verifier is remote or in-process, we should wrap it in
+     // caching and coalescing layers to avoid extra verifications and IPCs.
+--- a/services/network/network_context.h
++++ b/services/network/network_context.h
+@@ -110,6 +110,10 @@
+ class ChromeRequireCTDelegate;
+ }  // namespace certificate_transparency
+ 
++namespace cert_verifier {
++class MojoCertVerifier;
++}  // namespace cert_verifier
++
+ namespace domain_reliability {
+ class DomainReliabilityMonitor;
+ }  // namespace domain_reliability
+@@ -247,7 +251,9 @@
+   // These URLLoaderFactories should only ever be used by the
+   // CertVerifierService, and should never be passed to a renderer.
+   void CreateURLLoaderFactoryForCertNetFetcher(
+-      mojo::PendingReceiver<mojom::URLLoaderFactory> factory_receiver);
++      uint64_t network_access_generation,
++      mojo::PendingReceiver<mojom::URLLoaderFactory> factory_receiver,
++      base::OnceCallback<void(bool)> callback);
+ 
+   // Enables DoH probes to be sent using this context whenever the DNS
+   // configuration contains DoH servers.
+@@ -680,12 +686,12 @@
+   size_t num_url_loader_factories_for_testing() const {
+     return url_loader_factories_.size();
+   }
+-  size_t num_pending_cert_net_fetcher_receivers_for_testing() const {
+-    return pending_cert_net_fetcher_receivers_.size();
+-  }
+   bool network_persona_requests_blocked() const {
+     return network_persona_requests_blocked_;
+   }
++  uint64_t cert_network_access_generation_for_testing() const {
++    return cert_network_access_generation_;
++  }
+ 
+   net::CanaryDomainService* canary_domain_service_for_testing() {
+     return canary_domain_service_.get();
+@@ -803,6 +809,22 @@
+   // To be called back from CookieManager on settings change.
+   void OnCookieManagerSettingsChanged();
+ 
++  void OnCertNetworkAccessGenerationSynced(
++      uint64_t network_access_generation,
++      SetNetworkPersonaRequestsBlockedCallback callback,
++      bool accepted);
++  void OnCertNetworkAccessPreparedForRelease(
++      uint64_t network_access_generation,
++      bool was_blocked,
++      SetNetworkPersonaRequestsBlockedCallback callback,
++      bool accepted);
++  void OnCertNetworkAccessReleased(
++      uint64_t network_access_generation,
++      bool was_blocked,
++      SetNetworkPersonaRequestsBlockedCallback callback,
++      bool accepted);
++  void ReleaseNetworkPersonaRequestGateLocally(bool was_blocked);
++
+   URLRequestContextOwner MakeURLRequestContext(
+       mojo::PendingRemote<mojom::URLLoaderFactory>
+           url_loader_factory_for_cert_net_fetcher,
+@@ -1034,6 +1056,11 @@
+   std::unique_ptr<net::CanaryDomainService> canary_domain_service_;
+ 
+   // Used for certificate verification.
++  // Owned indirectly by `url_request_context_owner_` through the verifier
++  // wrappers installed in the URLRequestContext.
++  raw_ptr<cert_verifier::MojoCertVerifier> mojo_cert_verifier_ = nullptr;
++  uint64_t cert_network_access_generation_ = 0;
++  std::optional<uint64_t> cert_network_access_release_generation_;
+   uint64_t next_cert_verify_id_ = 0;
+   struct PendingCertVerify {
+     PendingCertVerify();
+@@ -1050,12 +1077,6 @@
+   std::map<uint64_t, std::unique_ptr<PendingCertVerify>>
+       cert_verifier_requests_;
+ 
+-  // CertVerifier can ask for a replacement factory while the Persona network
+-  // gate is closed. Keep the receiver pending and bind it after the gate is
+-  // released instead of opening a request path during the transition.
+-  std::vector<mojo::PendingReceiver<mojom::URLLoaderFactory>>
+-      pending_cert_net_fetcher_receivers_;
+-
+   // Manages allowed origin access lists.
+   cors::OriginAccessList cors_origin_access_list_;
+ 
+--- a/services/network/network_context_unittest.cc
++++ b/services/network/network_context_unittest.cc
+@@ -912,23 +912,53 @@
+ }
+ 
+ TEST_F(NetworkContextTest,
+-       InitialNetworkPersonaRequestGateRestoresCertNetFetcherFactory) {
++       NetworkPersonaRequestGateRejectsStaleCertNetFetcherFactory) {
+   mojom::NetworkContextParamsPtr params =
+       CreateNetworkContextParamsForTesting();
+   params->block_network_persona_requests = true;
+   std::unique_ptr<NetworkContext> network_context =
+       CreateContextWithParams(std::move(params));
+ 
+-  EXPECT_GE(
+-      network_context->num_pending_cert_net_fetcher_receivers_for_testing(),
+-      1u);
++  mojo::Remote<mojom::URLLoaderFactory> stale_factory;
++  auto stale_factory_receiver = stale_factory.BindNewPipeAndPassReceiver();
++  base::RunLoop stale_factory_disconnected;
++  stale_factory.set_disconnect_handler(
++      stale_factory_disconnected.QuitClosure());
++  base::test::TestFuture<bool> stale_while_blocked;
++  network_context->CreateURLLoaderFactoryForCertNetFetcher(
++      network_context->cert_network_access_generation_for_testing(),
++      std::move(stale_factory_receiver),
++      stale_while_blocked.GetCallback());
++  EXPECT_FALSE(stale_while_blocked.Get());
++  stale_factory_disconnected.Run();
++  EXPECT_EQ(network_context->num_url_loader_factories_for_testing(), 0u);
++
++  const uint64_t blocked_generation =
++      network_context->cert_network_access_generation_for_testing();
++
+   base::test::TestFuture<bool> released;
+   network_context->SetNetworkPersonaRequestsBlocked(false,
+                                                     released.GetCallback());
+   EXPECT_TRUE(released.Get());
+-  EXPECT_EQ(
+-      network_context->num_pending_cert_net_fetcher_receivers_for_testing(),
+-      0u);
++  EXPECT_FALSE(stale_factory.is_connected());
++
++  mojo::Remote<mojom::URLLoaderFactory> delayed_stale_factory;
++  base::test::TestFuture<bool> delayed_stale_accepted;
++  network_context->CreateURLLoaderFactoryForCertNetFetcher(
++      blocked_generation,
++      delayed_stale_factory.BindNewPipeAndPassReceiver(),
++      delayed_stale_accepted.GetCallback());
++  EXPECT_FALSE(delayed_stale_accepted.Get());
++
++  mojo::Remote<mojom::URLLoaderFactory> fresh_factory;
++  base::test::TestFuture<bool> fresh_accepted;
++  network_context->CreateURLLoaderFactoryForCertNetFetcher(
++      network_context->cert_network_access_generation_for_testing(),
++      fresh_factory.BindNewPipeAndPassReceiver(),
++      fresh_accepted.GetCallback());
++  EXPECT_TRUE(fresh_accepted.Get());
++  fresh_factory.FlushForTesting();
++  EXPECT_TRUE(fresh_factory.is_connected());
+   EXPECT_GE(network_context->num_url_loader_factories_for_testing(), 1u);
+ }
+ 
+@@ -974,12 +1004,13 @@
+   auto blocked_factory_params = mojom::URLLoaderFactoryParams::New();
+   blocked_factory_params->process_id = OriginatingProcessId::browser();
+   blocked_factory_params->is_orb_enabled = false;
++  auto blocked_factory_receiver =
++      blocked_factory.BindNewPipeAndPassReceiver();
+   base::RunLoop blocked_factory_disconnected;
+   blocked_factory.set_disconnect_handler(
+       blocked_factory_disconnected.QuitClosure());
+   network_context->CreateURLLoaderFactory(
+-      blocked_factory.BindNewPipeAndPassReceiver(),
+-      std::move(blocked_factory_params));
++      std::move(blocked_factory_receiver), std::move(blocked_factory_params));
+   blocked_factory_disconnected.Run();
+ 
+   base::test::TestFuture<bool> released;
+--- a/services/network/public/cpp/cert_verifier/mojo_cert_verifier.cc
++++ b/services/network/public/cpp/cert_verifier/mojo_cert_verifier.cc
+@@ -8,6 +8,7 @@
+ 
+ #include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
++#include "mojo/public/cpp/bindings/callback_helpers.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
+ #include "net/base/net_errors.h"
+@@ -77,31 +78,32 @@
+  public:
+   MojoReconnector(
+       mojo::PendingReceiver<mojom::URLLoaderFactoryConnector> receiver,
+-      base::RepeatingCallback<void(
+-          mojo::PendingReceiver<network::mojom::URLLoaderFactory>)> reconnector)
++      ReconnectURLLoaderFactory reconnector)
+       : receiver_(this, std::move(receiver)),
+         reconnector_(std::move(reconnector)) {}
+ 
+   // mojom::URLLoaderFactoryConnector implementation:
+   void CreateURLLoaderFactory(
++      uint64_t network_access_generation,
+       mojo::PendingReceiver<network::mojom::URLLoaderFactory>
+-          url_loader_factory) override {
+-    reconnector_.Run(std::move(url_loader_factory));
++          url_loader_factory,
++      CreateURLLoaderFactoryCallback callback) override {
++    reconnector_.Run(network_access_generation, std::move(url_loader_factory),
++                     std::move(callback));
+   }
+ 
+  private:
+   mojo::Receiver<mojom::URLLoaderFactoryConnector> receiver_;
+-  base::RepeatingCallback<void(
+-      mojo::PendingReceiver<network::mojom::URLLoaderFactory>)>
+-      reconnector_;
++  ReconnectURLLoaderFactory reconnector_;
+ };
+ 
+ MojoCertVerifier::MojoCertVerifier(
+     mojo::PendingRemote<mojom::CertVerifierService> mojo_cert_verifier,
+     mojo::PendingReceiver<mojom::CertVerifierServiceClient> client_receiver,
++    uint64_t network_access_generation,
++    bool network_access_blocked,
+     mojo::PendingRemote<network::mojom::URLLoaderFactory> url_loader_factory,
+-    base::RepeatingCallback<void(
+-        mojo::PendingReceiver<network::mojom::URLLoaderFactory>)> reconnector)
++    ReconnectURLLoaderFactory reconnector)
+     : mojo_cert_verifier_(std::move(mojo_cert_verifier)),
+       client_receiver_(this, std::move(client_receiver)) {
+   mojo::PendingRemote<mojom::URLLoaderFactoryConnector> reconnector_remote;
+@@ -109,7 +111,9 @@
+   reconnector_ = std::make_unique<MojoReconnector>(
+       reconnector_remote.InitWithNewPipeAndPassReceiver(),
+       std::move(reconnector));
+-  mojo_cert_verifier_->EnableNetworkAccess(std::move(url_loader_factory),
++  mojo_cert_verifier_->EnableNetworkAccess(network_access_generation,
++                                           network_access_blocked,
++                                           std::move(url_loader_factory),
+                                            std::move(reconnector_remote));
+ }
+ 
+@@ -167,4 +171,13 @@
+ void MojoCertVerifier::FlushForTesting() {
+   mojo_cert_verifier_.FlushForTesting();
+ }
++
++void MojoCertVerifier::SetNetworkAccessState(
++    uint64_t network_access_generation,
++    bool network_access_blocked,
++    base::OnceCallback<void(bool)> callback) {
++  mojo_cert_verifier_->SetNetworkAccessState(
++      network_access_generation, network_access_blocked,
++      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(callback), false));
++}
+ }  // namespace cert_verifier
+--- a/services/network/public/cpp/cert_verifier/mojo_cert_verifier.h
++++ b/services/network/public/cpp/cert_verifier/mojo_cert_verifier.h
+@@ -5,6 +5,8 @@
+ #ifndef SERVICES_NETWORK_PUBLIC_CPP_CERT_VERIFIER_MOJO_CERT_VERIFIER_H_
+ #define SERVICES_NETWORK_PUBLIC_CPP_CERT_VERIFIER_MOJO_CERT_VERIFIER_H_
+ 
++#include <stdint.h>
++
+ #include "base/functional/callback_forward.h"
+ #include "base/observer_list.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+@@ -26,7 +28,9 @@
+                          public mojom::CertVerifierServiceClient {
+  public:
+   using ReconnectURLLoaderFactory = base::RepeatingCallback<void(
+-      mojo::PendingReceiver<network::mojom::URLLoaderFactory>)>;
++      uint64_t,
++      mojo::PendingReceiver<network::mojom::URLLoaderFactory>,
++      base::OnceCallback<void(bool)>)>;
+ 
+   // The remote CertNetFetcher will use |url_loader_factory| for fetches. If
+   // |url_loader_factory| disconnects it will use |reconnector| to try to
+@@ -34,6 +38,8 @@
+   MojoCertVerifier(
+       mojo::PendingRemote<mojom::CertVerifierService> mojo_cert_verifier,
+       mojo::PendingReceiver<mojom::CertVerifierServiceClient> client_receiver,
++      uint64_t network_access_generation,
++      bool network_access_blocked,
+       mojo::PendingRemote<network::mojom::URLLoaderFactory> url_loader_factory,
+       ReconnectURLLoaderFactory reconnector);
+   ~MojoCertVerifier() override;
+@@ -61,6 +67,13 @@
+   // Flushes the underlying Mojo pipe.
+   void FlushForTesting();
+ 
++  // Publishes a new access epoch and gate state to the remote verifier. A
++  // dropped Mojo response is reported as false so the caller can remain
++  // fail-closed.
++  void SetNetworkAccessState(uint64_t network_access_generation,
++                             bool network_access_blocked,
++                             base::OnceCallback<void(bool)> callback);
++
+  private:
+   class MojoReconnector;
+ 
+--- a/services/network/public/cpp/cert_verifier/mojo_cert_verifier_unittest.cc
++++ b/services/network/public/cpp/cert_verifier/mojo_cert_verifier_unittest.cc
+@@ -13,6 +13,7 @@
+ #include "base/run_loop.h"
+ #include "base/test/bind.h"
+ #include "base/test/task_environment.h"
++#include "base/test/test_future.h"
+ #include "base/time/time.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
+@@ -32,6 +33,7 @@
+ namespace {
+ const int kExpectedNetError = net::ERR_CERT_INVALID;
+ const unsigned int kExpectedCertStatus = net::CERT_STATUS_INVALID;
++const uint64_t kInitialNetworkAccessGeneration = 7;
+ 
+ scoped_refptr<net::X509Certificate> GetTestCert() {
+   return net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
+@@ -68,6 +70,8 @@
+         mojo_cert_verifier_(
+             cv_service_receiver_.BindNewPipeAndPassRemote(),
+             cv_service_client_.BindNewPipeAndPassReceiver(),
++            kInitialNetworkAccessGeneration,
++            /*network_access_blocked=*/false,
+             CreateUnconnectedURLLoaderFactory(),
+             base::BindRepeating(&MojoCertVerifierTest::ReconnectCb,
+                                 base::Unretained(this))) {
+@@ -103,22 +107,52 @@
+     }
+ 
+     void EnableNetworkAccess(
++        uint64_t network_access_generation,
++        bool network_access_blocked,
+         mojo::PendingRemote<network::mojom::URLLoaderFactory>
+             url_loader_factory,
+         mojo::PendingRemote<mojom::URLLoaderFactoryConnector> reconnector)
+         override {
++      network_access_generation_ = network_access_generation;
++      network_access_blocked_ = network_access_blocked;
+       reconnector_.Bind(std::move(reconnector));
+     }
+ 
++    void SetNetworkAccessState(
++        uint64_t network_access_generation,
++        bool network_access_blocked,
++        SetNetworkAccessStateCallback callback) override {
++      network_access_generation_ = network_access_generation;
++      network_access_blocked_ = network_access_blocked;
++      if (defer_network_access_state_response_) {
++        defer_network_access_state_response_ = false;
++        pending_network_access_state_callback_ = std::move(callback);
++        return;
++      }
++      std::move(callback).Run(true);
++    }
++
++    void DeferNextNetworkAccessStateResponse() {
++      defer_network_access_state_response_ = true;
++    }
++
+     const net::CertVerifier::Config* config() const { return &config_; }
+     mojom::URLLoaderFactoryConnector* reconnector() {
+       return reconnector_.get();
+     }
++    uint64_t network_access_generation() const {
++      return network_access_generation_;
++    }
++    bool network_access_blocked() const { return network_access_blocked_; }
+ 
+    private:
+     raw_ptr<MojoCertVerifierTest> test_;
+ 
+     net::CertVerifier::Config config_;
++    uint64_t network_access_generation_ = 0;
++    bool network_access_blocked_ = false;
++    bool defer_network_access_state_response_ = false;
++    SetNetworkAccessStateCallback pending_network_access_state_callback_;
+     mojo::Remote<mojom::URLLoaderFactoryConnector> reconnector_;
+   };
+ 
+@@ -157,10 +191,17 @@
+ 
+   void SimulateCVServiceDisconnect() { cv_service_receiver_.reset(); }
+ 
+-  void ReconnectCb(mojo::PendingReceiver<network::mojom::URLLoaderFactory>
+-                       mojo_cert_verifier) {
+-    if (reconnect_cb_)
+-      reconnect_cb_.Run(std::move(mojo_cert_verifier));
++  void ReconnectCb(
++      uint64_t network_access_generation,
++      mojo::PendingReceiver<network::mojom::URLLoaderFactory>
++          mojo_cert_verifier,
++      base::OnceCallback<void(bool)> callback) {
++    if (reconnect_cb_) {
++      reconnect_cb_.Run(network_access_generation,
++                        std::move(mojo_cert_verifier), std::move(callback));
++      return;
++    }
++    std::move(callback).Run(false);
+   }
+ 
+   void SetReconnectCb(MojoCertVerifier::ReconnectURLLoaderFactory cb) {
+@@ -393,8 +434,13 @@
+ 
+ TEST_F(MojoCertVerifierTest, ReconnectorCallsCb) {
+   base::RunLoop run_loop;
++  base::test::TestFuture<bool> accepted;
+   SetReconnectCb(base::BindLambdaForTesting(
+-      [&](mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver) {
++      [&](uint64_t network_access_generation,
++          mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
++          base::OnceCallback<void(bool)> callback) {
++        EXPECT_EQ(network_access_generation, 19u);
++        std::move(callback).Run(true);
+         run_loop.Quit();
+       }));
+ 
+@@ -404,9 +450,47 @@
+   // disconnection. This should call the callback given to the MojoCertVerifier
+   // on construction.
+   dummy_cv_service()->reconnector()->CreateURLLoaderFactory(
+-      dummy_url_loader_factory_remote.InitWithNewPipeAndPassReceiver());
++      19, dummy_url_loader_factory_remote.InitWithNewPipeAndPassReceiver(),
++      accepted.GetCallback());
+ 
+   run_loop.Run();
++  EXPECT_TRUE(accepted.Get());
++}
++
++TEST_F(MojoCertVerifierTest, PublishesNetworkAccessState) {
++  EXPECT_EQ(dummy_cv_service()->network_access_generation(),
++            kInitialNetworkAccessGeneration);
++  EXPECT_FALSE(dummy_cv_service()->network_access_blocked());
++
++  base::test::TestFuture<bool> accepted;
++  mojo_cert_verifier()->SetNetworkAccessState(
++      23, /*network_access_blocked=*/true, accepted.GetCallback());
++  EXPECT_TRUE(accepted.Get());
++  EXPECT_EQ(dummy_cv_service()->network_access_generation(), 23u);
++  EXPECT_TRUE(dummy_cv_service()->network_access_blocked());
++}
++
++TEST_F(MojoCertVerifierTest, GenerationPublishFailsWhenServiceDisconnects) {
++  SimulateCVServiceDisconnect();
++  task_environment()->RunUntilIdle();
++
++  base::test::TestFuture<bool> accepted;
++  mojo_cert_verifier()->SetNetworkAccessState(
++      29, /*network_access_blocked=*/true, accepted.GetCallback());
++  EXPECT_FALSE(accepted.Get());
++}
++
++TEST_F(MojoCertVerifierTest,
++       InFlightNetworkAccessStatePublishFailsOnDisconnect) {
++  dummy_cv_service()->DeferNextNetworkAccessStateResponse();
++  base::test::TestFuture<bool> accepted;
++  mojo_cert_verifier()->SetNetworkAccessState(
++      31, /*network_access_blocked=*/true, accepted.GetCallback());
++  task_environment()->RunUntilIdle();
++  EXPECT_FALSE(accepted.IsReady());
++
++  SimulateCVServiceDisconnect();
++  EXPECT_FALSE(accepted.Get());
+ }
+ 
+ // Tests that a OnCertVerifierChanged message received from the
+--- a/services/network/public/mojom/cert_verifier_service.mojom
++++ b/services/network/public/mojom/cert_verifier_service.mojom
+@@ -32,9 +32,13 @@
+ // existing URLLoaderFactory is disconnected. The CertVerifierService uses the
+ // URLLoaderFactory for AIA and OCSP fetching.
+ interface URLLoaderFactoryConnector {
+-  // Binds a URLLoaderFactory.
++  // Binds a URLLoaderFactory for the current network access generation.
++  // Delayed requests from an earlier generation are rejected so certificate
++  // fetches cannot cross a network identity transition.
+   CreateURLLoaderFactory(
+-      pending_receiver<network.mojom.URLLoaderFactory> url_loader_factory);
++      uint64 network_access_generation,
++      pending_receiver<network.mojom.URLLoaderFactory> url_loader_factory)
++      => (bool accepted);
+ };
+ 
+ // An interface that verifies a certificate based on the |params|, and calls the
+@@ -47,9 +51,20 @@
+   // its URLLoaderFactories without crashing. Must be called before Verify() to
+   // have an effect.
+   EnableNetworkAccess(
++      uint64 network_access_generation,
++      bool network_access_blocked,
+       pending_remote<network.mojom.URLLoaderFactory> url_loader_factory,
+       pending_remote<URLLoaderFactoryConnector>? reconnector);
+ 
++  // Publishes a new network access epoch and cancels certificate fetches from
++  // the previous one. The response is sent only after the service has observed
++  // the state, so callers can use it as a native network identity gate. A new
++  // generation must first be published as blocked before that same generation
++  // can be released.
++  SetNetworkAccessState(uint64 network_access_generation,
++                        bool network_access_blocked)
++      => (bool accepted);
++
+   // Mojo IPC used to verify a certificate. Sends results to the
+   // |cert_verifier_request| interface when verification is complete.
+   Verify(RequestParams params,
+--- a/services/network/test/fake_test_cert_verifier_params_factory.cc
++++ b/services/network/test/fake_test_cert_verifier_params_factory.cc
+@@ -7,6 +7,7 @@
+ #include <memory>
+ 
+ #include "base/feature_list.h"
++#include "mojo/public/cpp/bindings/callback_helpers.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+@@ -59,4 +60,37 @@
+   std::move(callback).Run(nullptr);
+ }
+ 
++void FakeTestCertVerifierParamsFactory::EnableNetworkAccess(
++    uint64_t network_access_generation,
++    bool network_access_blocked,
++    mojo::PendingRemote<mojom::URLLoaderFactory> url_loader_factory,
++    mojo::PendingRemote<cert_verifier::mojom::URLLoaderFactoryConnector>
++        reconnector) {
++  url_loader_factory_.Bind(std::move(url_loader_factory));
++  if (reconnector.is_valid()) {
++    reconnector_.Bind(std::move(reconnector));
++  }
++}
++
++void FakeTestCertVerifierParamsFactory::SetNetworkAccessState(
++    uint64_t network_access_generation,
++    bool network_access_blocked,
++    SetNetworkAccessStateCallback callback) {
++  if (network_access_blocked) {
++    url_loader_factory_.reset();
++    std::move(callback).Run(true);
++    return;
++  }
++  if (!reconnector_) {
++    std::move(callback).Run(false);
++    return;
++  }
++
++  url_loader_factory_.reset();
++  reconnector_->CreateURLLoaderFactory(
++      network_access_generation,
++      url_loader_factory_.BindNewPipeAndPassReceiver(),
++      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(callback), false));
++}
++
+ }  // namespace network
+--- a/services/network/test/fake_test_cert_verifier_params_factory.h
++++ b/services/network/test/fake_test_cert_verifier_params_factory.h
+@@ -5,9 +5,11 @@
+ #ifndef SERVICES_NETWORK_TEST_FAKE_TEST_CERT_VERIFIER_PARAMS_FACTORY_H_
+ #define SERVICES_NETWORK_TEST_FAKE_TEST_CERT_VERIFIER_PARAMS_FACTORY_H_
+ 
++#include "mojo/public/cpp/bindings/remote.h"
+ #include "net/cert/cert_verifier.h"
+ #include "services/network/public/mojom/cert_verifier_service.mojom.h"
+ #include "services/network/public/mojom/network_context.mojom-forward.h"
++#include "services/network/public/mojom/url_loader_factory.mojom.h"
+ 
+ namespace network {
+ 
+@@ -41,9 +43,18 @@
+           callback) override;
+   void SetConfig(const net::CertVerifier::Config& config) override {}
+   void EnableNetworkAccess(
++      uint64_t network_access_generation,
++      bool network_access_blocked,
+       mojo::PendingRemote<mojom::URLLoaderFactory>,
+       mojo::PendingRemote<cert_verifier::mojom::URLLoaderFactoryConnector>
+-          reconnector) override {}
++          reconnector) override;
++  void SetNetworkAccessState(
++      uint64_t network_access_generation,
++      bool network_access_blocked,
++      SetNetworkAccessStateCallback callback) override;
++
++  mojo::Remote<cert_verifier::mojom::URLLoaderFactoryConnector> reconnector_;
++  mojo::Remote<mojom::URLLoaderFactory> url_loader_factory_;
+ };
+ 
+ }  // namespace network

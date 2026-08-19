@@ -1,0 +1,1348 @@
+--- a/chrome/browser/helium_persona/persona_audio_readback_browsertest.cc
++++ b/chrome/browser/helium_persona/persona_audio_readback_browsertest.cc
+@@ -3,11 +3,16 @@
+ // the terms of the GPL-3.0 license that can be found in the LICENSE file.
+ 
+ #include <algorithm>
++#include <array>
+ #include <cmath>
++#include <memory>
+ #include <string>
++#include <utility>
+ #include <vector>
+ 
+ #include "base/check.h"
++#include "base/functional/bind.h"
++#include "base/test/run_until.h"
+ #include "base/test/test_future.h"
+ #include "base/values.h"
+ #include "chrome/browser/helium_persona/persona_service.h"
+@@ -18,11 +23,17 @@
+ #include "chrome/browser/ui/views/persona/persona_indicator_menu_model.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
++#include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+ #include "content/public/test/test_navigation_observer.h"
++#include "net/http/http_status_code.h"
++#include "net/test/embedded_test_server/basic_http_response.h"
++#include "net/test/embedded_test_server/http_request.h"
++#include "net/test/embedded_test_server/http_response.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom.h"
+ #include "url/gurl.h"
+ #include "url/origin.h"
+ 
+@@ -32,6 +43,48 @@
+ 
+ constexpr int kCommandRefreshSiteFingerprints = 56001;
+ 
++std::unique_ptr<net::test_server::HttpResponse> HandleWorkerAuditRequest(
++    const net::test_server::HttpRequest& request) {
++  std::string script;
++  if (request.relative_url == "/persona-audit-dedicated-worker.js") {
++    script = "self.onmessage = () => self.postMessage('ready');";
++  } else if (request.relative_url ==
++             "/persona-audit-shared-worker.js") {
++    script = R"JS(
++      self.onconnect = event => {
++        const port = event.ports[0];
++        port.onmessage = () => port.postMessage('ready');
++        port.start();
++      };
++    )JS";
++  } else if (request.relative_url ==
++             "/persona-audit-service-worker.js") {
++    script = R"JS(
++      self.addEventListener('install', event => {
++        event.waitUntil(self.skipWaiting());
++      });
++      self.addEventListener('activate', event => {
++        event.waitUntil(self.clients.claim());
++      });
++      self.addEventListener('message', event => {
++        if (event.ports[0]) {
++          event.ports[0].postMessage('ready');
++        }
++        event.waitUntil(new Promise(resolve => setTimeout(resolve, 30000)));
++      });
++    )JS";
++  } else {
++    return nullptr;
++  }
++
++  auto response =
++      std::make_unique<net::test_server::BasicHttpResponse>();
++  response->set_code(net::HTTP_OK);
++  response->set_content_type("application/javascript");
++  response->set_content(std::move(script));
++  return response;
++}
++
+ struct AudioCapture {
+   bool consistent = false;
+   std::string buffer_hash;
+@@ -235,7 +288,8 @@
+   ASSERT_TRUE(audit.FindDict("surfaces"));
+   EXPECT_EQ("runtime_snapshot_verified",
+             *audit.FindDict("surfaces")->FindString("renderer"));
+-  EXPECT_EQ("unknown", *audit.FindDict("surfaces")->FindString("workers"));
++  EXPECT_EQ("not_applicable",
++            *audit.FindDict("surfaces")->FindString("workers"));
+   EXPECT_EQ("partial", *audit.FindDict("surfaces")->FindString("probe"));
+ 
+   const base::DictValue* evidence = audit.FindDict("runtimeEvidence");
+@@ -247,11 +301,119 @@
+   EXPECT_EQ(total, frames->FindInt("matched").value_or(0));
+   EXPECT_EQ(0, frames->FindInt("mismatched").value_or(-1));
+   EXPECT_EQ(0, frames->FindInt("unreachable").value_or(-1));
++  const base::DictValue* workers = evidence->FindDict("workers");
++  ASSERT_TRUE(workers);
++  EXPECT_EQ("not_applicable", *workers->FindString("status"));
++  EXPECT_EQ(0, workers->FindInt("total").value_or(-1));
+   EXPECT_EQ("matched", *evidence->FindDict("noiseTokens")
+                             ->FindDict("clientRect")
+                             ->FindString("status"));
+ }
+ 
++class PersonaWorkerAuditBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpOnMainThread() override {
++    embedded_test_server()->RegisterRequestHandler(
++        base::BindRepeating(&HandleWorkerAuditRequest));
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(PersonaWorkerAuditBrowserTest,
++                       AuditVerifiesAllWorkerTypes) {
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response = service->CreatePersonaProfile("Worker audit");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
++
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/title1.html")));
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_EQ(true, content::EvalJs(web_contents, R"JS(
++    (async () => {
++      window.personaDedicatedWorker =
++          new Worker('/persona-audit-dedicated-worker.js');
++      await new Promise((resolve, reject) => {
++        personaDedicatedWorker.onmessage = () => resolve();
++        personaDedicatedWorker.onerror = reject;
++        personaDedicatedWorker.postMessage('start');
++      });
++
++      window.personaSharedWorker =
++          new SharedWorker('/persona-audit-shared-worker.js');
++      await new Promise((resolve, reject) => {
++        personaSharedWorker.port.onmessage = () => resolve();
++        personaSharedWorker.onerror = reject;
++        personaSharedWorker.port.start();
++        personaSharedWorker.port.postMessage('start');
++      });
++
++      await navigator.serviceWorker.register(
++          '/persona-audit-service-worker.js');
++      const registration = await navigator.serviceWorker.ready;
++      const channel = new MessageChannel();
++      await new Promise((resolve, reject) => {
++        channel.port1.onmessage = () => resolve();
++        channel.port1.onmessageerror = reject;
++        registration.active.postMessage('hold', [channel.port2]);
++      });
++      return true;
++    })()
++  )JS"));
++
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    const auto probes = browser()
++                            ->profile()
++                            ->GetDefaultStoragePartition()
++                            ->GetHeliumPersonaWorkerSurfaceProbes();
++    std::array<bool, 3> reported_types = {};
++    for (const auto& worker_probe : probes) {
++      if (!worker_probe || !worker_probe->probe) {
++        continue;
++      }
++      switch (worker_probe->type) {
++        case blink::mojom::HeliumPersonaWorkerType::kDedicated:
++          reported_types[0] = true;
++          break;
++        case blink::mojom::HeliumPersonaWorkerType::kShared:
++          reported_types[1] = true;
++          break;
++        case blink::mojom::HeliumPersonaWorkerType::kService:
++          reported_types[2] = true;
++          break;
++      }
++    }
++    return reported_types[0] && reported_types[1] && reported_types[2];
++  }));
++
++  base::test::TestFuture<base::DictValue> audit_future;
++  service->GetPersonaAudit(audit_future.GetCallback());
++  const base::DictValue audit = audit_future.Take();
++  EXPECT_TRUE(audit.FindBool("ok").value_or(false));
++  EXPECT_EQ("runtime_snapshot_verified",
++            *audit.FindDict("surfaces")->FindString("workers"));
++
++  const base::DictValue* workers =
++      audit.FindDict("runtimeEvidence")->FindDict("workers");
++  ASSERT_TRUE(workers);
++  const int total = workers->FindInt("total").value_or(0);
++  EXPECT_GE(total, 3);
++  EXPECT_EQ(total, workers->FindInt("matched").value_or(0));
++  EXPECT_EQ(0, workers->FindInt("mismatched").value_or(-1));
++  EXPECT_EQ(0, workers->FindInt("unreported").value_or(-1));
++  const base::DictValue* by_type = workers->FindDict("byType");
++  ASSERT_TRUE(by_type);
++  EXPECT_GE(by_type->FindInt("dedicated").value_or(0), 1);
++  EXPECT_GE(by_type->FindInt("shared").value_or(0), 1);
++  EXPECT_GE(by_type->FindInt("service").value_or(0), 1);
++}
++
+ class PersonaSiteRefreshBrowserTest : public InProcessBrowserTest {
+  public:
+   void SetUpOnMainThread() override {
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -5,6 +5,7 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <iterator>
+ #include <limits>
+ #include <optional>
+ #include <string>
+@@ -43,8 +44,9 @@
+ #include "crypto/random.h"
+ #include "content/public/browser/global_routing_id.h"
+ #include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/web_contents.h"
+-#include "third_party/blink/public/mojom/frame/frame.mojom.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom.h"
+ #include "url/gurl.h"
+ #include "url/origin.h"
+ 
+@@ -1858,6 +1860,7 @@
+ 
+ constexpr std::array<const char*, 5> kNoiseTokenNames = {
+     "canvas", "audio", "hardware", "fontMetric", "clientRect"};
++constexpr size_t kWorkerNoiseTokenCount = 4u;
+ 
+ std::array<bool, 5> ExpectedNoiseTokens(
+     const blink::HeliumPersonaSnapshot& snapshot) {
+@@ -1876,16 +1879,27 @@
+ void SetEmptyRuntimeEvidence(base::DictValue* audit,
+                              std::string_view status) {
+   audit->EnsureDict("surfaces")->Set("renderer", status);
++  audit->EnsureDict("surfaces")->Set("workers", status);
+   audit->Set(
+       "runtimeEvidence",
+       base::DictValue()
+-          .Set("scope", "active_primary_frame_tree")
++          .Set("scope", "profile_active_execution_contexts")
+           .Set("frames", base::DictValue()
+                              .Set("status", status)
+                              .Set("total", 0)
+                              .Set("matched", 0)
+                              .Set("mismatched", 0)
+-                             .Set("unreachable", 0)));
++                             .Set("unreachable", 0))
++          .Set("workers", base::DictValue()
++                              .Set("status", status)
++                              .Set("total", 0)
++                              .Set("matched", 0)
++                              .Set("mismatched", 0)
++                              .Set("unreported", 0)
++                              .Set("byType", base::DictValue()
++                                                 .Set("dedicated", 0)
++                                                 .Set("shared", 0)
++                                                 .Set("service", 0))));
+ }
+ 
+ class PersonaSurfaceProbeOperation
+@@ -1894,17 +1908,21 @@
+   static void Run(
+       blink::HeliumPersonaSnapshot expected_snapshot,
+       std::vector<content::GlobalRenderFrameHostId> frame_ids,
++      std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++          worker_probes,
+       base::DictValue audit,
+       base::OnceCallback<void(base::DictValue)> callback) {
+     auto operation = base::MakeRefCounted<PersonaSurfaceProbeOperation>(
+-        std::move(expected_snapshot), frame_ids.size(), std::move(audit),
+-        std::move(callback));
++        std::move(expected_snapshot), frame_ids.size(),
++        std::move(worker_probes), std::move(audit), std::move(callback));
+     operation->Start(std::move(frame_ids));
+   }
+ 
+   PersonaSurfaceProbeOperation(
+       blink::HeliumPersonaSnapshot expected_snapshot,
+       size_t frame_count,
++      std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++          worker_probes,
+       base::DictValue audit,
+       base::OnceCallback<void(base::DictValue)> callback)
+       : expected_snapshot_(std::move(expected_snapshot)),
+@@ -1912,9 +1930,15 @@
+         total_(frame_count),
+         pending_(frame_count),
+         audit_(std::move(audit)),
+-        callback_(std::move(callback)) {}
++        callback_(std::move(callback)) {
++    EvaluateWorkerProbes(std::move(worker_probes));
++  }
+ 
+   void Start(std::vector<content::GlobalRenderFrameHostId> frame_ids) {
++    if (frame_ids.empty()) {
++      Finish();
++      return;
++    }
+     timeout_.Start(FROM_HERE, kPersonaSurfaceProbeTimeout,
+                    base::BindOnce(&PersonaSurfaceProbeOperation::OnTimeout,
+                                   base::WrapRefCounted(this)));
+@@ -1971,6 +1995,46 @@
+     Finish();
+   }
+ 
++  void EvaluateWorkerProbes(
++      std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++          worker_probes) {
++    worker_total_ = worker_probes.size();
++    for (const auto& worker_probe : worker_probes) {
++      CHECK(worker_probe);
++      switch (worker_probe->type) {
++        case blink::mojom::HeliumPersonaWorkerType::kDedicated:
++          ++worker_type_counts_[0];
++          break;
++        case blink::mojom::HeliumPersonaWorkerType::kShared:
++          ++worker_type_counts_[1];
++          break;
++        case blink::mojom::HeliumPersonaWorkerType::kService:
++          ++worker_type_counts_[2];
++          break;
++      }
++      if (!worker_probe->probe) {
++        ++worker_unreported_;
++        continue;
++      }
++
++      bool matches =
++          worker_probe->probe->snapshot == expected_snapshot_;
++      const std::array<bool, 5> applied_tokens =
++          AppliedNoiseTokens(*worker_probe->probe);
++      for (size_t i = 0; i < kWorkerNoiseTokenCount; ++i) {
++        if (expected_tokens_[i] != applied_tokens[i]) {
++          ++worker_token_mismatches_[i];
++          matches = false;
++        }
++      }
++      if (matches) {
++        ++worker_matched_;
++      } else {
++        ++worker_mismatched_;
++      }
++    }
++  }
++
+   void Finish() {
+     if (!callback_) {
+       return;
+@@ -1980,27 +2044,56 @@
+     timeout_.Stop();
+ 
+     const char* renderer_status =
+-        mismatched_ > 0u      ? "mismatched"
++        total_ == 0u          ? "not_applicable"
++        : mismatched_ > 0u    ? "mismatched"
+         : unreachable_ > 0u  ? (matched_ > 0u ? "partially_verified"
+                                                : "unreachable")
+                               : "runtime_snapshot_verified";
++    const char* worker_status =
++        worker_total_ == 0u                    ? "not_applicable"
++        : worker_mismatched_ > 0u              ? "mismatched"
++        : worker_unreported_ == worker_total_ ? "unreported"
++        : worker_unreported_ > 0u              ? "partially_verified"
++                                               : "runtime_snapshot_verified";
+     base::DictValue tokens;
+     for (size_t i = 0; i < kNoiseTokenNames.size(); ++i) {
+-      const char* token_status = token_mismatches_[i] > 0u
+-                                     ? "mismatched"
+-                                 : unreachable_ > 0u ? "partially_verified"
+-                                                     : "matched";
++      const char* token_status =
++          total_ == 0u              ? "not_applicable"
++          : token_mismatches_[i] > 0u ? "mismatched"
++          : unreachable_ > 0u        ? "partially_verified"
++                                     : "matched";
+       tokens.Set(kNoiseTokenNames[i],
+                  base::DictValue()
+                      .Set("expected", expected_tokens_[i])
+                      .Set("status", token_status)
+                      .Set("mismatched", token_mismatches_[i]));
+     }
++    base::DictValue worker_tokens;
++    for (size_t i = 0; i < kNoiseTokenNames.size(); ++i) {
++      const char* token_status =
++          i >= kWorkerNoiseTokenCount
++              ? "not_applicable"
++          : worker_total_ == 0u
++              ? "not_applicable"
++          : worker_unreported_ == worker_total_
++              ? "unreported"
++          : worker_token_mismatches_[i] > 0u
++              ? "mismatched"
++          : worker_unreported_ > 0u ? "partially_verified"
++                                    : "matched";
++      worker_tokens.Set(
++          kNoiseTokenNames[i],
++          base::DictValue()
++              .Set("expected", expected_tokens_[i])
++              .Set("status", token_status)
++              .Set("mismatched", worker_token_mismatches_[i]));
++    }
+     audit_.EnsureDict("surfaces")->Set("renderer", renderer_status);
++    audit_.EnsureDict("surfaces")->Set("workers", worker_status);
+     audit_.Set(
+         "runtimeEvidence",
+         base::DictValue()
+-            .Set("scope", "active_primary_frame_tree")
++            .Set("scope", "profile_active_execution_contexts")
+             .Set("frames", base::DictValue()
+                                .Set("status", renderer_status)
+                                .Set("total", static_cast<int>(total_))
+@@ -2009,12 +2102,34 @@
+                                     static_cast<int>(mismatched_))
+                                .Set("unreachable",
+                                     static_cast<int>(unreachable_)))
+-            .Set("noiseTokens", std::move(tokens)));
+-    if (mismatched_ > 0u || unreachable_ > 0u) {
++            .Set("workers",
++                 base::DictValue()
++                     .Set("status", worker_status)
++                     .Set("total", static_cast<int>(worker_total_))
++                     .Set("matched", static_cast<int>(worker_matched_))
++                     .Set("mismatched",
++                          static_cast<int>(worker_mismatched_))
++                     .Set("unreported",
++                          static_cast<int>(worker_unreported_))
++                     .Set("byType",
++                          base::DictValue()
++                              .Set("dedicated", worker_type_counts_[0])
++                              .Set("shared", worker_type_counts_[1])
++                              .Set("service", worker_type_counts_[2])))
++            .Set("noiseTokens", std::move(tokens))
++            .Set("workerNoiseTokens", std::move(worker_tokens)));
++    if (mismatched_ > 0u || unreachable_ > 0u ||
++        worker_mismatched_ > 0u || worker_unreported_ > 0u) {
+       audit_.Set("ok", false);
+     } else if (base::DictValue* assurance = audit_.FindDict("assurance")) {
+-      assurance->EnsureList("reasons")
+-          ->Append("renderer_runtime_snapshot_verified");
++      if (total_ > 0u) {
++        assurance->EnsureList("reasons")
++            ->Append("renderer_runtime_snapshot_verified");
++      }
++      if (worker_total_ > 0u) {
++        assurance->EnsureList("reasons")
++            ->Append("worker_runtime_snapshot_verified");
++      }
+     }
+     std::move(callback_).Run(std::move(audit_));
+   }
+@@ -2027,6 +2142,12 @@
+   size_t mismatched_ = 0u;
+   size_t unreachable_ = 0u;
+   std::array<int, 5> token_mismatches_ = {};
++  size_t worker_total_ = 0u;
++  size_t worker_matched_ = 0u;
++  size_t worker_mismatched_ = 0u;
++  size_t worker_unreported_ = 0u;
++  std::array<int, 3> worker_type_counts_ = {};
++  std::array<int, 5> worker_token_mismatches_ = {};
+   base::DictValue audit_;
+   base::OnceCallback<void(base::DictValue)> callback_;
+   base::OneShotTimer timeout_;
+@@ -2338,9 +2459,17 @@
+       .Set("surfaces",
+            base::DictValue()
+                .Set("renderer", "runtime_snapshot")
+-               .Set("workers", "snapshot_inherited")
++               .Set("workers", "runtime_snapshot_attestation")
+                .Set("network", "barrier_checked_transactional_fanout")
+-               .Set("probe", "partial"));
++               .Set("probe", "partial"))
++      .Set("runtimeEvidence",
++           base::DictValue()
++               .Set("workerTypes",
++                    base::ListValue()
++                        .Append("dedicated")
++                        .Append("shared")
++                        .Append("service"))
++               .Set("workerClientRect", "not_applicable"));
+ }
+ 
+ base::DictValue PersonaService::ValidatePersonaConfig(
+@@ -2579,13 +2708,21 @@
+           return true;
+         });
+   }
+-  if (frame_ids.empty()) {
+-    SetEmptyRuntimeEvidence(&audit, "not_applicable");
+-    std::move(callback).Run(std::move(audit));
+-    return;
+-  }
+-  PersonaSurfaceProbeOperation::Run(resolution.snapshot, std::move(frame_ids),
+-                                    std::move(audit), std::move(callback));
++
++  std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++      worker_probes;
++  profile_->ForEachLoadedStoragePartition(
++      [&worker_probes](content::StoragePartition* storage_partition) {
++        auto partition_probes =
++            storage_partition->GetHeliumPersonaWorkerSurfaceProbes();
++        worker_probes.insert(
++            worker_probes.end(),
++            std::make_move_iterator(partition_probes.begin()),
++            std::make_move_iterator(partition_probes.end()));
++      });
++  PersonaSurfaceProbeOperation::Run(
++      resolution.snapshot, std::move(frame_ids), std::move(worker_probes),
++      std::move(audit), std::move(callback));
+ }
+ 
+ base::DictValue PersonaService::CreatePersonaProfile(
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -542,6 +542,15 @@
+                   ->FindBool("effectiveSnapshot")
+                   .value_or(false));
+   EXPECT_EQ("partial", *contract.FindDict("surfaces")->FindString("probe"));
++  const base::DictValue* runtime_evidence =
++      contract.FindDict("runtimeEvidence");
++  ASSERT_TRUE(runtime_evidence);
++  const base::ListValue* worker_types =
++      runtime_evidence->FindList("workerTypes");
++  ASSERT_TRUE(worker_types);
++  EXPECT_EQ(3u, worker_types->size());
++  EXPECT_EQ("not_applicable",
++            *runtime_evidence->FindString("workerClientRect"));
+ }
+ 
+ TEST_F(PersonaServiceTest,
+@@ -599,6 +608,8 @@
+   EXPECT_FALSE(audit.FindBool("failClosed").value_or(true));
+   EXPECT_EQ("not_applicable",
+             *audit.FindDict("surfaces")->FindString("renderer"));
++  EXPECT_EQ("not_applicable",
++            *audit.FindDict("surfaces")->FindString("workers"));
+   EXPECT_EQ("partial", *audit.FindDict("surfaces")->FindString("probe"));
+   EXPECT_EQ("system", *audit.FindDict("surfaces")->FindString("fingerprint"));
+   EXPECT_EQ(0, *audit.FindDict("runtimeEvidence")
+--- a/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+@@ -40,6 +40,10 @@
+   };
+   capabilities: Record<string, boolean>;
+   surfaces: Record<string, string>;
++  runtimeEvidence: {
++    workerTypes: string[];
++    workerClientRect: string;
++  };
+ }
+ 
+ export interface PersonaValidationResponse {
+@@ -85,10 +89,27 @@
+       mismatched: number;
+       unreachable: number;
+     };
++    workers: {
++      status: string;
++      total: number;
++      matched: number;
++      mismatched: number;
++      unreported: number;
++      byType: {
++        dedicated: number;
++        shared: number;
++        service: number;
++      };
++    };
+     noiseTokens?: Record<string, {
+       expected: boolean;
+       status: string;
+       mismatched: number;
++    }>;
++    workerNoiseTokens?: Record<string, {
++      expected: boolean;
++      status: string;
++      mismatched: number;
+     }>;
+   };
+ }
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -1628,6 +1628,10 @@
+   // Do nothing for interfaces that the renderer might request, but doesn't
+   // always expect to be bound.
+   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
++  map->Add<blink::mojom::HeliumPersonaWorkerSurfaceProbeHost>(
++      base::BindRepeating(
++          &DedicatedWorkerHost::BindHeliumPersonaWorkerSurfaceProbeHost,
++          base::Unretained(host)));
+ 
+   // static binders — always register shape detection; deny drops the pipe.
+   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(base::BindRepeating(
+@@ -1830,6 +1834,10 @@
+   // Do nothing for interfaces that the renderer might request, but doesn't
+   // always expect to be bound.
+   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
++  map->Add<blink::mojom::HeliumPersonaWorkerSurfaceProbeHost>(
++      base::BindRepeating(
++          &SharedWorkerHost::BindHeliumPersonaWorkerSurfaceProbeHost,
++          base::Unretained(host)));
+   // Ignore the pending receiver because it's not clear how to handle
+   // notifications about content security (e.g., mixed contents and certificate
+   // errors) on shared workers. Generally these notifications are routed to the
+@@ -2038,6 +2046,10 @@
+   // Do nothing for interfaces that the renderer might request, but doesn't
+   // always expect to be bound.
+   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
++  map->Add<blink::mojom::HeliumPersonaWorkerSurfaceProbeHost>(
++      base::BindRepeating(
++          &ServiceWorkerHost::BindHeliumPersonaWorkerSurfaceProbeHost,
++          base::Unretained(host)));
+   // Ignore the pending receiver because it's not clear how to handle
+   // notifications about content security (e.g., mixed contents and certificate
+   // errors) on service workers. Generally these notifications are routed to the
+--- a/content/browser/service_worker/service_worker_host.cc
++++ b/content/browser/service_worker/service_worker_host.cc
+@@ -84,6 +84,33 @@
+   remote_interfaces_.Bind(std::move(interface_provider_remote));
+ }
+ 
++void ServiceWorkerHost::BindHeliumPersonaWorkerSurfaceProbeHost(
++    mojo::PendingReceiver<blink::mojom::HeliumPersonaWorkerSurfaceProbeHost>
++        receiver) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  persona_surface_probe_receivers_.Add(this, std::move(receiver));
++}
++
++blink::mojom::HeliumPersonaWorkerSurfaceProbePtr
++ServiceWorkerHost::GetHeliumPersonaWorkerSurfaceProbe() const {
++  auto result = blink::mojom::HeliumPersonaWorkerSurfaceProbe::New();
++  result->type = blink::mojom::HeliumPersonaWorkerType::kService;
++  result->probe = persona_surface_probe_ ? persona_surface_probe_.Clone()
++                                         : nullptr;
++  return result;
++}
++
++void ServiceWorkerHost::SetSurfaceProbe(
++    blink::mojom::HeliumPersonaSurfaceProbePtr probe) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  if (persona_surface_probe_) {
++    persona_surface_probe_receivers_.ReportBadMessage(
++        "Service worker reported Persona surface evidence twice");
++    return;
++  }
++  persona_surface_probe_ = std::move(probe);
++}
++
+ void ServiceWorkerHost::CreateWebTransportConnector(
+     mojo::PendingReceiver<blink::mojom::WebTransportConnector> receiver) {
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+--- a/content/browser/service_worker/service_worker_host.h
++++ b/content/browser/service_worker/service_worker_host.h
+@@ -22,6 +22,7 @@
+ #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
++#include "mojo/public/cpp/bindings/receiver_set.h"
+ #include "mojo/public/cpp/bindings/unique_receiver_set.h"
+ #include "net/base/network_isolation_key.h"
+ #include "services/network/public/mojom/fetch_api.mojom.h"
+@@ -31,6 +32,7 @@
+ #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-forward.h"
+ #include "third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom.h"
+ #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom.h"
+ #include "third_party/blink/public/mojom/loader/code_cache.mojom.h"
+ #include "third_party/blink/public/mojom/service_worker/service_worker_container.mojom.h"
+ #include "third_party/blink/public/mojom/service_worker/service_worker_container_type.mojom.h"
+@@ -56,8 +58,10 @@
+ // execution context instance.
+ //
+ // Lives on the UI thread.
+-class CONTENT_EXPORT ServiceWorkerHost : public BucketContext,
+-                                         public base::SupportsUserData {
++class CONTENT_EXPORT ServiceWorkerHost
++    : public blink::mojom::HeliumPersonaWorkerSurfaceProbeHost,
++      public BucketContext,
++      public base::SupportsUserData {
+  public:
+   ServiceWorkerHost(mojo::PendingAssociatedReceiver<
+                         blink::mojom::ServiceWorkerContainerHost> host_receiver,
+@@ -146,7 +150,16 @@
+ 
+   RenderProcessHost* GetProcessHost() const;
+ 
++  void BindHeliumPersonaWorkerSurfaceProbeHost(
++      mojo::PendingReceiver<
++          blink::mojom::HeliumPersonaWorkerSurfaceProbeHost> receiver);
++  blink::mojom::HeliumPersonaWorkerSurfaceProbePtr
++  GetHeliumPersonaWorkerSurfaceProbe() const;
++
+  private:
++  void SetSurfaceProbe(
++      blink::mojom::HeliumPersonaSurfaceProbePtr probe) override;
++
+   ChildProcessId worker_process_id_;
+ 
+   // The service worker being hosted. Raw pointer is safe because the version
+@@ -172,6 +185,9 @@
+       broker_;
+   mojo::Receiver<blink::mojom::BrowserInterfaceBroker> broker_receiver_{
+       &broker_};
++  mojo::ReceiverSet<blink::mojom::HeliumPersonaWorkerSurfaceProbeHost>
++      persona_surface_probe_receivers_;
++  blink::mojom::HeliumPersonaSurfaceProbePtr persona_surface_probe_;
+ 
+   std::unique_ptr<ServiceWorkerContainerHostForServiceWorker> container_host_;
+ 
+--- a/content/browser/storage_partition_impl.cc
++++ b/content/browser/storage_partition_impl.cc
+@@ -7,6 +7,7 @@
+ #include <stdint.h>
+ 
+ #include <functional>
++#include <iterator>
+ #include <memory>
+ #include <optional>
+ #include <utility>
+@@ -98,6 +99,8 @@
+ #include "content/browser/renderer_host/navigation_state_keep_alive.h"
+ #include "content/browser/service_worker/service_worker_client.h"
+ #include "content/browser/service_worker/service_worker_context_core.h"
++#include "content/browser/service_worker/service_worker_host.h"
++#include "content/browser/service_worker/service_worker_version.h"
+ #include "content/browser/service_worker/service_worker_context_wrapper.h"
+ #include "content/browser/shared_storage/shared_storage_header_observer.h"
+ #include "content/browser/shared_storage/shared_storage_runtime_manager.h"
+@@ -1735,6 +1738,31 @@
+   return shared_worker_service_.get();
+ }
+ 
++std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++StoragePartitionImpl::GetHeliumPersonaWorkerSurfaceProbes() {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  DCHECK(initialized_);
++  std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr> probes =
++      dedicated_worker_service_->GetHeliumPersonaWorkerSurfaceProbes();
++
++  auto shared_probes =
++      shared_worker_service_->GetHeliumPersonaWorkerSurfaceProbes();
++  probes.insert(probes.end(), std::make_move_iterator(shared_probes.begin()),
++                std::make_move_iterator(shared_probes.end()));
++
++  ServiceWorkerContextCore* context = service_worker_context_->context();
++  if (!context)
++    return probes;
++  for (const auto& entry : context->GetLiveVersions()) {
++    ServiceWorkerVersion* version = entry.second;
++    if (version->running_status() == blink::EmbeddedWorkerStatus::kStopped)
++      continue;
++    probes.push_back(
++        version->worker_host()->GetHeliumPersonaWorkerSurfaceProbe());
++  }
++  return probes;
++}
++
+ HostZoomMap* StoragePartitionImpl::GetHostZoomMap() {
+   DCHECK(initialized_);
+   DCHECK(host_zoom_level_context_.get());
+--- a/content/browser/storage_partition_impl.h
++++ b/content/browser/storage_partition_impl.h
+@@ -10,6 +10,7 @@
+ #include <memory>
+ #include <set>
+ #include <string>
++#include <vector>
+ 
+ #include "base/containers/flat_map.h"
+ #include "base/dcheck_is_on.h"
+@@ -208,6 +209,8 @@
+   ServiceWorkerContextWrapper* GetServiceWorkerContext() override;
+   DedicatedWorkerServiceImpl* GetDedicatedWorkerService() override;
+   SharedWorkerService* GetSharedWorkerService() override;
++  std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++  GetHeliumPersonaWorkerSurfaceProbes() override;
+   GeneratedCodeCacheContext* GetGeneratedCodeCacheContext() override;
+   DevToolsBackgroundServicesContext* GetDevToolsBackgroundServicesContext()
+       override;
+--- a/content/browser/worker_host/dedicated_worker_host.cc
++++ b/content/browser/worker_host/dedicated_worker_host.cc
+@@ -197,6 +197,33 @@
+       &DedicatedWorkerHost::OnMojoDisconnect, base::Unretained(this)));
+ }
+ 
++void DedicatedWorkerHost::BindHeliumPersonaWorkerSurfaceProbeHost(
++    mojo::PendingReceiver<blink::mojom::HeliumPersonaWorkerSurfaceProbeHost>
++        receiver) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  persona_surface_probe_receivers_.Add(this, std::move(receiver));
++}
++
++blink::mojom::HeliumPersonaWorkerSurfaceProbePtr
++DedicatedWorkerHost::GetHeliumPersonaWorkerSurfaceProbe() const {
++  auto result = blink::mojom::HeliumPersonaWorkerSurfaceProbe::New();
++  result->type = blink::mojom::HeliumPersonaWorkerType::kDedicated;
++  result->probe = persona_surface_probe_ ? persona_surface_probe_.Clone()
++                                         : nullptr;
++  return result;
++}
++
++void DedicatedWorkerHost::SetSurfaceProbe(
++    blink::mojom::HeliumPersonaSurfaceProbePtr probe) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  if (persona_surface_probe_) {
++    persona_surface_probe_receivers_.ReportBadMessage(
++        "Dedicated worker reported Persona surface evidence twice");
++    return;
++  }
++  persona_surface_probe_ = std::move(probe);
++}
++
+ void DedicatedWorkerHost::CreateContentSecurityNotifier(
+     mojo::PendingReceiver<blink::mojom::ContentSecurityNotifier> receiver) {
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+--- a/content/browser/worker_host/dedicated_worker_host.h
++++ b/content/browser/worker_host/dedicated_worker_host.h
+@@ -27,6 +27,7 @@
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
++#include "mojo/public/cpp/bindings/receiver_set.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "mojo/public/cpp/bindings/unique_receiver_set.h"
+ #include "net/base/isolation_info.h"
+@@ -41,6 +42,7 @@
+ #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-forward.h"
+ #include "third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom.h"
+ #include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom.h"
+ #include "third_party/blink/public/mojom/idle/idle_manager.mojom-forward.h"
+ #include "third_party/blink/public/mojom/loader/code_cache.mojom.h"
+ #include "third_party/blink/public/mojom/loader/content_security_notifier.mojom.h"
+@@ -87,6 +89,7 @@
+ class CONTENT_EXPORT DedicatedWorkerHost final
+     : public blink::mojom::DedicatedWorkerHost,
+       public blink::mojom::BackForwardCacheControllerHost,
++      public blink::mojom::HeliumPersonaWorkerSurfaceProbeHost,
+       public RenderProcessHostObserver,
+       public LockManager<storage::BucketId>::Observer,
+       public BucketContext,
+@@ -132,6 +135,11 @@
+ 
+   void BindBrowserInterfaceBrokerReceiver(
+       mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker> receiver);
++  void BindHeliumPersonaWorkerSurfaceProbeHost(
++      mojo::PendingReceiver<
++          blink::mojom::HeliumPersonaWorkerSurfaceProbeHost> receiver);
++  blink::mojom::HeliumPersonaWorkerSurfaceProbePtr
++  GetHeliumPersonaWorkerSurfaceProbe() const;
+ 
+   const blink::DedicatedWorkerToken& GetToken() const { return token_; }
+   RenderProcessHost* GetProcessHost() const { return worker_process_host_; }
+@@ -302,6 +310,9 @@
+   }
+ 
+  private:
++  void SetSurfaceProbe(
++      blink::mojom::HeliumPersonaSurfaceProbePtr probe) override;
++
+   // RenderProcessHostObserver:
+   void RenderProcessExited(RenderProcessHost* render_process_host,
+                            const ChildProcessTerminationInfo& info) override;
+@@ -430,6 +441,9 @@
+   mojo::Receiver<blink::mojom::DedicatedWorkerHost> host_receiver_;
+   mojo::Receiver<blink::mojom::BackForwardCacheControllerHost>
+       back_forward_cache_controller_host_receiver_{this};
++  mojo::ReceiverSet<blink::mojom::HeliumPersonaWorkerSurfaceProbeHost>
++      persona_surface_probe_receivers_;
++  blink::mojom::HeliumPersonaSurfaceProbePtr persona_surface_probe_;
+ 
+   // Indicates if subresource loaders of this worker support file URLs.
+   bool file_url_support_ = false;
+--- a/content/browser/worker_host/dedicated_worker_service_impl.cc
++++ b/content/browser/worker_host/dedicated_worker_service_impl.cc
+@@ -90,4 +90,14 @@
+   return it->second;
+ }
+ 
++std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++DedicatedWorkerServiceImpl::GetHeliumPersonaWorkerSurfaceProbes() const {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr> probes;
++  probes.reserve(dedicated_worker_hosts_.size());
++  for (const auto& entry : dedicated_worker_hosts_)
++    probes.push_back(entry.second->GetHeliumPersonaWorkerSurfaceProbe());
++  return probes;
++}
++
+ }  // namespace content
+--- a/content/browser/worker_host/dedicated_worker_service_impl.h
++++ b/content/browser/worker_host/dedicated_worker_service_impl.h
+@@ -5,11 +5,14 @@
+ #ifndef CONTENT_BROWSER_WORKER_HOST_DEDICATED_WORKER_SERVICE_IMPL_H_
+ #define CONTENT_BROWSER_WORKER_HOST_DEDICATED_WORKER_SERVICE_IMPL_H_
+ 
++#include <vector>
++
+ #include "base/containers/flat_map.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/observer_list.h"
+ #include "content/common/content_export.h"
+ #include "content/public/browser/dedicated_worker_service.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom-forward.h"
+ #include "url/gurl.h"
+ 
+ namespace content {
+@@ -52,6 +55,9 @@
+   DedicatedWorkerHost* GetDedicatedWorkerHostFromToken(
+       const blink::DedicatedWorkerToken& worker_token) const;
+ 
++  std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++  GetHeliumPersonaWorkerSurfaceProbes() const;
++
+  private:
+   base::ObserverList<Observer> observers_;
+   base::flat_map<blink::DedicatedWorkerToken,
+--- a/content/browser/worker_host/shared_worker_host.cc
++++ b/content/browser/worker_host/shared_worker_host.cc
+@@ -316,6 +316,33 @@
+   service_->NotifyBeforeWorkerDestroyed(token_);
+ }
+ 
++void SharedWorkerHost::BindHeliumPersonaWorkerSurfaceProbeHost(
++    mojo::PendingReceiver<blink::mojom::HeliumPersonaWorkerSurfaceProbeHost>
++        receiver) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  persona_surface_probe_receivers_.Add(this, std::move(receiver));
++}
++
++blink::mojom::HeliumPersonaWorkerSurfaceProbePtr
++SharedWorkerHost::GetHeliumPersonaWorkerSurfaceProbe() const {
++  auto result = blink::mojom::HeliumPersonaWorkerSurfaceProbe::New();
++  result->type = blink::mojom::HeliumPersonaWorkerType::kShared;
++  result->probe = persona_surface_probe_ ? persona_surface_probe_.Clone()
++                                         : nullptr;
++  return result;
++}
++
++void SharedWorkerHost::SetSurfaceProbe(
++    blink::mojom::HeliumPersonaSurfaceProbePtr probe) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  if (persona_surface_probe_) {
++    persona_surface_probe_receivers_.ReportBadMessage(
++        "Shared worker reported Persona surface evidence twice");
++    return;
++  }
++  persona_surface_probe_ = std::move(probe);
++}
++
+ RenderProcessHost* SharedWorkerHost::GetProcessHost() const {
+   DCHECK(site_instance_->HasProcess());
+   return site_instance_->GetProcess();
+--- a/content/browser/worker_host/shared_worker_host.h
++++ b/content/browser/worker_host/shared_worker_host.h
+@@ -31,6 +31,7 @@
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
++#include "mojo/public/cpp/bindings/receiver_set.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "mojo/public/cpp/bindings/unique_receiver_set.h"
+ #include "net/base/network_isolation_key.h"
+@@ -44,6 +45,7 @@
+ #include "third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom.h"
+ #include "third_party/blink/public/mojom/buckets/bucket_manager_host.mojom.h"
+ #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom.h"
+ #include "third_party/blink/public/mojom/loader/code_cache.mojom.h"
+ #include "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom-forward.h"
+ #include "third_party/blink/public/mojom/payments/payment_app.mojom-forward.h"
+@@ -84,6 +86,7 @@
+ // current BrowserContext.
+ class CONTENT_EXPORT SharedWorkerHost
+     : public blink::mojom::SharedWorkerHost,
++      public blink::mojom::HeliumPersonaWorkerSurfaceProbeHost,
+       public RenderProcessHostObserver,
+       public LockManager<storage::BucketId>::Observer,
+       public BucketContext,
+@@ -102,6 +105,12 @@
+ 
+   ~SharedWorkerHost() override;
+ 
++  void BindHeliumPersonaWorkerSurfaceProbeHost(
++      mojo::PendingReceiver<
++          blink::mojom::HeliumPersonaWorkerSurfaceProbeHost> receiver);
++  blink::mojom::HeliumPersonaWorkerSurfaceProbePtr
++  GetHeliumPersonaWorkerSurfaceProbe() const;
++
+   // Returns the RenderProcessHost where this shared worker lives.
+   // SharedWorkerHost can't outlive the RenderProcessHost so this can't be null.
+   RenderProcessHost* GetProcessHost() const;
+@@ -281,6 +290,9 @@
+   storage::BucketClientInfo GetBucketClientInfo() const override;
+ 
+  private:
++  void SetSurfaceProbe(
++      blink::mojom::HeliumPersonaSurfaceProbePtr probe) override;
++
+   friend class SharedWorkerHostTest;
+ 
+   class ScopedDevToolsHandle;
+@@ -391,6 +403,9 @@
+       this};
+   mojo::Receiver<blink::mojom::BrowserInterfaceBroker> broker_receiver_{
+       &broker_};
++  mojo::ReceiverSet<blink::mojom::HeliumPersonaWorkerSurfaceProbeHost>
++      persona_surface_probe_receivers_;
++  blink::mojom::HeliumPersonaSurfaceProbePtr persona_surface_probe_;
+ 
+   std::unique_ptr<ServiceWorkerMainResourceHandle> service_worker_handle_;
+ 
+--- a/content/browser/worker_host/shared_worker_service_impl.cc
++++ b/content/browser/worker_host/shared_worker_service_impl.cc
+@@ -93,6 +93,16 @@
+   }
+ }
+ 
++std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++SharedWorkerServiceImpl::GetHeliumPersonaWorkerSurfaceProbes() const {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr> probes;
++  probes.reserve(worker_hosts_.size());
++  for (const auto& host : worker_hosts_)
++    probes.push_back(host->GetHeliumPersonaWorkerSurfaceProbe());
++  return probes;
++}
++
+ bool SharedWorkerServiceImpl::TerminateWorker(
+     const GURL& url,
+     const std::string& name,
+--- a/content/browser/worker_host/shared_worker_service_impl.h
++++ b/content/browser/worker_host/shared_worker_service_impl.h
+@@ -9,6 +9,7 @@
+ #include <set>
+ #include <string>
+ #include <utility>
++#include <vector>
+ 
+ #include "base/containers/unique_ptr_adapters.h"
+ #include "base/gtest_prod_util.h"
+@@ -23,6 +24,7 @@
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "net/storage_access_api/status.h"
+ #include "third_party/blink/public/common/tokens/tokens.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom-forward.h"
+ #include "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom.h"
+ #include "third_party/blink/public/mojom/worker/shared_worker_connector.mojom.h"
+ #include "third_party/blink/public/mojom/worker/shared_worker_factory.mojom.h"
+@@ -78,6 +80,9 @@
+   void TerminateAllWorkers() override;
+   void Shutdown() override;
+ 
++  std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++  GetHeliumPersonaWorkerSurfaceProbes() const;
++
+   // Uses |url_loader_factory| to load workers' scripts instead of
+   // StoragePartition's ReconnectableURLLoaderFactoryForIOThread.
+   void SetURLLoaderFactoryForTesting(
+--- a/content/public/browser/render_frame_host.h
++++ b/content/public/browser/render_frame_host.h
+@@ -38,6 +38,7 @@
+ #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-forward.h"
+ #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
+ #include "third_party/blink/public/mojom/frame/frame.mojom-forward.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom-forward.h"
+ #include "third_party/blink/public/mojom/frame/sudden_termination_disabler_type.mojom-forward.h"
+ #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-forward.h"
+ #include "third_party/blink/public/mojom/opengraph/metadata.mojom-forward.h"
+--- a/content/public/browser/storage_partition.h
++++ b/content/public/browser/storage_partition.h
+@@ -8,6 +8,7 @@
+ #include <stdint.h>
+ 
+ #include <set>
++#include <vector>
+ 
+ #include "base/functional/callback_forward.h"
+ #include "base/observer_list_types.h"
+@@ -23,6 +24,7 @@
+ #include "services/network/public/mojom/cookie_manager.mojom-forward.h"
+ #include "services/network/public/mojom/restricted_cookie_manager.mojom-forward.h"
+ #include "services/network/public/mojom/trust_tokens.mojom-forward.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom-forward.h"
+ 
+ class GURL;
+ 
+@@ -158,6 +160,8 @@
+   virtual ServiceWorkerContext* GetServiceWorkerContext() = 0;
+   virtual DedicatedWorkerService* GetDedicatedWorkerService() = 0;
+   virtual SharedWorkerService* GetSharedWorkerService() = 0;
++  virtual std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++  GetHeliumPersonaWorkerSurfaceProbes() = 0;
+   virtual storage::mojom::CacheStorageControl* GetCacheStorageControl() = 0;
+   virtual GeneratedCodeCacheContext* GetGeneratedCodeCacheContext() = 0;
+   virtual DevToolsBackgroundServicesContext*
+--- a/content/public/test/test_storage_partition.cc
++++ b/content/public/test/test_storage_partition.cc
+@@ -12,6 +12,7 @@
+ #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+ #include "services/network/public/mojom/cookie_manager.mojom.h"
+ #include "services/network/test/test_url_loader_factory.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom.h"
+ 
+ namespace content {
+ 
+@@ -121,6 +122,11 @@
+   return shared_worker_service_;
+ }
+ 
++std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++TestStoragePartition::GetHeliumPersonaWorkerSurfaceProbes() {
++  return {};
++}
++
+ storage::mojom::CacheStorageControl*
+ TestStoragePartition::GetCacheStorageControl() {
+   // Bind and throw away the receiver. If testing is required, then add a method
+--- a/content/public/test/test_storage_partition.h
++++ b/content/public/test/test_storage_partition.h
+@@ -137,6 +137,8 @@
+     shared_worker_service_ = service;
+   }
+   SharedWorkerService* GetSharedWorkerService() override;
++  std::vector<blink::mojom::HeliumPersonaWorkerSurfaceProbePtr>
++  GetHeliumPersonaWorkerSurfaceProbes() override;
+ 
+   storage::mojom::CacheStorageControl* GetCacheStorageControl() override;
+ 
+--- a/net/proxy_resolution/system_proxy_resolution_service.cc
++++ b/net/proxy_resolution/system_proxy_resolution_service.cc
+@@ -23,6 +23,9 @@
+ 
+ void SystemProxyResolutionService::ReportSuccess(const ProxyInfo& proxy_info) {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  if (network_requests_blocked_)
++    return;
++
+   const ProxyRetryInfoMap& new_retry_info = proxy_info.proxy_retry_info();
+   ProxyResolutionService::ProcessProxyRetryInfo(
+       new_retry_info, proxy_retry_info_, proxy_delegate_);
+@@ -49,6 +52,8 @@
+   if (!blocked)
+     return;
+ 
++  proxy_retry_info_.clear();
++
+   base::WeakPtr<SystemProxyResolutionService> weak_this =
+       weak_factory_.GetWeakPtr();
+   while (!pending_requests_.empty()) {
+--- a/net/proxy_resolution/system_proxy_resolution_service_unittest-inl.h
++++ b/net/proxy_resolution/system_proxy_resolution_service_unittest-inl.h
+@@ -316,6 +316,31 @@
+   EXPECT_TRUE(this->service()->proxy_retry_info().empty());
+ }
+ 
++TYPED_TEST_P(SystemProxyResolutionServiceTest,
++             NetworkTransitionClearsBadProxyState) {
++  ProxyChain bad_proxy_chain(ProxyServer::FromSchemeHostAndPort(
++      ProxyServer::SCHEME_HTTP, "badproxy.com", 8080));
++  ProxyChain good_proxy_chain(ProxyServer::FromSchemeHostAndPort(
++      ProxyServer::SCHEME_HTTP, "goodproxy.com", 8080));
++
++  ProxyInfo proxy_info_with_retry;
++  ProxyList proxy_list;
++  proxy_list.AddProxyChain(bad_proxy_chain);
++  proxy_list.AddProxyChain(good_proxy_chain);
++  proxy_info_with_retry.UseProxyList(proxy_list);
++  ASSERT_TRUE(proxy_info_with_retry.Fallback(ERR_PROXY_CONNECTION_FAILED,
++                                             NetLogWithSource()));
++
++  this->service()->ReportSuccess(proxy_info_with_retry);
++  ASSERT_FALSE(this->service()->proxy_retry_info().empty());
++
++  this->service()->SetNetworkRequestsBlocked(true);
++  EXPECT_TRUE(this->service()->proxy_retry_info().empty());
++
++  this->service()->ReportSuccess(proxy_info_with_retry);
++  EXPECT_TRUE(this->service()->proxy_retry_info().empty());
++}
++
+ TYPED_TEST_P(SystemProxyResolutionServiceTest, ReportSuccessWithRetryInfo) {
+   // Test ReportSuccess() behavior when a proxy delegate is present.
+   // This ensures proxy delegate callbacks (OnSuccessfulRequestAfterFailures
+@@ -650,6 +675,7 @@
+     ProxyResolutionServiceDestructionWithInFlightRequests,
+     CastToConfiguredProxyResolutionService,
+     ClearBadProxiesCache,
++    NetworkTransitionClearsBadProxyState,
+     ReportSuccessWithRetryInfo,
+     ReportSuccessWithEmptyRetryInfo,
+     ReportSuccessWithRetryInfoAndWithoutDelegate,
+--- a/third_party/blink/public/mojom/BUILD.gn
++++ b/third_party/blink/public/mojom/BUILD.gn
+@@ -1357,8 +1357,9 @@
+     "fenced_frame/fenced_frame.mojom",
+     "navigation/navigation_params.mojom",
+ 
+-    # Helium persona snapshot.
++    # Helium persona snapshot and runtime evidence.
+     "helium_persona/persona_snapshot.mojom",
++    "helium_persona/persona_surface_probe.mojom",
+ 
+     # Note that service_worker_object.mojom and service_worker.mojom depend on
+     # transferable_message.mojom, and controller_service_worker.mojom and
+--- a/third_party/blink/public/mojom/frame/frame.mojom
++++ b/third_party/blink/public/mojom/frame/frame.mojom
+@@ -55,7 +55,7 @@
+ import "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom";
+ import "third_party/blink/public/mojom/frame/user_activation_update_types.mojom";
+ import "third_party/blink/public/mojom/frame/view_transition_state.mojom";
+-import "third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom";
++import "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom";
+ import "third_party/blink/public/mojom/input/focus_type.mojom";
+ import "third_party/blink/public/mojom/input/scroll_direction.mojom";
+ import "third_party/blink/public/mojom/loader/referrer.mojom";
+@@ -816,17 +816,6 @@
+   MaybeStartOutermostMainFrameNavigation(array<url.mojom.Url> urls);
+ };
+ 
+-// Renderer-held evidence for the Persona snapshot and deterministic-noise
+-// tokens attached to the frame's current execution context.
+-struct HeliumPersonaSurfaceProbe {
+-  HeliumPersonaSnapshot snapshot;
+-  bool canvas_noise_token_present;
+-  bool audio_noise_token_present;
+-  bool hardware_noise_token_present;
+-  bool font_metric_noise_token_present;
+-  bool client_rect_noise_token_present;
+-};
+-
+ // Implemented in Blink, this interface defines frame-specific methods that will
+ // be invoked from the browser process (e.g. content::RenderFrameHostImpl).
+ //
+--- /dev/null
++++ b/third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom
+@@ -0,0 +1,37 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++module blink.mojom;
++
++import "third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom";
++
++// Renderer-held evidence for the Persona snapshot and deterministic-noise
++// tokens attached to an execution context.
++struct HeliumPersonaSurfaceProbe {
++  HeliumPersonaSnapshot snapshot;
++  bool canvas_noise_token_present;
++  bool audio_noise_token_present;
++  bool hardware_noise_token_present;
++  bool font_metric_noise_token_present;
++  bool client_rect_noise_token_present;
++};
++
++enum HeliumPersonaWorkerType {
++  kDedicated,
++  kShared,
++  kService,
++};
++
++// A browser-side view of a live worker. A null probe means the worker exists
++// but has not reported runtime evidence yet.
++struct HeliumPersonaWorkerSurfaceProbe {
++  HeliumPersonaWorkerType type;
++  HeliumPersonaSurfaceProbe? probe;
++};
++
++// Implemented by each browser-side worker host. A worker reports exactly once
++// after its BrowserInterfaceBroker is connected.
++interface HeliumPersonaWorkerSurfaceProbeHost {
++  SetSurfaceProbe(HeliumPersonaSurfaceProbe probe);
++};
+--- a/third_party/blink/renderer/core/workers/worker_global_scope.cc
++++ b/third_party/blink/renderer/core/workers/worker_global_scope.cc
+@@ -31,11 +31,13 @@
+ #include "base/metrics/histogram_functions.h"
+ #include "base/trace_event/typed_macros.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
++#include "mojo/public/cpp/bindings/remote.h"
+ #include "services/metrics/public/cpp/mojo_ukm_recorder.h"
+ #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
+ #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
+ #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
+ #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom-blink.h"
+ #include "third_party/blink/public/mojom/loader/code_cache.mojom-blink.h"
+ #include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/public/platform/web_url_request.h"
+@@ -760,6 +762,7 @@
+         ToCrossVariantMojoType(
+             std::move(creation_params->browser_interface_broker)),
+         GetTaskRunner(TaskType::kInternalDefault));
++    ReportHeliumPersonaSurfaceProbe();
+   }
+ 
+   if (creation_params->coep_reporting_observer) {
+@@ -780,6 +783,24 @@
+       std::move(creation_params->worker_permissions_policy));
+ }
+ 
++void WorkerGlobalScope::ReportHeliumPersonaSurfaceProbe() {
++  if (!GetBrowserInterfaceBroker().is_bound())
++    return;
++
++  mojo::Remote<mojom::blink::HeliumPersonaWorkerSurfaceProbeHost> host;
++  GetBrowserInterfaceBroker().GetInterface(
++      host.BindNewPipeAndPassReceiver());
++  auto probe = mojom::blink::HeliumPersonaSurfaceProbe::New();
++  probe->snapshot = helium_persona_snapshot_;
++  probe->canvas_noise_token_present = CanvasNoiseToken().has_value();
++  probe->audio_noise_token_present = AudioNoiseToken().has_value();
++  probe->hardware_noise_token_present = HardwareNoiseToken().has_value();
++  probe->font_metric_noise_token_present =
++      FontMetricNoiseToken().has_value();
++  probe->client_rect_noise_token_present = false;
++  host->SetSurfaceProbe(std::move(probe));
++}
++
+ void WorkerGlobalScope::ExceptionThrown(ErrorEvent* event) {
+   int next_id = ++last_pending_error_event_id_;
+   pending_error_events_.Set(next_id, event);
+--- a/third_party/blink/renderer/core/workers/worker_global_scope.h
++++ b/third_party/blink/renderer/core/workers/worker_global_scope.h
+@@ -316,6 +316,7 @@
+   void ImportScriptsInternal(const Vector<String>& urls, ExceptionState&);
+ 
+  private:
++  void ReportHeliumPersonaSurfaceProbe();
+   void SetWorkerSettings(std::unique_ptr<WorkerSettings>);
+ 
+   // https://html.spec.whatwg.org/C/#run-a-worker Step 24.

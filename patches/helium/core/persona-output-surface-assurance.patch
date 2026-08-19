@@ -1,0 +1,1094 @@
+--- a/chrome/browser/helium_persona/persona_audio_readback_browsertest.cc
++++ b/chrome/browser/helium_persona/persona_audio_readback_browsertest.cc
+@@ -11,6 +11,7 @@
+ #include <vector>
+ 
+ #include "base/check.h"
++#include "base/command_line.h"
+ #include "base/functional/bind.h"
+ #include "base/test/run_until.h"
+ #include "base/test/test_future.h"
+@@ -25,9 +26,11 @@
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/web_contents.h"
++#include "content/public/common/content_switches.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+ #include "content/public/test/test_navigation_observer.h"
++#include "gpu/config/gpu_switches.h"
+ #include "net/http/http_status_code.h"
+ #include "net/test/embedded_test_server/basic_http_response.h"
+ #include "net/test/embedded_test_server/http_request.h"
+@@ -73,6 +76,23 @@ std::unique_ptr<net::test_server::HttpRe
+         event.waitUntil(new Promise(resolve => setTimeout(resolve, 30000)));
+       });
+     )JS";
++  } else if (request.relative_url ==
++             "/persona-audit-webgpu-worker.js") {
++    script = R"JS(
++      self.onmessage = async () => {
++        if (!self.navigator.gpu) {
++          self.postMessage({supported: false});
++          return;
++        }
++        const adapter = await self.navigator.gpu.requestAdapter();
++        if (!adapter) {
++          self.postMessage({supported: false});
++          return;
++        }
++        self.personaWebGpuDevice = await adapter.requestDevice();
++        self.postMessage({supported: true});
++      };
++    )JS";
+   } else {
+     return nullptr;
+   }
+@@ -346,10 +366,74 @@ std::string CaptureCanvasAndCopyReadback
+   return result.ExtractString();
+ }
+ 
++base::DictValue EvaluateWebGLReadbackPolicy(
++    content::WebContents* web_contents) {
++  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
++    (() => {
++      const canvas = document.createElement('canvas');
++      canvas.width = 2;
++      canvas.height = 2;
++      const gl = canvas.getContext('webgl2');
++      if (!gl) return {supported: false};
++
++      gl.clearColor(0.2, 0.4, 0.6, 1.0);
++      gl.clear(gl.COLOR_BUFFER_BIT);
++      const rgba8 = new Uint8Array(4);
++      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, rgba8);
++      const rgba8Allowed = gl.getError() === gl.NO_ERROR;
++
++      gl.pixelStorei(gl.PACK_ROW_LENGTH, 2);
++      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE,
++                    new Uint8Array(8));
++      const customPackRejected = gl.getError() === gl.INVALID_OPERATION;
++      gl.pixelStorei(gl.PACK_ROW_LENGTH, 0);
++
++      const packBuffer = gl.createBuffer();
++      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, packBuffer);
++      gl.bufferData(gl.PIXEL_PACK_BUFFER, 4, gl.STREAM_READ);
++      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, 0);
++      const packBufferRejected = gl.getError() === gl.INVALID_OPERATION;
++      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
++      gl.deleteBuffer(packBuffer);
++      return {
++        supported: true,
++        rgba8Allowed,
++        customPackRejected,
++        packBufferRejected,
++      };
++    })()
++  )JS");
++  CHECK(result.is_ok()) << result.ExtractError();
++  return result.ExtractDict().Clone();
++}
++
+ }  // namespace
+ 
+ class PersonaAudioReadbackBrowserTest : public InProcessBrowserTest {};
+ 
++class PersonaWebGLOnWebGpuBrowserTest
++    : public PersonaAudioReadbackBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    PersonaAudioReadbackBrowserTest::SetUpCommandLine(command_line);
++    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
++                                    "WebGLOnWebGPU");
++    command_line->AppendSwitch(switches::kEnableUnsafeWebGPU);
++  }
++};
++
++class PersonaWebGpuAuditBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    InProcessBrowserTest::SetUpCommandLine(command_line);
++    command_line->AppendSwitch(switches::kEnableUnsafeWebGPU);
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++};
++
+ IN_PROC_BROWSER_TEST_F(PersonaAudioReadbackBrowserTest,
+                        WorkerOffscreenCanvasExportUsesPersonaNoise) {
+   content::WebContents* web_contents =
+@@ -489,43 +573,32 @@ IN_PROC_BROWSER_TEST_F(PersonaAudioReadb
+       browser()->tab_strip_model()->GetActiveWebContents();
+   ASSERT_TRUE(content::NavigateToURL(
+       web_contents, GURL("data:text/html,<title>webgl-readback</title>")));
+-  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
+-    (() => {
+-      const canvas = document.createElement('canvas');
+-      canvas.width = 2;
+-      canvas.height = 2;
+-      const gl = canvas.getContext('webgl2');
+-      if (!gl) return {supported: false};
+-
+-      gl.clearColor(0.2, 0.4, 0.6, 1.0);
+-      gl.clear(gl.COLOR_BUFFER_BIT);
+-      const rgba8 = new Uint8Array(4);
+-      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, rgba8);
+-      const rgba8Allowed = gl.getError() === gl.NO_ERROR;
++  const base::DictValue policy = EvaluateWebGLReadbackPolicy(web_contents);
++  ASSERT_TRUE(policy.FindBool("supported").value_or(false));
++  EXPECT_TRUE(policy.FindBool("rgba8Allowed").value_or(false));
++  EXPECT_TRUE(policy.FindBool("customPackRejected").value_or(false));
++  EXPECT_TRUE(policy.FindBool("packBufferRejected").value_or(false));
++}
+ 
+-      gl.pixelStorei(gl.PACK_ROW_LENGTH, 2);
+-      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE,
+-                    new Uint8Array(8));
+-      const customPackRejected = gl.getError() === gl.INVALID_OPERATION;
+-      gl.pixelStorei(gl.PACK_ROW_LENGTH, 0);
++IN_PROC_BROWSER_TEST_F(PersonaWebGLOnWebGpuBrowserTest,
++                       PersonaReadbackPolicyBypassesExperimentalBackend) {
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response =
++      service->CreatePersonaProfile("WebGLOnWebGPU readback");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
+ 
+-      const packBuffer = gl.createBuffer();
+-      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, packBuffer);
+-      gl.bufferData(gl.PIXEL_PACK_BUFFER, 4, gl.STREAM_READ);
+-      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+-      const packBufferRejected = gl.getError() === gl.INVALID_OPERATION;
+-      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+-      gl.deleteBuffer(packBuffer);
+-      return {
+-        supported: true,
+-        rgba8Allowed,
+-        customPackRejected,
+-        packBufferRejected,
+-      };
+-    })()
+-  )JS");
+-  ASSERT_TRUE(result.is_ok()) << result.ExtractError();
+-  const base::DictValue& policy = result.ExtractDict();
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents,
++      GURL("data:text/html,<title>webgl-on-webgpu-readback</title>")));
++  const base::DictValue policy = EvaluateWebGLReadbackPolicy(web_contents);
+   ASSERT_TRUE(policy.FindBool("supported").value_or(false));
+   EXPECT_TRUE(policy.FindBool("rgba8Allowed").value_or(false));
+   EXPECT_TRUE(policy.FindBool("customPackRejected").value_or(false));
+@@ -605,6 +678,10 @@ IN_PROC_BROWSER_TEST_F(PersonaAudioReadb
+   EXPECT_EQ("not_applicable",
+             *audit.FindDict("surfaces")->FindString("workers"));
+   EXPECT_EQ("partial", *audit.FindDict("surfaces")->FindString("probe"));
++  EXPECT_EQ("not_observed",
++            *audit.FindDict("surfaces")->FindString("webGpu"));
++  EXPECT_EQ("not_observed",
++            *audit.FindDict("surfaces")->FindString("mediaOutput"));
+ 
+   const base::DictValue* evidence = audit.FindDict("runtimeEvidence");
+   ASSERT_TRUE(evidence);
+@@ -622,10 +699,142 @@ IN_PROC_BROWSER_TEST_F(PersonaAudioReadb
+   EXPECT_EQ("matched", *evidence->FindDict("noiseTokens")
+                             ->FindDict("clientRect")
+                             ->FindString("status"));
++  EXPECT_EQ(0, evidence->FindDict("webGpu")
++                   ->FindInt("observedContexts")
++                   .value_or(-1));
++  EXPECT_EQ(0, evidence->FindDict("mediaOutput")
++                   ->FindInt("observedContexts")
++                   .value_or(-1));
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaWebGpuAuditBrowserTest,
++                       AuditObservesWebGpuIdentityLimitsAndDevice) {
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response = service->CreatePersonaProfile("WebGPU audit");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
++
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/title1.html")));
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
++    (async () => {
++      if (!navigator.gpu) return {supported: false};
++      const adapter = await navigator.gpu.requestAdapter();
++      if (!adapter) return {supported: false};
++      const device = await adapter.requestDevice();
++      window.personaWebGpuDevice = device;
++      return {
++        supported: true,
++        vendor: adapter.info.vendor,
++        architecture: adapter.info.architecture,
++        device: adapter.info.device,
++        description: adapter.info.description,
++      };
++    })()
++  )JS");
++  ASSERT_TRUE(result.is_ok()) << result.ExtractError();
++  const base::DictValue& observed = result.ExtractDict();
++  if (!observed.FindBool("supported").value_or(false)) {
++    GTEST_SKIP() << "WebGPU is unavailable on this test host";
++  }
++  const blink::HeliumPersonaSnapshot expected = service->GetActiveSnapshot();
++  EXPECT_EQ(expected.gpu_vendor, *observed.FindString("vendor"));
++  EXPECT_EQ(expected.webgpu_architecture,
++            *observed.FindString("architecture"));
++  EXPECT_EQ(expected.webgpu_device, *observed.FindString("device"));
++  EXPECT_EQ(expected.webgpu_description,
++            *observed.FindString("description"));
++
++  base::test::TestFuture<base::DictValue> audit_future;
++  service->GetPersonaAudit(audit_future.GetCallback());
++  const base::DictValue audit = audit_future.Take();
++  EXPECT_TRUE(audit.FindBool("ok").value_or(false));
++  EXPECT_EQ("runtime_identity_verified",
++            *audit.FindDict("surfaces")->FindString("webGpu"));
++  const base::DictValue* evidence =
++      audit.FindDict("runtimeEvidence")->FindDict("webGpu");
++  ASSERT_TRUE(evidence);
++  const int observed_contexts =
++      evidence->FindInt("observedContexts").value_or(0);
++  EXPECT_GE(observed_contexts, 1);
++  EXPECT_EQ(observed_contexts,
++            evidence->FindInt("identityMatched").value_or(0));
++  EXPECT_EQ(0, evidence->FindInt("identityMismatched").value_or(-1));
++  EXPECT_EQ(observed_contexts,
++            evidence->FindInt("featureSetsObserved").value_or(0));
++  EXPECT_EQ(observed_contexts,
++            evidence->FindInt("limitSetsObserved").value_or(0));
++  EXPECT_EQ(observed_contexts * 36,
++            evidence->FindInt("limitValuesObserved").value_or(0));
++  EXPECT_EQ(0, evidence->FindInt("limitSetsIncomplete").value_or(-1));
++  EXPECT_GE(evidence->FindInt("devicesObserved").value_or(0), 1);
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaAudioReadbackBrowserTest,
++                       AuditObservesRealtimeAudioOutputCallback) {
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response = service->CreatePersonaProfile("Media output");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
++
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>media-output</title>")));
++  ASSERT_EQ(true, content::EvalJs(web_contents, R"JS(
++    (async () => {
++      const context = new AudioContext({latencyHint: 'interactive'});
++      const oscillator = context.createOscillator();
++      oscillator.connect(context.destination);
++      oscillator.start();
++      await context.resume();
++      window.personaAudioContext = context;
++      window.personaOscillator = oscillator;
++      return context.state === 'running';
++    })()
++  )JS"));
++
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    base::test::TestFuture<base::DictValue> audit_future;
++    service->GetPersonaAudit(audit_future.GetCallback());
++    const base::DictValue audit = audit_future.Take();
++    const base::DictValue* surfaces = audit.FindDict("surfaces");
++    return surfaces && surfaces->FindString("mediaOutput") &&
++           *surfaces->FindString("mediaOutput") ==
++               "runtime_output_observed";
++  }));
++
++  base::test::TestFuture<base::DictValue> audit_future;
++  service->GetPersonaAudit(audit_future.GetCallback());
++  const base::DictValue audit = audit_future.Take();
++  EXPECT_EQ("runtime_output_observed",
++            *audit.FindDict("surfaces")->FindString("mediaOutput"));
++  EXPECT_GE(audit.FindDict("runtimeEvidence")
++                ->FindDict("mediaOutput")
++                ->FindInt("observedContexts")
++                .value_or(0),
++            1);
+ }
+ 
+ class PersonaWorkerAuditBrowserTest : public InProcessBrowserTest {
+  public:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    InProcessBrowserTest::SetUpCommandLine(command_line);
++    command_line->AppendSwitch(switches::kEnableUnsafeWebGPU);
++  }
++
+   void SetUpOnMainThread() override {
+     embedded_test_server()->RegisterRequestHandler(
+         base::BindRepeating(&HandleWorkerAuditRequest));
+@@ -728,6 +937,70 @@ IN_PROC_BROWSER_TEST_F(PersonaWorkerAudi
+   EXPECT_GE(by_type->FindInt("service").value_or(0), 1);
+ }
+ 
++IN_PROC_BROWSER_TEST_F(PersonaWorkerAuditBrowserTest,
++                       WorkerUpdatesPassiveWebGpuEvidence) {
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response =
++      service->CreatePersonaProfile("Worker WebGPU audit");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
++
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/title1.html")));
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
++    (async () => {
++      window.personaWebGpuWorker =
++          new Worker('/persona-audit-webgpu-worker.js');
++      return await new Promise((resolve, reject) => {
++        personaWebGpuWorker.onmessage = event => resolve(event.data);
++        personaWebGpuWorker.onerror = reject;
++        personaWebGpuWorker.postMessage('start');
++      });
++    })()
++  )JS");
++  ASSERT_TRUE(result.is_ok()) << result.ExtractError();
++  if (!result.ExtractDict().FindBool("supported").value_or(false)) {
++    GTEST_SKIP() << "Worker WebGPU is unavailable on this test host";
++  }
++
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    const auto probes = browser()
++                            ->profile()
++                            ->GetDefaultStoragePartition()
++                            ->GetHeliumPersonaWorkerSurfaceProbes();
++    for (const auto& worker_probe : probes) {
++      if (worker_probe && worker_probe->probe &&
++          worker_probe->type ==
++              blink::mojom::HeliumPersonaWorkerType::kDedicated &&
++          worker_probe->probe->evidence_sequence > 1 &&
++          worker_probe->probe->webgpu_adapter_observed &&
++          worker_probe->probe->webgpu_device_observed) {
++        return true;
++      }
++    }
++    return false;
++  }));
++
++  base::test::TestFuture<base::DictValue> audit_future;
++  service->GetPersonaAudit(audit_future.GetCallback());
++  const base::DictValue audit = audit_future.Take();
++  EXPECT_TRUE(audit.FindBool("ok").value_or(false));
++  EXPECT_EQ("runtime_identity_verified",
++            *audit.FindDict("surfaces")->FindString("webGpu"));
++  EXPECT_GE(audit.FindDict("runtimeEvidence")
++                ->FindDict("webGpu")
++                ->FindInt("devicesObserved")
++                .value_or(0),
++            1);
++}
++
+ class PersonaSiteRefreshBrowserTest : public InProcessBrowserTest {
+  public:
+   void SetUpOnMainThread() override {
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -1874,6 +1874,7 @@ base::DictValue MakeAssurance(PersonaRes
+ constexpr std::array<const char*, 5> kNoiseTokenNames = {
+     "canvas", "audio", "hardware", "fontMetric", "clientRect"};
+ constexpr size_t kWorkerNoiseTokenCount = 4u;
++constexpr size_t kWebGpuLimitCount = 36u;
+ 
+ std::array<bool, 5> ExpectedNoiseTokens(
+     const blink::HeliumPersonaSnapshot& snapshot) {
+@@ -1893,6 +1894,8 @@ void SetEmptyRuntimeEvidence(base::DictV
+                              std::string_view status) {
+   audit->EnsureDict("surfaces")->Set("renderer", status);
+   audit->EnsureDict("surfaces")->Set("workers", status);
++  audit->EnsureDict("surfaces")->Set("webGpu", status);
++  audit->EnsureDict("surfaces")->Set("mediaOutput", status);
+   audit->Set(
+       "runtimeEvidence",
+       base::DictValue()
+@@ -1912,7 +1915,21 @@ void SetEmptyRuntimeEvidence(base::DictV
+                               .Set("byType", base::DictValue()
+                                                  .Set("dedicated", 0)
+                                                  .Set("shared", 0)
+-                                                 .Set("service", 0))));
++                                                 .Set("service", 0)))
++          .Set("webGpu", base::DictValue()
++                             .Set("status", status)
++                             .Set("observedContexts", 0)
++                             .Set("identityMatched", 0)
++                             .Set("identityMismatched", 0)
++                             .Set("featureSetsObserved", 0)
++                             .Set("featureValuesObserved", 0)
++                             .Set("limitSetsObserved", 0)
++                             .Set("limitValuesObserved", 0)
++                             .Set("limitSetsIncomplete", 0)
++                             .Set("devicesObserved", 0))
++          .Set("mediaOutput", base::DictValue()
++                                 .Set("status", status)
++                                 .Set("observedContexts", 0)));
+ }
+ 
+ class PersonaSurfaceProbeOperation
+@@ -1979,6 +1996,7 @@ class PersonaSurfaceProbeOperation
+     if (!probe) {
+       ++unreachable_;
+     } else {
++      ObserveRuntimeSurfaces(*probe);
+       bool matches = probe->snapshot == expected_snapshot_;
+       const std::array<bool, 5> applied_tokens = AppliedNoiseTokens(*probe);
+       for (size_t i = 0; i < expected_tokens_.size(); ++i) {
+@@ -2002,6 +2020,39 @@ class PersonaSurfaceProbeOperation
+   friend class base::RefCounted<PersonaSurfaceProbeOperation>;
+   ~PersonaSurfaceProbeOperation() = default;
+ 
++  void ObserveRuntimeSurfaces(
++      const blink::mojom::HeliumPersonaSurfaceProbe& probe) {
++    if (probe.webgpu_adapter_observed) {
++      ++webgpu_observed_;
++      const bool identity_matches =
++          probe.webgpu_vendor == expected_snapshot_.gpu_vendor &&
++          probe.webgpu_architecture ==
++              expected_snapshot_.webgpu_architecture &&
++          probe.webgpu_device == expected_snapshot_.webgpu_device &&
++          probe.webgpu_description ==
++              expected_snapshot_.webgpu_description;
++      if (identity_matches) {
++        ++webgpu_identity_matched_;
++      } else {
++        ++webgpu_identity_mismatched_;
++      }
++      ++webgpu_feature_sets_observed_;
++      webgpu_feature_values_observed_ += probe.webgpu_features.size();
++      webgpu_limit_values_observed_ += probe.webgpu_limits.size();
++      if (probe.webgpu_limits.size() == kWebGpuLimitCount) {
++        ++webgpu_limit_sets_observed_;
++      } else {
++        ++webgpu_limit_sets_incomplete_;
++      }
++      if (probe.webgpu_device_observed) {
++        ++webgpu_devices_observed_;
++      }
++    }
++    if (probe.media_output_observed) {
++      ++media_output_observed_;
++    }
++  }
++
+   void OnTimeout() {
+     unreachable_ += pending_;
+     pending_ = 0u;
+@@ -2030,6 +2081,7 @@ class PersonaSurfaceProbeOperation
+         continue;
+       }
+ 
++      ObserveRuntimeSurfaces(*worker_probe->probe);
+       bool matches =
+           worker_probe->probe->snapshot == expected_snapshot_;
+       const std::array<bool, 5> applied_tokens =
+@@ -2068,6 +2120,20 @@ class PersonaSurfaceProbeOperation
+         : worker_unreported_ == worker_total_ ? "unreported"
+         : worker_unreported_ > 0u              ? "partially_verified"
+                                                : "runtime_snapshot_verified";
++    const char* webgpu_status =
++        !expected_snapshot_.IsEnabled()
++            ? "system"
++        : webgpu_observed_ == 0u
++            ? "not_observed"
++        : webgpu_identity_mismatched_ > 0u
++            ? "mismatched"
++        : webgpu_limit_sets_incomplete_ > 0u ? "partially_observed"
++                                             : "runtime_identity_verified";
++    const char* media_output_status =
++        !expected_snapshot_.IsEnabled()
++            ? "system"
++        : media_output_observed_ == 0u ? "not_observed"
++                                       : "runtime_output_observed";
+     base::DictValue tokens;
+     for (size_t i = 0; i < kNoiseTokenNames.size(); ++i) {
+       const char* token_status =
+@@ -2103,6 +2169,8 @@ class PersonaSurfaceProbeOperation
+     }
+     audit_.EnsureDict("surfaces")->Set("renderer", renderer_status);
+     audit_.EnsureDict("surfaces")->Set("workers", worker_status);
++    audit_.EnsureDict("surfaces")->Set("webGpu", webgpu_status);
++    audit_.EnsureDict("surfaces")->Set("mediaOutput", media_output_status);
+     audit_.Set(
+         "runtimeEvidence",
+         base::DictValue()
+@@ -2130,9 +2198,36 @@ class PersonaSurfaceProbeOperation
+                               .Set("shared", worker_type_counts_[1])
+                               .Set("service", worker_type_counts_[2])))
+             .Set("noiseTokens", std::move(tokens))
+-            .Set("workerNoiseTokens", std::move(worker_tokens)));
++            .Set("workerNoiseTokens", std::move(worker_tokens))
++            .Set("webGpu",
++                 base::DictValue()
++                     .Set("status", webgpu_status)
++                     .Set("observedContexts",
++                          static_cast<int>(webgpu_observed_))
++                     .Set("identityMatched",
++                          static_cast<int>(webgpu_identity_matched_))
++                     .Set("identityMismatched",
++                          static_cast<int>(webgpu_identity_mismatched_))
++                     .Set("featureSetsObserved",
++                          static_cast<int>(webgpu_feature_sets_observed_))
++                     .Set("featureValuesObserved",
++                          static_cast<int>(webgpu_feature_values_observed_))
++                     .Set("limitSetsObserved",
++                          static_cast<int>(webgpu_limit_sets_observed_))
++                     .Set("limitValuesObserved",
++                          static_cast<int>(webgpu_limit_values_observed_))
++                     .Set("limitSetsIncomplete",
++                          static_cast<int>(webgpu_limit_sets_incomplete_))
++                     .Set("devicesObserved",
++                          static_cast<int>(webgpu_devices_observed_)))
++            .Set("mediaOutput",
++                 base::DictValue()
++                     .Set("status", media_output_status)
++                     .Set("observedContexts",
++                          static_cast<int>(media_output_observed_))));
+     if (mismatched_ > 0u || unreachable_ > 0u ||
+-        worker_mismatched_ > 0u || worker_unreported_ > 0u) {
++        worker_mismatched_ > 0u || worker_unreported_ > 0u ||
++        webgpu_identity_mismatched_ > 0u) {
+       audit_.Set("ok", false);
+     } else if (base::DictValue* assurance = audit_.FindDict("assurance")) {
+       if (total_ > 0u) {
+@@ -2143,6 +2238,14 @@ class PersonaSurfaceProbeOperation
+         assurance->EnsureList("reasons")
+             ->Append("worker_runtime_snapshot_verified");
+       }
++      if (webgpu_identity_matched_ > 0u) {
++        assurance->EnsureList("reasons")
++            ->Append("webgpu_runtime_identity_verified");
++      }
++      if (media_output_observed_ > 0u) {
++        assurance->EnsureList("reasons")
++            ->Append("media_output_runtime_observed");
++      }
+     }
+     std::move(callback_).Run(std::move(audit_));
+   }
+@@ -2161,6 +2264,16 @@ class PersonaSurfaceProbeOperation
+   size_t worker_unreported_ = 0u;
+   std::array<int, 3> worker_type_counts_ = {};
+   std::array<int, 5> worker_token_mismatches_ = {};
++  size_t webgpu_observed_ = 0u;
++  size_t webgpu_identity_matched_ = 0u;
++  size_t webgpu_identity_mismatched_ = 0u;
++  size_t webgpu_feature_sets_observed_ = 0u;
++  size_t webgpu_feature_values_observed_ = 0u;
++  size_t webgpu_limit_sets_observed_ = 0u;
++  size_t webgpu_limit_values_observed_ = 0u;
++  size_t webgpu_limit_sets_incomplete_ = 0u;
++  size_t webgpu_devices_observed_ = 0u;
++  size_t media_output_observed_ = 0u;
+   base::DictValue audit_;
+   base::OnceCallback<void(base::DictValue)> callback_;
+   base::OneShotTimer timeout_;
+@@ -2474,6 +2587,8 @@ base::DictValue PersonaService::GetPerso
+                .Set("renderer", "runtime_snapshot")
+                .Set("workers", "runtime_snapshot_attestation")
+                .Set("network", "barrier_checked_transactional_fanout")
++               .Set("webGpu", "passive_runtime_identity_and_limits")
++               .Set("mediaOutput", "passive_runtime_callback")
+                .Set("mediaDevices",
+                     "synthetic_enumeration_capture_fail_closed")
+                .Set("probe", "partial"))
+@@ -2648,6 +2763,12 @@ base::DictValue PersonaService::BuildPer
+           .Set("renderer", "unknown")
+           .Set("workers", "unknown")
+           .Set("probe", "partial")
++          .Set("webGpu", status == "persona_ready" ? "not_observed"
++                              : status == "system_real" ? "system"
++                                                        : "unavailable")
++          .Set("mediaOutput", status == "persona_ready" ? "not_observed"
++                                  : status == "system_real" ? "system"
++                                                            : "unavailable")
+           .Set("mediaDevices",
+                status == "persona_ready"
+                    ? "synthetic_configured_capture_fail_closed"
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -544,6 +544,10 @@ TEST_F(PersonaServiceTest, PersonaContra
+   EXPECT_EQ("partial", *contract.FindDict("surfaces")->FindString("probe"));
+   EXPECT_EQ("synthetic_enumeration_capture_fail_closed",
+             *contract.FindDict("surfaces")->FindString("mediaDevices"));
++  EXPECT_EQ("passive_runtime_identity_and_limits",
++            *contract.FindDict("surfaces")->FindString("webGpu"));
++  EXPECT_EQ("passive_runtime_callback",
++            *contract.FindDict("surfaces")->FindString("mediaOutput"));
+   const base::DictValue* runtime_evidence =
+       contract.FindDict("runtimeEvidence");
+   ASSERT_TRUE(runtime_evidence);
+@@ -616,9 +620,18 @@ TEST_F(PersonaServiceTest, EffectivePers
+   EXPECT_EQ("system", *audit.FindDict("surfaces")->FindString("fingerprint"));
+   EXPECT_EQ("system",
+             *audit.FindDict("surfaces")->FindString("mediaDevices"));
++  EXPECT_EQ("system", *audit.FindDict("surfaces")->FindString("webGpu"));
++  EXPECT_EQ("system",
++            *audit.FindDict("surfaces")->FindString("mediaOutput"));
+   EXPECT_EQ(0, *audit.FindDict("runtimeEvidence")
+                    ->FindDict("frames")
+                    ->FindInt("total"));
++  EXPECT_EQ("system", *audit.FindDict("runtimeEvidence")
++                           ->FindDict("webGpu")
++                           ->FindString("status"));
++  EXPECT_EQ("system", *audit.FindDict("runtimeEvidence")
++                           ->FindDict("mediaOutput")
++                           ->FindString("status"));
+ }
+ 
+ TEST_F(PersonaServiceTest, EffectivePersonaIncludesMediaDevicePolicy) {
+--- a/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+@@ -111,6 +111,22 @@ export interface PersonaAuditResponse {
+       status: string;
+       mismatched: number;
+     }>;
++    webGpu: {
++      status: string;
++      observedContexts: number;
++      identityMatched: number;
++      identityMismatched: number;
++      featureSetsObserved: number;
++      featureValuesObserved: number;
++      limitSetsObserved: number;
++      limitValuesObserved: number;
++      limitSetsIncomplete: number;
++      devicesObserved: number;
++    };
++    mediaOutput: {
++      status: string;
++      observedContexts: number;
++    };
+   };
+ }
+ 
+--- a/content/browser/service_worker/service_worker_host.cc
++++ b/content/browser/service_worker/service_worker_host.cc
+@@ -103,9 +103,8 @@ ServiceWorkerHost::GetHeliumPersonaWorke
+ void ServiceWorkerHost::SetSurfaceProbe(
+     blink::mojom::HeliumPersonaSurfaceProbePtr probe) {
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+-  if (persona_surface_probe_) {
+-    persona_surface_probe_receivers_.ReportBadMessage(
+-        "Service worker reported Persona surface evidence twice");
++  if (persona_surface_probe_ &&
++      probe->evidence_sequence <= persona_surface_probe_->evidence_sequence) {
+     return;
+   }
+   persona_surface_probe_ = std::move(probe);
+--- a/content/browser/worker_host/dedicated_worker_host.cc
++++ b/content/browser/worker_host/dedicated_worker_host.cc
+@@ -216,9 +216,8 @@ DedicatedWorkerHost::GetHeliumPersonaWor
+ void DedicatedWorkerHost::SetSurfaceProbe(
+     blink::mojom::HeliumPersonaSurfaceProbePtr probe) {
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+-  if (persona_surface_probe_) {
+-    persona_surface_probe_receivers_.ReportBadMessage(
+-        "Dedicated worker reported Persona surface evidence twice");
++  if (persona_surface_probe_ &&
++      probe->evidence_sequence <= persona_surface_probe_->evidence_sequence) {
+     return;
+   }
+   persona_surface_probe_ = std::move(probe);
+--- a/content/browser/worker_host/shared_worker_host.cc
++++ b/content/browser/worker_host/shared_worker_host.cc
+@@ -335,9 +335,8 @@ SharedWorkerHost::GetHeliumPersonaWorker
+ void SharedWorkerHost::SetSurfaceProbe(
+     blink::mojom::HeliumPersonaSurfaceProbePtr probe) {
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+-  if (persona_surface_probe_) {
+-    persona_surface_probe_receivers_.ReportBadMessage(
+-        "Shared worker reported Persona surface evidence twice");
++  if (persona_surface_probe_ &&
++      probe->evidence_sequence <= persona_surface_probe_->evidence_sequence) {
+     return;
+   }
+   persona_surface_probe_ = std::move(probe);
+--- a/third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom
+@@ -9,12 +9,22 @@ import "third_party/blink/public/mojom/h
+ // Renderer-held evidence for the Persona snapshot and deterministic-noise
+ // tokens attached to an execution context.
+ struct HeliumPersonaSurfaceProbe {
++  uint64 evidence_sequence;
+   HeliumPersonaSnapshot snapshot;
+   bool canvas_noise_token_present;
+   bool audio_noise_token_present;
+   bool hardware_noise_token_present;
+   bool font_metric_noise_token_present;
+   bool client_rect_noise_token_present;
++  bool webgpu_adapter_observed;
++  string webgpu_vendor;
++  string webgpu_architecture;
++  string webgpu_device;
++  string webgpu_description;
++  array<string> webgpu_features;
++  array<uint64> webgpu_limits;
++  bool webgpu_device_observed;
++  bool media_output_observed;
+ };
+ 
+ enum HeliumPersonaWorkerType {
+@@ -30,8 +40,8 @@ struct HeliumPersonaWorkerSurfaceProbe {
+   HeliumPersonaSurfaceProbe? probe;
+ };
+ 
+-// Implemented by each browser-side worker host. A worker reports exactly once
+-// after its BrowserInterfaceBroker is connected.
++// Implemented by each browser-side worker host. A worker reports after its
++// BrowserInterfaceBroker is connected and again when passive evidence changes.
+ interface HeliumPersonaWorkerSurfaceProbeHost {
+   SetSurfaceProbe(HeliumPersonaSurfaceProbe probe);
+ };
+--- a/third_party/blink/renderer/core/execution_context/execution_context.h
++++ b/third_party/blink/renderer/core/execution_context/execution_context.h
+@@ -28,7 +28,9 @@
+ #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_EXECUTION_CONTEXT_EXECUTION_CONTEXT_H_
+ #define THIRD_PARTY_BLINK_RENDERER_CORE_EXECUTION_CONTEXT_EXECUTION_CONTEXT_H_
+ 
++#include <cstdint>
+ #include <memory>
++#include <utility>
+ 
+ #include "base/notreached.h"
+ #include "net/storage_access_api/status.h"
+@@ -56,6 +58,7 @@
+ #include "third_party/blink/renderer/platform/supplementable.h"
+ #include "third_party/blink/renderer/platform/use_counter_and_console_logger.h"
+ #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++#include "third_party/blink/renderer/platform/wtf/vector.h"
+ #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
+ #include "v8/include/v8-callbacks.h"
+ #include "v8/include/v8-forward.h"
+@@ -512,6 +515,51 @@ class CORE_EXPORT ExecutionContext : pub
+     client_rect_noise_token_ = token;
+   }
+ 
++  struct HeliumPersonaRuntimeSurfaceEvidence {
++    bool webgpu_adapter_observed = false;
++    String webgpu_vendor;
++    String webgpu_architecture;
++    String webgpu_device;
++    String webgpu_description;
++    Vector<String> webgpu_features;
++    Vector<uint64_t> webgpu_limits;
++    bool webgpu_device_observed = false;
++    bool media_output_observed = false;
++  };
++
++  const HeliumPersonaRuntimeSurfaceEvidence&
++  GetHeliumPersonaRuntimeSurfaceEvidence() const {
++    return helium_persona_runtime_surface_evidence_;
++  }
++
++  void SetHeliumPersonaWebGpuEvidence(
++      const String& vendor,
++      const String& architecture,
++      const String& device,
++      const String& description,
++      Vector<String> features,
++      Vector<uint64_t> limits) {
++    auto& evidence = helium_persona_runtime_surface_evidence_;
++    evidence.webgpu_adapter_observed = true;
++    evidence.webgpu_vendor = vendor;
++    evidence.webgpu_architecture = architecture;
++    evidence.webgpu_device = device;
++    evidence.webgpu_description = description;
++    evidence.webgpu_features = std::move(features);
++    evidence.webgpu_limits = std::move(limits);
++    OnHeliumPersonaRuntimeSurfaceEvidenceChanged();
++  }
++
++  void SetHeliumPersonaWebGpuDeviceObserved() {
++    helium_persona_runtime_surface_evidence_.webgpu_device_observed = true;
++    OnHeliumPersonaRuntimeSurfaceEvidenceChanged();
++  }
++
++  void SetHeliumPersonaMediaOutputObserved() {
++    helium_persona_runtime_surface_evidence_.media_output_observed = true;
++    OnHeliumPersonaRuntimeSurfaceEvidenceChanged();
++  }
++
+   // Returns the policy state for network-efficiency-guardrails in this
+   // document.
+   virtual std::optional<mojom::blink::PolicyDisposition>
+@@ -532,6 +580,8 @@ class CORE_EXPORT ExecutionContext : pub
+   ExecutionContext(v8::Isolate* isolate, Agent* agent, bool is_window = false);
+   ~ExecutionContext() override;
+ 
++  virtual void OnHeliumPersonaRuntimeSurfaceEvidenceChanged() {}
++
+   // Resetting the Agent is only necessary for a special case related to the
+   // GetShouldReuseGlobalForUnownedMainFrame() Setting.
+   void ResetAgent(Agent* agent) { agent_ = agent; }
+@@ -597,6 +647,8 @@ class CORE_EXPORT ExecutionContext : pub
+   std::optional<NoiseToken> hardware_noise_token_;
+   std::optional<NoiseToken> font_metric_noise_token_;
+   std::optional<NoiseToken> client_rect_noise_token_;
++  HeliumPersonaRuntimeSurfaceEvidence
++      helium_persona_runtime_surface_evidence_;
+ };
+ 
+ }  // namespace blink
+--- a/third_party/blink/renderer/core/frame/local_frame_mojo_handler.cc
++++ b/third_party/blink/renderer/core/frame/local_frame_mojo_handler.cc
+@@ -386,6 +386,7 @@ void LocalFrameMojoHandler::DidDetachFra
+ void LocalFrameMojoHandler::GetHeliumPersonaSurfaceProbe(
+     GetHeliumPersonaSurfaceProbeCallback callback) {
+   auto probe = mojom::blink::HeliumPersonaSurfaceProbe::New();
++  probe->evidence_sequence = 0;
+   if (frame_->Client() && frame_->Client()->GetWebFrame() &&
+       frame_->Client()->GetWebFrame()->Client()) {
+     probe->snapshot = frame_->Client()
+@@ -404,6 +405,17 @@ void LocalFrameMojoHandler::GetHeliumPer
+         document->FontMetricNoiseToken().has_value();
+     probe->client_rect_noise_token_present =
+         document->ClientRectNoiseToken().has_value();
++    const auto& runtime_evidence =
++        document->GetHeliumPersonaRuntimeSurfaceEvidence();
++    probe->webgpu_adapter_observed = runtime_evidence.webgpu_adapter_observed;
++    probe->webgpu_vendor = runtime_evidence.webgpu_vendor;
++    probe->webgpu_architecture = runtime_evidence.webgpu_architecture;
++    probe->webgpu_device = runtime_evidence.webgpu_device;
++    probe->webgpu_description = runtime_evidence.webgpu_description;
++    probe->webgpu_features = runtime_evidence.webgpu_features;
++    probe->webgpu_limits = runtime_evidence.webgpu_limits;
++    probe->webgpu_device_observed = runtime_evidence.webgpu_device_observed;
++    probe->media_output_observed = runtime_evidence.media_output_observed;
+   }
+   std::move(callback).Run(std::move(probe));
+ }
+--- a/third_party/blink/renderer/core/workers/worker_global_scope.cc
++++ b/third_party/blink/renderer/core/workers/worker_global_scope.cc
+@@ -791,6 +791,7 @@ void WorkerGlobalScope::ReportHeliumPers
+   GetBrowserInterfaceBroker().GetInterface(
+       host.BindNewPipeAndPassReceiver());
+   auto probe = mojom::blink::HeliumPersonaSurfaceProbe::New();
++  probe->evidence_sequence = ++helium_persona_surface_probe_sequence_;
+   probe->snapshot = helium_persona_snapshot_;
+   probe->canvas_noise_token_present = CanvasNoiseToken().has_value();
+   probe->audio_noise_token_present = AudioNoiseToken().has_value();
+@@ -798,9 +799,24 @@ void WorkerGlobalScope::ReportHeliumPers
+   probe->font_metric_noise_token_present =
+       FontMetricNoiseToken().has_value();
+   probe->client_rect_noise_token_present = false;
++  const auto& runtime_evidence =
++      GetHeliumPersonaRuntimeSurfaceEvidence();
++  probe->webgpu_adapter_observed = runtime_evidence.webgpu_adapter_observed;
++  probe->webgpu_vendor = runtime_evidence.webgpu_vendor;
++  probe->webgpu_architecture = runtime_evidence.webgpu_architecture;
++  probe->webgpu_device = runtime_evidence.webgpu_device;
++  probe->webgpu_description = runtime_evidence.webgpu_description;
++  probe->webgpu_features = runtime_evidence.webgpu_features;
++  probe->webgpu_limits = runtime_evidence.webgpu_limits;
++  probe->webgpu_device_observed = runtime_evidence.webgpu_device_observed;
++  probe->media_output_observed = runtime_evidence.media_output_observed;
+   host->SetSurfaceProbe(std::move(probe));
+ }
+ 
++void WorkerGlobalScope::OnHeliumPersonaRuntimeSurfaceEvidenceChanged() {
++  ReportHeliumPersonaSurfaceProbe();
++}
++
+ void WorkerGlobalScope::ExceptionThrown(ErrorEvent* event) {
+   int next_id = ++last_pending_error_event_id_;
+   pending_error_events_.Set(next_id, event);
+--- a/third_party/blink/renderer/core/workers/worker_global_scope.h
++++ b/third_party/blink/renderer/core/workers/worker_global_scope.h
+@@ -317,6 +317,7 @@ class CORE_EXPORT WorkerGlobalScope
+ 
+  private:
+   void ReportHeliumPersonaSurfaceProbe();
++  void OnHeliumPersonaRuntimeSurfaceEvidenceChanged() override;
+   void SetWorkerSettings(std::unique_ptr<WorkerSettings>);
+ 
+   // https://html.spec.whatwg.org/C/#run-a-worker Step 24.
+@@ -333,6 +334,7 @@ class CORE_EXPORT WorkerGlobalScope
+   const String user_agent_;
+   const UserAgentMetadata ua_metadata_;
+   const HeliumPersonaSnapshot helium_persona_snapshot_;
++  uint64_t helium_persona_surface_probe_sequence_ = 0;
+   std::unique_ptr<WorkerSettings> worker_settings_;
+ 
+   mutable Member<WorkerLocation> location_;
+--- a/third_party/blink/renderer/modules/webaudio/realtime_audio_destination_handler.cc
++++ b/third_party/blink/renderer/modules/webaudio/realtime_audio_destination_handler.cc
+@@ -12,6 +12,7 @@
+ #include "third_party/blink/public/platform/web_audio_latency_hint.h"
+ #include "third_party/blink/public/platform/web_audio_sink_descriptor.h"
+ #include "third_party/blink/public/web/web_local_frame.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/modules/peerconnection/peer_connection_dependency_factory.h"
+ #include "third_party/blink/renderer/modules/webaudio/audio_node_input.h"
+ #include "third_party/blink/renderer/modules/webaudio/audio_node_output.h"
+@@ -232,6 +233,16 @@ void RealtimeAudioDestinationHandler::Re
+     return;
+   }
+ 
++  if (!persona_output_observation_posted_.exchange(
++          true, std::memory_order_acq_rel)) {
++    PostCrossThreadTask(
++        *task_runner_, FROM_HERE,
++        CrossThreadBindOnce(
++            &RealtimeAudioDestinationHandler::
++                RecordHeliumPersonaAudioOutputObserved,
++            weak_ptr_factory_.GetWeakPtr()));
++  }
++
+   context->HandlePreRenderTasks(number_of_frames, &output_position, &metric,
+                                 playout_delay, glitch_info);
+ 
+@@ -327,6 +338,17 @@ void RealtimeAudioDestinationHandler::Se
+   is_silence_detection_active_for_testing_ = detect_silence;
+ }
+ 
++void RealtimeAudioDestinationHandler::
++    RecordHeliumPersonaAudioOutputObserved() {
++  DCHECK(IsMainThread());
++  if (!IsInitialized() || !Context()) {
++    return;
++  }
++  if (ExecutionContext* execution_context = Context()->GetExecutionContext()) {
++    execution_context->SetHeliumPersonaMediaOutputObserved();
++  }
++}
++
+ uint32_t RealtimeAudioDestinationHandler::GetCallbackBufferSize() const {
+   DCHECK(IsMainThread());
+   DCHECK(IsInitialized());
+--- a/third_party/blink/renderer/modules/webaudio/realtime_audio_destination_handler.h
++++ b/third_party/blink/renderer/modules/webaudio/realtime_audio_destination_handler.h
+@@ -113,6 +113,7 @@ class MODULES_EXPORT RealtimeAudioDestin
+   // automatic pull nodes) and flips the switch if necessary. Called within the
+   // Render() method.
+   void SetDetectSilenceIfNecessary(bool has_automatic_pull_nodes);
++  void RecordHeliumPersonaAudioOutputObserved();
+ 
+   // Should only be called from StartPlatformDestination.
+   void EnablePullingAudioGraph() {
+@@ -149,6 +150,8 @@ class MODULES_EXPORT RealtimeAudioDestin
+   // the audio thread only reads this.
+   std::atomic_bool allow_pulling_audio_graph_;
+ 
++  std::atomic_bool persona_output_observation_posted_{false};
++
+   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+ 
+   // Represents the current condition of silence detection. By default, the
+--- a/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
++++ b/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
+@@ -53,11 +53,61 @@ GPUSupportedFeatures* MakeFeatureNameSet
+     if (feature_name_enum_optional) {
+       features->AddFeatureName(
+           V8GPUFeatureName(feature_name_enum_optional.value()));
+-      }
++    }
+   }
+   return features;
+ }
+ 
++Vector<String> CollectFeatureNames(const GPUSupportedFeatures& features) {
++  Vector<String> names;
++  names.ReserveInitialCapacity(features.FeatureNameSet().size());
++  for (const String& feature : features.FeatureNameSet()) {
++    names.push_back(feature);
++  }
++  return names;
++}
++
++Vector<uint64_t> CollectLimitValues(const GPUSupportedLimits& limits) {
++  return {
++      limits.maxTextureDimension1D(),
++      limits.maxTextureDimension2D(),
++      limits.maxTextureDimension3D(),
++      limits.maxTextureArrayLayers(),
++      limits.maxBindGroups(),
++      limits.maxBindGroupsPlusVertexBuffers(),
++      limits.maxBindingsPerBindGroup(),
++      limits.maxDynamicUniformBuffersPerPipelineLayout(),
++      limits.maxDynamicStorageBuffersPerPipelineLayout(),
++      limits.maxSampledTexturesPerShaderStage(),
++      limits.maxSamplersPerShaderStage(),
++      limits.maxStorageBuffersPerShaderStage(),
++      limits.maxStorageTexturesPerShaderStage(),
++      limits.maxUniformBuffersPerShaderStage(),
++      limits.maxUniformBufferBindingSize(),
++      limits.maxStorageBufferBindingSize(),
++      limits.minUniformBufferOffsetAlignment(),
++      limits.minStorageBufferOffsetAlignment(),
++      limits.maxVertexBuffers(),
++      limits.maxBufferSize(),
++      limits.maxVertexAttributes(),
++      limits.maxVertexBufferArrayStride(),
++      limits.maxInterStageShaderVariables(),
++      limits.maxColorAttachments(),
++      limits.maxColorAttachmentBytesPerSample(),
++      limits.maxComputeWorkgroupStorageSize(),
++      limits.maxComputeInvocationsPerWorkgroup(),
++      limits.maxComputeWorkgroupSizeX(),
++      limits.maxComputeWorkgroupSizeY(),
++      limits.maxComputeWorkgroupSizeZ(),
++      limits.maxComputeWorkgroupsPerDimension(),
++      limits.maxStorageBuffersInFragmentStage(),
++      limits.maxStorageTexturesInFragmentStage(),
++      limits.maxStorageBuffersInVertexStage(),
++      limits.maxStorageTexturesInVertexStage(),
++      limits.maxImmediateSize(),
++  };
++}
++
+ }  // anonymous namespace
+ 
+ GPUAdapter::GPUAdapter(
+@@ -128,6 +178,12 @@ GPUAdapter::GPUAdapter(
+   limits_ = MakeGarbageCollected<GPUSupportedLimits>(limits);
+ 
+   info_ = CreateAdapterInfoForAdapter();
++  if (gpu_ && gpu_->GetExecutionContext()) {
++    gpu_->GetExecutionContext()->SetHeliumPersonaWebGpuEvidence(
++        info_->vendor(), info_->architecture(), info_->device(),
++        info_->description(), CollectFeatureNames(*features_),
++        CollectLimitValues(*limits_));
++  }
+ }
+ 
+ GPUAdapterInfo* GPUAdapter::CreateAdapterInfoForAdapter() {
+@@ -259,6 +315,10 @@ void GPUAdapter::OnRequestDeviceCallback
+       DCHECK(dawn_device);
+ 
+       device->Initialize(dawn_device, descriptor, /*lost_info=*/nullptr);
++      if (ExecutionContext* execution_context =
++              device->GetExecutionContext()) {
++        execution_context->SetHeliumPersonaWebGpuDeviceObserved();
++      }
+       resolver->Resolve(device);
+ 
+       ukm::builders::ClientRenderingAPI(

@@ -1,0 +1,681 @@
+--- a/services/network/host_resolver.cc
++++ b/services/network/host_resolver.cc
+@@ -104,6 +104,14 @@
+     const net::NetworkAnonymizationKey& network_anonymization_key,
+     mojom::ResolveHostParametersPtr optional_parameters,
+     mojo::PendingRemote<mojom::ResolveHostClient> response_client) {
++  if (network_requests_blocked_) {
++    mojo::Remote<mojom::ResolveHostClient>(std::move(response_client))
++        ->OnComplete(net::ERR_NETWORK_ACCESS_REVOKED,
++                     net::ResolveErrorInfo(net::ERR_NETWORK_ACCESS_REVOKED),
++                     /*resolved_addresses=*/{},
++                     /*alternative_endpoints=*/{});
++    return;
++  }
+ #if !BUILDFLAG(ENABLE_MDNS)
+   // TODO(crbug.com/41375980): Handle without crashing if we create restricted
+   // HostResolvers for passing to untrusted processes.
+@@ -145,6 +153,10 @@
+     net::DnsQueryType query_type,
+     mojo::PendingRemote<mojom::MdnsListenClient> response_client,
+     MdnsListenCallback callback) {
++  if (network_requests_blocked_) {
++    std::move(callback).Run(net::ERR_NETWORK_ACCESS_REVOKED);
++    return;
++  }
+ #if BUILDFLAG(ENABLE_MDNS)
+   auto listener = std::make_unique<HostResolverMdnsListener>(internal_resolver_,
+                                                              host, query_type);
+@@ -167,6 +179,18 @@
+   return requests_.size();
+ }
+ 
++void HostResolver::SetNetworkRequestsBlocked(bool blocked) {
++  network_requests_blocked_ = blocked;
++  if (!blocked) {
++    return;
++  }
++
++  while (!requests_.empty()) {
++    (*requests_.begin())->Cancel(net::ERR_NETWORK_ACCESS_REVOKED);
++  }
++  listeners_.clear();
++}
++
+ void HostResolver::SetResolveHostCallbackForTesting(
+     ResolveHostCallback callback) {
+   GetResolveHostCallback() = std::move(callback);
+--- a/services/network/host_resolver.h
++++ b/services/network/host_resolver.h
+@@ -71,6 +71,10 @@
+ 
+   size_t GetNumOutstandingRequestsForTesting() const;
+ 
++  // Cancels active DNS work and rejects new work while a Persona network
++  // identity transaction is changing the route and protocol identity.
++  void SetNetworkRequestsBlocked(bool blocked);
++
+   // Sets a global callback when a ResolveHost call arrives.
+   using ResolveHostCallback =
+       base::RepeatingCallback<void(const std::string& host)>;
+@@ -94,6 +98,8 @@
+   const raw_ptr<net::HostResolver> internal_resolver_;
+   const raw_ptr<net::NetLog> net_log_;
+ 
++  bool network_requests_blocked_ = false;
++
+   base::WeakPtrFactory<HostResolver> weak_factory_{this};
+ };
+ 
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -847,6 +847,8 @@
+         std::move(params_->socket_brokers->server));
+   }
+ #endif
++  socket_factory_->SetNetworkPersonaRequestsBlocked(
++      network_persona_requests_blocked_);
+   resource_scheduler_ = std::make_unique<ResourceScheduler>();
+ 
+   if (params_->http_auth_static_network_context_params) {
+@@ -1091,6 +1093,10 @@
+ }
+ 
+ void NetworkContext::ActivateDohProbes() {
++  doh_probes_activation_requested_ = true;
++  if (network_persona_requests_blocked_) {
++    return;
++  }
+   DCHECK(url_request_context_->host_resolver());
+ 
+   doh_probes_request_.reset();
+@@ -1142,6 +1148,12 @@
+ void NetworkContext::GetViaObliviousHttp(
+     mojom::ObliviousHttpRequestPtr request,
+     mojo::PendingRemote<mojom::ObliviousHttpClient> client) {
++  if (network_persona_requests_blocked_) {
++    mojo::Remote<mojom::ObliviousHttpClient>(std::move(client))
++        ->OnCompleted(mojom::ObliviousHttpCompletionResult::NewNetError(
++            net::ERR_NETWORK_ACCESS_REVOKED));
++    return;
++  }
+   ohttp_handler_.StartRequest(std::move(request), std::move(client));
+ }
+ 
+@@ -1872,12 +1884,38 @@
+ void NetworkContext::SetNetworkPersonaRequestsBlocked(
+     bool blocked,
+     SetNetworkPersonaRequestsBlockedCallback callback) {
++  const bool was_blocked = network_persona_requests_blocked_;
+   network_persona_requests_blocked_ = blocked;
++  socket_factory_->SetNetworkPersonaRequestsBlocked(blocked);
+   if (!blocked) {
++    if (internal_host_resolver_) {
++      internal_host_resolver_->SetNetworkRequestsBlocked(false);
++    }
++    for (const auto& resolver : host_resolvers_) {
++      resolver->SetNetworkRequestsBlocked(false);
++    }
++    if (was_blocked && doh_probes_activation_requested_) {
++      ActivateDohProbes();
++    }
+     std::move(callback).Run(true);
+     return;
+   }
+ 
++  ohttp_handler_.AbortAllRequestsForNetworkPersonaTransition();
++  proxy_resolving_socket_factories_.Clear();
++  while (!proxy_lookup_requests_.empty()) {
++    (*proxy_lookup_requests_.begin())
++        ->Cancel(net::ERR_NETWORK_ACCESS_REVOKED);
++  }
++  if (internal_host_resolver_) {
++    internal_host_resolver_->SetNetworkRequestsBlocked(true);
++  }
++  for (const auto& resolver : host_resolvers_) {
++    resolver->SetNetworkRequestsBlocked(true);
++  }
++  doh_probes_request_.reset();
++  canary_domain_service_.reset();
++
+   // Aborting the last loader can delete its factory, so iterate a pointer
+   // snapshot instead of the owning set.
+   std::vector<PrefetchMatchingURLLoaderFactory*> factories;
+@@ -2100,6 +2138,9 @@
+ 
+ void NetworkContext::CreateProxyResolvingSocketFactory(
+     mojo::PendingReceiver<mojom::ProxyResolvingSocketFactory> receiver) {
++  if (network_persona_requests_blocked_) {
++    return;
++  }
+   proxy_resolving_socket_factories_.Add(
+       std::make_unique<ProxyResolvingSocketFactoryMojo>(url_request_context()),
+       std::move(receiver));
+@@ -2110,6 +2151,11 @@
+     const net::NetworkAnonymizationKey& network_anonyization_key,
+     mojo::PendingRemote<mojom::ProxyLookupClient> proxy_lookup_client) {
+   DCHECK(proxy_lookup_client);
++  if (network_persona_requests_blocked_) {
++    mojo::Remote<mojom::ProxyLookupClient>(std::move(proxy_lookup_client))
++        ->OnProxyLookupComplete(net::ERR_NETWORK_ACCESS_REVOKED, std::nullopt);
++    return;
++  }
+   std::unique_ptr<ProxyLookupRequest> proxy_lookup_request(
+       std::make_unique<ProxyLookupRequest>(std::move(proxy_lookup_client), this,
+                                            network_anonyization_key));
+@@ -2220,6 +2266,14 @@
+     const net::NetworkAnonymizationKey& network_anonymization_key,
+     mojom::ResolveHostParametersPtr optional_parameters,
+     mojo::PendingRemote<mojom::ResolveHostClient> response_client) {
++  if (network_persona_requests_blocked_) {
++    mojo::Remote<mojom::ResolveHostClient>(std::move(response_client))
++        ->OnComplete(net::ERR_NETWORK_ACCESS_REVOKED,
++                     net::ResolveErrorInfo(net::ERR_NETWORK_ACCESS_REVOKED),
++                     /*resolved_addresses=*/{},
++                     /*alternative_endpoints=*/{});
++    return;
++  }
+   // Dns request is disallowed if network access is disabled for the partition
+   // nonce or the network_restrictions_id.
+   // TODO(crbug.com/447954811): For Connection Allowlist DNS lookups, define a
+@@ -2259,6 +2313,9 @@
+ void NetworkContext::CreateHostResolver(
+     const std::optional<net::DnsConfigOverrides>& config_overrides,
+     mojo::PendingReceiver<mojom::HostResolver> receiver) {
++  if (network_persona_requests_blocked_) {
++    return;
++  }
+   net::HostResolver* internal_resolver = url_request_context_->host_resolver();
+   std::unique_ptr<net::HostResolver> private_internal_resolver;
+ 
+@@ -2562,6 +2619,9 @@
+     const std::optional<net::ConnectionKeepAliveConfig>& keepalive_config,
+     mojo::PendingRemote<mojom::ConnectionChangeObserverClient>
+         connection_change_observer_client) {
++  if (network_persona_requests_blocked_) {
++    return;
++  }
+   DCHECK(!require_network_anonymization_key_ ||
+          !network_anonymization_key.IsEmpty());
+ 
+--- a/services/network/network_context.h
++++ b/services/network/network_context.h
+@@ -1024,6 +1024,7 @@
+   std::set<std::unique_ptr<HostResolver>, base::UniquePtrComparator>
+       host_resolvers_;
+   std::unique_ptr<net::HostResolver::ProbeRequest> doh_probes_request_;
++  bool doh_probes_activation_requested_ = false;
+ 
+   // Created on-demand. Null if unused.
+   // Must be destroyed before `url_request_context_owner_`;
+@@ -1087,8 +1088,10 @@
+   // calls to DestroyURLLoaderFactory().
+   bool is_destructing_ = false;
+ 
+-  // Published before active requests are aborted, so no new request can enter
+-  // while a Persona network identity transaction is changing native state.
++  // Published before covered active requests are aborted, so new URLLoader,
++  // WebSocket, WebTransport, direct socket, DNS, preconnect, and OHTTP work
++  // cannot enter while a Persona network identity transaction changes native
++  // state. P2P, mDNS responders, and internal reporting are not covered.
+   bool network_persona_requests_blocked_ = false;
+ 
+   // True if the Prefetch() method is enabled.
+--- a/services/network/network_context_unittest.cc
++++ b/services/network/network_context_unittest.cc
+@@ -864,6 +864,27 @@
+       FetchRequest(request, network_context.get());
+   EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED,
+             client->completion_status().error_code);
++
++  mojo::Remote<mojom::RestrictedUDPSocket> restricted_socket;
++  base::test::TestFuture<int32_t, const std::optional<net::IPEndPoint>&>
++      restricted_result;
++  network_context->CreateRestrictedUDPSocket(
++      net::IPEndPoint(net::IPAddress::IPv4Localhost(), 0),
++      mojom::RestrictedUDPSocketMode::BOUND,
++      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
++      /*params=*/nullptr, restricted_socket.BindNewPipeAndPassReceiver(),
++      mojo::NullRemote(), /*allow_multicast=*/false,
++      /*allow_source_specific_multicast=*/false,
++      restricted_result.GetCallback());
++  EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED, restricted_result.Get<0>());
++
++  TestProxyLookupClient proxy_lookup_client;
++  proxy_lookup_client.StartLookUpProxyForURL(
++      GURL("https://blocked.example.test/"), net::NetworkAnonymizationKey(),
++      network_context.get());
++  proxy_lookup_client.WaitForResult();
++  EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED,
++            proxy_lookup_client.net_error());
+ }
+ 
+ TEST_F(NetworkContextTest, NetworkPersonaRequestGateCancelsActiveLoader) {
+@@ -907,6 +928,57 @@
+   EXPECT_FALSE(network_context->network_persona_requests_blocked());
+ }
+ 
++TEST_F(NetworkContextTest, NetworkPersonaRequestGateCancelsDirectSockets) {
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(CreateNetworkContextParamsForTesting());
++
++  mojo::Remote<mojom::UDPSocket> socket;
++  network_context->CreateUDPSocket(socket.BindNewPipeAndPassReceiver(),
++                                   mojo::NullRemote());
++  socket.FlushForTesting();
++
++  base::RunLoop socket_disconnected;
++  socket.set_disconnect_handler(socket_disconnected.QuitClosure());
++  base::test::TestFuture<bool> blocked;
++  network_context->SetNetworkPersonaRequestsBlocked(true,
++                                                    blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++  socket_disconnected.Run();
++
++  mojo::Remote<mojom::UDPSocket> rejected_socket;
++  auto rejected_receiver = rejected_socket.BindNewPipeAndPassReceiver();
++  base::RunLoop rejected_socket_disconnected;
++  rejected_socket.set_disconnect_handler(
++      rejected_socket_disconnected.QuitClosure());
++  network_context->CreateUDPSocket(std::move(rejected_receiver),
++                                   mojo::NullRemote());
++  rejected_socket_disconnected.Run();
++
++  mojo::Remote<mojom::RestrictedUDPSocket> restricted_socket;
++  base::test::TestFuture<int32_t, const std::optional<net::IPEndPoint>&>
++      restricted_result;
++  network_context->CreateRestrictedUDPSocket(
++      net::IPEndPoint(net::IPAddress::IPv4Localhost(), 0),
++      mojom::RestrictedUDPSocketMode::BOUND,
++      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
++      /*params=*/nullptr, restricted_socket.BindNewPipeAndPassReceiver(),
++      mojo::NullRemote(), /*allow_multicast=*/false,
++      /*allow_source_specific_multicast=*/false,
++      restricted_result.GetCallback());
++  EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED, restricted_result.Get<0>());
++  EXPECT_FALSE(restricted_result.Get<1>().has_value());
++
++  base::test::TestFuture<bool> released;
++  network_context->SetNetworkPersonaRequestsBlocked(false,
++                                                    released.GetCallback());
++  EXPECT_TRUE(released.Get());
++  mojo::Remote<mojom::UDPSocket> released_socket;
++  network_context->CreateUDPSocket(
++      released_socket.BindNewPipeAndPassReceiver(), mojo::NullRemote());
++  released_socket.FlushForTesting();
++  EXPECT_TRUE(released_socket.is_connected());
++}
++
+ class NetworkContextTestWithMockTime : public NetworkContextTest {
+  public:
+   NetworkContextTestWithMockTime()
+@@ -4415,6 +4487,65 @@
+ 
+ using NetworkContextResolveHostTest = NetworkContextTest;
+ 
++TEST_F(NetworkContextResolveHostTest,
++       NetworkPersonaRequestGateRejectsNewResolution) {
++  mojom::NetworkContextParamsPtr params =
++      CreateNetworkContextParamsForTesting();
++  params->block_network_persona_requests = true;
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(std::move(params));
++
++  base::RunLoop run_loop;
++  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
++  TestResolveHostClient response_client(&pending_response_client, &run_loop);
++  network_context->ResolveHost(
++      network::mojom::HostResolverHost::NewHostPortPair(
++          net::HostPortPair("blocked.test", 160)),
++      net::NetworkAnonymizationKey(), /*optional_parameters=*/nullptr,
++      std::move(pending_response_client));
++  run_loop.Run();
++
++  EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED,
++            response_client.top_level_result_error());
++  EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED,
++            response_client.result_error());
++  EXPECT_EQ(0u,
++            network_context->GetNumOutstandingResolveHostRequestsForTesting());
++}
++
++TEST_F(NetworkContextResolveHostTest,
++       NetworkPersonaRequestGateCancelsActiveResolution) {
++  auto resolver = std::make_unique<net::MockHostResolver>();
++  resolver->rules()->AddRule("pending.test", "1.2.3.4");
++  resolver->set_synchronous_mode(false);
++  network_service_->set_host_resolver_factory_for_testing(
++      std::make_unique<HostResolverFactory>(std::move(resolver)));
++  std::unique_ptr<NetworkContext> network_context =
++      CreateContextWithParams(CreateNetworkContextParamsForTesting());
++
++  base::RunLoop run_loop;
++  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
++  TestResolveHostClient response_client(&pending_response_client, &run_loop);
++  network_context->ResolveHost(
++      network::mojom::HostResolverHost::NewHostPortPair(
++          net::HostPortPair("pending.test", 160)),
++      net::NetworkAnonymizationKey(), /*optional_parameters=*/nullptr,
++      std::move(pending_response_client));
++
++  base::test::TestFuture<bool> blocked;
++  network_context->SetNetworkPersonaRequestsBlocked(true,
++                                                    blocked.GetCallback());
++  EXPECT_TRUE(blocked.Get());
++  run_loop.Run();
++
++  EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED,
++            response_client.top_level_result_error());
++  EXPECT_EQ(net::ERR_NETWORK_ACCESS_REVOKED,
++            response_client.result_error());
++  EXPECT_EQ(0u,
++            network_context->GetNumOutstandingResolveHostRequestsForTesting());
++}
++
+ TEST_F(NetworkContextResolveHostTest, Sync) {
+   auto resolver = std::make_unique<net::MockHostResolver>();
+   resolver->rules()->AddRule("sync.test", "1.2.3.4");
+--- a/services/network/oblivious_http_request_handler.cc
++++ b/services/network/oblivious_http_request_handler.cc
+@@ -264,6 +264,15 @@
+   ContinueHandlingRequest(/*headers=*/std::nullopt, id);
+ }
+ 
++void ObliviousHttpRequestHandler::
++    AbortAllRequestsForNetworkPersonaTransition() {
++  while (!client_state_.empty()) {
++    RespondWithError(client_state_.begin()->first,
++                     net::ERR_NETWORK_ACCESS_REVOKED,
++                     /*outer_response_error_code=*/std::nullopt);
++  }
++}
++
+ void ObliviousHttpRequestHandler::OnDoneConstructingTrustTokenHelper(
+     mojo::RemoteSetElementId id,
+     TrustTokenStatusOrRequestHelper status_or_helper) {
+--- a/services/network/oblivious_http_request_handler.h
++++ b/services/network/oblivious_http_request_handler.h
+@@ -50,6 +50,10 @@
+   void StartRequest(mojom::ObliviousHttpRequestPtr request,
+                     mojo::PendingRemote<mojom::ObliviousHttpClient> client);
+ 
++  // Completes every active request with a fail-closed network error before a
++  // Persona network identity transition can change the underlying route.
++  void AbortAllRequestsForNetworkPersonaTransition();
++
+   void SetURLLoaderFactoryForTesting(
+       mojo::PendingRemote<mojom::URLLoaderFactory> factory) {
+     url_loader_factory_.reset();
+--- a/services/network/oblivious_http_request_handler_unittest.cc
++++ b/services/network/oblivious_http_request_handler_unittest.cc
+@@ -684,6 +684,27 @@
+   }
+ }
+ 
++TEST_F(TestObliviousHttpRequestHandler,
++       AbortsAllRequestsForNetworkPersonaTransition) {
++  std::unique_ptr<network::ObliviousHttpRequestHandler> handler =
++      CreateHandler();
++  TestOhttpClient client_a;
++  client_a.SetExpectedNetError(net::ERR_NETWORK_ACCESS_REVOKED);
++  TestOhttpClient client_b;
++  client_b.SetExpectedNetError(net::ERR_NETWORK_ACCESS_REVOKED);
++
++  handler->StartRequest(CreateRequest(), client_a.CreatePendingRemote());
++  network::mojom::ObliviousHttpRequestPtr request_b = CreateRequest();
++  request_b->relay_url = GURL("https://another.relay.test");
++  handler->StartRequest(std::move(request_b), client_b.CreatePendingRemote());
++
++  ASSERT_TRUE(loader_factory()->IsPending(kRelayURL));
++  ASSERT_TRUE(loader_factory()->IsPending("https://another.relay.test"));
++  handler->AbortAllRequestsForNetworkPersonaTransition();
++  client_a.WaitForCall();
++  client_b.WaitForCall();
++}
++
+ TEST_F(TestObliviousHttpRequestHandler, PadsUpToNextPowerOfTwo) {
+   std::unique_ptr<network::ObliviousHttpRequestHandler> handler =
+       CreateHandler();
+--- a/services/network/proxy_lookup_request.cc
++++ b/services/network/proxy_lookup_request.cc
+@@ -55,6 +55,12 @@
+     OnResolveComplete(result);
+ }
+ 
++void ProxyLookupRequest::Cancel(int error) {
++  request_.reset();
++  proxy_lookup_client_->OnProxyLookupComplete(error, std::nullopt);
++  DestroySelf();
++}
++
+ void ProxyLookupRequest::OnResolveComplete(int result) {
+   if (result == net::OK) {
+     proxy_lookup_client_->OnProxyLookupComplete(
+--- a/services/network/proxy_lookup_request.h
++++ b/services/network/proxy_lookup_request.h
+@@ -48,6 +48,10 @@
+   // that the lookup was aborted.
+   void Start(const GURL& url);
+ 
++  // Cancels the lookup with an explicit error and deletes this request through
++  // its owning NetworkContext.
++  void Cancel(int error);
++
+  private:
+   void OnResolveComplete(int result);
+ 
+--- a/services/network/public/mojom/network_context.mojom
++++ b/services/network/public/mojom/network_context.mojom
+@@ -1312,9 +1312,11 @@
+   // A null config restores Chromium's native network identity.
+   UpdateNetworkPersona(NetworkPersonaConfig? config) => (bool accepted);
+ 
+-  // Blocks or releases external requests for a Persona identity transition.
+-  // Blocking aborts active URLLoaders, WebSockets, and WebTransports before
+-  // acknowledging.
++  // Blocks or releases covered external requests for a Persona identity
++  // transition. Blocking aborts active URLLoaders, WebSockets, WebTransports,
++  // direct sockets, DNS requests, proxy lookups, and OHTTP requests before
++  // acknowledging, and rejects new covered requests plus preconnects. P2P,
++  // mDNS responders, and internal reporting are not covered.
+   SetNetworkPersonaRequestsBlocked(bool blocked) => (bool accepted);
+ 
+   // Replaces the SOCKS5 credentials used for new connections. Existing
+--- a/services/network/socket_factory.cc
++++ b/services/network/socket_factory.cc
+@@ -45,9 +45,27 @@
+ 
+ SocketFactory::~SocketFactory() = default;
+ 
++void SocketFactory::SetNetworkPersonaRequestsBlocked(bool blocked) {
++  network_persona_requests_blocked_ = blocked;
++  if (!blocked) {
++    return;
++  }
++  ++network_persona_gate_generation_;
++
++  tls_socket_factory_.AbortAllSocketsForNetworkPersonaTransition();
++  tcp_connected_socket_receiver_.Clear();
++  tcp_bound_socket_receivers_.Clear();
++  tcp_server_socket_receivers_.Clear();
++  restricted_udp_socket_receivers_.Clear();
++  udp_socket_receivers_.Clear();
++}
++
+ void SocketFactory::CreateUDPSocket(
+     mojo::PendingReceiver<mojom::UDPSocket> receiver,
+     mojo::PendingRemote<mojom::UDPSocketListener> listener) {
++  if (network_persona_requests_blocked_) {
++    return;
++  }
+   udp_socket_receivers_.Add(
+       std::make_unique<UDPSocket>(std::move(listener), net_log_),
+       std::move(receiver));
+@@ -64,6 +82,10 @@
+     bool allow_multicast,
+     bool allow_source_specific_multicast,
+     mojom::NetworkContext::CreateRestrictedUDPSocketCallback callback) {
++  if (network_persona_requests_blocked_) {
++    std::move(callback).Run(net::ERR_NETWORK_ACCESS_REVOKED, std::nullopt);
++    return;
++  }
+   auto udp_socket = std::make_unique<UDPSocket>(std::move(listener), net_log_);
+   switch (mode) {
+     case mojom::RestrictedUDPSocketMode::BOUND:
+@@ -96,6 +118,10 @@
+     const net::NetworkTrafficAnnotationTag& traffic_annotation,
+     mojo::PendingReceiver<mojom::TCPServerSocket> receiver,
+     mojom::NetworkContext::CreateTCPServerSocketCallback callback) {
++  if (network_persona_requests_blocked_) {
++    std::move(callback).Run(net::ERR_NETWORK_ACCESS_REVOKED, std::nullopt);
++    return;
++  }
+ #if BUILDFLAG(IS_WIN)
+   if (socket_broker_client_) {
+     socket_broker_client_->CreateTcpSocket(
+@@ -103,7 +129,8 @@
+         base::BindOnce(&SocketFactory::DidCompleteCreate,
+                        weak_ptr_factory_.GetWeakPtr(), local_addr,
+                        std::move(options), traffic_annotation,
+-                       std::move(receiver), std::move(callback)));
++                       std::move(receiver), std::move(callback),
++                       network_persona_gate_generation_));
+     return;
+   }
+ #endif
+@@ -121,8 +148,14 @@
+     const net::NetworkTrafficAnnotationTag& traffic_annotation,
+     mojo::PendingReceiver<mojom::TCPServerSocket> receiver,
+     mojom::NetworkContext::CreateTCPServerSocketCallback callback,
++    uint64_t gate_generation,
+     network::TransferableSocket socket,
+     int result) {
++  if (network_persona_requests_blocked_ ||
++      gate_generation != network_persona_gate_generation_) {
++    std::move(callback).Run(net::ERR_NETWORK_ACCESS_REVOKED, std::nullopt);
++    return;
++  }
+   if (result != net::OK) {
+     std::move(callback).Run(result, std::nullopt);
+     return;
+@@ -175,6 +208,13 @@
+     mojo::PendingReceiver<mojom::TCPConnectedSocket> receiver,
+     mojo::PendingRemote<mojom::SocketObserver> observer,
+     mojom::NetworkContext::CreateTCPConnectedSocketCallback callback) {
++  if (network_persona_requests_blocked_) {
++    std::move(callback).Run(net::ERR_NETWORK_ACCESS_REVOKED, std::nullopt,
++                            std::nullopt,
++                            mojo::ScopedDataPipeConsumerHandle(),
++                            mojo::ScopedDataPipeProducerHandle());
++    return;
++  }
+   auto socket = std::make_unique<TCPConnectedSocket>(
+       std::move(observer), net_log_, &tls_socket_factory_,
+       client_socket_factory_, traffic_annotation);
+@@ -190,6 +230,10 @@
+     const net::NetworkTrafficAnnotationTag& traffic_annotation,
+     mojo::PendingReceiver<mojom::TCPBoundSocket> receiver,
+     mojom::NetworkContext::CreateTCPBoundSocketCallback callback) {
++  if (network_persona_requests_blocked_) {
++    std::move(callback).Run(net::ERR_NETWORK_ACCESS_REVOKED, std::nullopt);
++    return;
++  }
+   auto socket =
+       std::make_unique<TCPBoundSocket>(this, net_log_, traffic_annotation);
+   net::IPEndPoint local_addr_out;
+@@ -212,6 +256,9 @@
+     mojo::ReceiverId bound_socket_id,
+     std::unique_ptr<TCPServerSocket> server_socket,
+     mojo::PendingReceiver<mojom::TCPServerSocket> server_socket_receiver) {
++  if (network_persona_requests_blocked_) {
++    return;
++  }
+   tcp_server_socket_receivers_.Add(std::move(server_socket),
+                                    std::move(server_socket_receiver));
+   tcp_bound_socket_receivers_.Remove(bound_socket_id);
+@@ -222,6 +269,9 @@
+     std::unique_ptr<TCPConnectedSocket> connected_socket,
+     mojo::PendingReceiver<mojom::TCPConnectedSocket>
+         connected_socket_receiver) {
++  if (network_persona_requests_blocked_) {
++    return;
++  }
+   tcp_connected_socket_receiver_.Add(std::move(connected_socket),
+                                      std::move(connected_socket_receiver));
+   tcp_bound_socket_receivers_.Remove(bound_socket_id);
+@@ -230,6 +280,9 @@
+ void SocketFactory::OnAccept(
+     std::unique_ptr<TCPConnectedSocket> socket,
+     mojo::PendingReceiver<mojom::TCPConnectedSocket> receiver) {
++  if (network_persona_requests_blocked_) {
++    return;
++  }
+   tcp_connected_socket_receiver_.Add(std::move(socket), std::move(receiver));
+ }
+ 
+--- a/services/network/socket_factory.h
++++ b/services/network/socket_factory.h
+@@ -5,6 +5,8 @@
+ #ifndef SERVICES_NETWORK_SOCKET_FACTORY_H_
+ #define SERVICES_NETWORK_SOCKET_FACTORY_H_
+ 
++#include <stdint.h>
++
+ #include <memory>
+ #include <optional>
+ #include <vector>
+@@ -55,6 +57,11 @@
+ 
+   virtual ~SocketFactory();
+ 
++  // Blocks transition-era callbacks from publishing a socket and closes every
++  // socket owned by this factory. The factory itself remains alive because its
++  // platform socket broker is bound only once during NetworkContext startup.
++  void SetNetworkPersonaRequestsBlocked(bool blocked);
++
+   // These all correspond to the NetworkContext methods of the same name.
+   void CreateUDPSocket(mojo::PendingReceiver<mojom::UDPSocket> receiver,
+                        mojo::PendingRemote<mojom::UDPSocketListener> listener);
+@@ -137,6 +144,7 @@
+       const net::NetworkTrafficAnnotationTag& traffic_annotation,
+       mojo::PendingReceiver<mojom::TCPServerSocket> receiver,
+       mojom::NetworkContext::CreateTCPServerSocketCallback callback,
++      uint64_t gate_generation,
+       network::TransferableSocket socket,
+       int result);
+ #endif
+@@ -145,6 +153,8 @@
+ 
+   raw_ptr<net::ClientSocketFactory> client_socket_factory_;
+   TLSSocketFactory tls_socket_factory_;
++  bool network_persona_requests_blocked_ = false;
++  uint64_t network_persona_gate_generation_ = 0;
+   mojo::UniqueReceiverSet<mojom::UDPSocket> udp_socket_receivers_;
+   mojo::UniqueReceiverSet<mojom::RestrictedUDPSocket>
+       restricted_udp_socket_receivers_;
+--- a/services/network/tls_socket_factory.cc
++++ b/services/network/tls_socket_factory.cc
+@@ -75,6 +75,10 @@
+ 
+ TLSSocketFactory::~TLSSocketFactory() {}
+ 
++void TLSSocketFactory::AbortAllSocketsForNetworkPersonaTransition() {
++  tls_socket_receivers_.Clear();
++}
++
+ void TLSSocketFactory::UpgradeToTLS(
+     Delegate* socket_delegate,
+     const net::HostPortPair& host_port_pair,
+--- a/services/network/tls_socket_factory.h
++++ b/services/network/tls_socket_factory.h
+@@ -57,6 +57,10 @@
+ 
+   virtual ~TLSSocketFactory();
+ 
++  // Closes sockets that could otherwise survive a Persona network identity
++  // transition with the previous route or protocol identity.
++  void AbortAllSocketsForNetworkPersonaTransition();
++
+   // Upgrades an existing socket to TLS. The previous pipes and data pump
+   // must already have been destroyed before the call to this method.
+   void UpgradeToTLS(

@@ -1,0 +1,166 @@
+--- a/chrome/browser/helium_persona/persona_identity_template_unittest.cc
++++ b/chrome/browser/helium_persona/persona_identity_template_unittest.cc
+@@ -5,28 +5,39 @@
+ #include "chrome/browser/helium_persona/persona_identity_template.h"
+ 
+ #include <array>
++#include <vector>
+ 
+ #include "net/base/network_persona_template.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+ namespace helium_persona {
+ 
+-TEST(PersonaIdentityTemplateTest, CapturedVariantsShareOneIdentity) {
+-  const PersonaIdentityTemplate* identity =
+-      FindPersonaIdentityTemplate(kChromium149MacArmIdentityTemplateId);
+-  ASSERT_TRUE(identity);
+-  EXPECT_EQ(149, identity->chrome_major);
+-  EXPECT_EQ("macOS", identity->ua_ch_platform);
+-  EXPECT_EQ("arm", identity->architecture);
+-  EXPECT_EQ("64", identity->bitness);
+-  ASSERT_EQ(2u, identity->network_variant_ids.size());
+-  EXPECT_EQ(net::kChromium149DefaultTemplateId,
+-            identity->network_variant_ids[0]);
+-  EXPECT_EQ(net::kChromium149MldsaTemplateId,
+-            identity->network_variant_ids[1]);
++TEST(PersonaIdentityTemplateTest,
++     DesktopIdentitiesShareCapturedNetworkVariants) {
++  const std::vector<uint32_t> identity_ids = {
++      kChromium149MacArmIdentityTemplateId,
++      kChromium149WindowsX64IdentityTemplateId,
++      kChromium149LinuxX64IdentityTemplateId,
++  };
++  for (uint32_t identity_id : identity_ids) {
++    const PersonaIdentityTemplate* identity =
++        FindPersonaIdentityTemplate(identity_id);
++    ASSERT_TRUE(identity);
++    EXPECT_EQ(149, identity->chrome_major);
++    ASSERT_EQ(2u, identity->network_variant_ids.size());
++    EXPECT_EQ(net::kChromium149DefaultTemplateId,
++              identity->network_variant_ids[0]);
++    EXPECT_EQ(net::kChromium149MldsaTemplateId,
++              identity->network_variant_ids[1]);
++  }
+ 
+-  EXPECT_EQ(std::vector<uint32_t>({kChromium149MacArmIdentityTemplateId}),
+-            GetRotatablePersonaIdentityTemplateIds());
++  const PersonaIdentityTemplate* mac_identity =
++      FindPersonaIdentityTemplate(kChromium149MacArmIdentityTemplateId);
++  ASSERT_TRUE(mac_identity);
++  EXPECT_EQ("macOS", mac_identity->ua_ch_platform);
++  EXPECT_EQ("arm", mac_identity->architecture);
++  EXPECT_EQ("64", mac_identity->bitness);
++  EXPECT_EQ(identity_ids, GetRotatablePersonaIdentityTemplateIds());
+ }
+ 
+ TEST(PersonaIdentityTemplateTest, SelectsNetworkVariantByGeneration) {
+@@ -64,7 +75,11 @@
+     EXPECT_TRUE(FindPersonaIdentityTemplate(200));
+   }
+ 
+-  EXPECT_EQ(std::vector<uint32_t>({kChromium149MacArmIdentityTemplateId}),
++  EXPECT_EQ(std::vector<uint32_t>({
++                kChromium149MacArmIdentityTemplateId,
++                kChromium149WindowsX64IdentityTemplateId,
++                kChromium149LinuxX64IdentityTemplateId,
++            }),
+             GetRotatablePersonaIdentityTemplateIds());
+   EXPECT_FALSE(FindPersonaIdentityTemplate(200));
+ }
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -806,6 +806,8 @@
+ }
+ 
+ TEST_F(PersonaServiceTest, IdentityRotationUnavailableDoesNotMutatePrefs) {
++  ScopedPersonaIdentityTemplatesForTesting scoped_templates(
++      base::span(kTestIdentityTemplates).first<1>());
+   base::DictValue rotation;
+   rotation.Set("global", "2026-01-02T03:04:05.000Z");
+   rotation.Set("globalGeneration", "7");
+@@ -1117,11 +1119,6 @@
+   EXPECT_FALSE(fixed.FindBool("rotateDaily").value_or(true));
+ }
+ 
+-}  // namespace
+-
+-}  // namespace helium_persona
+-
+-
+ TEST_F(PersonaServiceTest, AttachesDevicePackToMacPresetClone) {
+   base::DictValue state = service_->GetPersonaState();
+   const base::ListValue* presets = state.FindList("presets");
+@@ -1155,7 +1152,7 @@
+             service_->GetActiveIdentityTemplateId());
+ }
+ 
+-TEST_F(PersonaServiceTest, RejectsIncompleteDevicePackActivation) {
++TEST_F(PersonaServiceTest, AttachesDevicePackToWindowsPresetClone) {
+   base::DictValue state = service_->GetPersonaState();
+   const base::ListValue* presets = state.FindList("presets");
+   ASSERT_TRUE(presets);
+@@ -1172,18 +1169,22 @@
+     }
+   }
+   ASSERT_TRUE(windows_preset);
+-  EXPECT_FALSE(windows_preset->FindBool("networkReady").value_or(true));
++  EXPECT_TRUE(windows_preset->FindBool("networkReady").value_or(false));
++  EXPECT_EQ(static_cast<int>(kChromium149WindowsX64IdentityTemplateId),
++            windows_preset->FindInt("devicePackId").value_or(0));
+   const std::string* preset_id = windows_preset->FindString("id");
+   ASSERT_TRUE(preset_id);
+   base::DictValue response = service_->ClonePresetIntoProfile(*preset_id);
+   ASSERT_TRUE(response.FindBool("ok").value_or(false));
+   const std::string* persona_id = response.FindString("personaId");
+   ASSERT_TRUE(persona_id);
+-  base::DictValue activate = service_->SetActivePersona(*persona_id);
+-  EXPECT_FALSE(activate.FindBool("ok").value_or(true));
+-  const base::DictValue* errors = activate.FindDict("fieldErrors");
+-  ASSERT_TRUE(errors);
+-  EXPECT_TRUE(errors->FindString("devicePackId"));
++  ASSERT_TRUE(service_->SetActivePersona(*persona_id)
++                  .FindBool("ok")
++                  .value_or(false));
++  EXPECT_TRUE(service_->GetActiveSnapshot().enabled);
++  EXPECT_FALSE(service_->GetActiveSnapshot().allow_web_rtc);
++  EXPECT_EQ(kChromium149WindowsX64IdentityTemplateId,
++            service_->GetActiveIdentityTemplateId());
+ }
+ 
+ TEST_F(PersonaServiceTest, SaveRejectsInvalidWebGPUIdentityType) {
+@@ -1205,3 +1206,7 @@
+   ASSERT_TRUE(error);
+   EXPECT_EQ("invalid_type", *error);
+ }
++
++}  // namespace
++
++}  // namespace helium_persona
+--- a/chrome/browser/net/profile_network_context_service_browsertest.cc
++++ b/chrome/browser/net/profile_network_context_service_browsertest.cc
+@@ -280,7 +280,7 @@
+ }
+ 
+ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest,
+-                       DoesNotApplyMacNetworkTemplateToWindowsPersona) {
++                       AppliesWindowsNetworkTemplateToWindowsPersona) {
+   auto* persona_service =
+       helium_persona::PersonaServiceFactory::GetForProfile(
+           browser()->profile());
+@@ -300,7 +300,14 @@
+   service->ConfigureNetworkContextParams(
+       /*in_memory=*/false, base::FilePath(), &params, &cert_params);
+ 
+-  EXPECT_FALSE(params.network_persona_config);
++  EXPECT_EQ(helium_persona::kChromium149WindowsX64IdentityTemplateId,
++            persona_service->GetActiveIdentityTemplateId());
++  ASSERT_TRUE(params.network_persona_config);
++  EXPECT_EQ(32u, params.network_persona_config->deterministic_seed.size());
++  EXPECT_EQ(persona_service->GetActiveSnapshot().fingerprint_generation,
++            params.network_persona_config->generation);
++  EXPECT_EQ(net::kChromium149DefaultTemplateId,
++            params.network_persona_config->template_id);
+ }
+ 
+ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest, CacheSize) {

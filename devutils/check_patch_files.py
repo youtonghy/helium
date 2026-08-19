@@ -222,7 +222,7 @@ _PERSONA_PROFILE_MANAGEMENT_GROUPS = {
     'startup persona picker flow': (
         'MaybeLaunchPersonaPickerOnStartup',
         'ResumePendingLaunchWithPersona',
-        'ApplyLastUsedPersonaOnStartup',
+        'CompletePendingPersonaLaunch',
         'ShowPersonaPickerForStartup',
         'kChromeUIPersonaPickerHost',
         'chrome://persona-picker',
@@ -515,7 +515,18 @@ def _apply_persona_patched_file(lines_by_path, patched_file):
     if not effective_path or Path(effective_path).suffix not in _PERSONA_PATCH_CODE_SUFFIXES:
         return
     for hunk in patched_file:
+        removed = Counter(line.value.strip() for line in hunk
+                          if line.is_removed and line.value.strip())
+        added = Counter(line.value.strip() for line in hunk if line.is_added and line.value.strip())
+        unchanged = removed & added
+        skip_removed = unchanged.copy()
+        skip_added = unchanged.copy()
         for line in hunk:
+            value = line.value.strip()
+            skip = skip_added if line.is_added else skip_removed
+            if value and (line.is_added or line.is_removed) and skip[value]:
+                skip[value] -= 1
+                continue
             _apply_persona_patch_line(lines_by_path, line, source_path, target_path)
 
 

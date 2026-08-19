@@ -1,0 +1,1291 @@
+--- a/chrome/browser/helium_persona/persona_audio_readback_browsertest.cc
++++ b/chrome/browser/helium_persona/persona_audio_readback_browsertest.cc
+@@ -728,6 +728,23 @@
+       if (!navigator.gpu) return {supported: false};
+       const adapter = await navigator.gpu.requestAdapter();
+       if (!adapter) return {supported: false};
++      let hiddenFeatureRejected = false;
++      try {
++        await adapter.requestDevice({requiredFeatures: ['timestamp-query']});
++      } catch (error) {
++        hiddenFeatureRejected = true;
++      }
++      let excessiveLimitRejected = false;
++      try {
++        await adapter.requestDevice({
++          requiredLimits: {
++            maxComputeInvocationsPerWorkgroup:
++                adapter.limits.maxComputeInvocationsPerWorkgroup + 1,
++          },
++        });
++      } catch (error) {
++        excessiveLimitRejected = true;
++      }
+       const device = await adapter.requestDevice();
+       window.personaWebGpuDevice = device;
+       return {
+@@ -736,6 +753,18 @@
+         architecture: adapter.info.architecture,
+         device: adapter.info.device,
+         description: adapter.info.description,
++        subgroupMinSize: adapter.info.subgroupMinSize,
++        subgroupMaxSize: adapter.info.subgroupMaxSize,
++        isFallbackAdapter: adapter.info.isFallbackAdapter,
++        featureCount: [...adapter.features].length,
++        hasCoreFeaturesAndLimits:
++            adapter.features.has('core-features-and-limits'),
++        maxComputeInvocationsPerWorkgroup:
++            adapter.limits.maxComputeInvocationsPerWorkgroup,
++        deviceMaxComputeInvocationsPerWorkgroup:
++            device.limits.maxComputeInvocationsPerWorkgroup,
++        hiddenFeatureRejected,
++        excessiveLimitRejected,
+       };
+     })()
+   )JS");
+@@ -751,12 +780,28 @@
+   EXPECT_EQ(expected.webgpu_device, *observed.FindString("device"));
+   EXPECT_EQ(expected.webgpu_description,
+             *observed.FindString("description"));
++  EXPECT_EQ(4, observed.FindInt("subgroupMinSize").value_or(-1));
++  EXPECT_EQ(128, observed.FindInt("subgroupMaxSize").value_or(-1));
++  EXPECT_FALSE(observed.FindBool("isFallbackAdapter").value_or(true));
++  EXPECT_EQ(1, observed.FindInt("featureCount").value_or(-1));
++  EXPECT_TRUE(
++      observed.FindBool("hasCoreFeaturesAndLimits").value_or(false));
++  EXPECT_EQ(static_cast<int>(
++                expected.webgpu_max_compute_invocations_per_workgroup),
++            observed.FindInt("maxComputeInvocationsPerWorkgroup")
++                .value_or(-1));
++  EXPECT_LE(observed.FindInt("deviceMaxComputeInvocationsPerWorkgroup")
++                .value_or(-1),
++            observed.FindInt("maxComputeInvocationsPerWorkgroup")
++                .value_or(-1));
++  EXPECT_TRUE(observed.FindBool("hiddenFeatureRejected").value_or(false));
++  EXPECT_TRUE(observed.FindBool("excessiveLimitRejected").value_or(false));
+ 
+   base::test::TestFuture<base::DictValue> audit_future;
+   service->GetPersonaAudit(audit_future.GetCallback());
+   const base::DictValue audit = audit_future.Take();
+   EXPECT_TRUE(audit.FindBool("ok").value_or(false));
+-  EXPECT_EQ("runtime_identity_verified",
++  EXPECT_EQ("runtime_capabilities_verified",
+             *audit.FindDict("surfaces")->FindString("webGpu"));
+   const base::DictValue* evidence =
+       audit.FindDict("runtimeEvidence")->FindDict("webGpu");
+@@ -770,10 +815,82 @@
+   EXPECT_EQ(observed_contexts,
+             evidence->FindInt("featureSetsObserved").value_or(0));
+   EXPECT_EQ(observed_contexts,
++            evidence->FindInt("featureValuesObserved").value_or(0));
++  EXPECT_EQ(observed_contexts,
+             evidence->FindInt("limitSetsObserved").value_or(0));
+   EXPECT_EQ(observed_contexts * 36,
+             evidence->FindInt("limitValuesObserved").value_or(0));
+   EXPECT_EQ(0, evidence->FindInt("limitSetsIncomplete").value_or(-1));
++  EXPECT_EQ(observed_contexts,
++            evidence->FindInt("capabilityProfilesMatched").value_or(0));
++  EXPECT_EQ(0,
++            evidence->FindInt("capabilityProfilesMismatched").value_or(-1));
++  EXPECT_GE(evidence->FindInt("devicesObserved").value_or(0), 1);
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaWebGpuAuditBrowserTest,
++                       AuditObservesCompatibilityCapabilityProfile) {
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response =
++      service->CreatePersonaProfile("WebGPU compatibility audit");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
++
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/title1.html")));
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
++    (async () => {
++      if (!navigator.gpu) return {supported: false};
++      const adapter = await navigator.gpu.requestAdapter({
++        featureLevel: 'compatibility',
++      });
++      if (!adapter) return {supported: false};
++      const device = await adapter.requestDevice();
++      window.personaCompatibilityDevice = device;
++      return {
++        supported: true,
++        featureCount: [...adapter.features].length,
++        maxTextureDimension2D: adapter.limits.maxTextureDimension2D,
++        maxComputeInvocationsPerWorkgroup:
++            adapter.limits.maxComputeInvocationsPerWorkgroup,
++        maxColorAttachments: adapter.limits.maxColorAttachments,
++        maxStorageBuffersInVertexStage:
++            adapter.limits.maxStorageBuffersInVertexStage,
++      };
++    })()
++  )JS");
++  ASSERT_TRUE(result.is_ok()) << result.ExtractError();
++  const base::DictValue& observed = result.ExtractDict();
++  if (!observed.FindBool("supported").value_or(false)) {
++    GTEST_SKIP() << "WebGPU compatibility mode is unavailable";
++  }
++  EXPECT_EQ(0, observed.FindInt("featureCount").value_or(-1));
++  EXPECT_EQ(4096, observed.FindInt("maxTextureDimension2D").value_or(-1));
++  EXPECT_EQ(128, observed.FindInt("maxComputeInvocationsPerWorkgroup")
++                     .value_or(-1));
++  EXPECT_EQ(4, observed.FindInt("maxColorAttachments").value_or(-1));
++  EXPECT_EQ(0,
++            observed.FindInt("maxStorageBuffersInVertexStage").value_or(-1));
++
++  base::test::TestFuture<base::DictValue> audit_future;
++  service->GetPersonaAudit(audit_future.GetCallback());
++  const base::DictValue audit = audit_future.Take();
++  EXPECT_TRUE(audit.FindBool("ok").value_or(false));
++  EXPECT_EQ("runtime_capabilities_verified",
++            *audit.FindDict("surfaces")->FindString("webGpu"));
++  const base::DictValue* evidence =
++      audit.FindDict("runtimeEvidence")->FindDict("webGpu");
++  ASSERT_TRUE(evidence);
++  EXPECT_GE(evidence->FindInt("capabilityProfilesMatched").value_or(0), 1);
++  EXPECT_EQ(0,
++            evidence->FindInt("capabilityProfilesMismatched").value_or(-1));
+   EXPECT_GE(evidence->FindInt("devicesObserved").value_or(0), 1);
+ }
+ 
+@@ -793,7 +910,7 @@
+       browser()->tab_strip_model()->GetActiveWebContents();
+   ASSERT_TRUE(content::NavigateToURL(
+       web_contents, GURL("data:text/html,<title>media-output</title>")));
+-  ASSERT_EQ(true, content::EvalJs(web_contents, R"JS(
++  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
+     (async () => {
+       const context = new AudioContext({latencyHint: 'interactive'});
+       const oscillator = context.createOscillator();
+@@ -802,9 +919,21 @@
+       await context.resume();
+       window.personaAudioContext = context;
+       window.personaOscillator = oscillator;
+-      return context.state === 'running';
++      return {
++        running: context.state === 'running',
++        baseLatency: context.baseLatency,
++        outputLatency: context.outputLatency,
++      };
+     })()
+-  )JS"));
++  )JS");
++  ASSERT_TRUE(result.is_ok()) << result.ExtractError();
++  const base::DictValue& observed = result.ExtractDict();
++  EXPECT_TRUE(observed.FindBool("running").value_or(false));
++  const blink::HeliumPersonaSnapshot expected = service->GetActiveSnapshot();
++  EXPECT_EQ(expected.audio_base_latency,
++            observed.FindDouble("baseLatency").value_or(-1.0));
++  EXPECT_EQ(expected.audio_output_latency,
++            observed.FindDouble("outputLatency").value_or(-1.0));
+ 
+   ASSERT_TRUE(base::test::RunUntil([&]() {
+     base::test::TestFuture<base::DictValue> audit_future;
+@@ -813,19 +942,26 @@
+     const base::DictValue* surfaces = audit.FindDict("surfaces");
+     return surfaces && surfaces->FindString("mediaOutput") &&
+            *surfaces->FindString("mediaOutput") ==
+-               "runtime_output_observed";
++               "runtime_output_verified";
+   }));
+ 
+   base::test::TestFuture<base::DictValue> audit_future;
+   service->GetPersonaAudit(audit_future.GetCallback());
+   const base::DictValue audit = audit_future.Take();
+-  EXPECT_EQ("runtime_output_observed",
++  EXPECT_EQ("runtime_output_verified",
+             *audit.FindDict("surfaces")->FindString("mediaOutput"));
+-  EXPECT_GE(audit.FindDict("runtimeEvidence")
+-                ->FindDict("mediaOutput")
+-                ->FindInt("observedContexts")
+-                .value_or(0),
+-            1);
++  const base::DictValue* media_output =
++      audit.FindDict("runtimeEvidence")->FindDict("mediaOutput");
++  ASSERT_TRUE(media_output);
++  EXPECT_GE(media_output->FindInt("observedContexts").value_or(0), 1);
++  EXPECT_GE(media_output->FindInt("baseLatencyMatched").value_or(0), 1);
++  EXPECT_EQ(0,
++            media_output->FindInt("baseLatencyMismatched").value_or(-1));
++  EXPECT_GE(media_output->FindInt("outputLatencyMatched").value_or(0), 1);
++  EXPECT_EQ(0,
++            media_output->FindInt("outputLatencyMismatched").value_or(-1));
++  EXPECT_GE(media_output->FindInt("verifiedContexts").value_or(0), 1);
++  EXPECT_EQ(0, media_output->FindInt("partialContexts").value_or(-1));
+ }
+ 
+ class PersonaWorkerAuditBrowserTest : public InProcessBrowserTest {
+@@ -992,8 +1128,14 @@
+   service->GetPersonaAudit(audit_future.GetCallback());
+   const base::DictValue audit = audit_future.Take();
+   EXPECT_TRUE(audit.FindBool("ok").value_or(false));
+-  EXPECT_EQ("runtime_identity_verified",
++  EXPECT_EQ("runtime_capabilities_verified",
+             *audit.FindDict("surfaces")->FindString("webGpu"));
++  const base::DictValue* evidence =
++      audit.FindDict("runtimeEvidence")->FindDict("webGpu");
++  ASSERT_TRUE(evidence);
++  EXPECT_GE(evidence->FindInt("capabilityProfilesMatched").value_or(0), 1);
++  EXPECT_EQ(0,
++            evidence->FindInt("capabilityProfilesMismatched").value_or(-1));
+   EXPECT_GE(audit.FindDict("runtimeEvidence")
+                 ->FindDict("webGpu")
+                 ->FindInt("devicesObserved")
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -1427,6 +1427,10 @@
+   if (!gpu->FindString("driver")) {
+     gpu->Set("driver", "");
+   }
++  base::DictValue* webgpu_profile = gpu->EnsureDict("webgpuProfile");
++  if (!webgpu_profile->FindInt("maxComputeInvocationsPerWorkgroup")) {
++    webgpu_profile->Set("maxComputeInvocationsPerWorkgroup", 256);
++  }
+   // Keep v1 exports useful to versions that only understand webgpuAdapter.
+   gpu->Set("webgpuAdapter", *gpu->FindString("webgpuDescription"));
+ 
+@@ -1732,7 +1736,13 @@
+           .Set("webgpuArchitecture", snapshot.webgpu_architecture)
+           .Set("webgpuDevice", snapshot.webgpu_device)
+           .Set("webgpuDescription", snapshot.webgpu_description)
+-          .Set("driver", snapshot.gpu_driver);
++          .Set("driver", snapshot.gpu_driver)
++          .Set("webgpuProfile",
++               base::DictValue().Set(
++                   "maxComputeInvocationsPerWorkgroup",
++                   static_cast<int>(
++                       snapshot
++                           .webgpu_max_compute_invocations_per_workgroup)));
+   base::DictValue hardware =
+       base::DictValue()
+           .Set("hardwareConcurrency", snapshot.hardware_concurrency)
+@@ -1876,6 +1886,51 @@
+ constexpr size_t kWorkerNoiseTokenCount = 4u;
+ constexpr size_t kWebGpuLimitCount = 36u;
+ 
++std::array<uint64_t, kWebGpuLimitCount> ExpectedWebGpuLimits(
++    const blink::HeliumPersonaSnapshot& snapshot,
++    bool compatibility_mode) {
++  return {
++      compatibility_mode ? 4096u : 8192u,
++      compatibility_mode ? 4096u : 8192u,
++      2048u,
++      256u,
++      4u,
++      24u,
++      1000u,
++      8u,
++      4u,
++      16u,
++      16u,
++      8u,
++      4u,
++      12u,
++      compatibility_mode ? 16384u : 65536u,
++      128u * 1024u * 1024u,
++      256u,
++      256u,
++      8u,
++      256u * 1024u * 1024u,
++      16u,
++      2048u,
++      compatibility_mode ? 15u : 16u,
++      compatibility_mode ? 4u : 8u,
++      32u,
++      16384u,
++      compatibility_mode
++          ? 128u
++          : snapshot.webgpu_max_compute_invocations_per_workgroup,
++      compatibility_mode ? 128u : 256u,
++      compatibility_mode ? 128u : 256u,
++      64u,
++      65535u,
++      compatibility_mode ? 4u : 8u,
++      4u,
++      compatibility_mode ? 0u : 8u,
++      compatibility_mode ? 0u : 4u,
++      0u,
++  };
++}
++
+ std::array<bool, 5> ExpectedNoiseTokens(
+     const blink::HeliumPersonaSnapshot& snapshot) {
+   return {snapshot.canvas_noise, snapshot.audio_noise, snapshot.hardware_noise,
+@@ -1926,10 +1981,20 @@
+                              .Set("limitSetsObserved", 0)
+                              .Set("limitValuesObserved", 0)
+                              .Set("limitSetsIncomplete", 0)
++                             .Set("capabilityProfilesMatched", 0)
++                             .Set("capabilityProfilesMismatched", 0)
+                              .Set("devicesObserved", 0))
+           .Set("mediaOutput", base::DictValue()
+                                  .Set("status", status)
+-                                 .Set("observedContexts", 0)));
++                                 .Set("observedContexts", 0)
++                                 .Set("baseLatencyObserved", 0)
++                                 .Set("baseLatencyMatched", 0)
++                                 .Set("baseLatencyMismatched", 0)
++                                 .Set("outputLatencyObserved", 0)
++                                 .Set("outputLatencyMatched", 0)
++                                 .Set("outputLatencyMismatched", 0)
++                                 .Set("verifiedContexts", 0)
++                                 .Set("partialContexts", 0)));
+ }
+ 
+ class PersonaSurfaceProbeOperation
+@@ -2030,7 +2095,11 @@
+               expected_snapshot_.webgpu_architecture &&
+           probe.webgpu_device == expected_snapshot_.webgpu_device &&
+           probe.webgpu_description ==
+-              expected_snapshot_.webgpu_description;
++              expected_snapshot_.webgpu_description &&
++          probe.webgpu_driver == expected_snapshot_.gpu_driver &&
++          probe.webgpu_subgroup_min_size == 4u &&
++          probe.webgpu_subgroup_max_size == 128u &&
++          !probe.webgpu_is_fallback_adapter;
+       if (identity_matches) {
+         ++webgpu_identity_matched_;
+       } else {
+@@ -2041,6 +2110,23 @@
+       webgpu_limit_values_observed_ += probe.webgpu_limits.size();
+       if (probe.webgpu_limits.size() == kWebGpuLimitCount) {
+         ++webgpu_limit_sets_observed_;
++        const auto expected_limits = ExpectedWebGpuLimits(
++            expected_snapshot_, probe.webgpu_compatibility_mode);
++        const bool feature_profile_matches =
++            probe.webgpu_compatibility_mode
++                ? probe.webgpu_features.empty()
++                : probe.webgpu_features.size() == 1u &&
++                      probe.webgpu_features.front() ==
++                          "core-features-and-limits";
++        const bool capability_matches =
++            feature_profile_matches &&
++            std::equal(probe.webgpu_limits.begin(), probe.webgpu_limits.end(),
++                       expected_limits.begin(), expected_limits.end());
++        if (capability_matches) {
++          ++webgpu_capability_profiles_matched_;
++        } else {
++          ++webgpu_capability_profiles_mismatched_;
++        }
+       } else {
+         ++webgpu_limit_sets_incomplete_;
+       }
+@@ -2051,6 +2137,32 @@
+     if (probe.media_output_observed) {
+       ++media_output_observed_;
+     }
++    if (probe.audio_base_latency_observed) {
++      ++audio_base_latency_observed_;
++      if (probe.audio_base_latency == expected_snapshot_.audio_base_latency) {
++        ++audio_base_latency_matched_;
++      } else {
++        ++audio_base_latency_mismatched_;
++      }
++    }
++    if (probe.audio_output_latency_observed) {
++      ++audio_output_latency_observed_;
++      if (probe.audio_output_latency ==
++          expected_snapshot_.audio_output_latency) {
++        ++audio_output_latency_matched_;
++      } else {
++        ++audio_output_latency_mismatched_;
++      }
++    }
++    const bool any_media_output_evidence =
++        probe.media_output_observed || probe.audio_base_latency_observed ||
++        probe.audio_output_latency_observed;
++    if (probe.media_output_observed && probe.audio_base_latency_observed &&
++        probe.audio_output_latency_observed) {
++      ++media_output_verified_contexts_;
++    } else if (any_media_output_evidence) {
++      ++media_output_partial_contexts_;
++    }
+   }
+ 
+   void OnTimeout() {
+@@ -2127,13 +2239,23 @@
+             ? "not_observed"
+         : webgpu_identity_mismatched_ > 0u
+             ? "mismatched"
++        : webgpu_capability_profiles_mismatched_ > 0u
++            ? "mismatched"
+         : webgpu_limit_sets_incomplete_ > 0u ? "partially_observed"
+-                                             : "runtime_identity_verified";
++                                             : "runtime_capabilities_verified";
+     const char* media_output_status =
+         !expected_snapshot_.IsEnabled()
+             ? "system"
+-        : media_output_observed_ == 0u ? "not_observed"
+-                                       : "runtime_output_observed";
++        : audio_base_latency_mismatched_ > 0u ||
++                audio_output_latency_mismatched_ > 0u
++            ? "mismatched"
++        : media_output_verified_contexts_ > 0u &&
++                media_output_partial_contexts_ == 0u
++            ? "runtime_output_verified"
++        : media_output_verified_contexts_ > 0u ||
++                media_output_partial_contexts_ > 0u
++            ? "partially_observed"
++            : "not_observed";
+     base::DictValue tokens;
+     for (size_t i = 0; i < kNoiseTokenNames.size(); ++i) {
+       const char* token_status =
+@@ -2218,16 +2340,41 @@
+                           static_cast<int>(webgpu_limit_values_observed_))
+                      .Set("limitSetsIncomplete",
+                           static_cast<int>(webgpu_limit_sets_incomplete_))
++                     .Set("capabilityProfilesMatched",
++                          static_cast<int>(
++                              webgpu_capability_profiles_matched_))
++                     .Set("capabilityProfilesMismatched",
++                          static_cast<int>(
++                              webgpu_capability_profiles_mismatched_))
+                      .Set("devicesObserved",
+                           static_cast<int>(webgpu_devices_observed_)))
+             .Set("mediaOutput",
+                  base::DictValue()
+                      .Set("status", media_output_status)
+                      .Set("observedContexts",
+-                          static_cast<int>(media_output_observed_))));
++                          static_cast<int>(media_output_observed_))
++                     .Set("baseLatencyObserved",
++                          static_cast<int>(audio_base_latency_observed_))
++                     .Set("baseLatencyMatched",
++                          static_cast<int>(audio_base_latency_matched_))
++                     .Set("baseLatencyMismatched",
++                          static_cast<int>(audio_base_latency_mismatched_))
++                     .Set("outputLatencyObserved",
++                          static_cast<int>(audio_output_latency_observed_))
++                     .Set("outputLatencyMatched",
++                          static_cast<int>(audio_output_latency_matched_))
++                     .Set("outputLatencyMismatched",
++                          static_cast<int>(audio_output_latency_mismatched_))
++                     .Set("verifiedContexts",
++                          static_cast<int>(media_output_verified_contexts_))
++                     .Set("partialContexts",
++                          static_cast<int>(media_output_partial_contexts_))));
+     if (mismatched_ > 0u || unreachable_ > 0u ||
+         worker_mismatched_ > 0u || worker_unreported_ > 0u ||
+-        webgpu_identity_mismatched_ > 0u) {
++        webgpu_identity_mismatched_ > 0u ||
++        webgpu_capability_profiles_mismatched_ > 0u ||
++        audio_base_latency_mismatched_ > 0u ||
++        audio_output_latency_mismatched_ > 0u) {
+       audit_.Set("ok", false);
+     } else if (base::DictValue* assurance = audit_.FindDict("assurance")) {
+       if (total_ > 0u) {
+@@ -2238,13 +2385,16 @@
+         assurance->EnsureList("reasons")
+             ->Append("worker_runtime_snapshot_verified");
+       }
+-      if (webgpu_identity_matched_ > 0u) {
++      if (webgpu_identity_matched_ > 0u &&
++          webgpu_capability_profiles_matched_ > 0u &&
++          webgpu_limit_sets_incomplete_ == 0u) {
+         assurance->EnsureList("reasons")
+-            ->Append("webgpu_runtime_identity_verified");
++            ->Append("webgpu_runtime_capabilities_verified");
+       }
+-      if (media_output_observed_ > 0u) {
++      if (media_output_verified_contexts_ > 0u &&
++          media_output_partial_contexts_ == 0u) {
+         assurance->EnsureList("reasons")
+-            ->Append("media_output_runtime_observed");
++            ->Append("media_output_runtime_verified");
+       }
+     }
+     std::move(callback_).Run(std::move(audit_));
+@@ -2272,8 +2422,18 @@
+   size_t webgpu_limit_sets_observed_ = 0u;
+   size_t webgpu_limit_values_observed_ = 0u;
+   size_t webgpu_limit_sets_incomplete_ = 0u;
++  size_t webgpu_capability_profiles_matched_ = 0u;
++  size_t webgpu_capability_profiles_mismatched_ = 0u;
+   size_t webgpu_devices_observed_ = 0u;
+   size_t media_output_observed_ = 0u;
++  size_t audio_base_latency_observed_ = 0u;
++  size_t audio_base_latency_matched_ = 0u;
++  size_t audio_base_latency_mismatched_ = 0u;
++  size_t audio_output_latency_observed_ = 0u;
++  size_t audio_output_latency_matched_ = 0u;
++  size_t audio_output_latency_mismatched_ = 0u;
++  size_t media_output_verified_contexts_ = 0u;
++  size_t media_output_partial_contexts_ = 0u;
+   base::DictValue audit_;
+   base::OnceCallback<void(base::DictValue)> callback_;
+   base::OneShotTimer timeout_;
+@@ -2587,8 +2747,8 @@
+                .Set("renderer", "runtime_snapshot")
+                .Set("workers", "runtime_snapshot_attestation")
+                .Set("network", "barrier_checked_transactional_fanout")
+-               .Set("webGpu", "passive_runtime_identity_and_limits")
+-               .Set("mediaOutput", "passive_runtime_callback")
++               .Set("webGpu", "runtime_identity_and_capability_profile")
++               .Set("mediaOutput", "runtime_latency_and_output_callback")
+                .Set("mediaDevices",
+                     "synthetic_enumeration_capture_fail_closed")
+                .Set("probe", "partial"))
+@@ -4525,6 +4685,16 @@
+   if (const std::string* value = FindNestedString(*persona, "gpu", "driver")) {
+     snapshot.gpu_driver = *value;
+   }
++  if (const base::DictValue* gpu = persona->FindDict("gpu")) {
++    if (const base::DictValue* webgpu_profile =
++            gpu->FindDict("webgpuProfile")) {
++      snapshot.webgpu_max_compute_invocations_per_workgroup =
++          static_cast<uint32_t>(
++              webgpu_profile
++                  ->FindInt("maxComputeInvocationsPerWorkgroup")
++                  .value_or(0));
++    }
++  }
+   if (const std::string* value = FindNestedString(*persona, "fonts", "id")) {
+     snapshot.font_pack_id = *value;
+   }
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -544,9 +544,9 @@
+   EXPECT_EQ("partial", *contract.FindDict("surfaces")->FindString("probe"));
+   EXPECT_EQ("synthetic_enumeration_capture_fail_closed",
+             *contract.FindDict("surfaces")->FindString("mediaDevices"));
+-  EXPECT_EQ("passive_runtime_identity_and_limits",
++  EXPECT_EQ("runtime_identity_and_capability_profile",
+             *contract.FindDict("surfaces")->FindString("webGpu"));
+-  EXPECT_EQ("passive_runtime_callback",
++  EXPECT_EQ("runtime_latency_and_output_callback",
+             *contract.FindDict("surfaces")->FindString("mediaOutput"));
+   const base::DictValue* runtime_evidence =
+       contract.FindDict("runtimeEvidence");
+@@ -813,16 +813,22 @@
+       imported_gpu->FindString("webgpuArchitecture");
+   const std::string* webgpu_device = imported_gpu->FindString("webgpuDevice");
+   const std::string* driver = imported_gpu->FindString("driver");
++  const base::DictValue* webgpu_profile =
++      imported_gpu->FindDict("webgpuProfile");
+   ASSERT_TRUE(webgpu_description);
+   ASSERT_TRUE(webgpu_adapter);
+   ASSERT_TRUE(webgpu_architecture);
+   ASSERT_TRUE(webgpu_device);
+   ASSERT_TRUE(driver);
++  ASSERT_TRUE(webgpu_profile);
+   EXPECT_EQ("Legacy Adapter Name", *webgpu_description);
+   EXPECT_EQ("Legacy Adapter Name", *webgpu_adapter);
+   EXPECT_TRUE(webgpu_architecture->empty());
+   EXPECT_TRUE(webgpu_device->empty());
+   EXPECT_TRUE(driver->empty());
++  EXPECT_EQ(256, webgpu_profile
++                     ->FindInt("maxComputeInvocationsPerWorkgroup")
++                     .value_or(0));
+ 
+   ASSERT_TRUE(ActivatePersona(service_.get(), persona_id)
+                   .FindBool("ok")
+@@ -832,6 +838,8 @@
+   EXPECT_TRUE(snapshot.webgpu_architecture.empty());
+   EXPECT_TRUE(snapshot.webgpu_device.empty());
+   EXPECT_TRUE(snapshot.gpu_driver.empty());
++  EXPECT_EQ(256u,
++            snapshot.webgpu_max_compute_invocations_per_workgroup);
+ }
+ 
+ TEST_F(PersonaServiceTest, PresetsMatchRuntimeVersionAndPlatformInvariants) {
+@@ -2547,6 +2555,29 @@
+   EXPECT_EQ("invalid_type", *error);
+ }
+ 
++TEST_F(PersonaServiceTest, SaveRejectsWebGPULimitBelowPortableBaseline) {
++  base::DictValue create_response = service_->CreatePersonaProfile("WebGPU");
++  const base::DictValue* created_state = create_response.FindDict("state");
++  ASSERT_TRUE(created_state);
++  const base::DictValue* created_persona =
++      FindFirstCustomPersona(created_state->FindList("personas"));
++  ASSERT_TRUE(created_persona);
++
++  base::DictValue payload = created_persona->Clone();
++  payload.EnsureDict("gpu")
++      ->EnsureDict("webgpuProfile")
++      ->Set("maxComputeInvocationsPerWorkgroup", 255);
++  base::DictValue response = service_->SavePersona(payload);
++
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  const base::DictValue* errors = response.FindDict("fieldErrors");
++  ASSERT_TRUE(errors);
++  const std::string* error = errors->FindString(
++      "gpu.webgpuProfile.maxComputeInvocationsPerWorkgroup");
++  ASSERT_TRUE(error);
++  EXPECT_EQ("out_of_range", *error);
++}
++
+ }  // namespace
+ 
+ }  // namespace helium_persona
+--- a/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+@@ -121,11 +121,21 @@
+       limitSetsObserved: number;
+       limitValuesObserved: number;
+       limitSetsIncomplete: number;
++      capabilityProfilesMatched: number;
++      capabilityProfilesMismatched: number;
+       devicesObserved: number;
+     };
+     mediaOutput: {
+       status: string;
+       observedContexts: number;
++      baseLatencyObserved: number;
++      baseLatencyMatched: number;
++      baseLatencyMismatched: number;
++      outputLatencyObserved: number;
++      outputLatencyMatched: number;
++      outputLatencyMismatched: number;
++      verifiedContexts: number;
++      partialContexts: number;
+     };
+   };
+ }
+--- a/chrome/browser/resources/settings/privacy_page/persona_config.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
+@@ -100,6 +100,9 @@
+     webgpuDevice: string;
+     webgpuDescription: string;
+     driver: string;
++    webgpuProfile: {
++      maxComputeInvocationsPerWorkgroup: number;
++    };
+   };
+   hardware: Record<string, unknown>&{
+     hardwareConcurrency: number;
+@@ -481,6 +484,9 @@
+       webgpuDevice: '',
+       webgpuDescription: 'Apple M2',
+       driver: '',
++      webgpuProfile: {
++        maxComputeInvocationsPerWorkgroup: 256,
++      },
+     },
+     hardware: {
+       hardwareConcurrency: 8,
+@@ -540,6 +546,10 @@
+     gpu.webgpuDescription = legacyWebGpuAdapter || defaults.gpu.webgpuDescription;
+   }
+   gpu.webgpuAdapter = gpu.webgpuDescription;
++  gpu.webgpuProfile = {
++    ...defaults.gpu.webgpuProfile,
++    ...asObject(inputGpu['webgpuProfile']),
++  };
+ 
+   const advancedInput = asObject(input['advanced']);
+   return {
+--- a/chrome/test/data/webui/settings/persona_config_test.ts
++++ b/chrome/test/data/webui/settings/persona_config_test.ts
+@@ -111,7 +111,10 @@
+ 
+   test('preserves nested defaults on partial overrides', () => {
+     const draft = createPersonaDraft({
+-      gpu: {vendor: 'Intel Inc.'},
++      gpu: {
++        vendor: 'Intel Inc.',
++        webgpuProfile: {maxComputeInvocationsPerWorkgroup: 512},
++      },
+       advanced: {allowGeolocation: true},
+     });
+ 
+@@ -121,6 +124,9 @@
+     assertEquals('', draft.gpu.webgpuArchitecture);
+     assertEquals('', draft.gpu.webgpuDevice);
+     assertEquals('Apple M2', draft.gpu.webgpuDescription);
++    assertEquals(
++        512,
++        draft.gpu.webgpuProfile.maxComputeInvocationsPerWorkgroup);
+     assertEquals(true, draft.advanced.allowGeolocation);
+     assertEquals(true, draft.advanced.clientHintsEnabled);
+     assertEquals(
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -471,7 +471,8 @@
+     if (const base::DictValue* webgpu_profile =
+             gpu->FindDict("webgpuProfile")) {
+       ValidateNumber(*webgpu_profile, "maxComputeInvocationsPerWorkgroup",
+-                     "gpu.webgpuProfile.maxComputeInvocationsPerWorkgroup", 0.0,
++                     "gpu.webgpuProfile.maxComputeInvocationsPerWorkgroup",
++                     256.0,
+                      4096.0, true, &errors);
+     }
+   }
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot.h
+@@ -123,6 +123,7 @@
+   std::string webgpu_architecture;
+   std::string webgpu_device;
+   std::string webgpu_description;
++  uint32_t webgpu_max_compute_invocations_per_workgroup = 0;
+   std::string gpu_driver;
+   std::string font_pack_id;
+   std::string font_pack_name;
+--- a/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
++++ b/third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h
+@@ -402,6 +402,11 @@
+     return data.webgpu_description;
+   }
+ 
++  static uint32_t webgpu_max_compute_invocations_per_workgroup(
++      const ::blink::HeliumPersonaSnapshot& data) {
++    return data.webgpu_max_compute_invocations_per_workgroup;
++  }
++
+   static const std::string& gpu_driver(
+       const ::blink::HeliumPersonaSnapshot& data) {
+     return data.gpu_driver;
+@@ -703,6 +708,8 @@
+         data.media_devices_video_input_count();
+     out->media_devices_audio_output_count =
+         data.media_devices_audio_output_count();
++    out->webgpu_max_compute_invocations_per_workgroup =
++        data.webgpu_max_compute_invocations_per_workgroup();
+     return data.ReadUserAgent(&out->user_agent) &&
+            data.ReadId(&out->id) && data.ReadName(&out->name) &&
+            data.ReadDevice(&out->device) && data.ReadOs(&out->os) &&
+--- a/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_snapshot.mojom
+@@ -91,6 +91,7 @@
+   string webgpu_architecture;
+   string webgpu_device;
+   string webgpu_description;
++  uint32 webgpu_max_compute_invocations_per_workgroup;
+   string gpu_driver;
+   string font_pack_id;
+   string font_pack_name;
+--- a/third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom
++++ b/third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom
+@@ -21,9 +21,18 @@
+   string webgpu_architecture;
+   string webgpu_device;
+   string webgpu_description;
++  string webgpu_driver;
++  uint32 webgpu_subgroup_min_size;
++  uint32 webgpu_subgroup_max_size;
++  bool webgpu_is_fallback_adapter;
+   array<string> webgpu_features;
+   array<uint64> webgpu_limits;
++  bool webgpu_compatibility_mode;
+   bool webgpu_device_observed;
++  bool audio_base_latency_observed;
++  double audio_base_latency;
++  bool audio_output_latency_observed;
++  double audio_output_latency;
+   bool media_output_observed;
+ };
+ 
+--- a/third_party/blink/renderer/core/execution_context/execution_context.h
++++ b/third_party/blink/renderer/core/execution_context/execution_context.h
+@@ -521,9 +521,18 @@
+     String webgpu_architecture;
+     String webgpu_device;
+     String webgpu_description;
++    String webgpu_driver;
++    uint32_t webgpu_subgroup_min_size = 0;
++    uint32_t webgpu_subgroup_max_size = 0;
++    bool webgpu_is_fallback_adapter = false;
+     Vector<String> webgpu_features;
+     Vector<uint64_t> webgpu_limits;
++    bool webgpu_compatibility_mode = false;
+     bool webgpu_device_observed = false;
++    bool audio_base_latency_observed = false;
++    double audio_base_latency = 0.0;
++    bool audio_output_latency_observed = false;
++    double audio_output_latency = 0.0;
+     bool media_output_observed = false;
+   };
+ 
+@@ -537,16 +546,26 @@
+       const String& architecture,
+       const String& device,
+       const String& description,
++      const String& driver,
++      uint32_t subgroup_min_size,
++      uint32_t subgroup_max_size,
++      bool is_fallback_adapter,
+       Vector<String> features,
+-      Vector<uint64_t> limits) {
++      Vector<uint64_t> limits,
++      bool compatibility_mode) {
+     auto& evidence = helium_persona_runtime_surface_evidence_;
+     evidence.webgpu_adapter_observed = true;
+     evidence.webgpu_vendor = vendor;
+     evidence.webgpu_architecture = architecture;
+     evidence.webgpu_device = device;
+     evidence.webgpu_description = description;
++    evidence.webgpu_driver = driver;
++    evidence.webgpu_subgroup_min_size = subgroup_min_size;
++    evidence.webgpu_subgroup_max_size = subgroup_max_size;
++    evidence.webgpu_is_fallback_adapter = is_fallback_adapter;
+     evidence.webgpu_features = std::move(features);
+     evidence.webgpu_limits = std::move(limits);
++    evidence.webgpu_compatibility_mode = compatibility_mode;
+     OnHeliumPersonaRuntimeSurfaceEvidenceChanged();
+   }
+ 
+@@ -560,6 +579,20 @@
+     OnHeliumPersonaRuntimeSurfaceEvidenceChanged();
+   }
+ 
++  void SetHeliumPersonaAudioBaseLatencyObserved(double value) {
++    auto& evidence = helium_persona_runtime_surface_evidence_;
++    evidence.audio_base_latency_observed = true;
++    evidence.audio_base_latency = value;
++    OnHeliumPersonaRuntimeSurfaceEvidenceChanged();
++  }
++
++  void SetHeliumPersonaAudioOutputLatencyObserved(double value) {
++    auto& evidence = helium_persona_runtime_surface_evidence_;
++    evidence.audio_output_latency_observed = true;
++    evidence.audio_output_latency = value;
++    OnHeliumPersonaRuntimeSurfaceEvidenceChanged();
++  }
++
+   // Returns the policy state for network-efficiency-guardrails in this
+   // document.
+   virtual std::optional<mojom::blink::PolicyDisposition>
+--- a/third_party/blink/renderer/core/frame/local_frame_mojo_handler.cc
++++ b/third_party/blink/renderer/core/frame/local_frame_mojo_handler.cc
+@@ -412,9 +412,24 @@
+     probe->webgpu_architecture = runtime_evidence.webgpu_architecture;
+     probe->webgpu_device = runtime_evidence.webgpu_device;
+     probe->webgpu_description = runtime_evidence.webgpu_description;
++    probe->webgpu_driver = runtime_evidence.webgpu_driver;
++    probe->webgpu_subgroup_min_size =
++        runtime_evidence.webgpu_subgroup_min_size;
++    probe->webgpu_subgroup_max_size =
++        runtime_evidence.webgpu_subgroup_max_size;
++    probe->webgpu_is_fallback_adapter =
++        runtime_evidence.webgpu_is_fallback_adapter;
+     probe->webgpu_features = runtime_evidence.webgpu_features;
+     probe->webgpu_limits = runtime_evidence.webgpu_limits;
++    probe->webgpu_compatibility_mode =
++        runtime_evidence.webgpu_compatibility_mode;
+     probe->webgpu_device_observed = runtime_evidence.webgpu_device_observed;
++    probe->audio_base_latency_observed =
++        runtime_evidence.audio_base_latency_observed;
++    probe->audio_base_latency = runtime_evidence.audio_base_latency;
++    probe->audio_output_latency_observed =
++        runtime_evidence.audio_output_latency_observed;
++    probe->audio_output_latency = runtime_evidence.audio_output_latency;
+     probe->media_output_observed = runtime_evidence.media_output_observed;
+   }
+   std::move(callback).Run(std::move(probe));
+--- a/third_party/blink/renderer/core/workers/worker_global_scope.cc
++++ b/third_party/blink/renderer/core/workers/worker_global_scope.cc
+@@ -806,9 +806,24 @@
+   probe->webgpu_architecture = runtime_evidence.webgpu_architecture;
+   probe->webgpu_device = runtime_evidence.webgpu_device;
+   probe->webgpu_description = runtime_evidence.webgpu_description;
++  probe->webgpu_driver = runtime_evidence.webgpu_driver;
++  probe->webgpu_subgroup_min_size =
++      runtime_evidence.webgpu_subgroup_min_size;
++  probe->webgpu_subgroup_max_size =
++      runtime_evidence.webgpu_subgroup_max_size;
++  probe->webgpu_is_fallback_adapter =
++      runtime_evidence.webgpu_is_fallback_adapter;
+   probe->webgpu_features = runtime_evidence.webgpu_features;
+   probe->webgpu_limits = runtime_evidence.webgpu_limits;
++  probe->webgpu_compatibility_mode =
++      runtime_evidence.webgpu_compatibility_mode;
+   probe->webgpu_device_observed = runtime_evidence.webgpu_device_observed;
++  probe->audio_base_latency_observed =
++      runtime_evidence.audio_base_latency_observed;
++  probe->audio_base_latency = runtime_evidence.audio_base_latency;
++  probe->audio_output_latency_observed =
++      runtime_evidence.audio_output_latency_observed;
++  probe->audio_output_latency = runtime_evidence.audio_output_latency;
+   probe->media_output_observed = runtime_evidence.media_output_observed;
+   host->SetSurfaceProbe(std::move(probe));
+ }
+--- a/third_party/blink/renderer/modules/webaudio/audio_context.cc
++++ b/third_party/blink/renderer/modules/webaudio/audio_context.cc
+@@ -1164,27 +1164,37 @@
+   DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
+   DCHECK(destination());
+ 
++  double result = base_latency_;
+   if (const HeliumPersonaSnapshot* snapshot =
+           GetPersonaSnapshot(GetExecutionContext());
+       snapshot && snapshot->audio_base_latency > 0.0) {
+-    return snapshot->audio_base_latency;
++    result = snapshot->audio_base_latency;
+   }
+-  return base_latency_;
++  if (ExecutionContext* context = GetExecutionContext()) {
++    context->SetHeliumPersonaAudioBaseLatencyObserved(result);
++  }
++  return result;
+ }
+ 
+ double AudioContext::outputLatency() const {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
+   DCHECK(destination());
+ 
++  double result;
+   if (const HeliumPersonaSnapshot* snapshot =
+           GetPersonaSnapshot(GetExecutionContext());
+       snapshot && snapshot->audio_output_latency > 0.0) {
+-    return snapshot->audio_output_latency;
++    result = snapshot->audio_output_latency;
++  } else {
++    DeferredTaskHandler::GraphAutoLocker locker(this);
++    double factor = GetOutputLatencyQuantizingFactor();
++    result =
++        std::round(output_position_.hardware_output_latency / factor) * factor;
+   }
+-  DeferredTaskHandler::GraphAutoLocker locker(this);
+-
+-  double factor = GetOutputLatencyQuantizingFactor();
+-  return std::round(output_position_.hardware_output_latency / factor) * factor;
++  if (ExecutionContext* context = GetExecutionContext()) {
++    context->SetHeliumPersonaAudioOutputLatencyObserved(result);
++  }
++  return result;
+ }
+ 
+ AudioPlaybackStats* AudioContext::playbackStats() {
+--- a/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
++++ b/third_party/blink/renderer/modules/webgpu/gpu_adapter.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "third_party/blink/renderer/modules/webgpu/gpu_adapter.h"
+ 
++#include <algorithm>
++
+ #include "services/metrics/public/cpp/ukm_builders.h"
+ #include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/web/web_local_frame.h"
+@@ -58,6 +60,203 @@
+   return features;
+ }
+ 
++GPUSupportedFeatures* MakePersonaFeatureNameSet(bool compatibility_mode) {
++  auto* features = MakeGarbageCollected<GPUSupportedFeatures>();
++  if (!compatibility_mode) {
++    features->AddFeatureName(V8GPUFeatureName(
++        V8GPUFeatureName::Enum::kCoreFeaturesAndLimits));
++  }
++  return features;
++}
++
++const HeliumPersonaSnapshot* GetPersonaSnapshot(GPU* gpu) {
++  if (!gpu) {
++    return nullptr;
++  }
++  ExecutionContext* context = gpu->GetExecutionContext();
++  if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
++    if (window->GetFrame() && window->GetFrame()->Client() &&
++        window->GetFrame()->Client()->GetWebFrame() &&
++        window->GetFrame()->Client()->GetWebFrame()->Client()) {
++      return &window->GetFrame()->Client()->GetWebFrame()->Client()
++                  ->GetHeliumPersonaSnapshot();
++    }
++  } else if (auto* worker = DynamicTo<WorkerGlobalScope>(context)) {
++    return &worker->GetHeliumPersonaSnapshot();
++  }
++  return nullptr;
++}
++
++void ApplyPersonaLimitProfile(
++    GPUSupportedLimits::ComboLimits* limits,
++    const HeliumPersonaSnapshot& snapshot,
++    bool compatibility_mode) {
++  limits->maxTextureDimension1D = compatibility_mode ? 4096 : 8192;
++  limits->maxTextureDimension2D = compatibility_mode ? 4096 : 8192;
++  limits->maxTextureDimension3D = 2048;
++  limits->maxTextureArrayLayers = 256;
++  limits->maxBindGroups = 4;
++  limits->maxBindGroupsPlusVertexBuffers = 24;
++  limits->maxBindingsPerBindGroup = 1000;
++  limits->maxDynamicUniformBuffersPerPipelineLayout = 8;
++  limits->maxDynamicStorageBuffersPerPipelineLayout = 4;
++  limits->maxSampledTexturesPerShaderStage = 16;
++  limits->maxSamplersPerShaderStage = 16;
++  limits->maxStorageBuffersPerShaderStage = 8;
++  limits->maxStorageTexturesPerShaderStage = 4;
++  limits->maxUniformBuffersPerShaderStage = 12;
++  limits->maxUniformBufferBindingSize = compatibility_mode ? 16384 : 65536;
++  limits->maxStorageBufferBindingSize = 128 * 1024 * 1024;
++  limits->minUniformBufferOffsetAlignment = 256;
++  limits->minStorageBufferOffsetAlignment = 256;
++  limits->maxVertexBuffers = 8;
++  limits->maxBufferSize = 256 * 1024 * 1024;
++  limits->maxVertexAttributes = 16;
++  limits->maxVertexBufferArrayStride = 2048;
++  limits->maxInterStageShaderVariables = compatibility_mode ? 15 : 16;
++  limits->maxColorAttachments = compatibility_mode ? 4 : 8;
++  limits->maxColorAttachmentBytesPerSample = 32;
++  limits->maxComputeWorkgroupStorageSize = 16384;
++  const uint32_t requested_compute_invocations =
++      compatibility_mode
++          ? 128
++          : snapshot.webgpu_max_compute_invocations_per_workgroup;
++  limits->maxComputeInvocationsPerWorkgroup = std::min(
++      limits->maxComputeInvocationsPerWorkgroup,
++      requested_compute_invocations > 0 ? requested_compute_invocations : 256);
++  limits->maxComputeWorkgroupSizeX = compatibility_mode ? 128 : 256;
++  limits->maxComputeWorkgroupSizeY = compatibility_mode ? 128 : 256;
++  limits->maxComputeWorkgroupSizeZ = 64;
++  limits->maxComputeWorkgroupsPerDimension = 65535;
++  limits->maxStorageBuffersInFragmentStage = compatibility_mode ? 4 : 8;
++  limits->maxStorageTexturesInFragmentStage = 4;
++  limits->maxStorageBuffersInVertexStage = compatibility_mode ? 0 : 8;
++  limits->maxStorageTexturesInVertexStage = compatibility_mode ? 0 : 4;
++  limits->maxImmediateSize = 0;
++}
++
++template <typename T>
++bool MaximumLimitFits(T required, T exposed, T undefined) {
++  return required == undefined || required <= exposed;
++}
++
++template <typename T>
++bool AlignmentLimitFits(T required, T exposed, T undefined) {
++  return required == undefined || required >= exposed;
++}
++
++bool RequiredLimitsFitPersona(
++    const GPUSupportedLimits::ComboLimits& required,
++    const GPUSupportedLimits& exposed) {
++  return MaximumLimitFits(required.maxTextureDimension1D,
++                          exposed.maxTextureDimension1D(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxTextureDimension2D,
++                          exposed.maxTextureDimension2D(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxTextureDimension3D,
++                          exposed.maxTextureDimension3D(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxTextureArrayLayers,
++                          exposed.maxTextureArrayLayers(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxBindGroups, exposed.maxBindGroups(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxBindGroupsPlusVertexBuffers,
++                          exposed.maxBindGroupsPlusVertexBuffers(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxBindingsPerBindGroup,
++                          exposed.maxBindingsPerBindGroup(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(
++             required.maxDynamicUniformBuffersPerPipelineLayout,
++             exposed.maxDynamicUniformBuffersPerPipelineLayout(),
++             wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(
++             required.maxDynamicStorageBuffersPerPipelineLayout,
++             exposed.maxDynamicStorageBuffersPerPipelineLayout(),
++             wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxSampledTexturesPerShaderStage,
++                          exposed.maxSampledTexturesPerShaderStage(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxSamplersPerShaderStage,
++                          exposed.maxSamplersPerShaderStage(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxStorageBuffersPerShaderStage,
++                          exposed.maxStorageBuffersPerShaderStage(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxStorageTexturesPerShaderStage,
++                          exposed.maxStorageTexturesPerShaderStage(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxUniformBuffersPerShaderStage,
++                          exposed.maxUniformBuffersPerShaderStage(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxUniformBufferBindingSize,
++                          exposed.maxUniformBufferBindingSize(),
++                          wgpu::kLimitU64Undefined) &&
++         MaximumLimitFits(required.maxStorageBufferBindingSize,
++                          exposed.maxStorageBufferBindingSize(),
++                          wgpu::kLimitU64Undefined) &&
++         AlignmentLimitFits(required.minUniformBufferOffsetAlignment,
++                            exposed.minUniformBufferOffsetAlignment(),
++                            wgpu::kLimitU32Undefined) &&
++         AlignmentLimitFits(required.minStorageBufferOffsetAlignment,
++                            exposed.minStorageBufferOffsetAlignment(),
++                            wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxVertexBuffers, exposed.maxVertexBuffers(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxBufferSize, exposed.maxBufferSize(),
++                          wgpu::kLimitU64Undefined) &&
++         MaximumLimitFits(required.maxVertexAttributes,
++                          exposed.maxVertexAttributes(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxVertexBufferArrayStride,
++                          exposed.maxVertexBufferArrayStride(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxInterStageShaderVariables,
++                          exposed.maxInterStageShaderVariables(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxColorAttachments,
++                          exposed.maxColorAttachments(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxColorAttachmentBytesPerSample,
++                          exposed.maxColorAttachmentBytesPerSample(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxComputeWorkgroupStorageSize,
++                          exposed.maxComputeWorkgroupStorageSize(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxComputeInvocationsPerWorkgroup,
++                          exposed.maxComputeInvocationsPerWorkgroup(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxComputeWorkgroupSizeX,
++                          exposed.maxComputeWorkgroupSizeX(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxComputeWorkgroupSizeY,
++                          exposed.maxComputeWorkgroupSizeY(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxComputeWorkgroupSizeZ,
++                          exposed.maxComputeWorkgroupSizeZ(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxComputeWorkgroupsPerDimension,
++                          exposed.maxComputeWorkgroupsPerDimension(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxStorageBuffersInFragmentStage,
++                          exposed.maxStorageBuffersInFragmentStage(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxStorageTexturesInFragmentStage,
++                          exposed.maxStorageTexturesInFragmentStage(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxStorageBuffersInVertexStage,
++                          exposed.maxStorageBuffersInVertexStage(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxStorageTexturesInVertexStage,
++                          exposed.maxStorageTexturesInVertexStage(),
++                          wgpu::kLimitU32Undefined) &&
++         MaximumLimitFits(required.maxImmediateSize,
++                          exposed.maxImmediateSize(),
++                          wgpu::kLimitU32Undefined);
++}
++
+ Vector<String> CollectFeatureNames(const GPUSupportedFeatures& features) {
+   Vector<String> names;
+   names.ReserveInitialCapacity(features.FeatureNameSet().size());
+@@ -116,6 +315,9 @@
+     scoped_refptr<DawnControlClientHolder> dawn_control_client,
+     const GPURequestAdapterOptions* options)
+     : DawnObject(dawn_control_client, std::move(handle), String()), gpu_(gpu) {
++  const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(gpu);
++  helium_persona_enabled_ = snapshot && snapshot->IsEnabled();
++  compatibility_mode_ = options->featureLevel() == "compatibility";
+   wgpu::AdapterInfo info = {};
+   wgpu::ChainedStructOut** propertiesChain = &info.nextInChain;
+   if (GetHandle().HasFeature(wgpu::FeatureName::AdapterPropertiesMemoryHeaps)) {
+@@ -169,42 +371,39 @@
+   }
+   subgroup_min_size_ = info.subgroupMinSize;
+   subgroup_max_size_ = info.subgroupMaxSize;
++  if (helium_persona_enabled_) {
++    subgroup_min_size_ = 4;
++    subgroup_max_size_ = 128;
++  }
+   power_preference_ = powerProperties.powerPreference;
+ 
+-  features_ = MakeFeatureNameSet(GetHandle());
++  features_ = helium_persona_enabled_
++                  ? MakePersonaFeatureNameSet(compatibility_mode_)
++                  : MakeFeatureNameSet(GetHandle());
+ 
+   GPUSupportedLimits::ComboLimits limits;
+   GetHandle().GetLimits(limits.GetLinked());
++  if (helium_persona_enabled_) {
++    ApplyPersonaLimitProfile(&limits, *snapshot, compatibility_mode_);
++  }
+   limits_ = MakeGarbageCollected<GPUSupportedLimits>(limits);
+ 
+   info_ = CreateAdapterInfoForAdapter();
+   if (gpu_ && gpu_->GetExecutionContext()) {
+     gpu_->GetExecutionContext()->SetHeliumPersonaWebGpuEvidence(
+         info_->vendor(), info_->architecture(), info_->device(),
+-        info_->description(), CollectFeatureNames(*features_),
+-        CollectLimitValues(*limits_));
++        info_->description(), info_->driver(), info_->subgroupMinSize(),
++        info_->subgroupMaxSize(), info_->isFallbackAdapter(),
++        CollectFeatureNames(*features_), CollectLimitValues(*limits_),
++        compatibility_mode_);
+   }
+ }
+ 
+ GPUAdapterInfo* GPUAdapter::CreateAdapterInfoForAdapter() {
+-  bool is_fallback_adapter = adapter_type_ == wgpu::AdapterType::CPU;
++  bool is_fallback_adapter =
++      !helium_persona_enabled_ && adapter_type_ == wgpu::AdapterType::CPU;
+ 
+-  const HeliumPersonaSnapshot* snapshot = nullptr;
+-  if (gpu_) {
+-    if (ExecutionContext* context = gpu_->GetExecutionContext()) {
+-      if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
+-        if (window->GetFrame() && window->GetFrame()->Client() &&
+-            window->GetFrame()->Client()->GetWebFrame() &&
+-            window->GetFrame()->Client()->GetWebFrame()->Client()) {
+-          snapshot =
+-              &window->GetFrame()->Client()->GetWebFrame()->Client()
+-                   ->GetHeliumPersonaSnapshot();
+-        }
+-      } else if (auto* worker = DynamicTo<WorkerGlobalScope>(context)) {
+-        snapshot = &worker->GetHeliumPersonaSnapshot();
+-      }
+-    }
+-  }
++  const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(gpu_.Get());
+ 
+   GPUAdapterInfoPersonaData persona_data = ApplyHeliumPersonaToGPUAdapterInfo(
+       snapshot,
+@@ -258,9 +457,11 @@
+       UNSAFE_BUFFERS(base::span<const wgpu::SubgroupMatrixConfig>(
+           subgroup_matrix_configs_.configs,
+           subgroup_matrix_configs_.configCount));
+-  for (const auto& c : subgroup_matrix_configs_span) {
+-    info->AppendSubgroupMatrixConfig(
+-        MakeGarbageCollected<GPUSubgroupMatrixConfig>(c));
++  if (!helium_persona_enabled_) {
++    for (const auto& c : subgroup_matrix_configs_span) {
++      info->AppendSubgroupMatrixConfig(
++          MakeGarbageCollected<GPUSubgroupMatrixConfig>(c));
++    }
+   }
+ 
+   return info;
+@@ -372,6 +573,13 @@
+                                       descriptor->requiredLimits(), resolver)) {
+       return promise;
+     }
++    if (helium_persona_enabled_ &&
++        !RequiredLimitsFitPersona(required_limits, *limits_)) {
++      resolver->RejectWithDOMException(
++          DOMExceptionCode::kOperationError,
++          "A required WebGPU limit exceeds the Persona adapter profile.");
++      return promise;
++    }
+   }
+ 
+   // Use a set to prevent duplicate features.
+@@ -380,7 +588,8 @@
+   // has the ShaderModuleCompilationOptions feature and the user has enabled the
+   // WebGPUDeveloperFeatures flag. It is needed to control
+   // strict math during shader module compilation.
+-  if (RuntimeEnabledFeatures::WebGPUDeveloperFeaturesEnabled() &&
++  if (!helium_persona_enabled_ &&
++      RuntimeEnabledFeatures::WebGPUDeveloperFeaturesEnabled() &&
+       GetHandle().HasFeature(
+           wgpu::FeatureName::ShaderModuleCompilationOptions)) {
+     required_features_set.insert(
+--- a/third_party/blink/renderer/modules/webgpu/gpu_adapter.h
++++ b/third_party/blink/renderer/modules/webgpu/gpu_adapter.h
+@@ -75,6 +75,8 @@
+   wgpu::BackendType backend_type_;
+   wgpu::AdapterType adapter_type_;
+   bool is_xr_compatible_ = false;
++  bool helium_persona_enabled_ = false;
++  bool compatibility_mode_ = false;
+   Member<GPUSupportedLimits> limits_;
+   Member<GPUSupportedFeatures> features_;
+   Member<GPUAdapterInfo> info_;

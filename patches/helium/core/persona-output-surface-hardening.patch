@@ -1,0 +1,2766 @@
+--- a/chrome/browser/helium_persona/persona_audio_readback_browsertest.cc
++++ b/chrome/browser/helium_persona/persona_audio_readback_browsertest.cc
+@@ -214,11 +214,325 @@
+   return capture;
+ }
+ 
++std::string CaptureWorkerOffscreenCanvas(
++    content::WebContents* web_contents) {
++  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
++    (async () => {
++      const workerSource = `
++        self.onmessage = async () => {
++          const canvas = new OffscreenCanvas(32, 32);
++          const context = canvas.getContext('2d');
++          context.fillStyle = 'rgb(37, 89, 143)';
++          context.fillRect(0, 0, 32, 32);
++          context.fillStyle = 'rgb(211, 47, 91)';
++          context.fillRect(4, 6, 20, 17);
++          const blob = await canvas.convertToBlob({type: 'image/png'});
++          const bytes = new Uint8Array(await blob.arrayBuffer());
++          let binary = '';
++          for (const byte of bytes) binary += String.fromCharCode(byte);
++          self.postMessage(btoa(binary));
++        };
++      `;
++      const url = URL.createObjectURL(
++          new Blob([workerSource], {type: 'application/javascript'}));
++      try {
++        const worker = new Worker(url);
++        const output = await new Promise((resolve, reject) => {
++          worker.onmessage = event => resolve(event.data);
++          worker.onerror = reject;
++          worker.postMessage('capture');
++        });
++        worker.terminate();
++        return output;
++      } finally {
++        URL.revokeObjectURL(url);
++      }
++    })()
++  )JS");
++  CHECK(result.is_ok()) << result.ExtractError();
++  return result.ExtractString();
++}
++
++std::string CaptureCanvasStreamFrame(content::WebContents* web_contents) {
++  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
++    (async () => {
++      const canvas = document.createElement('canvas');
++      canvas.width = 32;
++      canvas.height = 32;
++      const context = canvas.getContext('2d');
++      context.fillStyle = 'rgb(37, 89, 143)';
++      context.fillRect(0, 0, 32, 32);
++      context.fillStyle = 'rgb(211, 47, 91)';
++      context.fillRect(4, 6, 20, 17);
++
++      const stream = canvas.captureStream(0);
++      const track = stream.getVideoTracks()[0];
++      const processor = new MediaStreamTrackProcessor({track});
++      const reader = processor.readable.getReader();
++      track.requestFrame();
++      const {value: frame} = await reader.read();
++      const bytes = new Uint8Array(
++          frame.allocationSize({format: 'RGBA'}));
++      await frame.copyTo(bytes, {format: 'RGBA'});
++      frame.close();
++      track.stop();
++      await reader.cancel();
++      const digest = await crypto.subtle.digest('SHA-256', bytes);
++      return Array.from(new Uint8Array(digest), byte =>
++        byte.toString(16).padStart(2, '0')).join('');
++    })()
++  )JS");
++  CHECK(result.is_ok()) << result.ExtractError();
++  return result.ExtractString();
++}
++
++std::string CaptureCanvasFloatingPointReadback(
++    content::WebContents* web_contents) {
++  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
++    (async () => {
++      const canvas = document.createElement('canvas');
++      canvas.width = 32;
++      canvas.height = 32;
++      const context = canvas.getContext('2d');
++      context.fillStyle = 'rgb(37, 89, 143)';
++      context.fillRect(0, 0, 32, 32);
++      context.fillStyle = 'rgb(211, 47, 91)';
++      context.fillRect(4, 6, 20, 17);
++      const outputs = [];
++      for (const pixelFormat of ['rgba-float16', 'rgba-float32']) {
++        const imageData = context.getImageData(
++            0, 0, 32, 32, {pixelFormat});
++        const bytes = new Uint8Array(imageData.data.buffer);
++        const digest = await crypto.subtle.digest('SHA-256', bytes);
++        outputs.push(Array.from(new Uint8Array(digest), byte =>
++          byte.toString(16).padStart(2, '0')).join(''));
++      }
++      return outputs.join(':');
++    })()
++  )JS");
++  CHECK(result.is_ok()) << result.ExtractError();
++  return result.ExtractString();
++}
++
++std::string CaptureCanvasAndCopyReadback(
++    content::WebContents* web_contents) {
++  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
++    (async () => {
++      const source = document.createElement('canvas');
++      source.width = 32;
++      source.height = 32;
++      const sourceContext = source.getContext('2d');
++      sourceContext.fillStyle = 'rgb(37, 89, 143)';
++      sourceContext.fillRect(0, 0, 32, 32);
++      sourceContext.fillStyle = 'rgb(211, 47, 91)';
++      sourceContext.fillRect(4, 6, 20, 17);
++
++      const destination = document.createElement('canvas');
++      destination.width = 32;
++      destination.height = 32;
++      const destinationContext = destination.getContext('2d');
++      destinationContext.drawImage(source, 0, 0);
++
++      const hash = async context => {
++        const bytes = context.getImageData(0, 0, 32, 32).data;
++        const digest = await crypto.subtle.digest('SHA-256', bytes);
++        return Array.from(new Uint8Array(digest), byte =>
++          byte.toString(16).padStart(2, '0')).join('');
++      };
++      return `${await hash(sourceContext)}:${await hash(destinationContext)}`;
++    })()
++  )JS");
++  CHECK(result.is_ok()) << result.ExtractError();
++  return result.ExtractString();
++}
++
+ }  // namespace
+ 
+ class PersonaAudioReadbackBrowserTest : public InProcessBrowserTest {};
+ 
+ IN_PROC_BROWSER_TEST_F(PersonaAudioReadbackBrowserTest,
++                       WorkerOffscreenCanvasExportUsesPersonaNoise) {
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>canvas</title>")));
++  const std::string baseline = CaptureWorkerOffscreenCanvas(web_contents);
++
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response = service->CreatePersonaProfile("Canvas export");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
++
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>canvas</title>")));
++  const std::string generation_zero =
++      CaptureWorkerOffscreenCanvas(web_contents);
++  EXPECT_EQ(generation_zero, CaptureWorkerOffscreenCanvas(web_contents));
++  EXPECT_NE(baseline, generation_zero);
++
++  service->RefreshFingerprint(FingerprintRefreshScope::kProfile,
++                              std::string());
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>canvas</title>")));
++  const std::string generation_one =
++      CaptureWorkerOffscreenCanvas(web_contents);
++  EXPECT_NE(generation_zero, generation_one);
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaAudioReadbackBrowserTest,
++                       CanvasCaptureStreamUsesPersonaNoise) {
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>canvas-stream</title>")));
++  const std::string baseline = CaptureCanvasStreamFrame(web_contents);
++
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response = service->CreatePersonaProfile("Canvas stream");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
++
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>canvas-stream</title>")));
++  const std::string generation_zero =
++      CaptureCanvasStreamFrame(web_contents);
++  EXPECT_EQ(generation_zero, CaptureCanvasStreamFrame(web_contents));
++  EXPECT_NE(baseline, generation_zero);
++
++  service->RefreshFingerprint(FingerprintRefreshScope::kProfile,
++                              std::string());
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>canvas-stream</title>")));
++  EXPECT_NE(generation_zero, CaptureCanvasStreamFrame(web_contents));
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaAudioReadbackBrowserTest,
++                       FloatingPointCanvasReadbackUsesPersonaNoise) {
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>float-canvas</title>")));
++  const std::string baseline =
++      CaptureCanvasFloatingPointReadback(web_contents);
++
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response = service->CreatePersonaProfile("Float canvas");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
++
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>float-canvas</title>")));
++  const std::string generation_zero =
++      CaptureCanvasFloatingPointReadback(web_contents);
++  EXPECT_EQ(generation_zero,
++            CaptureCanvasFloatingPointReadback(web_contents));
++  EXPECT_NE(baseline, generation_zero);
++
++  service->RefreshFingerprint(FingerprintRefreshScope::kProfile,
++                              std::string());
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>float-canvas</title>")));
++  EXPECT_NE(generation_zero,
++            CaptureCanvasFloatingPointReadback(web_contents));
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaAudioReadbackBrowserTest,
++                       CanvasCopyDoesNotAccumulatePersonaNoise) {
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response = service->CreatePersonaProfile("Canvas copy");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
++
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>canvas-copy</title>")));
++  const std::string output = CaptureCanvasAndCopyReadback(web_contents);
++  const size_t separator = output.find(':');
++  ASSERT_NE(std::string::npos, separator);
++  EXPECT_EQ(output.substr(0, separator), output.substr(separator + 1));
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaAudioReadbackBrowserTest,
++                       WebGLUnprotectedReadbackModesFailClosed) {
++  PersonaService* service =
++      PersonaServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  base::DictValue response = service->CreatePersonaProfile("WebGL readback");
++  const std::string* persona_id = response.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  base::test::TestFuture<base::DictValue> activation;
++  service->SetActivePersona(*persona_id, activation.GetCallback());
++  ASSERT_TRUE(activation.Take().FindBool("ok").value_or(false));
++
++  content::WebContents* web_contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(content::NavigateToURL(
++      web_contents, GURL("data:text/html,<title>webgl-readback</title>")));
++  const content::EvalJsResult result = content::EvalJs(web_contents, R"JS(
++    (() => {
++      const canvas = document.createElement('canvas');
++      canvas.width = 2;
++      canvas.height = 2;
++      const gl = canvas.getContext('webgl2');
++      if (!gl) return {supported: false};
++
++      gl.clearColor(0.2, 0.4, 0.6, 1.0);
++      gl.clear(gl.COLOR_BUFFER_BIT);
++      const rgba8 = new Uint8Array(4);
++      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, rgba8);
++      const rgba8Allowed = gl.getError() === gl.NO_ERROR;
++
++      gl.pixelStorei(gl.PACK_ROW_LENGTH, 2);
++      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE,
++                    new Uint8Array(8));
++      const customPackRejected = gl.getError() === gl.INVALID_OPERATION;
++      gl.pixelStorei(gl.PACK_ROW_LENGTH, 0);
++
++      const packBuffer = gl.createBuffer();
++      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, packBuffer);
++      gl.bufferData(gl.PIXEL_PACK_BUFFER, 4, gl.STREAM_READ);
++      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, 0);
++      const packBufferRejected = gl.getError() === gl.INVALID_OPERATION;
++      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
++      gl.deleteBuffer(packBuffer);
++      return {
++        supported: true,
++        rgba8Allowed,
++        customPackRejected,
++        packBufferRejected,
++      };
++    })()
++  )JS");
++  ASSERT_TRUE(result.is_ok()) << result.ExtractError();
++  const base::DictValue& policy = result.ExtractDict();
++  ASSERT_TRUE(policy.FindBool("supported").value_or(false));
++  EXPECT_TRUE(policy.FindBool("rgba8Allowed").value_or(false));
++  EXPECT_TRUE(policy.FindBool("customPackRejected").value_or(false));
++  EXPECT_TRUE(policy.FindBool("packBufferRejected").value_or(false));
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaAudioReadbackBrowserTest,
+                        StableWithinGenerationAndChangesAfterRefresh) {
+   const GURL test_url("data:text/html,<body></body>");
+   content::WebContents* web_contents =
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -1765,6 +1765,18 @@
+           .Set("downlinkMax", snapshot.network_downlink_max)
+           .Set("saveData", snapshot.network_save_data)
+           .Set("online", snapshot.network_online);
++  base::ListValue media_device_labels;
++  for (const std::string& label : snapshot.media_device_labels) {
++    media_device_labels.Append(label);
++  }
++  base::DictValue media_devices =
++      base::DictValue()
++          .Set("audioBaseLatency", snapshot.audio_base_latency)
++          .Set("audioOutputLatency", snapshot.audio_output_latency)
++          .Set("audioInputCount", snapshot.media_devices_audio_input_count)
++          .Set("videoInputCount", snapshot.media_devices_video_input_count)
++          .Set("audioOutputCount", snapshot.media_devices_audio_output_count)
++          .Set("labels", std::move(media_device_labels));
+   return base::DictValue()
+       .Set("enabled", snapshot.enabled)
+       .Set("id", snapshot.id)
+@@ -1783,6 +1795,7 @@
+       .Set("screen", std::move(screen))
+       .Set("advanced", std::move(advanced))
+       .Set("network", std::move(network))
++      .Set("mediaDevices", std::move(media_devices))
+       .Set("fingerprintGeneration",
+            base::NumberToString(snapshot.fingerprint_generation))
+       .Set("fingerprintRotationScope", snapshot.fingerprint_rotation_scope)
+@@ -2461,6 +2474,8 @@
+                .Set("renderer", "runtime_snapshot")
+                .Set("workers", "runtime_snapshot_attestation")
+                .Set("network", "barrier_checked_transactional_fanout")
++               .Set("mediaDevices",
++                    "synthetic_enumeration_capture_fail_closed")
+                .Set("probe", "partial"))
+       .Set("runtimeEvidence",
+            base::DictValue()
+@@ -2557,7 +2572,7 @@
+   const base::DictValue* effective = response.FindDict("effective");
+   base::ListValue diff;
+   if (requested && effective) {
+-    constexpr std::array<std::string_view, 25> kComparableFields = {
++    constexpr std::array<std::string_view, 31> kComparableFields = {
+         "enabled",
+         "id",
+         "name",
+@@ -2583,6 +2598,12 @@
+         "network.effectiveType",
+         "network.rtt",
+         "network.routeId",
++        "mediaDevices.audioBaseLatency",
++        "mediaDevices.audioOutputLatency",
++        "mediaDevices.audioInputCount",
++        "mediaDevices.videoInputCount",
++        "mediaDevices.audioOutputCount",
++        "mediaDevices.labels",
+     };
+     for (std::string_view path : kComparableFields) {
+       AppendPersonaDiff(*requested, *effective, path, &diff);
+@@ -2627,6 +2648,11 @@
+           .Set("renderer", "unknown")
+           .Set("workers", "unknown")
+           .Set("probe", "partial")
++          .Set("mediaDevices",
++               status == "persona_ready"
++                   ? "synthetic_configured_capture_fail_closed"
++               : status == "system_real" ? "system"
++                                           : "unavailable")
+           .Set("fingerprint", status == "persona_ready" ? "configured"
+                               : status == "system_real" ? "system"
+                                                         : "unavailable");
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -542,6 +542,8 @@
+                   ->FindBool("effectiveSnapshot")
+                   .value_or(false));
+   EXPECT_EQ("partial", *contract.FindDict("surfaces")->FindString("probe"));
++  EXPECT_EQ("synthetic_enumeration_capture_fail_closed",
++            *contract.FindDict("surfaces")->FindString("mediaDevices"));
+   const base::DictValue* runtime_evidence =
+       contract.FindDict("runtimeEvidence");
+   ASSERT_TRUE(runtime_evidence);
+@@ -612,11 +614,38 @@
+             *audit.FindDict("surfaces")->FindString("workers"));
+   EXPECT_EQ("partial", *audit.FindDict("surfaces")->FindString("probe"));
+   EXPECT_EQ("system", *audit.FindDict("surfaces")->FindString("fingerprint"));
++  EXPECT_EQ("system",
++            *audit.FindDict("surfaces")->FindString("mediaDevices"));
+   EXPECT_EQ(0, *audit.FindDict("runtimeEvidence")
+                    ->FindDict("frames")
+                    ->FindInt("total"));
+ }
+ 
++TEST_F(PersonaServiceTest, EffectivePersonaIncludesMediaDevicePolicy) {
++  const base::DictValue created = service_->CreatePersonaProfile("Media");
++  const std::string* persona_id = created.FindString("personaId");
++  ASSERT_TRUE(persona_id);
++  ASSERT_TRUE(ActivatePersona(service_.get(), *persona_id)
++                  .FindBool("ok")
++                  .value_or(false));
++
++  const base::DictValue effective = service_->GetEffectivePersona();
++  EXPECT_EQ("persona_ready", *effective.FindString("status"));
++  const base::DictValue* effective_snapshot = effective.FindDict("effective");
++  ASSERT_TRUE(effective_snapshot);
++  const base::DictValue* media_devices =
++      effective_snapshot->FindDict("mediaDevices");
++  ASSERT_TRUE(media_devices);
++  EXPECT_EQ(1, media_devices->FindInt("audioInputCount").value_or(-1));
++  EXPECT_EQ(1, media_devices->FindInt("videoInputCount").value_or(-1));
++  EXPECT_EQ(1, media_devices->FindInt("audioOutputCount").value_or(-1));
++  ASSERT_TRUE(media_devices->FindList("labels"));
++
++  const base::DictValue audit = GetPersonaAudit(service_.get());
++  EXPECT_EQ("synthetic_configured_capture_fail_closed",
++            *audit.FindDict("surfaces")->FindString("mediaDevices"));
++}
++
+ TEST_F(PersonaServiceTest,
+        EffectivePersonaDoesNotInitializeMissingFingerprintState) {
+   const base::DictValue created = service_->CreatePersonaProfile("Work");
+--- a/content/browser/renderer_host/media/media_devices_dispatcher_host.cc
++++ b/content/browser/renderer_host/media/media_devices_dispatcher_host.cc
+@@ -33,6 +33,7 @@
+ #include "content/public/browser/browser_context.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
++#include "content/public/common/content_client.h"
+ #include "content/public/common/content_switches.h"
+ #include "media/audio/audio_system.h"
+ #include "media/base/media_switches.h"
+@@ -56,6 +57,24 @@
+ 
+ namespace {
+ 
++bool IsPersonaSyntheticMediaDeviceId(const std::string& device_id) {
++  return device_id.starts_with("persona_audio_input_") ||
++         device_id.starts_with("persona_video_input_") ||
++         device_id.starts_with("persona_audio_output_");
++}
++
++bool ShouldBlockRealMediaDevicesOnUIThread(
++    GlobalRenderFrameHostId render_frame_host_id) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  RenderFrameHostImpl* render_frame_host =
++      RenderFrameHostImpl::FromID(render_frame_host_id);
++  return !render_frame_host ||
++         GetContentClient()
++             ->browser()
++             ->GetHeliumPersonaSnapshot(render_frame_host->GetBrowserContext())
++             .IsEnabled();
++}
++
+ std::vector<blink::mojom::AudioInputDeviceCapabilitiesPtr>
+ ToVectorAudioInputDeviceCapabilitiesPtr(
+     const std::vector<blink::mojom::AudioInputDeviceCapabilities>&
+@@ -358,6 +377,26 @@
+     return;
+   }
+ 
++  GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
++      FROM_HERE,
++      base::BindOnce(&ShouldBlockRealMediaDevicesOnUIThread,
++                     render_frame_host_id_),
++      base::BindOnce(
++          &MediaDevicesDispatcherHost::SetPreferredSinkIdAfterPersonaCheck,
++          weak_factory_.GetWeakPtr(), hashed_sink_id, std::move(callback)));
++}
++
++void MediaDevicesDispatcherHost::SetPreferredSinkIdAfterPersonaCheck(
++    const std::string& hashed_sink_id,
++    SetPreferredSinkIdCallback callback,
++    bool block_real_devices) {
++  CHECK_CURRENTLY_ON(BrowserThread::IO);
++  if (block_real_devices) {
++    std::move(callback).Run(
++        media::OutputDeviceStatus::OUTPUT_DEVICE_STATUS_ERROR_NOT_AUTHORIZED);
++    return;
++  }
++
+   CHECK(media_stream_manager_->preferred_audio_output_device_manager());
+ 
+   // The first thing is to validate whether the caller is permitted to set the
+@@ -445,9 +484,11 @@
+     capabilities->device_id = std::move(hmac_device_id);
+     capabilities->group_id = std::move(hmac_group_id);
+     capabilities->control_support = device_info.video_control_support;
+-    capabilities->formats =
+-        media_stream_manager_->media_devices_manager()->GetVideoInputFormats(
+-            device_info.device_id, true /* try_in_use_first */);
++    if (!IsPersonaSyntheticMediaDeviceId(device_info.device_id)) {
++      capabilities->formats =
++          media_stream_manager_->media_devices_manager()->GetVideoInputFormats(
++              device_info.device_id, true /* try_in_use_first */);
++    }
+     capabilities->facing_mode = device_info.video_facing;
+     video_input_capabilities.push_back(std::move(capabilities));
+   }
+@@ -468,6 +509,29 @@
+       "MDDH::GetVideoInputDeviceFormats({hashed_device_id=%s}, "
+       "{try_in_use_first=%s})",
+       hashed_device_id.c_str(), base::ToString(try_in_use_first)));
++  GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
++      FROM_HERE,
++      base::BindOnce(&ShouldBlockRealMediaDevicesOnUIThread,
++                     render_frame_host_id_),
++      base::BindOnce(&MediaDevicesDispatcherHost::
++                         GetVideoInputDeviceFormatsAfterPersonaCheck,
++                     weak_factory_.GetWeakPtr(), hashed_device_id,
++                     try_in_use_first, std::move(client_callback),
++                     std::move(scoped_trace), salt_and_origin));
++}
++
++void MediaDevicesDispatcherHost::GetVideoInputDeviceFormatsAfterPersonaCheck(
++    const std::string& hashed_device_id,
++    bool try_in_use_first,
++    GetVideoInputDeviceFormatsCallback client_callback,
++    std::unique_ptr<ScopedMediaStreamTrace> scoped_trace,
++    const MediaDeviceSaltAndOrigin& salt_and_origin,
++    bool block_real_devices) {
++  DCHECK_CURRENTLY_ON(BrowserThread::IO);
++  if (block_real_devices) {
++    std::move(client_callback).Run(media::VideoCaptureFormats());
++    return;
++  }
+   GetRawDeviceIDForMediaStreamHMAC(
+       blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE, salt_and_origin,
+       hashed_device_id, base::SequencedTaskRunner::GetCurrentDefault(),
+@@ -559,8 +623,18 @@
+           [](GlobalRenderFrameHostId render_frame_host_id) {
+             RenderFrameHostImpl* render_frame_host =
+                 RenderFrameHostImpl::FromID(render_frame_host_id);
+-            return render_frame_host &&
+-                   render_frame_host->HasTransientUserActivation();
++            if (!render_frame_host) {
++              return std::make_pair(false, false);
++            }
++            const bool persona_enabled =
++                GetContentClient()
++                    ->browser()
++                    ->GetHeliumPersonaSnapshot(
++                        render_frame_host->GetBrowserContext())
++                    .IsEnabled();
++            return std::make_pair(
++                render_frame_host->HasTransientUserActivation(),
++                persona_enabled);
+           },
+           render_frame_host_id_),
+       base::BindOnce(
+@@ -571,9 +645,16 @@
+ 
+ void MediaDevicesDispatcherHost::OnGotTransientUserActivationResult(
+     const std::string& hashed_device_id,
+-    bool has_user_activation) {
++    std::pair<bool, bool> state) {
+   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+ 
++  const auto [has_user_activation, persona_enabled] = state;
++  if (persona_enabled) {
++    auto result = blink::mojom::SelectAudioOutputResult::New();
++    result->status = blink::mojom::AudioOutputStatus::kNotSupported;
++    std::move(select_audio_output_callback_).Run(std::move(result));
++    return;
++  }
+   if (!has_user_activation) {
+     auto result = blink::mojom::SelectAudioOutputResult::New();
+     result->status = blink::mojom::AudioOutputStatus::kNoUserActivation;
+@@ -771,6 +852,8 @@
+   }
+   // No devices or fake devices, no need to read audio parameters.
+   if (current_audio_input_capabilities_.empty() ||
++      IsPersonaSyntheticMediaDeviceId(
++          current_audio_input_capabilities_.front().device_id) ||
+       base::CommandLine::ForCurrentProcess()->HasSwitch(
+           switches::kUseFakeDeviceForMediaStream)) {
+     MediaStreamManager::SendMessageToNativeLog(base::StringPrintf(
+--- a/content/browser/renderer_host/media/media_devices_dispatcher_host.h
++++ b/content/browser/renderer_host/media/media_devices_dispatcher_host.h
+@@ -94,7 +94,7 @@
+ 
+  private:
+   void OnGotTransientUserActivationResult(const std::string& hashed_device_id,
+-                                          bool has_user_activation);
++                                          std::pair<bool, bool> state);
+ 
+   void OnAudioOutputPermissionResult(const std::string& hashed_device_id,
+                                      MediaDevicesManager::PermissionDeniedState
+@@ -146,6 +146,11 @@
+       const std::string& raw_device_id,
+       const std::string& device_id_for_renderer);
+ 
++  void SetPreferredSinkIdAfterPersonaCheck(
++      const std::string& hashed_sink_id,
++      SetPreferredSinkIdCallback callback,
++      bool block_real_devices);
++
+   std::unique_ptr<AudioOutputAuthorizationHandler> CreateAuthorizationHandler();
+ 
+   void FinalizeGetVideoInputCapabilities(
+@@ -175,6 +180,14 @@
+       std::unique_ptr<ScopedMediaStreamTrace> scoped_trace,
+       const MediaDeviceSaltAndOrigin& salt_and_origin);
+ 
++  void GetVideoInputDeviceFormatsAfterPersonaCheck(
++      const std::string& hashed_device_id,
++      bool try_in_use_first,
++      GetVideoInputDeviceFormatsCallback client_callback,
++      std::unique_ptr<ScopedMediaStreamTrace> scoped_trace,
++      const MediaDeviceSaltAndOrigin& salt_and_origin,
++      bool block_real_devices);
++
+   void GetVideoInputDeviceFormatsWithRawId(
+       const std::string& hashed_device_id,
+       bool try_in_use_first,
+--- a/content/browser/renderer_host/media/media_devices_dispatcher_host_unittest.cc
++++ b/content/browser/renderer_host/media/media_devices_dispatcher_host_unittest.cc
+@@ -144,6 +144,15 @@
+     expected_browser_context_ = browser_context;
+   }
+ 
++  blink::HeliumPersonaSnapshot GetHeliumPersonaSnapshot(
++      BrowserContext* browser_context) override {
++    return persona_snapshot_;
++  }
++
++  void SetHeliumPersonaSnapshot(blink::HeliumPersonaSnapshot snapshot) {
++    persona_snapshot_ = std::move(snapshot);
++  }
++
+  private:
+   void PreferenceRankDeviceInfos(BrowserContext* browser_context,
+                                  const std::string& default_device_id,
+@@ -160,6 +169,7 @@
+   }
+ 
+   raw_ptr<BrowserContext> expected_browser_context_;
++  blink::HeliumPersonaSnapshot persona_snapshot_;
+ };
+ 
+ }  // namespace
+@@ -818,6 +828,23 @@
+   run_loop.Run();
+ }
+ 
++TEST_P(MediaDevicesDispatcherHostTest,
++       PersonaRejectsVideoInputDeviceFormatQueries) {
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
++
++  base::test::TestFuture<const MediaDeviceSaltAndOrigin&> salt_future;
++  GetMediaDeviceSaltAndOrigin(render_frame_host_->GetGlobalId(),
++                              salt_future.GetCallback());
++  const MediaDeviceSaltAndOrigin salt_and_origin = salt_future.Get();
++  base::test::TestFuture<media::VideoCaptureFormats> formats_future;
++  host_->GetAllVideoInputDeviceFormats(
++      GetHMACForRawMediaDeviceID(salt_and_origin, "persona_video_input_0"),
++      formats_future.GetCallback());
++  EXPECT_TRUE(formats_future.Get().empty());
++}
++
+ TEST_P(MediaDevicesDispatcherHostTest, GetAvailableVideoInputDeviceFormats) {
+   base::RunLoop run_loop;
+   EXPECT_CALL(*this, MockAvailableVideoInputDeviceFormatsCallback())
+@@ -978,6 +1005,19 @@
+   host_->SetPreferredSinkId(kDefaultAudioDeviceID, base::DoNothing());
+ }
+ 
++TEST_P(MediaDevicesDispatcherHostTest,
++       PersonaRejectsSettingPreferredSinkId) {
++  base::test::ScopedFeatureList feature_list(
++      blink::features::kPreferredAudioOutputDevices);
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
++
++  base::test::TestFuture<media::OutputDeviceStatus> future;
++  host_->SetPreferredSinkId(kDefaultAudioDeviceID, future.GetCallback());
++  EXPECT_EQ(media::OUTPUT_DEVICE_STATUS_ERROR_NOT_AUTHORIZED, future.Get());
++}
++
+ TEST_P(MediaDevicesDispatcherHostTest, SelectAudioOutputNoFeature) {
+   EXPECT_CALL(
+       *this,
+@@ -1006,6 +1046,17 @@
+   EXPECT_TRUE(result->device_info.label.empty());
+ }
+ 
++TEST_P(SelectAudioOutputTest, PersonaRejectsSelectingAudioOutput) {
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
++
++  base::test::TestFuture<blink::mojom::SelectAudioOutputResultPtr> future;
++  host_->SelectAudioOutput(kDefaultAudioDeviceID, future.GetCallback());
++  EXPECT_EQ(blink::mojom::AudioOutputStatus::kNotSupported,
++            future.Take()->status);
++}
++
+ TEST_P(SelectAudioOutputTest, SelectAudioOutputNoPermission) {
+   render_frame_host_->SimulateUserActivation();
+ 
+--- a/content/browser/renderer_host/media/media_devices_manager.cc
++++ b/content/browser/renderer_host/media/media_devices_manager.cc
+@@ -20,6 +20,7 @@
+ #include "base/location.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/sequence_checker.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/strings/stringprintf.h"
+ #include "base/strings/to_string.h"
+ #include "base/task/bind_post_task.h"
+@@ -42,14 +43,13 @@
+ #include "media/base/media_switches.h"
+ #include "media/capture/capture_switches.h"
+ #include "media/capture/mojom/video_capture_types.mojom-shared.h"
+-#include "base/strings/string_number_conversions.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "services/audio/public/mojom/device_notifications.mojom.h"
+ #include "services/video_capture/public/cpp/features.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/mediastream/media_devices.h"
+ #include "third_party/blink/public/mojom/mediastream/media_devices.mojom.h"
+-#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ 
+ #if BUILDFLAG(IS_MAC)
+ #include "base/functional/callback_helpers.h"
+@@ -229,14 +229,19 @@
+ blink::WebMediaDeviceInfoArray BuildPersonaAudioDevices(
+     MediaDeviceType type,
+     int count,
+-    const std::vector<std::string>& labels) {
++    const std::vector<std::string>& labels,
++    const std::string& identity_scope) {
+   CHECK(type == MediaDeviceType::kMediaAudioInput ||
+         type == MediaDeviceType::kMediaAudioOutput);
+   const bool is_output = type == MediaDeviceType::kMediaAudioOutput;
+-  const std::string id_prefix =
++  std::string id_prefix =
+       is_output ? "persona_audio_output_" : "persona_audio_input_";
+-  const std::string group_id = is_output ? "persona_audio_output_group"
+-                                         : "persona_audio_input_group";
++  std::string group_id = is_output ? "persona_audio_output_group"
++                                   : "persona_audio_input_group";
++  if (!identity_scope.empty()) {
++    id_prefix += identity_scope + "_";
++    group_id += "_" + identity_scope;
++  }
+   blink::WebMediaDeviceInfoArray devices;
+   for (int i = 0; i < count; ++i) {
+     std::string label;
+@@ -255,20 +260,102 @@
+ 
+ blink::WebMediaDeviceInfoArray BuildPersonaVideoDevices(
+     int count,
+-    const std::vector<std::string>& labels) {
++    const std::vector<std::string>& labels,
++    const std::string& identity_scope) {
+   blink::WebMediaDeviceInfoArray devices;
++  std::string id_prefix = "persona_video_input_";
++  std::string group_id = "persona_video_group";
++  if (!identity_scope.empty()) {
++    id_prefix += identity_scope + "_";
++    group_id += "_" + identity_scope;
++  }
+   for (int i = 0; i < count; ++i) {
+     std::string label =
+         labels.empty()
+             ? (i == 0 ? "Default Video Camera"
+                       : "Camera " + base::NumberToString(i + 1))
+             : labels[i % labels.size()];
+-    devices.emplace_back("persona_video_input_" + base::NumberToString(i),
+-                         label, "persona_video_group");
++    devices.emplace_back(id_prefix + base::NumberToString(i), label, group_id);
+   }
+   return devices;
+ }
+ 
++MediaDeviceEnumeration BuildPersonaMediaDeviceEnumeration(
++    const blink::HeliumPersonaSnapshot& snapshot,
++    const MediaDevicesManager::BoolDeviceTypes& requested_types) {
++  MediaDeviceEnumeration enumeration;
++  const std::string identity_scope =
++      snapshot.id.empty()
++          ? std::string()
++          : snapshot.id + "_" +
++                base::NumberToString(snapshot.fingerprint_generation);
++  const size_t audio_input_index =
++      static_cast<size_t>(MediaDeviceType::kMediaAudioInput);
++  const size_t video_input_index =
++      static_cast<size_t>(MediaDeviceType::kMediaVideoInput);
++  const size_t audio_output_index =
++      static_cast<size_t>(MediaDeviceType::kMediaAudioOutput);
++  if (requested_types[audio_input_index]) {
++    enumeration[audio_input_index] = BuildPersonaAudioDevices(
++        MediaDeviceType::kMediaAudioInput,
++        snapshot.media_devices_audio_input_count, snapshot.media_device_labels,
++        identity_scope);
++  }
++  if (requested_types[video_input_index]) {
++    enumeration[video_input_index] = BuildPersonaVideoDevices(
++        snapshot.media_devices_video_input_count, snapshot.media_device_labels,
++        identity_scope);
++  }
++  if (requested_types[audio_output_index]) {
++    enumeration[audio_output_index] = BuildPersonaAudioDevices(
++        MediaDeviceType::kMediaAudioOutput,
++        snapshot.media_devices_audio_output_count,
++        snapshot.media_device_labels, identity_scope);
++  }
++  return enumeration;
++}
++
++void ResolvePersonaMediaDeviceEnumeration(
++    GlobalRenderFrameHostId render_frame_host_id,
++    const MediaDevicesManager::BoolDeviceTypes& requested_types,
++    base::OnceCallback<void(std::optional<MediaDeviceEnumeration>)> callback) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  BrowserContext* browser_context =
++      GetBrowserContextOnUIThread(render_frame_host_id);
++  if (!browser_context) {
++    std::move(callback).Run(MediaDeviceEnumeration());
++    return;
++  }
++
++  const blink::HeliumPersonaSnapshot snapshot =
++      GetContentClient()->browser()->GetHeliumPersonaSnapshot(browser_context);
++  if (!snapshot.IsEnabled()) {
++    std::move(callback).Run(std::nullopt);
++    return;
++  }
++  std::move(callback).Run(
++      BuildPersonaMediaDeviceEnumeration(snapshot, requested_types));
++}
++
++void ResolvePersonaEnabled(
++    GlobalRenderFrameHostId render_frame_host_id,
++    base::OnceCallback<void(bool)> callback) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  BrowserContext* browser_context =
++      GetBrowserContextOnUIThread(render_frame_host_id);
++  std::move(callback).Run(
++      !browser_context || GetContentClient()
++                              ->browser()
++                              ->GetHeliumPersonaSnapshot(browser_context)
++                              .IsEnabled());
++}
++
++bool IsPersonaSyntheticMediaDeviceId(const std::string& device_id) {
++  return device_id.starts_with("persona_audio_input_") ||
++         device_id.starts_with("persona_video_input_") ||
++         device_id.starts_with("persona_audio_output_");
++}
++
+ // Sort the devices according to user pref. If the pref is unset or
+ // the render frame host doesn't have a `BrowserContext` the ordering will be
+ // unmodified.
+@@ -294,33 +381,8 @@
+   const blink::HeliumPersonaSnapshot persona_snapshot =
+       content_client_browser->GetHeliumPersonaSnapshot(browser_context);
+   if (persona_snapshot.IsEnabled()) {
+-    const size_t audio_input_index =
+-        static_cast<size_t>(MediaDeviceType::kMediaAudioInput);
+-    const size_t video_input_index =
+-        static_cast<size_t>(MediaDeviceType::kMediaVideoInput);
+-    const size_t audio_output_index =
+-        static_cast<size_t>(MediaDeviceType::kMediaAudioOutput);
+-    ranked_enumeration[audio_input_index] =
+-        requested_types[audio_input_index]
+-            ? BuildPersonaAudioDevices(
+-                  MediaDeviceType::kMediaAudioInput,
+-                  persona_snapshot.media_devices_audio_input_count,
+-                  persona_snapshot.media_device_labels)
+-            : blink::WebMediaDeviceInfoArray();
+-    ranked_enumeration[video_input_index] =
+-        requested_types[video_input_index]
+-            ? BuildPersonaVideoDevices(
+-                  persona_snapshot.media_devices_video_input_count,
+-                  persona_snapshot.media_device_labels)
+-            : blink::WebMediaDeviceInfoArray();
+-    ranked_enumeration[audio_output_index] =
+-        requested_types[audio_output_index]
+-            ? BuildPersonaAudioDevices(
+-                  MediaDeviceType::kMediaAudioOutput,
+-                  persona_snapshot.media_devices_audio_output_count,
+-                  persona_snapshot.media_device_labels)
+-            : blink::WebMediaDeviceInfoArray();
+-    std::move(callback).Run(ranked_enumeration);
++    std::move(callback).Run(
++        BuildPersonaMediaDeviceEnumeration(persona_snapshot, requested_types));
+     return;
+   }
+ 
+@@ -729,6 +791,29 @@
+   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+   SendLogMessage(base::StringPrintf(
+       "EnumerateAndRankDevices({request_id=%llu})", request_id));
++  GetUIThreadTaskRunner({})->PostTask(
++      FROM_HERE,
++      base::BindOnce(
++          &ResolvePersonaMediaDeviceEnumeration, render_frame_host_id,
++          requested_types,
++          base::BindPostTaskToCurrentDefault(base::BindOnce(
++              &MediaDevicesManager::OnPersonaMediaDevicesResolved,
++              weak_factory_.GetWeakPtr(), render_frame_host_id,
++              requested_types, std::move(callback), request_id))));
++}
++
++void MediaDevicesManager::OnPersonaMediaDevicesResolved(
++    GlobalRenderFrameHostId render_frame_host_id,
++    const BoolDeviceTypes& requested_types,
++    EnumerationCallback callback,
++    uint64_t request_id,
++    std::optional<MediaDeviceEnumeration> persona_enumeration) {
++  DCHECK_CURRENTLY_ON(BrowserThread::IO);
++  if (persona_enumeration) {
++    std::move(callback).Run(std::move(*persona_enumeration));
++    return;
++  }
++
+   EnumerateDevices(
+       requested_types,
+       base::BindPostTask(
+@@ -836,8 +921,6 @@
+   } else if (start_video_monitoring) {
+     start_mode = DeviceStartMonitoringMode::kStartVideo;
+   }
+-  StartMonitoringAndPopulateCache(0, start_mode);
+-
+   uint32_t subscription_id = ++last_subscription_id_;
+   mojo::Remote<blink::mojom::MediaDevicesListener> media_devices_listener;
+   media_devices_listener.Bind(std::move(listener));
+@@ -848,6 +931,13 @@
+       subscription_id,
+       SubscriptionRequest(render_frame_host_id, subscribe_types,
+                           std::move(media_devices_listener)));
++  GetUIThreadTaskRunner({})->PostTask(
++      FROM_HERE,
++      base::BindOnce(
++          &ResolvePersonaEnabled, render_frame_host_id,
++          base::BindPostTaskToCurrentDefault(base::BindOnce(
++              &MediaDevicesManager::StartMonitoringForSubscriptionIfNeeded,
++              weak_factory_.GetWeakPtr(), subscription_id, start_mode))));
+ #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+   if (base::FeatureList::IsEnabled(kReleaseVideoSourceProviderIfNotInUse)) {
+     MaybeScheduleDisconnectVideoSourceProviderTimer();
+@@ -867,6 +957,16 @@
+   return subscription_id;
+ }
+ 
++void MediaDevicesManager::StartMonitoringForSubscriptionIfNeeded(
++    uint32_t subscription_id,
++    DeviceStartMonitoringMode start_mode,
++    bool persona_enabled) {
++  DCHECK_CURRENTLY_ON(BrowserThread::IO);
++  if (!persona_enabled && subscriptions_.contains(subscription_id)) {
++    StartMonitoringAndPopulateCache(0, start_mode);
++  }
++}
++
+ void MediaDevicesManager::SetSubscriptionLastSeenDeviceIdSalt(
+     uint32_t subscription_id,
+     const MediaDeviceSaltAndOrigin& salt_and_origin) {
+@@ -1366,7 +1466,8 @@
+         std::move(capabilities));
+     size_t capabilities_index =
+         enumeration_states_[state_id].audio_capabilities.size() - 1;
+-    if (use_fake_devices_) {
++    if (use_fake_devices_ ||
++        IsPersonaSyntheticMediaDeviceId(raw_device_info.device_id)) {
+       GetIOThreadTaskRunner({})->PostTask(
+           FROM_HERE,
+           base::BindOnce(&MediaDevicesManager::GotAudioInputCapabilities,
+@@ -1468,8 +1569,10 @@
+     VideoInputDeviceCapabilitiesPtr capabilities =
+         blink::mojom::VideoInputDeviceCapabilities::New();
+     capabilities->device_id = translated_device_infos[i].device_id;
+-    capabilities->formats = GetVideoInputFormats(raw_device_infos[i].device_id,
+-                                                 false /* try_in_use_first */);
++    if (!IsPersonaSyntheticMediaDeviceId(raw_device_infos[i].device_id)) {
++      capabilities->formats = GetVideoInputFormats(
++          raw_device_infos[i].device_id, false /* try_in_use_first */);
++    }
+     capabilities->facing_mode = translated_device_infos[i].video_facing;
+     if (translated_device_infos[i].availability) {
+       capabilities->availability =
+@@ -1856,19 +1959,43 @@
+     const MediaDeviceSaltAndOrigin& salt_and_origin,
+     bool has_permission) {
+   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+-  MediaDevicesManager::BoolDeviceTypes requested_types;
+-  requested_types[static_cast<size_t>(type)] = true;
+   MediaDeviceEnumeration enumeration;
+   enumeration[static_cast<size_t>(type)] = device_infos;
+ 
+   GetUIThreadTaskRunner({})->PostTask(
+       FROM_HERE,
++      base::BindOnce(
++          &ResolvePersonaEnabled, render_frame_host_id,
++          base::BindPostTaskToCurrentDefault(base::BindOnce(
++              &MediaDevicesManager::ContinueDeviceChangeAfterPersonaCheck,
++              weak_factory_.GetWeakPtr(), subscription_id,
++              render_frame_host_id, type, salt_and_origin, has_permission,
++              std::move(enumeration)))));
++}
++
++void MediaDevicesManager::ContinueDeviceChangeAfterPersonaCheck(
++    uint32_t subscription_id,
++    GlobalRenderFrameHostId render_frame_host_id,
++    MediaDeviceType type,
++    const MediaDeviceSaltAndOrigin& salt_and_origin,
++    bool has_permission,
++    MediaDeviceEnumeration enumeration,
++    bool persona_enabled) {
++  DCHECK_CURRENTLY_ON(BrowserThread::IO);
++  if (persona_enabled || !subscriptions_.contains(subscription_id)) {
++    return;
++  }
++  BoolDeviceTypes requested_types;
++  requested_types.fill(false);
++  requested_types[static_cast<size_t>(type)] = true;
++  GetUIThreadTaskRunner({})->PostTask(
++      FROM_HERE,
+       base::BindOnce(&RankDevices, render_frame_host_id, requested_types,
+                      base::BindPostTaskToCurrentDefault(base::BindOnce(
+                          &MediaDevicesManager::NotifyDeviceChange,
+                          weak_factory_.GetWeakPtr(), subscription_id, type,
+                          salt_and_origin, has_permission)),
+-                     enumeration));
++                     std::move(enumeration)));
+ }
+ 
+ void MediaDevicesManager::NotifyDeviceChange(
+--- a/content/browser/renderer_host/media/media_devices_manager.h
++++ b/content/browser/renderer_host/media/media_devices_manager.h
+@@ -8,6 +8,7 @@
+ #include <array>
+ #include <map>
+ #include <memory>
++#include <optional>
+ #include <string>
+ #include <utility>
+ #include <vector>
+@@ -426,6 +427,12 @@
+       media::AudioDeviceDescriptions device_descriptions);
+ 
+   // Helpers to handle enumeration results.
++  void OnPersonaMediaDevicesResolved(
++      GlobalRenderFrameHostId render_frame_host_id,
++      const BoolDeviceTypes& requested_types,
++      EnumerationCallback callback,
++      uint64_t request_id,
++      std::optional<MediaDeviceEnumeration> persona_enumeration);
+   void DevicesEnumerated(uint64_t request_id,
+                          MediaDeviceType type,
+                          const blink::WebMediaDeviceInfoArray& snapshot);
+@@ -436,6 +443,10 @@
+   bool IsEnumerationRequestReady(const EnumerationRequest& request_info);
+ 
+   // Helpers to handle device-change notification.
++  void StartMonitoringForSubscriptionIfNeeded(
++      uint32_t subscription_id,
++      DeviceStartMonitoringMode start_mode,
++      bool persona_enabled);
+   void HandleDevicesChanged(MediaDeviceType type);
+   void MaybeStopRemovedInputDevices(
+       MediaDeviceType type,
+@@ -463,6 +474,14 @@
+       const blink::WebMediaDeviceInfoArray& device_infos,
+       const MediaDeviceSaltAndOrigin& salt_and_origin,
+       bool has_permission);
++  void ContinueDeviceChangeAfterPersonaCheck(
++      uint32_t subscription_id,
++      GlobalRenderFrameHostId render_frame_host_id,
++      MediaDeviceType type,
++      const MediaDeviceSaltAndOrigin& salt_and_origin,
++      bool has_permission,
++      MediaDeviceEnumeration enumeration,
++      bool persona_enabled);
+   void NotifyDeviceChange(uint32_t subscription_id,
+                           MediaDeviceType type,
+                           const MediaDeviceSaltAndOrigin& salt_and_origin,
+--- a/content/browser/renderer_host/media/media_devices_manager_unittest.cc
++++ b/content/browser/renderer_host/media/media_devices_manager_unittest.cc
+@@ -376,6 +376,19 @@
+     run_loop.Run();
+   }
+ 
++  void SimulateCheckedPermissionForDeviceChange(
++      uint32_t subscription_id,
++      MediaDeviceType type,
++      const blink::WebMediaDeviceInfoArray& device_infos) {
++    media_devices_manager_->OnCheckedPermissionForDeviceChange(
++        subscription_id, render_frame_host_->GetGlobalId(), type, device_infos,
++        MediaDeviceSaltAndOrigin(
++            salt, url::Origin::Create(GURL("https://test.com")),
++            "fake_group_id_salt", /*has_focus=*/true,
++            /*is_background=*/false),
++        /*has_permission=*/true);
++  }
++
+   void EnumerateCallback(base::RunLoop* run_loop,
+                          const MediaDeviceEnumeration& result) {
+     for (int i = 0; i < static_cast<int>(MediaDeviceType::kNumMediaDeviceTypes);
+@@ -694,13 +707,13 @@
+   InitializeRenderFrameHost();
+   blink::HeliumPersonaSnapshot snapshot;
+   snapshot.enabled = true;
++  snapshot.id = "device-persona";
++  snapshot.fingerprint_generation = 7;
+   browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
+ 
+-  EXPECT_CALL(*audio_manager_, MockGetAudioInputDeviceNames(_)).Times(1);
+-  EXPECT_CALL(*video_capture_device_factory_, MockGetDevicesInfo()).Times(1);
+-  EXPECT_CALL(*audio_manager_, MockGetAudioOutputDeviceNames(_)).Times(1);
+-  EXPECT_CALL(media_devices_manager_client_, InputDevicesChangedUI(_, _))
+-      .Times(AtLeast(1));
++  EXPECT_CALL(*audio_manager_, MockGetAudioInputDeviceNames(_)).Times(0);
++  EXPECT_CALL(*video_capture_device_factory_, MockGetDevicesInfo()).Times(0);
++  EXPECT_CALL(*audio_manager_, MockGetAudioOutputDeviceNames(_)).Times(0);
+ 
+   MediaDevicesManager::BoolDeviceTypes requested_types;
+   requested_types.fill(true);
+@@ -717,16 +730,60 @@
+       devices[static_cast<size_t>(MediaDeviceType::kMediaAudioOutput)];
+ 
+   ASSERT_EQ(audio_inputs.size(), 1u);
+-  EXPECT_EQ(audio_inputs[0].device_id, "persona_audio_input_0");
++  EXPECT_EQ(audio_inputs[0].device_id,
++            "persona_audio_input_device-persona_7_0");
+   EXPECT_EQ(audio_inputs[0].label, "Default Audio Input");
+-  EXPECT_EQ(audio_inputs[0].group_id, "persona_audio_input_group");
++  EXPECT_EQ(audio_inputs[0].group_id,
++            "persona_audio_input_group_device-persona_7");
+   ASSERT_EQ(video_inputs.size(), 1u);
+-  EXPECT_EQ(video_inputs[0].device_id, "persona_video_input_0");
++  EXPECT_EQ(video_inputs[0].device_id,
++            "persona_video_input_device-persona_7_0");
+   EXPECT_EQ(video_inputs[0].label, "Default Video Camera");
+   ASSERT_EQ(audio_outputs.size(), 1u);
+-  EXPECT_EQ(audio_outputs[0].device_id, "persona_audio_output_0");
++  EXPECT_EQ(audio_outputs[0].device_id,
++            "persona_audio_output_device-persona_7_0");
+   EXPECT_EQ(audio_outputs[0].label, "Default Audio Output");
+-  EXPECT_EQ(audio_outputs[0].group_id, "persona_audio_output_group");
++  EXPECT_EQ(audio_outputs[0].group_id,
++            "persona_audio_output_group_device-persona_7");
++
++  blink::HeliumPersonaSnapshot rotated_snapshot;
++  rotated_snapshot.enabled = true;
++  rotated_snapshot.id = "device-persona";
++  rotated_snapshot.fingerprint_generation = 8;
++  browser_client_.SetHeliumPersonaSnapshot(std::move(rotated_snapshot));
++  base::test::TestFuture<MediaDeviceEnumeration> rotated_future;
++  media_devices_manager_->EnumerateAndRankDevices(
++      render_frame_host_->GetGlobalId(), requested_types,
++      rotated_future.GetCallback<const MediaDeviceEnumeration&>());
++  const auto& rotated_devices = rotated_future.Get();
++  EXPECT_EQ(rotated_devices[static_cast<size_t>(
++                                MediaDeviceType::kMediaAudioInput)][0]
++                .device_id,
++            "persona_audio_input_device-persona_8_0");
++}
++
++TEST_F(MediaDevicesManagerTest, PersonaSuppressesPhysicalDeviceChangeEvents) {
++  InitializeRenderFrameHost();
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
++
++  MockMediaDevicesListener listener;
++  MediaDevicesManager::BoolDeviceTypes subscribed_types;
++  subscribed_types.fill(false);
++  subscribed_types[static_cast<size_t>(MediaDeviceType::kMediaVideoInput)] =
++      true;
++  const uint32_t subscription_id =
++      media_devices_manager_->SubscribeDeviceChangeNotifications(
++          render_frame_host_->GetGlobalId(), subscribed_types,
++          listener.CreateInterfacePtrAndBind());
++  EXPECT_CALL(listener, OnDevicesChanged(_, _)).Times(0);
++
++  blink::WebMediaDeviceInfoArray physical_devices;
++  physical_devices.emplace_back("physical-camera", "Host camera", "group");
++  SimulateCheckedPermissionForDeviceChange(
++      subscription_id, MediaDeviceType::kMediaVideoInput, physical_devices);
++  task_environment_.RunUntilIdle();
+ }
+ 
+ TEST_F(MediaDevicesManagerTest, PersonaMediaDevicesHonorRequestedCustomCount) {
+@@ -741,7 +798,7 @@
+ 
+   EXPECT_CALL(*audio_manager_, MockGetAudioInputDeviceNames(_)).Times(0);
+   EXPECT_CALL(*video_capture_device_factory_, MockGetDevicesInfo()).Times(0);
+-  EXPECT_CALL(*audio_manager_, MockGetAudioOutputDeviceNames(_)).Times(1);
++  EXPECT_CALL(*audio_manager_, MockGetAudioOutputDeviceNames(_)).Times(0);
+ 
+   MediaDevicesManager::BoolDeviceTypes requested_types;
+   requested_types.fill(false);
+--- a/content/browser/renderer_host/media/media_stream_dispatcher_host.cc
++++ b/content/browser/renderer_host/media/media_stream_dispatcher_host.cc
+@@ -66,6 +66,18 @@
+   }
+ }
+ 
++bool ShouldBlockRealMediaCaptureOnUIThread(
++    GlobalRenderFrameHostId render_frame_host_id) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  RenderFrameHostImpl* render_frame_host =
++      RenderFrameHostImpl::FromID(render_frame_host_id);
++  return !render_frame_host ||
++         GetContentClient()
++             ->browser()
++             ->GetHeliumPersonaSnapshot(render_frame_host->GetBrowserContext())
++             .IsEnabled();
++}
++
+ std::unique_ptr<MediaStreamWebContentsObserver, BrowserThread::DeleteOnUIThread>
+ StartObservingWebContents(GlobalRenderFrameHostId render_frame_host_id,
+                           base::RepeatingClosure focus_callback) {
+@@ -353,6 +365,7 @@
+ void MediaStreamDispatcherHost::GenerateStreamsChecksOnUIThread(
+     GlobalRenderFrameHostId render_frame_host_id,
+     bool request_all_screens,
++    bool request_device_capture,
+     base::OnceCallback<void(MediaDeviceSaltAndOriginCallback)>
+         get_salt_and_origin_cb,
+     base::OnceCallback<void(GenerateStreamsUIThreadCheckResult)>
+@@ -368,6 +381,13 @@
+     return;
+   }
+ 
++  if (request_device_capture &&
++      ShouldBlockRealMediaCaptureOnUIThread(render_frame_host_id)) {
++    std::move(result_callback)
++        .Run(base::unexpected(MediaStreamRequestResult::PERMISSION_DENIED));
++    return;
++  }
++
+   if (request_all_screens) {
+     CheckRequestAllScreensAllowed(std::move(get_salt_and_origin_cb),
+                                   std::move(result_callback),
+@@ -480,11 +500,17 @@
+     return;
+   }
+ 
++  const bool request_device_capture =
++      controls.audio.stream_type ==
++          blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE ||
++      controls.video.stream_type ==
++          blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE;
+   GetUIThreadTaskRunner({})->PostTask(
+       FROM_HERE,
+       base::BindOnce(
+           &MediaStreamDispatcherHost::GenerateStreamsChecksOnUIThread,
+           render_frame_host_id_, controls.request_all_screens,
++          request_device_capture,
+           base::BindOnce(get_salt_and_origin_cb_, render_frame_host_id_),
+           base::BindPostTaskToCurrentDefault(base::BindOnce(
+               &MediaStreamDispatcherHost::DoGenerateStreams,
+@@ -592,6 +618,27 @@
+     return;
+   }
+ 
++  GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
++      FROM_HERE,
++      base::BindOnce(&ShouldBlockRealMediaCaptureOnUIThread,
++                     render_frame_host_id_),
++      base::BindOnce(&MediaStreamDispatcherHost::OpenDeviceAfterPersonaCheck,
++                     weak_factory_.GetWeakPtr(), page_request_id, device_id,
++                     type, std::move(callback)));
++}
++
++void MediaStreamDispatcherHost::OpenDeviceAfterPersonaCheck(
++    int32_t page_request_id,
++    const std::string& device_id,
++    blink::mojom::MediaStreamType type,
++    OpenDeviceCallback callback,
++    bool block_real_devices) {
++  DCHECK_CURRENTLY_ON(BrowserThread::IO);
++  if (block_real_devices) {
++    std::move(callback).Run(false /* success */, std::string(),
++                            blink::MediaStreamDevice());
++    return;
++  }
+   GetUIThreadTaskRunner({})->PostTask(
+       FROM_HERE,
+       base::BindOnce(get_salt_and_origin_cb_, render_frame_host_id_,
+@@ -794,6 +841,27 @@
+   // on it", and whether we can/need to specific the destination renderer/frame
+   // in this case.
+ 
++  GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
++      FROM_HERE,
++      base::BindOnce(&ShouldBlockRealMediaCaptureOnUIThread,
++                     render_frame_host_id_),
++      base::BindOnce(&MediaStreamDispatcherHost::GetOpenDeviceAfterPersonaCheck,
++                     weak_factory_.GetWeakPtr(), page_request_id, session_id,
++                     transfer_id, std::move(callback)));
++}
++
++void MediaStreamDispatcherHost::GetOpenDeviceAfterPersonaCheck(
++    int32_t page_request_id,
++    const base::UnguessableToken& session_id,
++    const base::UnguessableToken& transfer_id,
++    GetOpenDeviceCallback callback,
++    bool block_real_devices) {
++  DCHECK_CURRENTLY_ON(BrowserThread::IO);
++  if (block_real_devices) {
++    std::move(callback).Run(MediaStreamRequestResult::PERMISSION_DENIED,
++                            nullptr);
++    return;
++  }
+   GetUIThreadTaskRunner({})->PostTask(
+       FROM_HERE,
+       base::BindOnce(get_salt_and_origin_cb_, render_frame_host_id_,
+--- a/content/browser/renderer_host/media/media_stream_dispatcher_host.h
++++ b/content/browser/renderer_host/media/media_stream_dispatcher_host.h
+@@ -88,6 +88,7 @@
+   static void GenerateStreamsChecksOnUIThread(
+       GlobalRenderFrameHostId render_frame_host_id,
+       bool request_all_screens,
++      bool request_device_capture,
+       base::OnceCallback<void(MediaDeviceSaltAndOriginCallback)>
+           get_salt_and_origin_cb,
+       base::OnceCallback<void(GenerateStreamsUIThreadCheckResult)>
+@@ -168,6 +169,12 @@
+                      const base::UnguessableToken& session_id,
+                      const base::UnguessableToken& transfer_id,
+                      GetOpenDeviceCallback callback) override;
++  void GetOpenDeviceAfterPersonaCheck(
++      int32_t page_request_id,
++      const base::UnguessableToken& session_id,
++      const base::UnguessableToken& transfer_id,
++      GetOpenDeviceCallback callback,
++      bool block_real_devices);
+   void DoGetOpenDevice(int32_t page_request_id,
+                        const base::UnguessableToken& session_id,
+                        const base::UnguessableToken& transfer_id,
+@@ -185,6 +192,11 @@
+                     blink::mojom::MediaStreamType type,
+                     OpenDeviceCallback callback,
+                     const MediaDeviceSaltAndOrigin& salt_and_origin);
++  void OpenDeviceAfterPersonaCheck(int32_t request_id,
++                                   const std::string& device_id,
++                                   blink::mojom::MediaStreamType type,
++                                   OpenDeviceCallback callback,
++                                   bool block_real_devices);
+ 
+   void OnDeviceStopped(const std::string& label,
+                        const blink::MediaStreamDevice& device);
+--- a/content/browser/renderer_host/media/media_stream_dispatcher_host_unittest.cc
++++ b/content/browser/renderer_host/media/media_stream_dispatcher_host_unittest.cc
+@@ -190,6 +190,14 @@
+                        base::Unretained(this)));
+   }
+ 
++  void OnOpenDeviceForResult(int page_request_id,
++                             const std::string& device_id,
++                             blink::mojom::MediaStreamType type,
++                             OpenDeviceCallback callback) {
++    MediaStreamDispatcherHost::OpenDevice(page_request_id, device_id, type,
++                                          std::move(callback));
++  }
++
+   // mojom::MediaStreamDeviceObserver implementation.
+   void OnDeviceStopped(const std::string& label,
+                        const blink::MediaStreamDevice& device) override {
+@@ -310,6 +318,18 @@
+               IsMultiCaptureAllowed,
+               (RenderFrameHost * render_frame_host),
+               (override));
++
++  blink::HeliumPersonaSnapshot GetHeliumPersonaSnapshot(
++      BrowserContext* browser_context) override {
++    return persona_snapshot_;
++  }
++
++  void SetHeliumPersonaSnapshot(blink::HeliumPersonaSnapshot snapshot) {
++    persona_snapshot_ = std::move(snapshot);
++  }
++
++ private:
++  blink::HeliumPersonaSnapshot persona_snapshot_;
+ };
+ 
+ class MediaStreamDispatcherHostTest : public RenderViewHostTestHarness {
+@@ -705,6 +725,32 @@
+   EXPECT_TRUE(video_device(/*stream_index=*/0u).has_value());
+ }
+ 
++TEST_F(MediaStreamDispatcherHostTest,
++       PersonaRejectsRealAudioAndVideoCapture) {
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  content_browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
++
++  blink::StreamControls controls(true, true);
++  GenerateStreamAndWaitForFailure(
++      kPageRequestId, controls, MediaStreamRequestResult::PERMISSION_DENIED);
++}
++
++TEST_F(MediaStreamDispatcherHostTest, PersonaRejectsOpeningRealDevice) {
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  content_browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
++
++  base::test::TestFuture<bool, const std::string&,
++                         const blink::MediaStreamDevice&>
++      future;
++  host_->OnOpenDeviceForResult(
++      kPageRequestId, kRegularVideoDeviceId1,
++      blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE,
++      future.GetCallback());
++  EXPECT_FALSE(future.Get<0>());
++}
++
+ TEST_F(MediaStreamDispatcherHostTest, GenerateStreamWithDepthVideo) {
+   // We specify to generate both audio and video stream.
+   blink::StreamControls controls(true, true);
+--- a/content/browser/renderer_host/media/render_frame_audio_output_stream_factory.cc
++++ b/content/browser/renderer_host/media/render_frame_audio_output_stream_factory.cc
+@@ -22,6 +22,7 @@
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/strings/stringprintf.h"
++#include "base/task/bind_post_task.h"
+ #include "base/time/time.h"
+ #include "base/trace_event/trace_event.h"
+ #include "base/unguessable_token.h"
+@@ -30,7 +31,10 @@
+ #include "content/browser/renderer_host/media/preferred_audio_output_device_manager.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
++#include "content/public/browser/content_browser_client.h"
++#include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_process_host.h"
++#include "content/public/common/content_client.h"
+ #include "media/base/output_device_info.h"
+ #include "media/mojo/mojom/audio_output_stream.mojom.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+@@ -41,6 +45,21 @@
+ 
+ namespace {
+ 
++void CheckPersonaAudioOutputAccessOnUIThread(
++    GlobalRenderFrameHostId render_frame_host_id,
++    base::OnceCallback<void(bool)> callback) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  RenderFrameHost* render_frame_host =
++      RenderFrameHost::FromID(render_frame_host_id);
++  const bool persona_enabled =
++      !render_frame_host ||
++      GetContentClient()
++          ->browser()
++          ->GetHeliumPersonaSnapshot(render_frame_host->GetBrowserContext())
++          .IsEnabled();
++  std::move(callback).Run(persona_enabled);
++}
++
+ const char* OutputDeviceStatusToString(media::OutputDeviceStatus status) {
+   switch (status) {
+     case media::OUTPUT_DEVICE_STATUS_OK:
+@@ -150,6 +169,14 @@
+       const std::optional<base::UnguessableToken>& session_id,
+       const std::string& device_id,
+       RequestDeviceAuthorizationCallback callback) final;
++  void RequestDeviceAuthorizationAfterPersonaCheck(
++      mojo::PendingReceiver<media::mojom::AudioOutputStreamProvider>
++          provider_receiver,
++      std::optional<base::UnguessableToken> session_id,
++      std::string device_id,
++      RequestDeviceAuthorizationCallback callback,
++      base::TimeTicks auth_start_time,
++      bool persona_enabled);
+ 
+   // Here, the |raw_device_id| is used to create the stream, and
+   // |device_id_for_renderer| is nonempty in the case when the renderer
+@@ -286,6 +313,39 @@
+ 
+   const base::TimeTicks auth_start_time = base::TimeTicks::Now();
+ 
++  GetUIThreadTaskRunner({})->PostTask(
++      FROM_HERE,
++      base::BindOnce(
++          &CheckPersonaAudioOutputAccessOnUIThread,
++          global_render_frame_host_id_,
++          base::BindPostTaskToCurrentDefault(base::BindOnce(
++              &RenderFrameAudioOutputStreamFactory::Core::
++                  RequestDeviceAuthorizationAfterPersonaCheck,
++              weak_ptr_factory_.GetWeakPtr(), std::move(provider_receiver),
++              session_id, device_id, std::move(callback), auth_start_time))));
++}
++
++void RenderFrameAudioOutputStreamFactory::Core::
++    RequestDeviceAuthorizationAfterPersonaCheck(
++        mojo::PendingReceiver<media::mojom::AudioOutputStreamProvider>
++            provider_receiver,
++        std::optional<base::UnguessableToken> session_id,
++        std::string device_id,
++        RequestDeviceAuthorizationCallback callback,
++        base::TimeTicks auth_start_time,
++        bool persona_enabled) {
++  DCHECK_CURRENTLY_ON(BrowserThread::IO);
++  const bool selects_nondefault_device =
++      !media::AudioDeviceDescription::IsDefaultDevice(device_id) ||
++      media::AudioDeviceDescription::UseSessionIdToSelectDevice(
++          session_id.value_or(base::UnguessableToken()), device_id);
++  if (persona_enabled && selects_nondefault_device) {
++    std::move(callback).Run(
++        media::OUTPUT_DEVICE_STATUS_ERROR_NOT_AUTHORIZED,
++        media::AudioParameters::UnavailableDeviceParams(), std::string());
++    return;
++  }
++
+   AudioOutputAuthorizationHandler::AuthorizationCompletedCallback
+       completed_callback = base::BindOnce(
+           &RenderFrameAudioOutputStreamFactory::Core::AuthorizationCompleted,
+--- a/content/browser/renderer_host/media/render_frame_audio_output_stream_factory_unittest.cc
++++ b/content/browser/renderer_host/media/render_frame_audio_output_stream_factory_unittest.cc
+@@ -11,6 +11,7 @@
+ 
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
++#include "base/memory/raw_ptr.h"
+ #include "base/run_loop.h"
+ #include "base/test/mock_callback.h"
+ #include "base/test/task_environment.h"
+@@ -19,9 +20,11 @@
+ #include "content/browser/renderer_host/media/media_stream_manager.h"
+ #include "content/browser/renderer_host/media/mock_preferred_audio_output_device_manager.h"
+ #include "content/browser/renderer_host/media/preferred_audio_output_device_manager.h"
++#include "content/public/browser/content_browser_client.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/render_process_host.h"
++#include "content/public/common/content_client.h"
+ #include "content/public/test/mock_render_process_host.h"
+ #include "content/public/test/navigation_simulator.h"
+ #include "content/public/test/test_renderer_host.h"
+@@ -48,6 +51,21 @@
+ 
+ namespace content {
+ 
++class PersonaContentBrowserClient : public ContentBrowserClient {
++ public:
++  blink::HeliumPersonaSnapshot GetHeliumPersonaSnapshot(
++      BrowserContext* browser_context) override {
++    return persona_snapshot_;
++  }
++
++  void SetHeliumPersonaSnapshot(blink::HeliumPersonaSnapshot snapshot) {
++    persona_snapshot_ = std::move(snapshot);
++  }
++
++ private:
++  blink::HeliumPersonaSnapshot persona_snapshot_;
++};
++
+ class RenderFrameAudioOutputStreamFactoryTest
+     : public RenderViewHostTestHarness {
+  public:
+@@ -61,6 +79,8 @@
+   ~RenderFrameAudioOutputStreamFactoryTest() override {}
+ 
+   void SetUp() override {
++    previous_browser_client_ =
++        SetBrowserClientForTesting(&content_browser_client_);
+     RenderViewHostTestHarness::SetUp();
+     RenderFrameHostTester::For(main_rfh())->InitializeRenderFrameIfNeeded();
+ 
+@@ -78,6 +98,7 @@
+         base::NullCallback());
+     audio_manager_.Shutdown();
+     RenderViewHostTestHarness::TearDown();
++    SetBrowserClientForTesting(previous_browser_client_);
+   }
+ 
+   void BindFactory(
+@@ -139,6 +160,8 @@
+   media::FakeAudioManager audio_manager_;
+   std::unique_ptr<media::AudioSystem> audio_system_;
+   std::unique_ptr<MediaStreamManager> media_stream_manager_;
++  PersonaContentBrowserClient content_browser_client_;
++  raw_ptr<ContentBrowserClient> previous_browser_client_ = nullptr;
+ };
+ 
+ TEST_F(RenderFrameAudioOutputStreamFactoryTest, ConstructDestruct) {
+@@ -169,6 +192,81 @@
+   EXPECT_EQ(1u, factory.CurrentNumberOfProvidersForTesting());
+ }
+ 
++TEST_F(RenderFrameAudioOutputStreamFactoryTest,
++       PersonaRejectsNondefaultAudioOutputAuthorization) {
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  content_browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
++
++  mojo::Remote<blink::mojom::RendererAudioOutputStreamFactory> factory_remote;
++  RenderFrameAudioOutputStreamFactory factory(
++      main_rfh(), audio_system_.get(), media_stream_manager_.get(),
++      factory_remote.BindNewPipeAndPassReceiver());
++
++  mojo::Remote<media::mojom::AudioOutputStreamProvider> provider_remote;
++  MockAuthorizationCallback mock_callback;
++  factory.SetAuthorizedDeviceIdForGlobalMediaControls(kDeviceId);
++  factory_remote->RequestDeviceAuthorization(
++      provider_remote.BindNewPipeAndPassReceiver(), std::nullopt, kDeviceId,
++      mock_callback.Get());
++
++  EXPECT_CALL(mock_callback,
++              Run(media::OUTPUT_DEVICE_STATUS_ERROR_NOT_AUTHORIZED, _,
++                  std::string()));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_EQ(0u, factory.CurrentNumberOfProvidersForTesting());
++}
++
++TEST_F(RenderFrameAudioOutputStreamFactoryTest,
++       PersonaAllowsDefaultAudioOutputAuthorization) {
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  content_browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
++
++  mojo::Remote<blink::mojom::RendererAudioOutputStreamFactory> factory_remote;
++  RenderFrameAudioOutputStreamFactory factory(
++      main_rfh(), audio_system_.get(), media_stream_manager_.get(),
++      factory_remote.BindNewPipeAndPassReceiver());
++
++  mojo::Remote<media::mojom::AudioOutputStreamProvider> provider_remote;
++  MockAuthorizationCallback mock_callback;
++  factory_remote->RequestDeviceAuthorization(
++      provider_remote.BindNewPipeAndPassReceiver(), std::nullopt,
++      kDefaultDeviceId, mock_callback.Get());
++
++  EXPECT_CALL(mock_callback,
++              Run(media::OUTPUT_DEVICE_STATUS_OK, _, std::string()));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_EQ(1u, factory.CurrentNumberOfProvidersForTesting());
++}
++
++TEST_F(RenderFrameAudioOutputStreamFactoryTest,
++       PersonaRejectsSessionSelectedAudioOutputAuthorization) {
++  blink::HeliumPersonaSnapshot snapshot;
++  snapshot.enabled = true;
++  content_browser_client_.SetHeliumPersonaSnapshot(std::move(snapshot));
++
++  mojo::Remote<blink::mojom::RendererAudioOutputStreamFactory> factory_remote;
++  RenderFrameAudioOutputStreamFactory factory(
++      main_rfh(), audio_system_.get(), media_stream_manager_.get(),
++      factory_remote.BindNewPipeAndPassReceiver());
++
++  mojo::Remote<media::mojom::AudioOutputStreamProvider> provider_remote;
++  MockAuthorizationCallback mock_callback;
++  factory_remote->RequestDeviceAuthorization(
++      provider_remote.BindNewPipeAndPassReceiver(),
++      base::UnguessableToken::Create(), std::string(), mock_callback.Get());
++
++  EXPECT_CALL(mock_callback,
++              Run(media::OUTPUT_DEVICE_STATUS_ERROR_NOT_AUTHORIZED, _,
++                  std::string()));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_EQ(0u, factory.CurrentNumberOfProvidersForTesting());
++}
++
+ TEST_F(
+     RenderFrameAudioOutputStreamFactoryTest,
+     RequestDeviceAuthorizationForDefaultDeviceAndDestroyProviderPtr_CleansUp) {
+--- a/third_party/blink/renderer/core/canvas_interventions/noise_helper.cc
++++ b/third_party/blink/renderer/core/canvas_interventions/noise_helper.cc
+@@ -4,9 +4,11 @@
+ 
+ #include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
+ 
++#include <algorithm>
+ #include <array>
+ #include <cstddef>
+ #include <cstdint>
++#include <vector>
+ 
+ #include "base/check_op.h"
+ #include "base/containers/span.h"
+@@ -14,6 +16,11 @@
+ #include "base/numerics/byte_conversions.h"
+ #include "base/numerics/safe_conversions.h"
+ #include "third_party/blink/renderer/core/canvas_interventions/noise_hash.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
++#include "third_party/blink/renderer/platform/wtf/vector.h"
++#include "third_party/skia/include/core/SkData.h"
++#include "third_party/skia/include/core/SkImageInfo.h"
+ 
+ namespace blink {
+ 
+@@ -22,6 +29,19 @@
+ constexpr uint8_t kMaxClosePixelDelta = 10u;
+ constexpr uint8_t kMaxNoisePerChannel = 3u;
+ constexpr uint8_t kChannelsPerPixel = 4u;
++constexpr size_t kF16BytesPerChannel = 2u;
++constexpr size_t kF16BytesPerPixel =
++    kChannelsPerPixel * kF16BytesPerChannel;
++constexpr size_t kF32BytesPerChannel = 4u;
++constexpr size_t kF32BytesPerPixel =
++    kChannelsPerPixel * kF32BytesPerChannel;
++constexpr uint16_t kF16ExponentMask = 0x7c00u;
++constexpr uint16_t kF16SignMask = 0x8000u;
++constexpr uint16_t kF16MaxFinite = 0x7bffu;
++constexpr uint16_t kF16NormalizedOne = 0x3c00u;
++constexpr uint32_t kF32ExponentMask = 0x7f800000u;
++constexpr uint32_t kF32SignMask = 0x80000000u;
++constexpr uint32_t kF32MaxFinite = 0x7f7fffffu;
+ constexpr std::array<uint8_t, 4u> kEmptyPixel({0, 0, 0, 0});
+ 
+ struct PixelLocation {
+@@ -109,8 +129,261 @@
+   writer.Write(from_pixel.first<kChannelsPerPixel>());
+ }
+ 
++base::span<uint8_t, kF16BytesPerPixel> GetF16PixelAt(
++    const int x,
++    const int y,
++    const int width,
++    const base::span<uint8_t> pixels) {
++  return pixels
++      .subspan(static_cast<size_t>(x + y * width) * kF16BytesPerPixel)
++      .first<kF16BytesPerPixel>();
++}
++
++void CopyF16PixelValue(const base::span<uint8_t> from_pixel,
++                       base::span<uint8_t> to_pixel) {
++  base::SpanWriter writer(to_pixel);
++  writer.Write(from_pixel.first<kF16BytesPerPixel>());
++}
++
++void NoiseF16Pixel(base::span<uint8_t, kF16BytesPerPixel> pixel,
++                   NoiseHash& token_hash,
++                   SkAlphaType alpha_type,
++                   bool normalized) {
++  const uint16_t alpha = base::U16FromLittleEndian(
++      pixel.subspan(3u * kF16BytesPerChannel)
++          .first<kF16BytesPerChannel>());
++  for (size_t channel_index = 0; channel_index < 3u; ++channel_index) {
++    base::span<uint8_t, kF16BytesPerChannel> channel =
++        pixel.subspan(channel_index * kF16BytesPerChannel)
++            .first<kF16BytesPerChannel>();
++    const uint16_t value = base::U16FromLittleEndian(channel);
++    if (value == kF16SignMask ||
++        (value & kF16ExponentMask) == kF16ExponentMask) {
++      continue;
++    }
++
++    uint16_t minimum;
++    uint16_t maximum;
++    if (value & kF16SignMask) {
++      if (normalized) {
++        continue;
++      }
++      minimum = std::max<uint16_t>(kF16SignMask + 1u, value - 3u);
++      maximum = std::min<uint16_t>(kF16SignMask | kF16MaxFinite, value + 3u);
++    } else {
++      minimum = value > 3u ? value - 3u : 0u;
++      maximum = std::min<uint16_t>(kF16MaxFinite, value + 3u);
++      if (normalized) {
++        if (value > kF16NormalizedOne) {
++          continue;
++        }
++        maximum = std::min(maximum, kF16NormalizedOne);
++      }
++      if (alpha_type == kPremul_SkAlphaType &&
++          !(alpha & kF16SignMask) &&
++          (alpha & kF16ExponentMask) != kF16ExponentMask && value <= alpha) {
++        maximum = std::min(maximum, alpha);
++      }
++    }
++    if (minimum > maximum) {
++      continue;
++    }
++    const uint16_t noised_value = base::checked_cast<uint16_t>(
++        minimum + token_hash.GetValueBelow(maximum - minimum + 1));
++    base::SpanWriter writer(channel);
++    writer.WriteU16LittleEndian(noised_value);
++  }
++}
++
++void NoiseF16PixelsImpl(const NoiseHash& token_hash,
++                        base::span<uint8_t> pixels,
++                        const int width,
++                        const int height,
++                        SkAlphaType alpha_type,
++                        bool normalized) {
++  CHECK_EQ(pixels.size(),
++           static_cast<size_t>(width * height) * kF16BytesPerPixel);
++  const size_t row_size = width * kF16BytesPerPixel;
++  std::vector<uint8_t> row1(row_size);
++  std::vector<uint8_t> row2(row_size);
++  base::span<uint8_t> unnoised_previous_row(row1);
++  base::span<uint8_t> unnoised_current_row(row2);
++
++  for (int y = 0; y < height; ++y) {
++    unnoised_current_row.copy_from(pixels.subspan(y * row_size, row_size));
++    for (int x = 0; x < width; ++x) {
++      auto pixel = GetF16PixelAt(x, y, width, pixels);
++      if (base::U64FromLittleEndian(pixel) == 0u) {
++        continue;
++      }
++      if (y > 0 && x > 0 &&
++          GetF16PixelAt(x - 1, 0, width, unnoised_previous_row) == pixel) {
++        CopyF16PixelValue(GetF16PixelAt(x - 1, y - 1, width, pixels), pixel);
++      } else if (y > 0 &&
++                 GetF16PixelAt(x, 0, width, unnoised_previous_row) == pixel) {
++        CopyF16PixelValue(GetF16PixelAt(x, y - 1, width, pixels), pixel);
++      } else if (y > 0 && x < width - 1 &&
++                 GetF16PixelAt(x + 1, 0, width, unnoised_previous_row) ==
++                     pixel) {
++        CopyF16PixelValue(GetF16PixelAt(x + 1, y - 1, width, pixels), pixel);
++      } else if (x > 0 &&
++                 GetF16PixelAt(x - 1, 0, width, unnoised_current_row) ==
++                     pixel) {
++        CopyF16PixelValue(GetF16PixelAt(x - 1, y, width, pixels), pixel);
++      } else {
++        NoiseHash hash_copy = token_hash;
++        hash_copy.Update(base::U64FromLittleEndian(pixel));
++        const std::pair<PixelLocation, PixelLocation> other_pixels =
++            GetRandomPixelLocations(hash_copy, {x, y}, width, height);
++        hash_copy.Update(base::U64FromLittleEndian(GetF16PixelAt(
++            other_pixels.first.x, other_pixels.first.y, width, pixels)));
++        hash_copy.Update(base::U64FromLittleEndian(GetF16PixelAt(
++            other_pixels.second.x, other_pixels.second.y, width, pixels)));
++        NoiseF16Pixel(pixel, hash_copy, alpha_type, normalized);
++      }
++    }
++    std::swap(unnoised_previous_row, unnoised_current_row);
++  }
++}
++
++base::span<uint8_t, kF32BytesPerPixel> GetF32PixelAt(
++    const int x,
++    const int y,
++    const int width,
++    const base::span<uint8_t> pixels) {
++  return pixels
++      .subspan(static_cast<size_t>(x + y * width) * kF32BytesPerPixel)
++      .first<kF32BytesPerPixel>();
++}
++
++void CopyF32PixelValue(const base::span<uint8_t> from_pixel,
++                       base::span<uint8_t> to_pixel) {
++  base::SpanWriter writer(to_pixel);
++  writer.Write(from_pixel.first<kF32BytesPerPixel>());
++}
++
++void UpdateHashWithF32Pixel(NoiseHash& token_hash,
++                            base::span<uint8_t, kF32BytesPerPixel> pixel) {
++  token_hash.Update(base::U64FromLittleEndian(pixel.first<8u>()));
++  token_hash.Update(base::U64FromLittleEndian(pixel.last<8u>()));
++}
++
++void NoiseF32Pixel(base::span<uint8_t, kF32BytesPerPixel> pixel,
++                   NoiseHash& token_hash,
++                   SkAlphaType alpha_type) {
++  const uint32_t alpha = base::U32FromLittleEndian(
++      pixel.subspan(3u * kF32BytesPerChannel)
++          .first<kF32BytesPerChannel>());
++  for (size_t channel_index = 0; channel_index < 3u; ++channel_index) {
++    base::span<uint8_t, kF32BytesPerChannel> channel =
++        pixel.subspan(channel_index * kF32BytesPerChannel)
++            .first<kF32BytesPerChannel>();
++    const uint32_t value = base::U32FromLittleEndian(channel);
++    if (value == kF32SignMask ||
++        (value & kF32ExponentMask) == kF32ExponentMask) {
++      continue;
++    }
++
++    uint32_t minimum;
++    uint32_t maximum;
++    if (value & kF32SignMask) {
++      minimum = std::max<uint32_t>(kF32SignMask + 1u, value - 3u);
++      maximum = std::min<uint32_t>(kF32SignMask | kF32MaxFinite, value + 3u);
++    } else {
++      minimum = value > 3u ? value - 3u : 0u;
++      maximum = std::min<uint32_t>(kF32MaxFinite, value + 3u);
++      if (alpha_type == kPremul_SkAlphaType &&
++          !(alpha & kF32SignMask) &&
++          (alpha & kF32ExponentMask) != kF32ExponentMask && value <= alpha) {
++        maximum = std::min(maximum, alpha);
++      }
++    }
++    if (minimum > maximum) {
++      continue;
++    }
++    const uint32_t noised_value = base::checked_cast<uint32_t>(
++        minimum + token_hash.GetValueBelow(maximum - minimum + 1u));
++    base::SpanWriter writer(channel);
++    writer.WriteU32LittleEndian(noised_value);
++  }
++}
++
++void NoiseF32PixelsImpl(const NoiseHash& token_hash,
++                        base::span<uint8_t> pixels,
++                        const int width,
++                        const int height,
++                        SkAlphaType alpha_type) {
++  CHECK_EQ(pixels.size(),
++           static_cast<size_t>(width * height) * kF32BytesPerPixel);
++  const size_t row_size = width * kF32BytesPerPixel;
++  std::vector<uint8_t> row1(row_size);
++  std::vector<uint8_t> row2(row_size);
++  base::span<uint8_t> unnoised_previous_row(row1);
++  base::span<uint8_t> unnoised_current_row(row2);
++
++  for (int y = 0; y < height; ++y) {
++    unnoised_current_row.copy_from(pixels.subspan(y * row_size, row_size));
++    for (int x = 0; x < width; ++x) {
++      auto pixel = GetF32PixelAt(x, y, width, pixels);
++      if (base::U64FromLittleEndian(pixel.first<8u>()) == 0u &&
++          base::U64FromLittleEndian(pixel.last<8u>()) == 0u) {
++        continue;
++      }
++      const auto previous_pixel = [&](int previous_x, int previous_y) {
++        return GetF32PixelAt(previous_x, previous_y, width, pixels);
++      };
++      if (y > 0 && x > 0 &&
++          GetF32PixelAt(x - 1, 0, width, unnoised_previous_row) == pixel) {
++        CopyF32PixelValue(previous_pixel(x - 1, y - 1), pixel);
++      } else if (y > 0 &&
++                 GetF32PixelAt(x, 0, width, unnoised_previous_row) == pixel) {
++        CopyF32PixelValue(previous_pixel(x, y - 1), pixel);
++      } else if (y > 0 && x < width - 1 &&
++                 GetF32PixelAt(x + 1, 0, width, unnoised_previous_row) ==
++                     pixel) {
++        CopyF32PixelValue(previous_pixel(x + 1, y - 1), pixel);
++      } else if (x > 0 &&
++                 GetF32PixelAt(x - 1, 0, width, unnoised_current_row) ==
++                     pixel) {
++        CopyF32PixelValue(previous_pixel(x - 1, y), pixel);
++      } else {
++        NoiseHash hash_copy = token_hash;
++        UpdateHashWithF32Pixel(hash_copy, pixel);
++        const auto other_pixels =
++            GetRandomPixelLocations(hash_copy, {x, y}, width, height);
++        UpdateHashWithF32Pixel(
++            hash_copy, previous_pixel(other_pixels.first.x,
++                                      other_pixels.first.y));
++        UpdateHashWithF32Pixel(
++            hash_copy, previous_pixel(other_pixels.second.x,
++                                      other_pixels.second.y));
++        NoiseF32Pixel(pixel, hash_copy, alpha_type);
++      }
++    }
++    std::swap(unnoised_previous_row, unnoised_current_row);
++  }
++}
++
+ }  // namespace
+ 
++void NoiseF16Pixels(const NoiseHash& token_hash,
++                    base::span<uint8_t> pixels,
++                    const int width,
++                    const int height,
++                    SkAlphaType alpha_type,
++                    bool normalized) {
++  NoiseF16PixelsImpl(token_hash, pixels, width, height, alpha_type,
++                     normalized);
++}
++
++void NoiseF32Pixels(const NoiseHash& token_hash,
++                    base::span<uint8_t> pixels,
++                    const int width,
++                    const int height,
++                    SkAlphaType alpha_type) {
++  NoiseF32PixelsImpl(token_hash, pixels, width, height, alpha_type);
++}
++
+ void NoisePixels(const NoiseHash& token_hash,
+                  base::span<uint8_t> pixels,
+                  const int width,
+@@ -165,4 +438,55 @@
+   }
+ }
+ 
++scoped_refptr<StaticBitmapImage> ApplyCanvasNoiseForExport(
++    scoped_refptr<StaticBitmapImage> image_bitmap,
++    ExecutionContext* execution_context) {
++  if (!image_bitmap || !execution_context ||
++      !execution_context->CanvasNoiseToken()) {
++    return image_bitmap;
++  }
++
++  const gfx::Size size = image_bitmap->Size();
++  const SkImageInfo source_info =
++      image_bitmap->PaintImageForCurrentFrame().GetSkImageInfo();
++  const SkAlphaType alpha_type =
++      source_info.alphaType() == kUnknown_SkAlphaType
++          ? kPremul_SkAlphaType
++          : source_info.alphaType();
++  const bool is_f16 = source_info.colorType() == kRGBA_F16_SkColorType;
++  const bool is_f16_normalized =
++      source_info.colorType() == kRGBA_F16Norm_SkColorType;
++  const bool is_f32 = source_info.colorType() == kRGBA_F32_SkColorType;
++  const bool is_floating_point = is_f16 || is_f16_normalized || is_f32;
++  const SkImageInfo info =
++      is_floating_point
++          ? SkImageInfo::Make(size.width(), size.height(),
++                              kRGBA_F16_SkColorType, alpha_type,
++                              source_info.refColorSpace())
++          : SkImageInfo::MakeN32(size.width(), size.height(), alpha_type,
++                                 source_info.refColorSpace());
++  Vector<uint8_t> pixels =
++      image_bitmap->CopyImageData(info, /*apply_orientation=*/false);
++  if (pixels.empty()) {
++    return nullptr;
++  }
++
++  if (is_floating_point) {
++    NoiseF16Pixels(NoiseHash(*execution_context->CanvasNoiseToken()),
++                   base::span(pixels), size.width(), size.height(), alpha_type,
++                   is_f16_normalized);
++  } else {
++    NoisePixels(NoiseHash(*execution_context->CanvasNoiseToken()),
++                base::span(pixels), size.width(), size.height());
++  }
++  scoped_refptr<StaticBitmapImage> noisy_bitmap = StaticBitmapImage::Create(
++      SkData::MakeWithCopy(pixels.data(), pixels.size()), info,
++      image_bitmap->Orientation());
++  if (!noisy_bitmap) {
++    return nullptr;
++  }
++  noisy_bitmap->SetOriginClean(image_bitmap->OriginClean());
++  return noisy_bitmap;
++}
++
+ }  // namespace blink
+--- a/third_party/blink/renderer/core/canvas_interventions/noise_helper.h
++++ b/third_party/blink/renderer/core/canvas_interventions/noise_helper.h
+@@ -8,10 +8,15 @@
+ #include <cstdint>
+ 
+ #include "base/containers/span.h"
++#include "base/memory/scoped_refptr.h"
+ #include "third_party/blink/renderer/core/canvas_interventions/noise_hash.h"
+ #include "third_party/blink/renderer/core/core_export.h"
++#include "third_party/skia/include/core/SkAlphaType.h"
+ 
+ namespace blink {
++class ExecutionContext;
++class StaticBitmapImage;
++
+ // Adds noise to the provided pixels in place, using |token_hash| as the
+ // source for pseudo-randomness. This function assumes that there are 4
+ // channels per pixel.
+@@ -20,6 +25,29 @@
+                              const int width,
+                              const int height);
+ 
++// Floating-point variants preserve the alpha channel and representation. The
++// normalized F16 path also keeps RGB in [0, 1]. Premultiplied inputs are not
++// perturbed above their original alpha boundary.
++CORE_EXPORT void NoiseF16Pixels(const NoiseHash& token_hash,
++                                base::span<uint8_t> pixels,
++                                const int width,
++                                const int height,
++                                SkAlphaType alpha_type,
++                                bool normalized);
++CORE_EXPORT void NoiseF32Pixels(const NoiseHash& token_hash,
++                                base::span<uint8_t> pixels,
++                                const int width,
++                                const int height,
++                                SkAlphaType alpha_type);
++
++// Applies deterministic Persona canvas noise to a snapshot before it is
++// exposed through a canvas readback API. Returns the original image when the
++// execution context has no canvas noise token, and null when protected
++// readback fails.
++CORE_EXPORT scoped_refptr<StaticBitmapImage> ApplyCanvasNoiseForExport(
++    scoped_refptr<StaticBitmapImage> image_bitmap,
++    ExecutionContext* execution_context);
++
+ }  // namespace blink
+ 
+ #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_CANVAS_INTERVENTIONS_NOISE_HELPER_H_
+--- a/third_party/blink/renderer/core/canvas_interventions/noise_helper_unittest.cc
++++ b/third_party/blink/renderer/core/canvas_interventions/noise_helper_unittest.cc
+@@ -13,11 +13,20 @@
+ 
+ #include "base/containers/span.h"
+ #include "base/containers/span_writer.h"
++#include "base/numerics/byte_conversions.h"
+ #include "base/test/gtest_util.h"
+ #include "net/base/schemeful_site.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/renderer/core/canvas_interventions/noise_hash.h"
++#include "third_party/blink/renderer/core/dom/document.h"
++#include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
++#include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
++#include "third_party/blink/renderer/platform/testing/task_environment.h"
++#include "third_party/skia/include/core/SkCanvas.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "third_party/skia/include/core/SkColorSpace.h"
++#include "third_party/skia/include/core/SkSurface.h"
+ #include "third_party/googletest/src/googletest/include/gtest/gtest.h"
+ #include "url/gurl.h"
+ 
+@@ -87,6 +96,159 @@
+   EXPECT_NE(pixels, pixels2);
+ }
+ 
++TEST_F(NoiseHelperTest, ApplyCanvasNoiseForExportUsesExecutionContextToken) {
++  test::TaskEnvironment task_environment;
++  auto page = std::make_unique<DummyPageHolder>(gfx::Size(32, 32));
++  Document& document = page->GetDocument();
++  const SkImageInfo info = SkImageInfo::MakeN32Premul(32, 32);
++  sk_sp<SkSurface> surface = SkSurfaces::Raster(info);
++  ASSERT_TRUE(surface);
++  surface->getCanvas()->clear(SkColorSetRGB(37, 89, 143));
++  scoped_refptr<StaticBitmapImage> image =
++      UnacceleratedStaticBitmapImage::Create(surface->makeImageSnapshot());
++  ASSERT_TRUE(image);
++  const Vector<uint8_t> original =
++      image->CopyImageData(info, /*apply_orientation=*/false);
++
++  EXPECT_EQ(image, ApplyCanvasNoiseForExport(image, &document));
++  document.SetCanvasNoiseToken(NoiseToken(0x01234678901234567));
++  scoped_refptr<StaticBitmapImage> first =
++      ApplyCanvasNoiseForExport(image, &document);
++  scoped_refptr<StaticBitmapImage> second =
++      ApplyCanvasNoiseForExport(image, &document);
++  ASSERT_TRUE(first);
++  ASSERT_TRUE(second);
++  EXPECT_NE(original,
++            first->CopyImageData(info, /*apply_orientation=*/false));
++  EXPECT_EQ(first->CopyImageData(info, /*apply_orientation=*/false),
++            second->CopyImageData(info, /*apply_orientation=*/false));
++}
++
++TEST_F(NoiseHelperTest, ApplyCanvasNoiseForExportPreservesF16AndColorSpace) {
++  test::TaskEnvironment task_environment;
++  auto page = std::make_unique<DummyPageHolder>(gfx::Size(8, 8));
++  Document& document = page->GetDocument();
++  document.SetCanvasNoiseToken(NoiseToken(0x01234678901234567));
++  sk_sp<SkColorSpace> color_space = SkColorSpace::MakeSRGBLinear();
++  const SkImageInfo info =
++      SkImageInfo::Make(8, 8, kRGBA_F16_SkColorType, kPremul_SkAlphaType,
++                        color_space);
++  sk_sp<SkSurface> surface = SkSurfaces::Raster(info);
++  ASSERT_TRUE(surface);
++  surface->getCanvas()->clear(SkColorSetRGB(37, 89, 143));
++  scoped_refptr<StaticBitmapImage> image =
++      UnacceleratedStaticBitmapImage::Create(surface->makeImageSnapshot());
++  ASSERT_TRUE(image);
++  const Vector<uint8_t> original =
++      image->CopyImageData(info, /*apply_orientation=*/false);
++
++  scoped_refptr<StaticBitmapImage> noised =
++      ApplyCanvasNoiseForExport(image, &document);
++  ASSERT_TRUE(noised);
++  const SkImageInfo noised_info =
++      noised->PaintImageForCurrentFrame().GetSkImageInfo();
++  EXPECT_EQ(kRGBA_F16_SkColorType, noised_info.colorType());
++  EXPECT_TRUE(SkColorSpace::Equals(color_space.get(),
++                                   noised_info.colorSpace()));
++  const Vector<uint8_t> noised_pixels =
++      noised->CopyImageData(info, /*apply_orientation=*/false);
++  EXPECT_NE(original, noised_pixels);
++  const base::span<const uint8_t> pixels(noised_pixels);
++  for (size_t offset = 8u; offset < pixels.size(); offset += 8u) {
++    EXPECT_EQ(pixels.first<8u>(), pixels.subspan(offset).first<8u>());
++  }
++}
++
++TEST_F(NoiseHelperTest,
++       ApplyCanvasNoiseForExportConvertsUnsupportedFloatFormatsToF16) {
++  test::TaskEnvironment task_environment;
++  auto page = std::make_unique<DummyPageHolder>(gfx::Size(8, 8));
++  Document& document = page->GetDocument();
++  document.SetCanvasNoiseToken(NoiseToken(0x01234678901234567));
++  sk_sp<SkColorSpace> color_space = SkColorSpace::MakeSRGBLinear();
++
++  for (SkColorType source_type :
++       {kRGBA_F16Norm_SkColorType, kRGBA_F32_SkColorType}) {
++    const SkImageInfo source_info =
++        SkImageInfo::Make(8, 8, source_type, kPremul_SkAlphaType, color_space);
++    sk_sp<SkSurface> surface = SkSurfaces::Raster(source_info);
++    ASSERT_TRUE(surface);
++    surface->getCanvas()->clear(SkColorSetRGB(37, 89, 143));
++    scoped_refptr<StaticBitmapImage> image =
++        UnacceleratedStaticBitmapImage::Create(surface->makeImageSnapshot());
++    ASSERT_TRUE(image);
++
++    scoped_refptr<StaticBitmapImage> noised =
++        ApplyCanvasNoiseForExport(image, &document);
++    ASSERT_TRUE(noised);
++    const SkImageInfo noised_info =
++        noised->PaintImageForCurrentFrame().GetSkImageInfo();
++    EXPECT_EQ(kRGBA_F16_SkColorType, noised_info.colorType());
++    EXPECT_TRUE(SkColorSpace::Equals(color_space.get(),
++                                     noised_info.colorSpace()));
++  }
++}
++
++TEST_F(NoiseHelperTest, NoiseF16PixelsPreservesNormalizedPremultipliedRange) {
++  constexpr int kWidth = 8;
++  constexpr int kHeight = 8;
++  constexpr uint16_t kHalfOne = 0x3c00u;
++  std::vector<uint8_t> pixels(kWidth * kHeight * 8u);
++  base::SpanWriter writer{base::span(pixels)};
++  for (int pixel = 0; pixel < kWidth * kHeight; ++pixel) {
++    for (int channel = 0; channel < 4; ++channel) {
++      writer.WriteU16LittleEndian(kHalfOne);
++    }
++  }
++  const std::vector<uint8_t> original = pixels;
++
++  NoiseF16Pixels(NoiseHash(NoiseToken(0x01234678901234567)),
++                 base::span(pixels), kWidth, kHeight, kPremul_SkAlphaType,
++                 /*normalized=*/true);
++
++  EXPECT_NE(original, pixels);
++  for (size_t offset = 0; offset < pixels.size(); offset += 8u) {
++    const auto pixel = base::span(pixels).subspan(offset).first<8u>();
++    const uint16_t alpha = base::U16FromLittleEndian(pixel.last<2u>());
++    EXPECT_EQ(kHalfOne, alpha);
++    for (size_t channel = 0; channel < 3u; ++channel) {
++      const uint16_t value = base::U16FromLittleEndian(
++          pixel.subspan(channel * 2u).first<2u>());
++      EXPECT_LE(value, kHalfOne);
++      EXPECT_LE(value, alpha);
++    }
++  }
++}
++
++TEST_F(NoiseHelperTest, NoiseF32PixelsPreservesPremultipliedRange) {
++  constexpr int kWidth = 8;
++  constexpr int kHeight = 8;
++  constexpr uint32_t kFloatOne = 0x3f800000u;
++  std::vector<uint8_t> pixels(kWidth * kHeight * 16u);
++  base::SpanWriter writer{base::span(pixels)};
++  for (int pixel = 0; pixel < kWidth * kHeight; ++pixel) {
++    for (int channel = 0; channel < 4; ++channel) {
++      writer.WriteU32LittleEndian(kFloatOne);
++    }
++  }
++  const std::vector<uint8_t> original = pixels;
++
++  NoiseF32Pixels(NoiseHash(NoiseToken(0x01234678901234567)),
++                 base::span(pixels), kWidth, kHeight, kPremul_SkAlphaType);
++
++  EXPECT_NE(original, pixels);
++  for (size_t offset = 0; offset < pixels.size(); offset += 16u) {
++    const auto pixel = base::span(pixels).subspan(offset).first<16u>();
++    const uint32_t alpha = base::U32FromLittleEndian(pixel.last<4u>());
++    EXPECT_EQ(kFloatOne, alpha);
++    for (size_t channel = 0; channel < 3u; ++channel) {
++      const uint32_t value = base::U32FromLittleEndian(
++          pixel.subspan(channel * 4u).first<4u>());
++      EXPECT_LE(value, alpha);
++    }
++  }
++}
++
+ TEST_F(NoiseHelperTest, NoisePixelsAllSameValue) {
+   const int width = 100;
+   const int height = 100;
+--- a/third_party/blink/renderer/core/html/canvas/canvas_image_source.h
++++ b/third_party/blink/renderer/core/html/canvas/canvas_image_source.h
+@@ -54,6 +54,15 @@
+   virtual scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
+                                                        const gfx::SizeF&) = 0;
+ 
++  // Returns pixels for a script-visible consumer that can expose the source
++  // through a readback API. Canvas implementations override this separately
++  // so ordinary rendering consumers such as drawImage remain unchanged.
++  virtual scoped_refptr<Image> GetSourceImageForScriptReadback(
++      SourceImageStatus* status,
++      const gfx::SizeF& default_object_size) {
++    return GetSourceImageForCanvas(status, default_object_size);
++  }
++
+   // IMPORTANT: Result must be independent of whether destinationContext is
+   // already tainted because this function may be used to determine whether
+   // a CanvasPattern is "origin clean", and that pattern may be used on
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+@@ -62,7 +62,6 @@
+ #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap_options.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_image_encode_options.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_elementimage.h"
+-#include "third_party/blink/renderer/core/canvas_interventions/noise_hash.h"
+ #include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
+ #include "third_party/blink/renderer/core/css/css_font_selector.h"
+ #include "third_party/blink/renderer/core/css/style_change_reason.h"
+@@ -136,7 +135,6 @@
+ #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+ #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+ #include "third_party/blink/renderer/platform/wtf/functional.h"
+-#include "third_party/skia/include/core/SkData.h"
+ #include "ui/base/resource/resource_scale_factor.h"
+ #include "ui/gfx/geometry/rect_conversions.h"
+ #include "ui/gfx/geometry/size_conversions.h"
+@@ -175,30 +173,6 @@
+ constexpr int kUndefinedQualityValue = -1.0;
+ constexpr int kMinimumAccelerated2dCanvasSize = 128 * 129;
+ 
+-scoped_refptr<StaticBitmapImage> ApplyHeliumCanvasNoiseForExport(
+-    scoped_refptr<StaticBitmapImage> image_bitmap,
+-    ExecutionContext* execution_context) {
+-  if (!execution_context || !execution_context->CanvasNoiseToken())
+-    return image_bitmap;
+-
+-  const gfx::Size size = image_bitmap->Size();
+-  const SkImageInfo info =
+-      SkImageInfo::MakeN32Premul(size.width(), size.height());
+-  Vector<uint8_t> pixels =
+-      image_bitmap->CopyImageData(info, /*apply_orientation=*/false);
+-  if (pixels.empty())
+-    return image_bitmap;
+-
+-  NoisePixels(NoiseHash(*execution_context->CanvasNoiseToken()),
+-              base::span(pixels), size.width(), size.height());
+-
+-  scoped_refptr<StaticBitmapImage> noisy_bitmap = StaticBitmapImage::Create(
+-      SkData::MakeWithCopy(pixels.data(), pixels.size()), info,
+-      image_bitmap->Orientation());
+-  noisy_bitmap->SetOriginClean(image_bitmap->OriginClean());
+-  return noisy_bitmap;
+-}
+-
+ // Tracks whether canvases should start out with acceleration disabled.
+ class DisabledAccelerationCounterSupplement final
+     : public GarbageCollected<DisabledAccelerationCounterSupplement>,
+@@ -1093,6 +1067,8 @@
+ 
+   const bool context_color_is_opaque =
+       context_ && SkAlphaTypeIsOpaque(context_->GetAlphaType());
++  const bool protect_canvas_readback =
++      GetExecutionContext() && GetExecutionContext()->CanvasNoiseToken();
+ 
+   for (CanvasDrawListener* listener : listeners_) {
+     if (!listener->NeedsNewFrame())
+@@ -1107,7 +1083,8 @@
+     // First attempt to copy directly from the rendering context to a video
+     // frame. Not all rendering contexts need to support this (for contexts
+     // where GetSourceImageForCanvasInternal is zero-copy, this is superfluous).
+-    if (context_ && (context_color_is_opaque || can_discard_alpha) &&
++    if (!protect_canvas_readback && context_ &&
++        (context_color_is_opaque || can_discard_alpha) &&
+         base::FeatureList::IsEnabled(kOneCopyCanvasCapture)) {
+       if (context_->CopyRenderingResultsToVideoFrame(
+               copier_->GetAcceleratedVideoFramePool(
+@@ -1128,6 +1105,11 @@
+     if (!source_image) {
+       SourceImageStatus status;
+       source_image = GetSourceImageForCanvasInternal(&status);
++      source_image = ApplyCanvasNoiseForExport(std::move(source_image),
++                                               GetExecutionContext());
++      if (!source_image) {
++        status = kInvalidSourceImageStatus;
++      }
+       if (status != kNormalSourceImageStatus)
+         continue;
+     }
+@@ -1349,8 +1331,10 @@
+ 
+   scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
+   if (image_bitmap) {
+-    image_bitmap = ApplyHeliumCanvasNoiseForExport(std::move(image_bitmap),
+-                                                   GetExecutionContext());
++    image_bitmap = ApplyCanvasNoiseForExport(std::move(image_bitmap),
++                                             GetExecutionContext());
++    if (!image_bitmap)
++      return String("data:,");
+     std::unique_ptr<ImageDataBuffer> data_buffer =
+         ImageDataBuffer::Create(image_bitmap);
+     if (!data_buffer)
+@@ -1462,14 +1446,16 @@
+   CanvasAsyncBlobCreator* async_creator = nullptr;
+   scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(kBackBuffer);
+   if (image_bitmap) {
+-    image_bitmap = ApplyHeliumCanvasNoiseForExport(std::move(image_bitmap),
+-                                                   GetExecutionContext());
+-    auto* options = ImageEncodeOptions::Create();
+-    options->setType(ImageEncoderUtils::MimeTypeName(encoding_mime_type));
+-    async_creator = MakeGarbageCollected<CanvasAsyncBlobCreator>(
+-        image_bitmap, options,
+-        CanvasAsyncBlobCreator::kHTMLCanvasToBlobCallback, callback, start_time,
+-        GetExecutionContext());
++    image_bitmap = ApplyCanvasNoiseForExport(std::move(image_bitmap),
++                                             GetExecutionContext());
++    if (image_bitmap) {
++      auto* options = ImageEncodeOptions::Create();
++      options->setType(ImageEncoderUtils::MimeTypeName(encoding_mime_type));
++      async_creator = MakeGarbageCollected<CanvasAsyncBlobCreator>(
++          image_bitmap, options,
++          CanvasAsyncBlobCreator::kHTMLCanvasToBlobCallback, callback,
++          start_time, GetExecutionContext());
++    }
+   }
+ 
+   if (async_creator) {
+@@ -1903,6 +1889,18 @@
+   return GetSourceImageForCanvasInternal(status);
+ }
+ 
++scoped_refptr<Image> HTMLCanvasElement::GetSourceImageForScriptReadback(
++    SourceImageStatus* status,
++    const gfx::SizeF&) {
++  scoped_refptr<StaticBitmapImage> image =
++      GetSourceImageForCanvasInternal(status);
++  image = ApplyCanvasNoiseForExport(std::move(image), GetExecutionContext());
++  if (!image) {
++    *status = kInvalidSourceImageStatus;
++  }
++  return image;
++}
++
+ scoped_refptr<StaticBitmapImage>
+ HTMLCanvasElement::GetSourceImageForCanvasInternal(SourceImageStatus* status) {
+   if (ContextHasOpenLayers(context_)) {
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.h
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.h
+@@ -233,6 +233,9 @@
+   // CanvasImageSource implementation
+   scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
+                                                const gfx::SizeF&) override;
++  scoped_refptr<Image> GetSourceImageForScriptReadback(
++      SourceImageStatus*,
++      const gfx::SizeF&) override;
+   bool WouldTaintOrigin() const override;
+   gfx::SizeF ElementSize(const gfx::SizeF&,
+                          const RespectImageOrientationEnum) const override;
+--- a/third_party/blink/renderer/core/imagebitmap/image_bitmap.cc
++++ b/third_party/blink/renderer/core/imagebitmap/image_bitmap.cc
+@@ -369,7 +369,7 @@
+                          const ImageBitmapOptions* options) {
+   SourceImageStatus status;
+   scoped_refptr<Image> image_input =
+-      canvas->GetSourceImageForCanvas(&status, gfx::SizeF());
++      canvas->GetSourceImageForScriptReadback(&status, gfx::SizeF());
+   if (status != kNormalSourceImageStatus)
+     return;
+   scoped_refptr<StaticBitmapImage> input =
+@@ -391,8 +391,9 @@
+                          std::optional<gfx::Rect> crop_rect,
+                          const ImageBitmapOptions* options) {
+   SourceImageStatus status;
+-  scoped_refptr<Image> raw_input = offscreen_canvas->GetSourceImageForCanvas(
+-      &status, gfx::SizeF(offscreen_canvas->Size()));
++  scoped_refptr<Image> raw_input =
++      offscreen_canvas->GetSourceImageForScriptReadback(
++          &status, gfx::SizeF(offscreen_canvas->Size()));
+   scoped_refptr<StaticBitmapImage> input =
+       To<StaticBitmapImage>(raw_input.get());
+   raw_input = nullptr;
+--- a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
++++ b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
+@@ -13,6 +13,7 @@
+ #include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_elementimage.h"
++#include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
+ #include "third_party/blink/renderer/core/css/css_font_selector.h"
+ #include "third_party/blink/renderer/core/css/offscreen_font_selector.h"
+ #include "third_party/blink/renderer/core/css/style_engine.h"
+@@ -281,6 +282,20 @@
+     // Undocumented exception (not in spec).
+     exception_state.ThrowDOMException(DOMExceptionCode::kUnknownError,
+                                       "ImageBitmap construction failed");
++    return nullptr;
++  }
++
++  ExecutionContext* execution_context = GetExecutionContext();
++  if (execution_context && execution_context->CanvasNoiseToken()) {
++    scoped_refptr<StaticBitmapImage> noisy_image = ApplyCanvasNoiseForExport(
++        image->BitmapImage(), execution_context);
++    if (!noisy_image) {
++      exception_state.ThrowDOMException(
++          DOMExceptionCode::kNotReadableError,
++          "Readback of the source image has failed.");
++      return nullptr;
++    }
++    image = MakeGarbageCollected<ImageBitmap>(std::move(noisy_image));
+   }
+ 
+   return image;
+@@ -317,11 +332,28 @@
+   if (!image) {
+     image = CreateTransparentImage();
+   }
+-  *status = image ? kNormalSourceImageStatus : kInvalidSourceImageStatus;
++  *status = kNormalSourceImageStatus;
+ 
+   return image;
+ }
+ 
++scoped_refptr<Image> OffscreenCanvas::GetSourceImageForScriptReadback(
++    SourceImageStatus* status,
++    const gfx::SizeF& size) {
++  scoped_refptr<Image> image = GetSourceImageForCanvas(status, size);
++  auto static_image = DynamicTo<StaticBitmapImage>(image.get());
++  if (!static_image) {
++    *status = kInvalidSourceImageStatus;
++    return nullptr;
++  }
++  scoped_refptr<StaticBitmapImage> noised_image = ApplyCanvasNoiseForExport(
++      base::WrapRefCounted(static_image), GetExecutionContext());
++  if (!noised_image) {
++    *status = kInvalidSourceImageStatus;
++  }
++  return noised_image;
++}
++
+ ScriptPromise<ImageBitmap> OffscreenCanvas::CreateImageBitmap(
+     ScriptState* script_state,
+     std::optional<gfx::Rect> crop_rect,
+@@ -423,6 +455,14 @@
+   base::TimeTicks start_time = base::TimeTicks::Now();
+   scoped_refptr<StaticBitmapImage> image_bitmap = context_->GetImage();
+   if (image_bitmap) {
++    image_bitmap = ApplyCanvasNoiseForExport(
++        std::move(image_bitmap), ExecutionContext::From(script_state));
++    if (!image_bitmap) {
++      exception_state.ThrowDOMException(
++          DOMExceptionCode::kNotReadableError,
++          "Readback of the source image has failed.");
++      return EmptyPromise();
++    }
+     auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<Blob>>(
+         script_state, exception_state.GetContext());
+     CanvasAsyncBlobCreator::ToBlobFunctionType function_type =
+--- a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h
++++ b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h
+@@ -176,6 +176,9 @@
+   // CanvasImageSource implementation
+   scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
+                                                const gfx::SizeF&) final;
++  scoped_refptr<Image> GetSourceImageForScriptReadback(
++      SourceImageStatus*,
++      const gfx::SizeF&) final;
+   bool WouldTaintOrigin() const final { return !origin_clean_; }
+   gfx::SizeF ElementSize(const gfx::SizeF& default_object_size,
+                          const RespectImageOrientationEnum) const final {
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -534,11 +534,26 @@
+       SkIRect bounds =
+           snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
+       DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
+-    } else if (image_data_pixmap.colorType() == kRGBA_8888_SkColorType) {
++    } else {
+       ExecutionContext* execution_context = GetTopExecutionContext();
+       if (execution_context && execution_context->CanvasNoiseToken()) {
+-        NoisePixels(NoiseHash(*execution_context->CanvasNoiseToken()),
+-                    image_data->RawByteSpan(), sw, sh);
++        const NoiseHash noise_hash(*execution_context->CanvasNoiseToken());
++        switch (image_data_pixmap.colorType()) {
++          case kRGBA_8888_SkColorType:
++            NoisePixels(noise_hash, image_data->RawByteSpan(), sw, sh);
++            break;
++          case kRGBA_F16_SkColorType:
++            NoiseF16Pixels(noise_hash, image_data->RawByteSpan(), sw, sh,
++                           image_data_pixmap.alphaType(),
++                           /*normalized=*/false);
++            break;
++          case kRGBA_F32_SkColorType:
++            NoiseF32Pixels(noise_hash, image_data->RawByteSpan(), sw, sh,
++                           image_data_pixmap.alphaType());
++            break;
++          default:
++            break;
++        }
+       }
+     }
+   }
+--- a/third_party/blink/renderer/modules/canvas/imagebitmap/image_bitmap_source_util.cc
++++ b/third_party/blink/renderer/modules/canvas/imagebitmap/image_bitmap_source_util.cc
+@@ -186,7 +186,8 @@
+ 
+   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
+   scoped_refptr<Image> image =
+-      canvas_image_source.GetSourceImageForCanvas(&source_image_status, size);
++      canvas_image_source.GetSourceImageForScriptReadback(
++          &source_image_status, size);
+   if (!image || source_image_status != kNormalSourceImageStatus) {
+     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                       "Invalid element or state.");
+--- a/third_party/blink/renderer/modules/webcodecs/video_frame.cc
++++ b/third_party/blink/renderer/modules/webcodecs/video_frame.cc
+@@ -760,7 +760,8 @@
+       image_source->ElementSize(gfx::SizeF(), kRespectImageOrientation);
+ 
+   SourceImageStatus status = kInvalidSourceImageStatus;
+-  auto image = image_source->GetSourceImageForCanvas(&status, source_size);
++  auto image =
++      image_source->GetSourceImageForScriptReadback(&status, source_size);
+   if (!image || status != kNormalSourceImageStatus) {
+     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                       "Invalid source state");
+--- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+@@ -875,6 +875,14 @@
+   // taint the origin using the WebGL API.
+   DCHECK(Host()->OriginClean());
+ 
++  ExecutionContext* execution_context = Host()->GetTopExecutionContext();
++  if (execution_context && execution_context->CanvasNoiseToken()) {
++    SynthesizeGLError(
++        GL_INVALID_OPERATION, "readPixels",
++        "PIXEL_PACK readback is unavailable for an active Persona");
++    return;
++  }
++
+   if (!ValidateValueFitNonNegInt32("readPixels", "offset", offset))
+     return;
+ 
+--- a/third_party/blink/renderer/modules/webgl/webgl_context_factory.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_context_factory.cc
+@@ -36,7 +36,8 @@
+     ExecutionContext* execution_context,
+     CanvasRenderingContextHost* host,
+     const CanvasContextCreationAttributesCore& attrs) {
+-  if (RuntimeEnabledFeatures::WebGLOnWebGPUEnabled()) {
++  if (RuntimeEnabledFeatures::WebGLOnWebGPUEnabled() &&
++      (!execution_context || !execution_context->CanvasNoiseToken())) {
+     return CreateInternalWebGPU(execution_context, host, attrs);
+   } else {
+     return CreateInternal(execution_context, host, attrs);
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -5319,6 +5319,19 @@
+                                         buffer_size.ValueOrDie())) {
+     return;
+   }
++  ExecutionContext* execution_context = Host()->GetTopExecutionContext();
++  if (execution_context && execution_context->CanvasNoiseToken()) {
++    const WebGLImageConversion::PixelStoreParams pack_params =
++        GetPackPixelStoreParams();
++    if (format != GL_RGBA || type != GL_UNSIGNED_BYTE ||
++        pack_params.alignment != 4 || pack_params.row_length != 0 ||
++        pack_params.skip_pixels != 0 || pack_params.skip_rows != 0) {
++      SynthesizeGLError(
++          GL_INVALID_OPERATION, "readPixels",
++          "Persona-protected readback requires tightly packed RGBA8 pixels");
++      return;
++    }
++  }
+   ClearIfComposited(kClearCallerOther);
+ 
+   uint8_t* data = static_cast<uint8_t*>(pixels->BaseAddressMaybeShared()) +
+@@ -5348,9 +5361,8 @@
+     }
+     ContextGL()->ReadPixels(x, y, width, height, format, type, data);
+   }
+-  ExecutionContext* execution_context = Host()->GetTopExecutionContext();
+   // Apply to WebGL1 and WebGL2 ArrayBufferView readbacks used by fingerprint
+-  // scripts. PIXEL_PACK buffer paths write to GPU memory and are skipped here.
++  // scripts. Other layouts and GPU-buffer readback fail closed above.
+   if (format == GL_RGBA && type == GL_UNSIGNED_BYTE && width > 0 &&
+       height > 0 && execution_context &&
+       execution_context->CanvasNoiseToken()) {
+@@ -6390,9 +6402,15 @@
+   // directly into a texture in this context. This path does not perform color
+   // space conversion, so only use it if the source and unpack color spaces are
+   // the same.
+-  if (auto* source_canvas_webgl_context = DynamicTo<WebGLRenderingContextBase>(
+-          context_host->RenderingContext())) {
+-    if (CanUseTexImageViaGPU(params) &&
++  ExecutionContext* source_execution_context =
++      context_host->GetTopExecutionContext();
++  const bool protect_source_readback =
++      source_execution_context && source_execution_context->CanvasNoiseToken();
++  if (!protect_source_readback) {
++    if (auto* source_canvas_webgl_context =
++            DynamicTo<WebGLRenderingContextBase>(
++                context_host->RenderingContext());
++        source_canvas_webgl_context && CanUseTexImageViaGPU(params) &&
+         source_canvas_webgl_context->drawing_buffer_color_space_ ==
+             unpack_color_space_) {
+       TexImageViaGPU(params, nullptr, source_canvas_webgl_context);
+@@ -6401,14 +6419,14 @@
+   }
+ 
+   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
+-  scoped_refptr<Image> image = context_host->GetSourceImageForCanvas(
++  scoped_refptr<Image> image = context_host->GetSourceImageForScriptReadback(
+       &source_image_status, gfx::SizeF(*params.width, *params.height));
+   if (source_image_status != kNormalSourceImageStatus)
+     return;
+ 
+-  // The implementation of GetSourceImageForCanvas for both subclasses of
+-  // CanvasRenderingContextHost (HTMLCanvasElement and OffscreenCanvas) always
+-  // return a StaticBitmapImage.
++  // The readback implementation for both CanvasRenderingContextHost
++  // subclasses (HTMLCanvasElement and OffscreenCanvas) always returns a
++  // StaticBitmapImage.
+   StaticBitmapImage* static_bitmap_image =
+       DynamicTo<StaticBitmapImage>(image.get());
+   DCHECK(static_bitmap_image);
+--- a/third_party/blink/renderer/modules/webgpu/gpu_canvas_context.cc
++++ b/third_party/blink/renderer/modules/webgpu/gpu_canvas_context.cc
+@@ -15,6 +15,7 @@
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_canvas_configuration.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_union_offscreen_rendering_context.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_union_rendering_context.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
+ #include "third_party/blink/renderer/core/html/canvas/predefined_color_space.h"
+ #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
+@@ -423,6 +424,16 @@
+ 
+   const wgpu::TextureUsage usage =
+       AsDawnFlags<wgpu::TextureUsage>(descriptor->usage());
++  ExecutionContext* execution_context = GetExecutionContext();
++  constexpr wgpu::TextureUsage kScriptReadableUsages =
++      wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::TextureBinding |
++      wgpu::TextureUsage::StorageBinding;
++  if (execution_context && execution_context->CanvasNoiseToken() &&
++      (usage & kScriptReadableUsages) != wgpu::TextureUsage::None) {
++    exception_state.ThrowTypeError(
++        "Script-readable canvas usage is unavailable for an active Persona");
++    return;
++  }
+   if (RuntimeEnabledFeatures::WebGPUTransientAttachmentEnabled() &&
+       usage & wgpu::TextureUsage::TransientAttachment) {
+     exception_state.ThrowTypeError(
+--- a/third_party/blink/renderer/modules/webgpu/gpu_queue.cc
++++ b/third_party/blink/renderer/modules/webgpu/gpu_queue.cc
+@@ -274,7 +274,7 @@
+   // TODO(https://crbug.com/40760113): Ensure unpremultiplied images will live
+   // on GPU if possible.
+   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
+-  auto image_for_canvas = canvas_image_source->GetSourceImageForCanvas(
++  auto image_for_canvas = canvas_image_source->GetSourceImageForScriptReadback(
+       &source_image_status, image_size);
+   if (source_image_status != kNormalSourceImageStatus) {
+     // Canvas back resource is broken, zero size, incomplete or invalid.
