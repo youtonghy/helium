@@ -231,3 +231,5 @@ helium/core/persona-worker-runtime-attestation.patch
 helium/core/persona-output-surface-hardening.patch
 helium/core/persona-output-surface-assurance.patch
 helium/core/persona-runtime-capability-assurance.patch
+helium/core/persona-media-surface-completion.patch
+helium/core/persona-build-compatibility-fixes.patch

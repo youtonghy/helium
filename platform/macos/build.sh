@@ -73,6 +73,35 @@ ___helium_setup_siso() {
         "$_depot_tools_dir/cipd" ensure --root "$_siso_dir" --ensure-file -
 }
 
+___helium_build_python() {
+    local configured="${NITROUS_BUILD_PYTHON:-${HELIUM_BUILD_PYTHON:-}}"
+    local candidate
+    local resolved
+
+    if [ -n "$configured" ]; then
+        resolved="$(command -v "$configured" 2>/dev/null || true)"
+        if [ -z "$resolved" ] || ! "$resolved" -c \
+            'import sys; raise SystemExit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
+            echo "error: NITROUS_BUILD_PYTHON must select Python 3.11 or newer" >&2
+            return 1
+        fi
+        printf '%s\n' "$resolved"
+        return
+    fi
+
+    for candidate in python3.14 python3.13 python3.12 python3.11 python3; do
+        resolved="$(command -v "$candidate" 2>/dev/null || true)"
+        if [ -n "$resolved" ] && "$resolved" -c \
+            'import sys; raise SystemExit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
+            printf '%s\n' "$resolved"
+            return
+        fi
+    done
+
+    echo "error: Chromium depot_tools requires Python 3.11 or newer" >&2
+    return 1
+}
+
 ___helium_setup_gn_args() {
     mkdir -p "$_out_dir"
     local args_file="$_out_dir/args.gn"
@@ -147,7 +176,14 @@ ___helium_presetup() {
 }
 
 ___helium_source_ready() {
-    [ -f "$_src_dir/DEPS" ] && [ -d "$_src_dir/tools" ]
+    [ -f "$_src_dir/DEPS" ] &&
+        [ -d "$_src_dir/tools" ] &&
+        [ -f "$_src_dir/chrome/VERSION" ] || return 1
+
+    local version_key
+    for version_key in HELIUM_MAJOR HELIUM_MINOR HELIUM_PATCH HELIUM_PLATFORM; do
+        grep -Eq "^${version_key}=[0-9]+$" "$_src_dir/chrome/VERSION" || return 1
+    done
 }
 
 ___helium_out_ready() {
@@ -436,7 +472,7 @@ ___helium_check() {
 
 ___helium_syntax_smoke() {
     local smoke_file="third_party/blink/common/navigation/navigation_params.cc"
-    local generated_header="gen/third_party/blink/public/mojom/navigation/navigation_params.mojom-forward.h"
+    local smoke_object="obj/third_party/blink/common/common/navigation_params.o"
     if [ ! -f "$_out_dir/compile_commands.json" ]; then
         ___helium_log "skipping syntax smoke; compile_commands.json is not ready"
         return
@@ -445,7 +481,7 @@ ___helium_syntax_smoke() {
         ___helium_log "skipping syntax smoke; missing $smoke_file"
         return
     fi
-    if [ ! -f "$_out_dir/$generated_header" ]; then
+    if [ ! -f "$_out_dir/$smoke_object" ]; then
         ___helium_log "skipping syntax smoke; generated dependencies are not ready"
         return
     fi
@@ -459,7 +495,9 @@ ___helium_setup() {
 
 ___helium_build_products() {
     cd "$_src_dir"
-    SISO_PATH="$_siso_path" python3 "$_depot_tools_dir/autoninja.py" \
+    local build_python
+    build_python="$(___helium_build_python)"
+    SISO_PATH="$_siso_path" "$build_python" "$_depot_tools_dir/autoninja.py" \
         -k 0 -C "$_out_dir" chrome chromedriver
     ___helium_sync_ublock_resources
 }

@@ -1,0 +1,152 @@
+--- a/chrome/browser/nitrous_proxy/nitrous_proxy_service.cc
++++ b/chrome/browser/nitrous_proxy/nitrous_proxy_service.cc
+@@ -538,7 +538,8 @@
+   }
+   PrefService* local_state =
+       g_browser_process ? g_browser_process->local_state() : nullptr;
+-  if (local_state && IsProxyExternallyControlled(local_state)) {
++  if (local_state &&
++      IsProxyConfigurationExternallyControlled(local_state)) {
+     return true;
+   }
+   const PrefService::Preference* override_rules_pref =
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -681,7 +681,8 @@
+     event.stopPropagation();
+     const profileId =
+         (event.currentTarget as HTMLElement).dataset['profileId'] || '';
+-    if (!profileId || !this.canDeleteProfile_(profileId)) {
++    if (!profileId ||
++        !this.canDeleteProfile_(profileId, this.activePersonaId_)) {
+       return;
+     }
+     if (!window.confirm(this.i18n('personaDeleteConfirm'))) {
+--- a/chrome/browser/ui/startup/startup_browser_creator.cc
++++ b/chrome/browser/ui/startup/startup_browser_creator.cc
+@@ -263,7 +263,7 @@
+         browser && browser->tab_strip_model()
+             ? browser->tab_strip_model()->GetActiveWebContents()
+             : nullptr;
+-    if (contents && contents->GetLastCommittedURL().host_piece() ==
++    if (contents && contents->GetLastCommittedURL().host() ==
+                         chrome::kChromeUIPersonaPickerHost) {
+       picker = browser;
+       return false;
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -1118,7 +1118,7 @@
+   scoped_refptr<ResourceSchedulerClient> resource_scheduler_client =
+       base::MakeRefCounted<ResourceSchedulerClient>(
+           ResourceScheduler::ClientId::Create(),
+-          /*is_browser_initiated=*/true, resource_scheduler_.get(),
++          IsBrowserInitiated(true), resource_scheduler_.get(),
+           url_request_context_->network_quality_estimator());
+   // The factory may be bound while preparing a release, but every request it
+   // receives still checks NetworkContext::network_persona_requests_blocked().
+@@ -2477,7 +2477,7 @@
+   if (network_persona_requests_blocked_) {
+     mojo::Remote<mojom::WebTransportHandshakeClient>(
+         std::move(pending_handshake_client))
+-        ->OnHandshakeFailed(nullptr);
++        ->OnHandshakeFailed(std::nullopt);
+     return;
+   }
+   web_transports_.insert(std::make_unique<WebTransport>(
+--- a/services/network/tcp_bound_socket.h
++++ b/services/network/tcp_bound_socket.h
+@@ -44,6 +44,8 @@
+ 
+   ~TCPBoundSocket() override;
+ 
++  void Abort(int error);
++
+   // Attempts to bind a socket to the specified address. Returns net::OK on
+   // success, setting |local_addr_out| to the bound address. Returns a network
+   // error code on failure. Must be called before Listen() or Connect().
+--- a/third_party/blink/public/mojom/BUILD.gn
++++ b/third_party/blink/public/mojom/BUILD.gn
+@@ -1541,6 +1541,7 @@
+         },
+       ]
+       traits_headers = [ "//third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h" ]
++      traits_public_deps = [ "//third_party/blink/public/common:headers" ]
+     },
+     {
+       types = [
+@@ -1590,6 +1591,20 @@
+     {
+       types = [
+         {
++          mojom = "blink.mojom.HeliumPersonaUaChBrand"
++          cpp = "::blink::HeliumPersonaUaChBrand"
++        },
++        {
++          mojom = "blink.mojom.HeliumPersonaSnapshot"
++          cpp = "::blink::HeliumPersonaSnapshot"
++        },
++      ]
++      traits_headers = [ "//third_party/blink/public/common/helium_persona/persona_snapshot_mojom_traits.h" ]
++      traits_public_deps = [ "//third_party/blink/public/common:headers" ]
++    },
++    {
++      types = [
++        {
+           mojom = "blink.mojom.CloneableMessage"
+           cpp = "::blink::BlinkCloneableMessage"
+           move_only = true
+--- a/third_party/blink/renderer/core/frame/local_frame_mojo_handler.cc
++++ b/third_party/blink/renderer/core/frame/local_frame_mojo_handler.cc
+@@ -22,6 +22,7 @@
+ #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
+ #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink.h"
+ #include "third_party/blink/public/mojom/frame/media_player_action.mojom-blink.h"
++#include "third_party/blink/public/mojom/helium_persona/persona_surface_probe.mojom-blink.h"
+ #include "third_party/blink/public/mojom/opengraph/metadata.mojom-blink.h"
+ #include "third_party/blink/public/mojom/timing/resource_timing.mojom-blink-forward.h"
+ #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
+@@ -394,19 +395,19 @@
+                           ->Client()
+                           ->GetHeliumPersonaSnapshot();
+   }
+-  if (Document* document = GetDocument()) {
++  if (LocalDOMWindow* window = DomWindow()) {
+     probe->canvas_noise_token_present =
+-        document->CanvasNoiseToken().has_value();
++        window->CanvasNoiseToken().has_value();
+     probe->audio_noise_token_present =
+-        document->AudioNoiseToken().has_value();
++        window->AudioNoiseToken().has_value();
+     probe->hardware_noise_token_present =
+-        document->HardwareNoiseToken().has_value();
++        window->HardwareNoiseToken().has_value();
+     probe->font_metric_noise_token_present =
+-        document->FontMetricNoiseToken().has_value();
++        window->FontMetricNoiseToken().has_value();
+     probe->client_rect_noise_token_present =
+-        document->ClientRectNoiseToken().has_value();
++        window->ClientRectNoiseToken().has_value();
+     const auto& runtime_evidence =
+-        document->GetHeliumPersonaRuntimeSurfaceEvidence();
++        window->GetHeliumPersonaRuntimeSurfaceEvidence();
+     probe->webgpu_adapter_observed = runtime_evidence.webgpu_adapter_observed;
+     probe->webgpu_vendor = runtime_evidence.webgpu_vendor;
+     probe->webgpu_architecture = runtime_evidence.webgpu_architecture;
+--- a/third_party/blink/renderer/core/html/canvas/canvas_image_source.h
++++ b/third_party/blink/renderer/core/html/canvas/canvas_image_source.h
+@@ -30,14 +30,13 @@
+ #include "base/memory/scoped_refptr.h"
+ #include "third_party/blink/renderer/core/core_export.h"
+ #include "third_party/blink/renderer/platform/graphics/flush_reason.h"
++#include "third_party/blink/renderer/platform/graphics/image.h"
+ #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
+ #include "third_party/blink/renderer/platform/weborigin/kurl.h"
+ #include "ui/gfx/geometry/size_f.h"
+ 
+ namespace blink {
+ 
+-class Image;
+-
+ enum SourceImageStatus {
+   kNormalSourceImageStatus,
+   kUndecodableSourceImageStatus,     // Image element with a 'broken' image

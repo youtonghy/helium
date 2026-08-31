@@ -1,0 +1,27 @@
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -1448,6 +1448,14 @@
+     disabled_extensions_.insert(entry);
+   }
+ 
++  // Persona sessions must not expose backend-specific debug extensions. Keep
++  // the filtering at the shared extension gate so getExtension() and
++  // getSupportedExtensions() observe the same policy.
++  if (GetPersonaSnapshot(Host()->GetTopExecutionContext())) {
++    disabled_extensions_.insert("WEBGL_debug_renderer_info");
++    disabled_extensions_.insert("WEBGL_debug_shaders");
++  }
++
+ #define ADD_VALUES_TO_SET(set, values)             \
+   for (size_t i = 0; i < std::size(values); ++i) { \
+     set.insert(values[i]);                         \
+@@ -4525,6 +4533,9 @@
+     }
+   }
+ 
++  std::sort(result.begin(), result.end(), CodeUnitCompareLessThan);
++  result.erase(std::unique(result.begin(), result.end()), result.end());
++
+   return result;
+ }
+ 
