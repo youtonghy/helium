@@ -1539,5 +1539,25 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
     "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
     "message": "Les profils protégés désactivent la synthèse vocale, car aucun moteur vocal portable n’est disponible."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches to a compatible browser and network identity for the same operating system and CPU architecture. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "Cette action passe à une identité de navigateur et de réseau compatible avec le même système d’exploitation et la même architecture de processeur. Les onglets de ce profil seront rechargés une fois la nouvelle identité acceptée par la pile réseau."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "No second compatible identity is available for this operating system, CPU architecture, and device configuration. Fingerprint refresh remains available.",
+    "message": "Aucune autre identité compatible n’est disponible pour ce système d’exploitation, cette architecture de processeur et cette configuration matérielle. L’actualisation de l’empreinte reste disponible."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "A profile update is available. Review network identity defaults and any older protection settings. Custom values change only when you save the reviewed update; older protection policies still require an upgrade before activation.",
+    "message": "Une mise à jour de ce profil est disponible. Vérifiez les valeurs par défaut de l’identité réseau et les anciens paramètres de protection. Les valeurs personnalisées ne changent que lorsque vous enregistrez la mise à jour examinée. Les anciennes politiques de protection doivent toujours être mises à jour avant l’activation."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review profile update",
+    "message": "Examiner la mise à jour du profil"
   }
 ]

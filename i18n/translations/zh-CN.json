@@ -1823,5 +1823,30 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
     "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
     "message": "由于没有可移植语音引擎，受保护的配置禁用语音合成。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches to a compatible browser and network identity for the same operating system and CPU architecture. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "这会切换到与当前操作系统和 CPU 架构兼容的浏览器及网络身份。网络栈接受新身份后，此配置的标签页将重新加载。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "No second compatible identity is available for this operating system, CPU architecture, and device configuration. Fingerprint refresh remains available.",
+    "message": "当前操作系统、CPU 架构和设备配置没有第二个兼容身份。指纹刷新仍可使用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "A profile update is available. Review network identity defaults and any older protection settings. Custom values change only when you save the reviewed update; older protection policies still require an upgrade before activation.",
+    "message": "此配置有可用更新。请检查网络身份默认值和旧版保护设置。只有保存审核后的更新才会修改自定义值；旧版保护策略仍需升级后才能激活。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review profile update",
+    "message": "检查配置更新"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_MODE_DESCRIPTION",
+    "source": "Use a fixed seed for repeatable identity and rendering noise, or let Nitrous generate a random seed. Network handshake random fields are generated separately for every connection.",
+    "message": "使用固定种子可重复生成身份和渲染噪声，也可让 Nitrous 生成随机种子。网络握手的随机字段会为每个连接独立生成。"
   }
 ]

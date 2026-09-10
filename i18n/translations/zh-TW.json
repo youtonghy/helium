@@ -1823,5 +1823,30 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
     "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
     "message": "由於沒有可攜式語音引擎，受保護的設定檔會停用語音合成。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches to a compatible browser and network identity for the same operating system and CPU architecture. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "這會切換至與目前作業系統和 CPU 架構相容的瀏覽器及網路身分。網路堆疊接受新身分後，此設定檔的分頁將重新載入。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "No second compatible identity is available for this operating system, CPU architecture, and device configuration. Fingerprint refresh remains available.",
+    "message": "目前的作業系統、CPU 架構和裝置設定沒有第二個相容身分。指紋重新整理仍可使用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "A profile update is available. Review network identity defaults and any older protection settings. Custom values change only when you save the reviewed update; older protection policies still require an upgrade before activation.",
+    "message": "此設定檔有可用更新。請檢查網路身分預設值和舊版保護設定。只有儲存檢閱後的更新才會修改自訂值；舊版保護政策仍須升級後才能啟用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review profile update",
+    "message": "檢閱設定檔更新"
+  },
+  {
+    "name": "IDS_SETTINGS_FINGERPRINT_MODE_DESCRIPTION",
+    "source": "Use a fixed seed for repeatable identity and rendering noise, or let Nitrous generate a random seed. Network handshake random fields are generated separately for every connection.",
+    "message": "使用固定種子可重複產生身分和繪製雜訊，也可讓 Nitrous 產生隨機種子。網路交握的隨機欄位會為每個連線獨立產生。"
   }
 ]

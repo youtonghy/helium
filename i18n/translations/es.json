@@ -1538,5 +1538,25 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
     "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
     "message": "Los perfiles protegidos desactivan la síntesis de voz porque no hay un motor de voz portátil disponible."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches to a compatible browser and network identity for the same operating system and CPU architecture. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "Se cambiará a una identidad de navegador y de red compatible con el mismo sistema operativo y arquitectura de CPU. Las pestañas de este perfil se volverán a cargar cuando la pila de red acepte la nueva identidad."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "No second compatible identity is available for this operating system, CPU architecture, and device configuration. Fingerprint refresh remains available.",
+    "message": "No hay otra identidad compatible con este sistema operativo, arquitectura de CPU y configuración del dispositivo. La actualización de la huella sigue disponible."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "A profile update is available. Review network identity defaults and any older protection settings. Custom values change only when you save the reviewed update; older protection policies still require an upgrade before activation.",
+    "message": "Hay una actualización disponible para este perfil. Revisa los valores predeterminados de la identidad de red y los ajustes de protección antiguos. Los valores personalizados solo cambian al guardar la actualización revisada. Las políticas de protección antiguas siguen requiriendo una actualización antes de la activación."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review profile update",
+    "message": "Revisar actualización del perfil"
   }
 ]

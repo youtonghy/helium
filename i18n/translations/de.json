@@ -1538,5 +1538,25 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
     "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
     "message": "Geschützte Profile deaktivieren die Sprachausgabe, da keine portable Sprachsynthese-Engine verfügbar ist."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches to a compatible browser and network identity for the same operating system and CPU architecture. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "Dies wechselt zu einer kompatiblen Browser- und Netzwerkidentität für dasselbe Betriebssystem und dieselbe CPU-Architektur. Die Tabs dieses Profils werden neu geladen, sobald der Netzwerkstack die neue Identität akzeptiert hat."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "No second compatible identity is available for this operating system, CPU architecture, and device configuration. Fingerprint refresh remains available.",
+    "message": "Für dieses Betriebssystem, diese CPU-Architektur und diese Gerätekonfiguration ist keine zweite kompatible Identität verfügbar. Die Aktualisierung des Fingerabdrucks bleibt verfügbar."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "A profile update is available. Review network identity defaults and any older protection settings. Custom values change only when you save the reviewed update; older protection policies still require an upgrade before activation.",
+    "message": "Für dieses Profil ist eine Aktualisierung verfügbar. Prüfen Sie die Standardwerte der Netzwerkidentität und ältere Schutzeinstellungen. Benutzerdefinierte Werte ändern sich erst, wenn Sie die geprüfte Aktualisierung speichern. Ältere Schutzrichtlinien müssen vor der Aktivierung weiterhin aktualisiert werden."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review profile update",
+    "message": "Profilaktualisierung prüfen"
   }
 ]

@@ -3030,6 +3030,36 @@
     "message": "Protected profiles disable speech synthesis because no portable voice engine is available."
   },
   {
+    "name": "IDS_SETTINGS_FINGERPRINT_MODE_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Description of fixed and random fingerprint seed modes",
+    "message": "Use a fixed seed for repeatable identity and rendering noise, or let Nitrous generate a random seed. Network handshake random fields are generated separately for every connection."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Explanation shown before rotating the complete browser and network identity",
+    "message": "This switches to a compatible browser and network identity for the same operating system and CPU architecture. Open tabs in this profile will reload after the network stack accepts the new identity."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Status shown when there are not enough verified complete identity templates to rotate",
+    "message": "No second compatible identity is available for this operating system, CPU architecture, and device configuration. Fingerprint refresh remains available."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "A profile update is available. Review network identity defaults and any older protection settings. Custom values change only when you save the reviewed update; older protection policies still require an upgrade before activation."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Review profile update"
+  },
+  {
     "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
     "source": "chrome/app/generated_resources.grd",
     "context": "The name of the macOS system Translate command in the content area context menu",

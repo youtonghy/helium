@@ -1,0 +1,2037 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -1884,7 +1884,7 @@
+       Seed mode
+     </message>
+     <message name="IDS_SETTINGS_FINGERPRINT_MODE_DESCRIPTION" desc="Description of fixed and random fingerprint seed modes">
+-      Use a fixed seed for repeatable fingerprints, or let Nitrous generate a random seed.
++      Use a fixed seed for repeatable identity and rendering noise, or let Nitrous generate a random seed. Network handshake random fields are generated separately for every connection.
+     </message>
+     <message name="IDS_SETTINGS_FINGERPRINT_FIXED_SEED_LABEL" desc="Label for the fixed fingerprint seed input">
+       Fixed seed
+@@ -1989,13 +1989,13 @@
+       Rotate complete identity?
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY" desc="Explanation shown before rotating the complete browser and network identity">
+-      This switches the browser version, user agent, client hints, platform, TLS, HTTP/2, and HTTP/3 identity together. Open tabs in this profile will reload after the network stack accepts the new identity.
++      This switches to a compatible browser and network identity for the same operating system and CPU architecture. Open tabs in this profile will reload after the network stack accepts the new identity.
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_CONFIRM" desc="Confirmation button for complete persona identity rotation">
+       Rotate and reload
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE" desc="Status shown when there are not enough verified complete identity templates to rotate">
+-      Complete identity rotation requires at least two verified browser identity templates. Fingerprint refresh remains available and keeps the current browser version and platform.
++      No second compatible identity is available for this operating system, CPU architecture, and device configuration. Fingerprint refresh remains available.
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_FAILED" desc="Error shown when complete persona identity rotation fails">
+       Complete identity rotation failed. Tabs were not reloaded.
+@@ -2025,10 +2025,10 @@
+       Selected profile: <ph name="NAME">$1<ex>Work laptop</ex></ph>
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED" desc="Persona protection policy and explicit route selection">
+-      Review and upgrade this profile before activation. Its older protection settings and any implicit direct connection need confirmation.
++      A profile update is available. Review network identity defaults and any older protection settings. Custom values change only when you save the reviewed update; older protection policies still require an upgrade before activation.
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE" desc="Persona protection policy and explicit route selection">
+-      Review protection upgrade
++      Review profile update
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_PROTECTION_REVIEW" desc="Persona protection policy and explicit route selection">
+       Review the updated values, then save. The original configuration will be kept in the exported profile. Bundled fonts can change page layout and fingerprint values.
+--- a/chrome/browser/helium_persona/persona_fingerprint_consistency_browsertest.cc
++++ b/chrome/browser/helium_persona/persona_fingerprint_consistency_browsertest.cc
+@@ -7,7 +7,9 @@
+ 
+ #include "base/check.h"
+ #include "base/functional/bind.h"
++#include "base/json/json_writer.h"
+ #include "base/notreached.h"
++#include "base/strings/string_util.h"
+ #include "base/test/run_until.h"
+ #include "base/test/test_future.h"
+ #include "base/values.h"
+@@ -34,6 +36,43 @@ namespace {
+ 
+ std::unique_ptr<net::test_server::HttpResponse> HandleFingerprintPage(
+     const net::test_server::HttpRequest& request) {
++  if (request.relative_url.starts_with("/persona-metadata-")) {
++    auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++    if (request.relative_url == "/persona-metadata-headers") {
++      base::DictValue headers;
++      for (const auto& [name, value] : request.headers) {
++        headers.Set(base::ToLowerASCII(name), value);
++      }
++      response->set_content_type("application/json");
++      response->set_content(base::WriteJson(headers).value());
++    } else {
++      response->set_content_type("application/javascript");
++      std::string script = R"JS(
++        const metadata = () => navigator.userAgentData.getHighEntropyValues(
++            ['platformVersion', 'architecture', 'bitness', 'fullVersionList']);
++      )JS";
++      if (request.relative_url == "/persona-metadata-shared-worker.js") {
++        script += R"JS(
++          self.onconnect = event => {
++            const port = event.ports[0];
++            port.onmessage = async () => port.postMessage(await metadata());
++            port.start();
++          };
++        )JS";
++      } else if (request.relative_url == "/persona-metadata-service-worker.js") {
++        script += R"JS(
++          self.addEventListener('install', event => event.waitUntil(self.skipWaiting()));
++          self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
++          self.onmessage = event => event.waitUntil(
++              metadata().then(value => event.ports[0].postMessage(value)));
++        )JS";
++      } else {
++        script += "self.onmessage = async () => self.postMessage(await metadata());";
++      }
++      response->set_content(script);
++    }
++    return response;
++  }
+   if (request.relative_url != "/fingerprint-consistency.html" &&
+       request.relative_url != "/fingerprint-worker.js") {
+     return nullptr;
+@@ -52,6 +91,8 @@ std::unique_ptr<net::test_server::HttpRe
+     )JS");
+   } else {
+     response->set_content_type("text/html");
++    response->AddCustomHeader(
++        "Accept-CH", "Sec-CH-UA-Platform-Version, Sec-CH-UA-Full-Version-List");
+     response->set_content(R"HTML(
+       <!doctype html><title>Fingerprint consistency</title>
+       <script>
+@@ -195,6 +236,80 @@ class PersonaFingerprintConsistencyBrows
+ };
+ 
+ IN_PROC_BROWSER_TEST_F(PersonaFingerprintConsistencyBrowserTest,
++                       ClientHintsAgreeInRequestsPagesAndAllWorkerTypes) {
++  const auto native = content::EvalJs(contents(), R"JS(
++    navigator.userAgentData.getHighEntropyValues(['platformVersion'])
++  )JS").ExtractDict().Clone();
++  for (const char* preset_id : {"de-linux", "us-west-macos"}) {
++    auto created = service()->ClonePresetIntoProfile(preset_id);
++    ASSERT_TRUE(created.FindBool("ok").value_or(false));
++    const std::string id = *created.FindString("personaId");
++    auto profile = service()->ResolvePersonaById(id).FindDict("requested")->Clone();
++    profile.SetByDottedPath("network.routeMode", "direct");
++    ASSERT_TRUE(service()->SavePersona(profile).FindBool("ok").value_or(false));
++    Activate(id);
++    const auto all = content::EvalJs(contents(), R"JS(
++      (async () => {
++        const read = () => navigator.userAgentData.getHighEntropyValues(
++            ['platformVersion', 'architecture', 'bitness', 'fullVersionList']);
++        const dedicated = await new Promise((resolve, reject) => {
++          const worker = new Worker('/persona-metadata-worker.js');
++          worker.onerror = reject;
++          worker.onmessage = event => { worker.terminate(); resolve(event.data); };
++          worker.postMessage('read');
++        });
++        const shared = await new Promise((resolve, reject) => {
++          const worker = new SharedWorker('/persona-metadata-shared-worker.js');
++          worker.onerror = reject;
++          worker.port.onmessage = event => {
++            worker.port.close(); resolve(event.data);
++          };
++          worker.port.start();
++          worker.port.postMessage('read');
++        });
++        await navigator.serviceWorker.register('/persona-metadata-service-worker.js');
++        const registration = await navigator.serviceWorker.ready;
++        const service = await new Promise(resolve => {
++          const channel = new MessageChannel();
++          channel.port1.onmessage = event => {
++            channel.port1.close(); resolve(event.data);
++          };
++          registration.active.postMessage('read', [channel.port2]);
++        });
++        await registration.unregister();
++        const headers = await (await fetch('/persona-metadata-headers')).json();
++        return {page: await read(), dedicated, shared, service, headers};
++      })()
++    )JS").ExtractDict().Clone();
++    const auto* page = all.FindDict("page");
++    ASSERT_TRUE(page);
++    EXPECT_EQ(*profile.FindDict("uaCh")->FindString("platformVersion"),
++              *page->FindString("platformVersion"));
++    EXPECT_EQ(*profile.FindDict("uaCh")->FindString("platform"),
++              *page->FindString("platform"));
++    EXPECT_EQ(*profile.FindDict("uaCh")->FindList("brands"),
++              *page->FindList("brands"));
++    for (const char* worker : {"dedicated", "shared", "service"}) {
++      ASSERT_TRUE(all.FindDict(worker)) << worker;
++      EXPECT_EQ(*page, *all.FindDict(worker)) << worker;
++    }
++    const auto* headers = all.FindDict("headers");
++    ASSERT_TRUE(headers);
++    ASSERT_TRUE(headers->FindString("sec-ch-ua-platform-version"));
++    EXPECT_EQ("\"" + *page->FindString("platformVersion") + "\"",
++              *headers->FindString("sec-ch-ua-platform-version"));
++    ASSERT_TRUE(headers->FindString("sec-ch-ua"));
++    EXPECT_EQ("\"Google Chrome\";v=\"149\", \"Chromium\";v=\"149\", "
++              "\"Not)A;Brand\";v=\"24\"",
++              *headers->FindString("sec-ch-ua"));
++  }
++  Activate("default");
++  EXPECT_EQ(native, content::EvalJs(contents(), R"JS(
++    navigator.userAgentData.getHighEntropyValues(['platformVersion'])
++  )JS").ExtractDict());
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaFingerprintConsistencyBrowserTest,
+                        ScreenMediaAndDprAgreeInMainAndCrossOriginFrames) {
+   auto profile = CreateProfile();
+   const auto* id = profile.FindString("id");
+--- a/chrome/browser/helium_persona/persona_identity_template.cc
++++ b/chrome/browser/helium_persona/persona_identity_template.cc
+@@ -14,8 +14,8 @@ namespace helium_persona {
+ namespace {
+ 
+ // Chrome 149 desktop network variants (shared across macOS/Windows/Linux
+-// complete identities). Host emission is steered by signature profile +
+-// extension-order seed; structural TLS fields match Chrome-for-Testing 149
++// complete identities). Signature profiles select the wire variant while
++// extension order remains random. TLS fields match Chrome-for-Testing 149
+ // desktop captures on macOS arm64 and Linux x86_64.
+ constexpr std::array<uint32_t, 2> kChromium149DesktopNetworkVariants = {
+     kChromium149DesktopDefaultNetworkTemplateId,
+@@ -67,7 +67,7 @@ constexpr std::array<PersonaIdentityTemp
+             "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+         .navigator_platform = "Linux x86_64",
+         .ua_ch_platform = "Linux",
+-        .ua_ch_platform_version = "6.8.0",
++        .ua_ch_platform_version = "",
+         .ua_ch_full_version = "149.0.7827.114",
+         .architecture = "x86",
+         .bitness = "64",
+@@ -106,6 +106,53 @@ const PersonaIdentityTemplate* FindPerso
+   return it == templates.end() ? nullptr : &*it;
+ }
+ 
++const PersonaIdentityTemplate* ResolvePersonaIdentityTemplate(
++    const base::DictValue& persona) {
++  const base::DictValue* ua_ch = persona.FindDict("uaCh");
++  if (!ua_ch) {
++    return nullptr;
++  }
++  const auto find_string = [](const base::DictValue& dict,
++                              std::string_view key) -> std::string_view {
++    const std::string* value = dict.FindString(key);
++    return value ? *value : std::string_view();
++  };
++  const std::string_view user_agent = find_string(persona, "userAgent");
++  const std::string_view os = find_string(persona, "platform");
++  const std::string_view ua_ch_platform = find_string(*ua_ch, "platform");
++  const std::string_view ua_ch_platform_version =
++      find_string(*ua_ch, "platformVersion");
++  const std::string_view ua_ch_full_version =
++      find_string(*ua_ch, "fullVersion");
++  const std::string_view architecture = find_string(*ua_ch, "architecture");
++  const std::string_view bitness = find_string(*ua_ch, "bitness");
++  const bool mobile = ua_ch->FindBool("mobile").value_or(false);
++  const bool wow64 = ua_ch->FindBool("wow64").value_or(false);
++
++  if (const PersonaIdentityTemplate* exact = MatchPersonaIdentityTemplate(
++          user_agent, os, ua_ch_platform, ua_ch_platform_version,
++          ua_ch_full_version, architecture, bitness, mobile, wow64);
++      exact && PersonaIdentityHasNetworkVariants(*exact)) {
++    return exact;
++  }
++
++  const PersonaIdentityTemplate* compatible =
++      MatchCompatiblePersonaIdentityTemplate(os, architecture, bitness,
++                                              ua_ch_full_version, mobile);
++  if (!compatible || compatible->ua_ch_platform != ua_ch_platform ||
++      compatible->ua_ch_wow64 != wow64) {
++    return nullptr;
++  }
++  if (const auto pack_id = persona.FindInt("devicePackId");
++      pack_id && *pack_id > 0) {
++    const auto* by_pack = FindPersonaIdentityTemplate(*pack_id);
++    if (by_pack && ArePersonaIdentityTemplatesCompatible(*compatible, *by_pack)) {
++      return by_pack;
++    }
++  }
++  return compatible;
++}
++
+ std::vector<uint32_t> GetRotatablePersonaIdentityTemplateIds() {
+   std::vector<uint32_t> ids;
+   const base::span<const PersonaIdentityTemplate> templates =
+@@ -116,6 +163,33 @@ std::vector<uint32_t> GetRotatablePerson
+   }
+   return ids;
+ }
++
++bool ArePersonaIdentityTemplatesCompatible(
++    const PersonaIdentityTemplate& current,
++    const PersonaIdentityTemplate& candidate) {
++  // The catalog does not model alternate GPU/font/device packs. A rotation
++  // must retain the device's OS and CPU cohort; only browser identity may vary.
++  return current.os == candidate.os &&
++         current.architecture == candidate.architecture &&
++         current.bitness == candidate.bitness &&
++         current.navigator_platform == candidate.navigator_platform &&
++         current.ua_ch_platform == candidate.ua_ch_platform &&
++         current.ua_ch_mobile == candidate.ua_ch_mobile &&
++         current.ua_ch_wow64 == candidate.ua_ch_wow64 &&
++         current.chrome_major == candidate.chrome_major &&
++         PersonaIdentityHasNetworkVariants(candidate);
++}
++
++std::vector<uint32_t> GetCompatiblePersonaIdentityTemplateIds(
++    const PersonaIdentityTemplate& current) {
++  std::vector<uint32_t> ids;
++  for (const auto& candidate : GetIdentityTemplates()) {
++    if (ArePersonaIdentityTemplatesCompatible(current, candidate)) {
++      ids.push_back(candidate.id);
++    }
++  }
++  return ids;
++}
+ 
+ const PersonaIdentityTemplate* MatchPersonaIdentityTemplate(
+     std::string_view user_agent,
+--- a/chrome/browser/helium_persona/persona_identity_template.h
++++ b/chrome/browser/helium_persona/persona_identity_template.h
+@@ -10,6 +10,7 @@
+ #include <vector>
+ 
+ #include "base/containers/span.h"
++#include "base/values.h"
+ 
+ namespace helium_persona {
+ 
+@@ -19,7 +20,7 @@ inline constexpr uint32_t kChromium149Wi
+ inline constexpr uint32_t kChromium149LinuxX64IdentityTemplateId = 149200;
+ 
+ // Shared network wire variants for Chrome 149 desktop (TLS signature profile
+-// default / ML-DSA). Extension order is seed-steered; structural TLS fields are
++// default / ML-DSA). Extension order is random per connection; TLS fields are
+ // shared across desktop OS for this Chrome major (see
+ // net/data/network_persona/reference/CAPTURE_REPORT.md).
+ inline constexpr uint32_t kChromium149DesktopDefaultNetworkTemplateId = 149001;
+@@ -56,7 +57,16 @@ class ScopedPersonaIdentityTemplatesForT
+ };
+ 
+ const PersonaIdentityTemplate* FindPersonaIdentityTemplate(uint32_t id);
++// Resolve the declared device cohort before considering persisted pack IDs.
++// Shared by Persona activation and network-context configuration.
++const PersonaIdentityTemplate* ResolvePersonaIdentityTemplate(
++    const base::DictValue& persona);
+ std::vector<uint32_t> GetRotatablePersonaIdentityTemplateIds();
++bool ArePersonaIdentityTemplatesCompatible(
++    const PersonaIdentityTemplate& current,
++    const PersonaIdentityTemplate& candidate);
++std::vector<uint32_t> GetCompatiblePersonaIdentityTemplateIds(
++    const PersonaIdentityTemplate& current);
+ const PersonaIdentityTemplate* MatchPersonaIdentityTemplate(
+     std::string_view user_agent,
+     std::string_view os,
+--- a/chrome/browser/helium_persona/persona_identity_template_unittest.cc
++++ b/chrome/browser/helium_persona/persona_identity_template_unittest.cc
+@@ -40,6 +40,47 @@ TEST(PersonaIdentityTemplateTest,
+   EXPECT_EQ(identity_ids, GetRotatablePersonaIdentityTemplateIds());
+ }
+ 
++TEST(PersonaIdentityTemplateTest, RotationCandidatesRetainDeviceCohort) {
++  for (uint32_t id : GetRotatablePersonaIdentityTemplateIds()) {
++    const auto* identity = FindPersonaIdentityTemplate(id);
++    ASSERT_TRUE(identity);
++    EXPECT_EQ(std::vector<uint32_t>({id}),
++              GetCompatiblePersonaIdentityTemplateIds(*identity));
++  }
++  const auto* linux_identity =
++      FindPersonaIdentityTemplate(kChromium149LinuxX64IdentityTemplateId);
++  ASSERT_TRUE(linux_identity);
++  EXPECT_TRUE(linux_identity->ua_ch_platform_version.empty());
++  auto incompatible = *linux_identity;
++  incompatible.architecture = "arm";
++  EXPECT_FALSE(ArePersonaIdentityTemplatesCompatible(*linux_identity,
++                                                     incompatible));
++  incompatible = *linux_identity;
++  incompatible.bitness = "32";
++  EXPECT_FALSE(ArePersonaIdentityTemplatesCompatible(*linux_identity,
++                                                     incompatible));
++}
++
++TEST(PersonaIdentityTemplateTest, StalePackCannotOverrideDeclaredDevice) {
++  auto persona = base::DictValue()
++      .Set("platform", "Linux")
++      .Set("devicePackId", static_cast<int>(kChromium149MacArmIdentityTemplateId))
++      .Set("uaCh", base::DictValue()
++          .Set("platform", "Linux")
++          .Set("platformVersion", "6.8.0")
++          .Set("architecture", "x86")
++          .Set("bitness", "64")
++          .Set("fullVersion", "149.0.7827.114"));
++  const auto* identity = ResolvePersonaIdentityTemplate(persona);
++  ASSERT_TRUE(identity);
++  EXPECT_EQ(kChromium149LinuxX64IdentityTemplateId, identity->id);
++  persona.SetByDottedPath("uaCh.architecture", "arm");
++  EXPECT_FALSE(ResolvePersonaIdentityTemplate(persona));
++  persona.SetByDottedPath("uaCh.architecture", "x86");
++  persona.SetByDottedPath("uaCh.platform", "macOS");
++  EXPECT_FALSE(ResolvePersonaIdentityTemplate(persona));
++}
++
+ TEST(PersonaIdentityTemplateTest, SelectsNetworkVariantByGeneration) {
+   const PersonaIdentityTemplate* identity =
+       FindPersonaIdentityTemplate(kChromium149MacArmIdentityTemplateId);
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -38,6 +38,7 @@
+ #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+ #include "chrome/browser/ui/persona_tab_reloader.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/embedder_support/user_agent_utils.h"
+ #include "components/helium_persona/persona_snapshot.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+ #include "components/prefs/pref_service.h"
+@@ -480,11 +481,12 @@ base::DictValue MakeRegionDefaults() {
+ 
+ base::DictValue MakeUaChDefaults() {
+   base::ListValue brands;
+-  brands.Append(base::DictValue()
+-                    .Set("brand", "Chromium")
+-                    .Set("version", kPersonaChromeMajorVersion));
+-  brands.Append(
+-      base::DictValue().Set("brand", "Not/A)Brand").Set("version", "24"));
++  for (const auto& brand : embedder_support::GenerateBrandVersionList(
++           149, "Google Chrome", kPersonaChromeMajorVersion,
++           blink::UserAgentBrandVersionType::kMajorVersion)) {
++    brands.Append(base::DictValue().Set("brand", brand.brand)
++                                   .Set("version", brand.version));
++  }
+ 
+   base::ListValue form_factors;
+   form_factors.Append("Desktop");
+@@ -553,56 +555,13 @@ base::DictValue MakeAdvancedDefaults() {
+       .Set("fingerprintRotation", MakeFingerprintRotationDefaults());
+ }
+ 
+-const PersonaIdentityTemplate* ResolveCompleteIdentity(
+-    const base::DictValue& persona) {
+-  if (std::optional<int> pack_id = persona.FindInt("devicePackId");
+-      pack_id && *pack_id > 0) {
+-    if (const PersonaIdentityTemplate* by_pack =
+-            FindPersonaIdentityTemplate(static_cast<uint32_t>(*pack_id));
+-        by_pack && PersonaIdentityHasNetworkVariants(*by_pack)) {
+-      return by_pack;
+-    }
+-  }
+-
+-  const base::DictValue* ua_ch = persona.FindDict("uaCh");
+-  if (!ua_ch) {
+-    return nullptr;
+-  }
+-  const auto find_string = [](const base::DictValue& dict,
+-                              std::string_view key) -> std::string_view {
+-    const std::string* value = dict.FindString(key);
+-    return value ? *value : std::string_view();
+-  };
+-  const std::string_view user_agent = find_string(persona, "userAgent");
+-  const std::string_view os = find_string(persona, "platform");
+-  const std::string_view ua_ch_platform = find_string(*ua_ch, "platform");
+-  const std::string_view ua_ch_platform_version =
+-      find_string(*ua_ch, "platformVersion");
+-  const std::string_view ua_ch_full_version =
+-      find_string(*ua_ch, "fullVersion");
+-  const std::string_view architecture = find_string(*ua_ch, "architecture");
+-  const std::string_view bitness = find_string(*ua_ch, "bitness");
+-  const bool mobile = ua_ch->FindBool("mobile").value_or(false);
+-  const bool wow64 = ua_ch->FindBool("wow64").value_or(false);
+-
+-  if (const PersonaIdentityTemplate* exact = MatchPersonaIdentityTemplate(
+-          user_agent, os, ua_ch_platform, ua_ch_platform_version,
+-          ua_ch_full_version, architecture, bitness, mobile, wow64);
+-      exact && PersonaIdentityHasNetworkVariants(*exact)) {
+-    return exact;
+-  }
+-
+-  return MatchCompatiblePersonaIdentityTemplate(os, architecture, bitness,
+-                                                ua_ch_full_version, mobile);
+-}
+-
+ bool PersonaHasCompleteNetworkIdentity(const base::DictValue& persona) {
+-  const PersonaIdentityTemplate* identity = ResolveCompleteIdentity(persona);
++  const PersonaIdentityTemplate* identity = ResolvePersonaIdentityTemplate(persona);
+   return identity && PersonaIdentityHasNetworkVariants(*identity);
+ }
+ 
+ void AttachDevicePackMetadata(base::DictValue& persona) {
+-  const PersonaIdentityTemplate* identity = ResolveCompleteIdentity(persona);
++  const PersonaIdentityTemplate* identity = ResolvePersonaIdentityTemplate(persona);
+   if (!identity) {
+     persona.Set("networkReady", false);
+     if (!persona.FindInt("devicePackId").has_value()) {
+@@ -1048,7 +1007,7 @@ base::DictValue MakePreset(std::string_v
+       base::DictValue()
+           .Set("id", id)
+           .Set("sourcePresetId", id)
+-          .Set("presetRevision", 1)
++          .Set("presetRevision", 2)
+           .Set("protectionVersion", kPersonaProtectionVersion)
+           .Set("name", name)
+           .Set("displayName", name)
+@@ -1115,7 +1074,7 @@ base::ListValue MakePresetList() {
+                  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+                  "Europe/Berlin", "de-DE", "de-DE,de;q=0.9,en;q=0.7", "Linux",
+-                 "6.8.0", "x86", "64", "149.0.7827.114", "Intel Inc.",
++                 "", "x86", "64", "149.0.7827.114", "Intel Inc.",
+                  "ANGLE (Intel, Intel Iris Xe Graphics Vulkan 1.3)",
+                  "Intel Iris Xe Graphics", 8, 16, 0, 1536, 960, 1536, 920, 1.25,
+                  "noto-de", 0.02, "wifi", 15.0));
+@@ -2620,6 +2579,63 @@ base::ListValue NormalizePersonaList(con
+   return personas;
+ }
+ 
++bool NeedsNetworkPresetUpgrade(const base::DictValue& persona) {
++  return persona.FindInt("presetRevision").value_or(0) < 2;
++}
++
++base::DictValue MakeNetworkPresetUpgrade(const base::DictValue& original,
++                                          bool reviewed) {
++  base::DictValue candidate = original.Clone();
++  if (!NeedsNetworkPresetUpgrade(original) ||
++      (original.FindString("id") &&
++       *original.FindString("id") == kDefaultPersonaId)) {
++    return candidate;
++  }
++  bool untouched = false;
++  const auto* source_id = original.FindString("sourcePresetId");
++  if (source_id && !source_id->empty()) {
++    for (const auto& value : MakePresetList()) {
++      auto legacy = value.GetDict().Clone();
++      if (*legacy.FindString("id") != *source_id) {
++        continue;
++      }
++      legacy.SetByDottedPath(
++          "uaCh.brands", base::ListValue()
++              .Append(base::DictValue().Set("brand", "Chromium")
++                                      .Set("version", "149"))
++              .Append(base::DictValue().Set("brand", "Not/A)Brand")
++                                      .Set("version", "24")));
++      if (*legacy.FindString("platform") == "Linux") {
++        legacy.SetByDottedPath("uaCh.platformVersion", "6.8.0");
++      }
++      untouched = true;
++      for (auto path : {"platform", "userAgent", "uaCh"}) {
++        const auto* saved = FindPersonaPath(original, path);
++        const auto* expected = FindPersonaPath(legacy, path);
++        if (!saved || !expected || *saved != *expected) {
++          untouched = false;
++          break;
++        }
++      }
++      break;
++    }
++  }
++  if (!reviewed && !untouched) {
++    return candidate;
++  }
++  if (!candidate.FindDict("legacyNetworkSettings")) {
++    candidate.Set("legacyNetworkSettings", original.Clone());
++  }
++  candidate.SetByDottedPath("uaCh.brands",
++                            MakeUaChDefaults().FindList("brands")->Clone());
++  if (const auto* platform = original.FindString("platform");
++      platform && *platform == "Linux") {
++    candidate.SetByDottedPath("uaCh.platformVersion", "");
++  }
++  candidate.Set("presetRevision", 2);
++  return candidate;
++}
++
+ // Preserve custom identity fields. Only the protection policy changes here;
+ // saving the reviewed candidate is the transaction that records its backup.
+ base::DictValue MakeProtectionUpgrade(const base::DictValue& original) {
+@@ -2924,6 +2940,7 @@ base::DictValue PersonaService::GetPerso
+       .Set("legacyImportSchemas", base::ListValue()
+                                       .Append(kPersonaLegacyImportSchema)
+                                       .Append(kPersonaPreviousImportSchema))
++      .Set("uaChDefaults", MakeUaChDefaults())
+       .Set("supportedWebRtcModes", std::move(web_rtc_modes))
+       .Set("launchSelectionModes", std::move(launch_selection_modes))
+       .Set("fingerprintRotationScopes", std::move(rotation_scopes))
+@@ -3010,7 +3027,11 @@ base::DictValue PersonaService::ResolveP
+   response.Set("requested", persona->Clone());
+   if (persona_id != kDefaultPersonaId &&
+       persona->FindInt("protectionVersion") != kPersonaProtectionVersion) {
+-    response.Set("upgradeCandidate", MakeProtectionUpgrade(*persona));
++    response.Set("upgradeCandidate",
++                 MakeNetworkPresetUpgrade(MakeProtectionUpgrade(*persona), true));
++  } else if (persona_id != kDefaultPersonaId &&
++             NeedsNetworkPresetUpgrade(*persona)) {
++    response.Set("upgradeCandidate", MakeNetworkPresetUpgrade(*persona, true));
+   }
+   response.Set("activationErrors", GetActivationErrors(*persona));
+   response.Set(
+@@ -3352,7 +3373,18 @@ base::DictValue PersonaService::PrepareP
+     return MakeResponse(false, std::move(state), std::move(errors));
+   }
+ 
+-  base::DictValue persona = NormalizePersona(validated, *payload_id);
++  base::DictValue persona = NormalizePersona(
++      MakeNetworkPresetUpgrade(validated, false), *payload_id);
++  if (const auto* backup = existing->FindDict("legacyNetworkSettings")) {
++    persona.Set("legacyNetworkSettings", backup->Clone());
++  } else if (NeedsNetworkPresetUpgrade(*existing) &&
++             !NeedsNetworkPresetUpgrade(persona)) {
++    const auto* original = prefs_ ? FindPersonaInList(
++        prefs_->GetDict(kPersonaStatePref).FindList("personas"), *payload_id)
++                                 : nullptr;
++    persona.Set("legacyNetworkSettings",
++                original ? original->Clone() : existing->Clone());
++  }
+   if (existing->FindInt("protectionVersion") != kPersonaProtectionVersion &&
+       persona.FindInt("protectionVersion") == kPersonaProtectionVersion &&
+       !existing->FindDict("legacyProtectionSettings")) {
+@@ -3443,8 +3475,14 @@ base::DictValue PersonaService::ImportPe
+       continue;
+     }
+ 
+-    base::DictValue persona =
+-        NormalizePersona(validated, *validated.FindString("id"));
++    auto network_candidate = MakeNetworkPresetUpgrade(validated, false);
++    if (NeedsNetworkPresetUpgrade(validated) &&
++        !NeedsNetworkPresetUpgrade(network_candidate) &&
++        !validated.FindDict("legacyNetworkSettings")) {
++      network_candidate.Set("legacyNetworkSettings", value.GetDict().Clone());
++    }
++    base::DictValue persona = NormalizePersona(
++        network_candidate, *validated.FindString("id"));
+     persona.Set("enabled", true);
+     persona.Set("modifiedAt", MakeIsoTimestamp());
+ 
+@@ -3591,7 +3629,15 @@ void PersonaService::StartPersonaActivat
+     return;
+   }
+ 
+-  base::DictValue persona = current_persona->Clone();
++  base::DictValue persona = MakeNetworkPresetUpgrade(*current_persona, false);
++  if (NeedsNetworkPresetUpgrade(*current_persona) &&
++      !NeedsNetworkPresetUpgrade(persona) &&
++      !current_persona->FindDict("legacyNetworkSettings")) {
++    if (const auto* original = FindPersonaInList(
++            prefs_->GetDict(kPersonaStatePref).FindList("personas"), persona_id)) {
++      persona.Set("legacyNetworkSettings", original->Clone());
++    }
++  }
+   AttachDevicePackMetadata(persona);
+   base::DictValue route_errors = GetActivationErrors(persona);
+   if (!route_errors.empty()) {
+@@ -3622,7 +3668,7 @@ void PersonaService::StartPersonaActivat
+ 
+   std::optional<uint32_t> identity_template_id;
+   if (persona_id != kDefaultPersonaId && enabled) {
+-    const PersonaIdentityTemplate* identity = ResolveCompleteIdentity(persona);
++    const PersonaIdentityTemplate* identity = ResolvePersonaIdentityTemplate(persona);
+     if (!identity) {
+       base::DictValue response =
+           MakeResponse(false, std::move(state),
+@@ -4317,14 +4363,13 @@ base::DictValue PersonaService::SetFinge
+ 
+ void PersonaService::RotateIdentity(OperationCallback callback) {
+   base::DictValue state = ReadState();
+-  const std::vector<uint32_t> ids = GetRotatablePersonaIdentityTemplateIds();
+   if (pending_persona_activation_ || pending_identity_rotation_) {
+     std::move(callback).Run(
+         MakeResponse(false, std::move(state),
+                      base::DictValue().Set("identityRotation", "inProgress")));
+     return;
+   }
+-  if (!prefs_ || !identity_rotation_delegate_ || ids.size() < 2u) {
++  if (!prefs_ || !identity_rotation_delegate_ || !CanRotateIdentity()) {
+     std::move(callback).Run(
+         MakeResponse(false, std::move(state),
+                      base::DictValue().Set("identityRotation", "unavailable")));
+@@ -4337,7 +4382,7 @@ void PersonaService::RotateIdentity(Oper
+   const uint32_t current_id = GetActiveIdentityTemplateId();
+   const PersonaIdentityTemplate* current =
+       current_id ? FindPersonaIdentityTemplate(current_id)
+-                 : (active_persona ? ResolveCompleteIdentity(*active_persona)
++                 : (active_persona ? ResolvePersonaIdentityTemplate(*active_persona)
+                                    : nullptr);
+   if (!active_persona || !active_persona->FindBool("enabled").value_or(false) ||
+       !PersonaHasCompleteNetworkIdentity(*active_persona) || !current ||
+@@ -4357,7 +4402,8 @@ void PersonaService::RotateIdentity(Oper
+   }
+ 
+   const uint32_t next_id =
+-      SelectNextPersonaIdentityTemplateId(ids, current->id);
++      SelectNextPersonaIdentityTemplateId(
++          GetCompatiblePersonaIdentityTemplateIds(*current), current->id);
+   if (!next_id || next_id == current->id ||
+       !FindPersonaIdentityTemplate(next_id)) {
+     std::move(callback).Run(
+@@ -4709,7 +4755,20 @@ void PersonaService::FinishIdentityRotat
+ }
+ 
+ bool PersonaService::CanRotateIdentity() const {
+-  return GetRotatablePersonaIdentityTemplateIds().size() > 1u;
++  if (!prefs_ || !identity_rotation_delegate_) {
++    return false;
++  }
++  const auto& state = prefs_->GetDict(kPersonaStatePref);
++  const auto* persona =
++      FindPersonaInList(state.FindList("personas"), GetActivePersonaId(state));
++  const auto* current = persona ? ResolvePersonaIdentityTemplate(*persona) : nullptr;
++  const uint32_t active_id = GetActiveIdentityTemplateId();
++  const auto* active = FindPersonaIdentityTemplate(active_id);
++  return persona && persona->FindBool("enabled").value_or(false) && current &&
++         (!active_id || (active &&
++                        ArePersonaIdentityTemplatesCompatible(*current, *active))) &&
++         GetActivationErrors(*persona).empty() &&
++         GetCompatiblePersonaIdentityTemplateIds(*current).size() > 1u;
+ }
+ 
+ uint32_t PersonaService::GetActiveIdentityTemplateId() const {
+@@ -5177,9 +5236,16 @@ blink::HeliumPersonaSnapshot PersonaServ
+   if (identity_id) {
+     const PersonaIdentityTemplate* identity =
+         FindPersonaIdentityTemplate(identity_id);
+-    if (!identity) {
++    const auto* declared_identity = ResolvePersonaIdentityTemplate(*persona);
++    if (!identity || !declared_identity ||
++        !ArePersonaIdentityTemplatesCompatible(*declared_identity, *identity)) {
++      // Historical cross-OS rotations must be repaired by SetActivePersona's
++      // network transaction before any execution context can use the snapshot.
+       return blink::HeliumPersonaSnapshot();
+     }
++    if (identity->id == declared_identity->id) {
++      return snapshot;
++    }
+     snapshot.os = identity->os;
+     snapshot.user_agent = identity->user_agent;
+     snapshot.platform = identity->navigator_platform;
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -115,6 +115,33 @@ class PersonaServiceTest : public testin
+     return WithDirectRoute(service_->ClonePresetIntoProfile(id));
+   }
+ 
++  void ReplaceStoredPersona(const base::DictValue& persona) {
++    auto state = prefs_.GetDict(kPersonaStatePref).Clone();
++    for (auto& value : *state.FindList("personas")) {
++      if (*value.GetDict().FindString("id") == *persona.FindString("id")) {
++        value = base::Value(persona.Clone());
++        break;
++      }
++    }
++    prefs_.SetDict(kPersonaStatePref, std::move(state));
++  }
++
++  base::DictValue InstallLegacyNetworkPreset(const std::string& preset_id) {
++    auto created = CloneConfiguredPreset(preset_id);
++    auto persona = FindPersona(created.FindDict("state")->FindList("personas"),
++                               *created.FindString("personaId"))->Clone();
++    persona.Set("presetRevision", 1);
++    persona.SetByDottedPath(
++        "uaCh.brands", base::ListValue()
++            .Append(base::DictValue().Set("brand", "Chromium").Set("version", "149"))
++            .Append(base::DictValue().Set("brand", "Not/A)Brand").Set("version", "24")));
++    if (*persona.FindString("platform") == "Linux") {
++      persona.SetByDottedPath("uaCh.platformVersion", "6.8.0");
++    }
++    ReplaceStoredPersona(persona);
++    return persona;
++  }
++
+   sync_preferences::TestingPrefServiceSyncable prefs_;
+   std::unique_ptr<PersonaService> service_;
+ };
+@@ -3037,4 +3064,233 @@ TEST_F(PersonaServiceTest,
+   }
+ }
+ 
++TEST_F(PersonaServiceTest, PresetRevisionTwoMatchesChrome149ClientHints) {
++  const auto contract = service_->GetPersonaContract();
++  const auto expected_brands =
++      base::ListValue()
++          .Append(base::DictValue().Set("brand", "Google Chrome")
++                                  .Set("version", "149"))
++          .Append(base::DictValue().Set("brand", "Chromium")
++                                  .Set("version", "149"))
++          .Append(base::DictValue().Set("brand", "Not)A;Brand")
++                                  .Set("version", "24"));
++  ASSERT_EQ(expected_brands,
++            *contract.FindDict("uaChDefaults")->FindList("brands"));
++  const auto state = service_->GetPersonaState();
++  ASSERT_EQ(19u, state.FindList("presets")->size());
++  for (const auto& value : *state.FindList("presets")) {
++    const auto& preset = value.GetDict();
++    EXPECT_EQ(2, preset.FindInt("presetRevision"));
++    EXPECT_EQ(expected_brands, *preset.FindDict("uaCh")->FindList("brands"));
++    if (*preset.FindString("platform") == "Linux") {
++      EXPECT_EQ("", *preset.FindDict("uaCh")->FindString("platformVersion"));
++    }
++  }
++}
++
++TEST_F(PersonaServiceTest, LegacyNetworkMigrationCommitsWithActivationOnlyOnce) {
++  constexpr char kSeed[] =
++      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
++  ASSERT_TRUE(service_->SetFixedFingerprintSeed(kSeed)
++                  .FindBool("ok").value_or(false));
++  auto legacy = InstallLegacyNetworkPreset("de-linux");
++  const std::string id = *legacy.FindString("id");
++  const auto old_state = prefs_.GetDict(kPersonaStatePref).Clone();
++  const auto old_seed = prefs_.GetString(kPersonaFingerprintProfileSaltPref);
++  service_->GetPersonaState();
++  service_->ResolvePersonaById(id);
++  EXPECT_EQ(old_state, prefs_.GetDict(kPersonaStatePref));
++
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  auto* network = delegate.get();
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  base::test::TestFuture<base::DictValue> result;
++  service_->SetActivePersona(id, result.GetCallback());
++  ASSERT_EQ(1u, network->apply_calls.size());
++  EXPECT_EQ(kChromium149LinuxX64IdentityTemplateId,
++            network->apply_calls.front().identity_template_id.value_or(0));
++  EXPECT_EQ(old_state, prefs_.GetDict(kPersonaStatePref));
++  EXPECT_EQ(old_seed, prefs_.GetString(kPersonaFingerprintProfileSaltPref));
++  network->CompleteNextApply(true);
++  ASSERT_TRUE(result.Take().FindBool("ok").value_or(false));
++  auto resolved = service_->ResolvePersonaById(id);
++  const auto* migrated = resolved.FindDict("requested");
++  ASSERT_TRUE(migrated);
++  EXPECT_EQ(2, migrated->FindInt("presetRevision"));
++  EXPECT_EQ(legacy, *migrated->FindDict("legacyNetworkSettings"));
++  EXPECT_EQ(*legacy.FindDict("region"), *migrated->FindDict("region"));
++  EXPECT_EQ(*legacy.FindDict("network"), *migrated->FindDict("network"));
++  EXPECT_EQ(*legacy.FindString("displayName"),
++            *migrated->FindString("displayName"));
++  EXPECT_TRUE(service_->GetActiveSnapshot().ua_ch_platform_version.empty());
++  EXPECT_EQ(kSeed, prefs_.GetString(kPersonaFingerprintProfileSaltPref));
++  EXPECT_FALSE(resolved.FindDict("upgradeCandidate"));
++
++  base::test::TestFuture<base::DictValue> again;
++  service_->SetActivePersona(id, again.GetCallback());
++  network->CompleteNextApply(true);
++  ASSERT_TRUE(again.Take().FindBool("ok").value_or(false));
++  EXPECT_EQ(legacy, *service_->ResolvePersonaById(id)
++                         .FindDict("requested")
++                         ->FindDict("legacyNetworkSettings"));
++}
++
++TEST_F(PersonaServiceTest, FailedActivationDoesNotPersistNetworkMigration) {
++  const auto legacy = InstallLegacyNetworkPreset("de-linux");
++  const auto old_state = prefs_.GetDict(kPersonaStatePref).Clone();
++  const auto old_rotation =
++      prefs_.GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  auto* network = delegate.get();
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  base::test::TestFuture<base::DictValue> result;
++  service_->SetActivePersona(*legacy.FindString("id"), result.GetCallback());
++  network->CompleteNextApply(false);
++  network->CompleteNextApply(true);
++  EXPECT_FALSE(result.Take().FindBool("ok").value_or(true));
++  EXPECT_EQ(old_state, prefs_.GetDict(kPersonaStatePref));
++  EXPECT_EQ(old_rotation, prefs_.GetDict(kPersonaFingerprintRotationEpochPref));
++}
++
++TEST_F(PersonaServiceTest, NetworkMigrationPreservesCustomAndUnknownRecords) {
++  for (bool unknown_source : {false, true}) {
++    auto legacy = InstallLegacyNetworkPreset("de-linux");
++    const std::string id = *legacy.FindString("id");
++    if (unknown_source) {
++      legacy.Remove("sourcePresetId");
++    } else {
++      legacy.SetByDottedPath(
++          "uaCh.brands", base::ListValue().Append(
++              base::DictValue().Set("brand", "Custom/Brand")
++                               .Set("version", "149")));
++    }
++    ReplaceStoredPersona(legacy);
++    ASSERT_TRUE(ActivatePersona(service_.get(), id)
++                    .FindBool("ok").value_or(false));
++    const auto resolved = service_->ResolvePersonaById(id);
++    const auto* saved = resolved.FindDict("requested");
++    EXPECT_EQ(1, saved->FindInt("presetRevision"));
++    EXPECT_EQ(*legacy.FindDict("uaCh"), *saved->FindDict("uaCh"));
++    EXPECT_FALSE(saved->FindDict("legacyNetworkSettings"));
++    ASSERT_TRUE(resolved.FindDict("upgradeCandidate"));
++    EXPECT_EQ(2, resolved.FindDict("upgradeCandidate")->FindInt("presetRevision"));
++  }
++}
++
++TEST_F(PersonaServiceTest, ImportedLegacyPresetMigratesAndRetainsBackup) {
++  const auto legacy = InstallLegacyNetworkPreset("de-linux");
++  auto imported = service_->ImportPersonas(
++      base::DictValue()
++          .Set("schema", *service_->GetPersonaContract().FindString("schema"))
++          .Set("personas", base::ListValue().Append(legacy.Clone())));
++  ASSERT_TRUE(imported.FindBool("ok").value_or(false));
++  const auto* records = imported.FindDict("state")->FindList("personas");
++  const auto& copy = records->back().GetDict();
++  EXPECT_NE(*legacy.FindString("id"), *copy.FindString("id"));
++  EXPECT_EQ(2, copy.FindInt("presetRevision"));
++  ASSERT_TRUE(copy.FindDict("legacyNetworkSettings"));
++  EXPECT_EQ(*legacy.FindDict("uaCh"),
++            *copy.FindDict("legacyNetworkSettings")->FindDict("uaCh"));
++  EXPECT_EQ("", *copy.FindDict("uaCh")->FindString("platformVersion"));
++}
++
++TEST_F(PersonaServiceTest, ReviewedNetworkUpgradePreservesCustomBackupOnce) {
++  auto legacy = InstallLegacyNetworkPreset("de-linux");
++  const std::string id = *legacy.FindString("id");
++  legacy.SetByDottedPath("uaCh.brands", base::ListValue().Append(
++      base::DictValue().Set("brand", "Custom Brand").Set("version", "149")));
++  ReplaceStoredPersona(legacy);
++  auto resolved = service_->ResolvePersonaById(id);
++  ASSERT_TRUE(resolved.FindDict("upgradeCandidate"));
++  auto candidate = resolved.FindDict("upgradeCandidate")->Clone();
++  ASSERT_TRUE(service_->SavePersona(candidate).FindBool("ok").value_or(false));
++  resolved = service_->ResolvePersonaById(id);
++  EXPECT_FALSE(resolved.FindDict("upgradeCandidate"));
++  EXPECT_EQ(legacy, *resolved.FindDict("requested")->FindDict("legacyNetworkSettings"));
++  EXPECT_EQ(*legacy.FindDict("network"), *resolved.FindDict("requested")->FindDict("network"));
++  EXPECT_EQ(1, resolved.FindDict("requested")->FindInt("protectionVersion"));
++  ASSERT_TRUE(service_->SavePersona(resolved.FindDict("requested")->Clone())
++                  .FindBool("ok").value_or(false));
++  EXPECT_EQ(legacy, *service_->ResolvePersonaById(id)
++                         .FindDict("requested")->FindDict("legacyNetworkSettings"));
++}
++
++TEST_F(PersonaServiceTest, NetworkMigrationDoesNotBypassProtectionUpgrade) {
++  auto legacy = InstallLegacyNetworkPreset("de-linux");
++  legacy.Set("protectionVersion", 0);
++  ReplaceStoredPersona(legacy);
++  const auto old_state = prefs_.GetDict(kPersonaStatePref).Clone();
++  const auto response =
++      ActivatePersona(service_.get(), *legacy.FindString("id"));
++  EXPECT_FALSE(response.FindBool("ok").value_or(true));
++  EXPECT_EQ("upgrade_required",
++            *response.FindDict("fieldErrors")->FindString("protectionVersion"));
++  EXPECT_EQ(old_state, prefs_.GetDict(kPersonaStatePref));
++}
++
++TEST_F(PersonaServiceTest, ProductionCatalogCannotRotateAcrossOperatingSystems) {
++  const auto created = CloneConfiguredPreset("us-west-macos");
++  const std::string id = *created.FindString("personaId");
++  ASSERT_TRUE(ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  auto* network = delegate.get();
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  const auto old_state = prefs_.GetDict(kPersonaStatePref).Clone();
++  const auto old_rotation =
++      prefs_.GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  EXPECT_FALSE(service_->CanRotateIdentity());
++  EXPECT_FALSE(service_->GetPersonaState()
++                   .FindBool("identityRotationAvailable").value_or(true));
++  base::test::TestFuture<base::DictValue> result;
++  service_->RotateIdentity(result.GetCallback());
++  EXPECT_FALSE(result.Take().FindBool("ok").value_or(true));
++  EXPECT_TRUE(network->apply_calls.empty());
++  EXPECT_EQ(old_state, prefs_.GetDict(kPersonaStatePref));
++  EXPECT_EQ(old_rotation, prefs_.GetDict(kPersonaFingerprintRotationEpochPref));
++}
++
++TEST_F(PersonaServiceTest, HistoricalCrossOsRotationRequiresTransactionalRepair) {
++  const auto created = CloneConfiguredPreset("us-west-macos");
++  const std::string id = *created.FindString("personaId");
++  ASSERT_TRUE(ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  auto persona = service_->ResolvePersonaById(id).FindDict("requested")->Clone();
++  persona.Set("devicePackId", static_cast<int>(kChromium149WindowsX64IdentityTemplateId));
++  ReplaceStoredPersona(persona);
++  auto rotation = prefs_.GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  rotation.Set("identityTemplateId",
++               static_cast<int>(kChromium149WindowsX64IdentityTemplateId));
++  prefs_.SetDict(kPersonaFingerprintRotationEpochPref, rotation.Clone());
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaUnavailable,
++            service_->ResolveActivePersona().status);
++  EXPECT_FALSE(service_->GetActiveSnapshot().enabled);
++
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  auto* network = delegate.get();
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  base::test::TestFuture<base::DictValue> failed;
++  service_->SetActivePersona(id, failed.GetCallback());
++  ASSERT_EQ(1u, network->apply_calls.size());
++  EXPECT_EQ(kChromium149MacArmIdentityTemplateId,
++            network->apply_calls.front().identity_template_id.value_or(0));
++  network->CompleteNextApply(false);
++  network->CompleteNextApply(false);
++  EXPECT_FALSE(failed.Take().FindBool("ok").value_or(true));
++  EXPECT_EQ(rotation, prefs_.GetDict(kPersonaFingerprintRotationEpochPref));
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaUnavailable,
++            service_->ResolveActivePersona().status);
++
++  base::test::TestFuture<base::DictValue> repaired;
++  service_->SetActivePersona(id, repaired.GetCallback());
++  network->CompleteNextApply(true);
++  ASSERT_TRUE(repaired.Take().FindBool("ok").value_or(false));
++  EXPECT_EQ(kChromium149MacArmIdentityTemplateId,
++            service_->GetActiveIdentityTemplateId());
++  const auto snapshot = service_->GetActiveSnapshot();
++  EXPECT_TRUE(snapshot.enabled);
++  EXPECT_EQ("macOS", snapshot.ua_ch_platform);
++  EXPECT_EQ("arm", snapshot.ua_ch_architecture);
++  EXPECT_EQ(*persona.FindDict("gpu")->FindString("renderer"),
++            snapshot.gpu_renderer);
++}
++
+ }  // namespace helium_persona
+--- a/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+@@ -29,6 +29,7 @@ export interface PersonaProfilesResponse
+ }
+ 
+ export interface PersonaContractResponse {
++  uaChDefaults: PersonaRecord['uaCh'];
+   schema: string;
+   version: number;
+   legacyImportSchemas: string[];
+--- a/chrome/browser/resources/settings/privacy_page/persona_config.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
+@@ -380,7 +380,8 @@ function setPath(root: Record<string, an
+ }
+ 
+ export function createPersonaDraft(
+-    inputValue: Record<string, any> = {}): PersonaRecord {
++    inputValue: Record<string, any> = {},
++    uaChDefaults?: PersonaRecord['uaCh']): PersonaRecord {
+   const input = asObject(inputValue);
+   const inputScreen = asObject(input['screen']);
+   const inputGpu = asObject(input['gpu']);
+@@ -403,18 +404,17 @@ export function createPersonaDraft(
+     navigatorProductSub: '20030107',
+     uaCh: {
+       platform: 'macOS',
+-      platformVersion: '15.0.0',
++      platformVersion: '',
+       architecture: 'arm',
+       model: '',
+       bitness: '64',
+       fullVersion: '149.0.7827.114',
+       mobile: false,
+       wow64: false,
+-      brands: [
+-        {brand: 'Chromium', version: '149'},
+-        {brand: 'Not/A)Brand', version: '24'},
+-      ],
++      // Loaded from the backend contract before an editable draft is shown.
++      brands: [] as PersonaUaChBrand[],
+       formFactors: ['Desktop'],
++      ...uaChDefaults,
+     },
+     region: {
+       timezone: 'UTC',
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -389,7 +389,7 @@
+       </div>
+     </template>
+     <template is="dom-if"
+-        if="[[needsProtectionUpgrade_(editablePersona_.id, editablePersona_.protectionVersion)]]">
++        if="[[needsProtectionUpgrade_(editablePersona_.id, editablePersona_.protectionVersion, editablePersona_.presetRevision)]]">
+       <div class="status-message" role="status">
+         <p>$i18n{personaProtectionUpgradeRequired}</p>
+         <cr-button on-click="onUpgradeProtectionClick_" disabled="[[pending_]]">
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -508,6 +508,8 @@ export class SettingsPersonaPageElement
+   declare private identityRotationDisabled_: boolean;
+   declare private showIdentityRotationDialog_: boolean;
+ 
++  private uaChDefaults_?: PersonaRecord['uaCh'];
++
+   override connectedCallback() {
+     super.connectedCallback();
+     void this.loadPersonaData_();
+@@ -516,19 +518,21 @@ export class SettingsPersonaPageElement
+   private async loadPersonaData_() {
+     const result = await this.runPendingRequest_(async () => {
+       const browserProxy = PersonaBrowserProxyImpl.getInstance();
+-      const [state, profilesResponse, launchSelectionMode, proxyState] =
++      const [state, profilesResponse, launchSelectionMode, proxyState, contract] =
+           await Promise.all([
+             browserProxy.getPersonaState(),
+             browserProxy.getPersonaProfiles(),
+             browserProxy.getLaunchSelectionMode(),
+             NitrousProxyBrowserProxyImpl.getInstance().getProxyState(),
++            browserProxy.getPersonaContract(),
+           ]);
+-      return {state, profilesResponse, launchSelectionMode, proxyState};
++      return {state, profilesResponse, launchSelectionMode, proxyState, contract};
+     });
+     if (!result) {
+       this.showMutationError_();
+       return;
+     }
++    this.uaChDefaults_ = result.contract.uaChDefaults;
+     this.launchSelectionMode_ = result.launchSelectionMode || 'always_ask';
+     this.networkRoutes_ = result.proxyState.routes;
+     this.applyPersonaState_(result.state, result.profilesResponse);
+@@ -576,7 +580,7 @@ export class SettingsPersonaPageElement
+   }
+ 
+   private mergePersona_(persona: PersonaRecord): PersonaRecord {
+-    return createPersonaDraft(persona);
++    return createPersonaDraft(persona, this.uaChDefaults_);
+   }
+ 
+   private confirmDiscardChanges_(): boolean {
+@@ -721,8 +725,10 @@ export class SettingsPersonaPageElement
+     this.saveStatusIsError_ = false;
+   }
+ 
+-  private needsProtectionUpgrade_(personaId: string, version: number): boolean {
+-    return !!personaId && personaId !== 'default' && version !== 1;
++  private needsProtectionUpgrade_(
++      personaId: string, version: number, revision: number): boolean {
++    return !!personaId && personaId !== 'default' &&
++        (version !== 1 || (revision || 0) < 2);
+   }
+ 
+   private async onUpgradeProtectionClick_() {
+@@ -745,6 +751,7 @@ export class SettingsPersonaPageElement
+           'fonts', 'advanced.allowSpeechSynthesis', 'advanced.fontMetricNoise',
+           'advanced.clientRectNoise', 'screen.colorGamut', 'screen.dynamicRange',
+           'screen.reducedMotion', 'network.routeMode',
++          'uaCh.brands', 'uaCh.platformVersion', 'presetRevision',
+         ]);
+     this.hasUnsavedChanges_ = true;
+     this.saveStatus_ = this.i18n('personaProtectionReview');
+--- a/chrome/test/data/webui/settings/persona_config_test.ts
++++ b/chrome/test/data/webui/settings/persona_config_test.ts
+@@ -20,6 +20,19 @@ import {
+ } from 'chrome://settings/privacy_page/persona_config.js';
+ 
+ suite('PersonaConfig', () => {
++  test('uses backend UA-CH defaults and retains explicit custom values', () => {
++    const defaults = {
++      ...createPersonaDraft().uaCh,
++      brands: [{brand: 'Backend supplied brand', version: '149'}],
++      platformVersion: '',
++    };
++    assertDeepEquals(defaults, createPersonaDraft({}, defaults).uaCh);
++    const customBrands = [{brand: 'Custom/Brand', version: '5'}];
++    const draft = createPersonaDraft({uaCh: {brands: customBrands}}, defaults);
++    assertDeepEquals(customBrands, draft.uaCh.brands);
++    assertEquals('', draft.uaCh.platformVersion);
++  });
++
+   test('converts every editable numeric field', () => {
+     const draft = createPersonaDraft({
+       id: 'persona-test',
+--- a/components/helium_persona/persona_snapshot.cc
++++ b/components/helium_persona/persona_snapshot.cc
+@@ -323,10 +323,12 @@ base::DictValue GetPersonaFieldErrors(co
+ 
+   ValidateNumber(value, "protectionVersion", "protectionVersion", 0, 1, true,
+                  &errors);
+-  ValidateNumber(value, "presetRevision", "presetRevision", 0, 1, true,
++  ValidateNumber(value, "presetRevision", "presetRevision", 0, 2, true,
+                  &errors);
+   constexpr std::array<std::string_view, 1> kSourceFields = {"sourcePresetId"};
+   ValidateStringFields(value, kSourceFields, "", &errors);
++  ValidateDictField(value, "legacyNetworkSettings",
++                    "legacyNetworkSettings", false, &errors);
+   ValidateDictField(value, "legacyProtectionSettings",
+                     "legacyProtectionSettings", false, &errors);
+   const bool portable_policy = value.FindInt("protectionVersion") == 1;
+--- a/content/browser/client_hints/client_hints.cc
++++ b/content/browser/client_hints/client_hints.cc
+@@ -285,8 +285,8 @@ std::optional<blink::UserAgentMetadata>
+       GetContentClient()->browser()->GetUserAgentMetadata();
+   if (!snapshot->ua_ch_platform.empty())
+     metadata.platform = snapshot->ua_ch_platform;
+-  if (!snapshot->ua_ch_platform_version.empty())
+-    metadata.platform_version = snapshot->ua_ch_platform_version;
++  // Empty is the Linux platform version, not an absent override.
++  metadata.platform_version = snapshot->ua_ch_platform_version;
+   if (!snapshot->ua_ch_architecture.empty())
+     metadata.architecture = snapshot->ua_ch_architecture;
+   if (!snapshot->ua_ch_model.empty())
+--- a/content/browser/service_worker/service_worker_version.cc
++++ b/content/browser/service_worker/service_worker_version.cc
+@@ -287,9 +287,8 @@ void ApplyPersonaUserAgentMetadata(
+   if (!persona_snapshot.ua_ch_platform.empty()) {
+     ua_metadata->platform = persona_snapshot.ua_ch_platform;
+   }
+-  if (!persona_snapshot.ua_ch_platform_version.empty()) {
+-    ua_metadata->platform_version = persona_snapshot.ua_ch_platform_version;
+-  }
++  // Empty is the Linux platform version, not an absent override.
++  ua_metadata->platform_version = persona_snapshot.ua_ch_platform_version;
+   if (!persona_snapshot.ua_ch_architecture.empty()) {
+     ua_metadata->architecture = persona_snapshot.ua_ch_architecture;
+   }
+--- a/content/browser/worker_host/shared_worker_host.cc
++++ b/content/browser/worker_host/shared_worker_host.cc
+@@ -129,9 +129,8 @@ void ApplyPersonaUserAgentMetadata(
+   if (!persona_snapshot.ua_ch_platform.empty()) {
+     ua_metadata->platform = persona_snapshot.ua_ch_platform;
+   }
+-  if (!persona_snapshot.ua_ch_platform_version.empty()) {
+-    ua_metadata->platform_version = persona_snapshot.ua_ch_platform_version;
+-  }
++  // Empty is the Linux platform version, not an absent override.
++  ua_metadata->platform_version = persona_snapshot.ua_ch_platform_version;
+   if (!persona_snapshot.ua_ch_architecture.empty()) {
+     ua_metadata->architecture = persona_snapshot.ua_ch_architecture;
+   }
+--- a/content/renderer/render_frame_impl.cc
++++ b/content/renderer/render_frame_impl.cc
+@@ -349,8 +349,8 @@ blink::UserAgentMetadata ApplyHeliumPers
+     blink::UserAgentMetadata metadata) {
+   if (!snapshot.ua_ch_platform.empty())
+     metadata.platform = snapshot.ua_ch_platform;
+-  if (!snapshot.ua_ch_platform_version.empty())
+-    metadata.platform_version = snapshot.ua_ch_platform_version;
++  // Empty is the Linux platform version, not an absent override.
++  metadata.platform_version = snapshot.ua_ch_platform_version;
+   if (!snapshot.ua_ch_architecture.empty())
+     metadata.architecture = snapshot.ua_ch_architecture;
+   if (!snapshot.ua_ch_model.empty())
+--- a/net/base/network_persona_template.cc
++++ b/net/base/network_persona_template.cc
+@@ -10,19 +10,19 @@
+ #include <string_view>
+ #include <vector>
+ 
+-#include "crypto/hash.h"
+ #include "third_party/boringssl/src/include/openssl/ssl.h"
+ 
+ namespace net {
+ namespace {
+ 
+ // Chrome 149 desktop wire variants. Host emission is steered by signature
+-// profile + extension-order seed. Golden ClientHello fixtures were captured
+-// from this Chromium 149.0.7827.114 production SSLClientSocket path (macOS
++// profile; extension order uses native per-connection randomness. Golden
++// ClientHello fixtures were captured from this Chromium 149.0.7827.114
++// production SSLClientSocket path (macOS
+ // host). Independent Chrome-for-Testing 149.0.7827.115 captures on macOS
+ // arm64 and Linux x86_64 confirm structural TLS equivalence across desktop OS
+ // (ciphers, groups, signature algorithms, ALPN); only extension order differs
+-// and is seed-controlled. See net/data/network_persona/reference/.
++// between connections. See net/data/network_persona/reference/.
+ constexpr std::array<NetworkPersonaTemplate, 2> kTemplates = {{
+     {
+         .id = kChromium149DefaultTemplateId,
+@@ -110,16 +110,4 @@ std::span<const uint16_t> GetNetworkPers
+   return kChromium149DefaultVerifyPrefs;
+ }
+ 
+-std::array<uint8_t, 32> DeriveNetworkPersonaTlsExtensionSeed(
+-    const NetworkPersonaConfig& config) {
+-  constexpr std::string_view kDomain = "nitrous-tls-extension-order";
+-  std::vector<uint8_t> input(config.deterministic_seed.begin(),
+-                             config.deterministic_seed.end());
+-  input.insert(input.end(), kDomain.begin(), kDomain.end());
+-  for (int shift = 56; shift >= 0; shift -= 8) {
+-    input.push_back(static_cast<uint8_t>(config.generation >> shift));
+-  }
+-  return crypto::hash::Sha256(input);
+-}
+-
+ }  // namespace net
+--- a/net/base/network_persona_template.h
++++ b/net/base/network_persona_template.h
+@@ -13,7 +13,6 @@
+ #include <vector>
+ 
+ #include "net/base/net_export.h"
+-#include "net/base/network_persona_config.h"
+ 
+ namespace net {
+ 
+@@ -50,8 +49,6 @@ NET_EXPORT std::vector<uint32_t> GetComp
+     int chrome_major);
+ NET_EXPORT std::span<const uint16_t> GetNetworkPersonaTlsVerifyAlgorithmPrefs(
+     TlsSignatureProfile profile);
+-NET_EXPORT std::array<uint8_t, 32> DeriveNetworkPersonaTlsExtensionSeed(
+-    const NetworkPersonaConfig& config);
+ 
+ }  // namespace net
+ 
+--- a/net/base/network_persona_template_unittest.cc
++++ b/net/base/network_persona_template_unittest.cc
+@@ -102,18 +102,6 @@ TEST(NetworkPersonaTemplateTest, TlsProf
+             std::vector<uint16_t>(mldsa_prefs.begin(), mldsa_prefs.end()));
+ }
+ 
+-TEST(NetworkPersonaTemplateTest, TlsExtensionSeedIsGenerationScoped) {
+-  NetworkPersonaConfig config;
+-  config.template_id = kChromium149DefaultTemplateId;
+-  config.generation = 7;
+-  config.deterministic_seed.fill(0x42);
+-
+-  const auto first = DeriveNetworkPersonaTlsExtensionSeed(config);
+-  EXPECT_EQ(first, DeriveNetworkPersonaTlsExtensionSeed(config));
+-  ++config.generation;
+-  EXPECT_NE(first, DeriveNetworkPersonaTlsExtensionSeed(config));
+-}
+-
+ TEST(NetworkPersonaTemplateTest, RawClientHelloFixturesMatchCatalogHashes) {
+   for (uint32_t template_id : {kChromium149DefaultTemplateId,
+                                kChromium149MldsaTemplateId}) {
+--- a/net/data/network_persona/README.md
++++ b/net/data/network_persona/README.md
+@@ -15,8 +15,10 @@ Both network variants are shared by comp
+ | Windows x64 | 149100 | Windows |
+ | Linux x64 | 149200 | Linux |
+ 
+-Complete identity rotation is available whenever at least two complete
+-identities are present (now true for the Chrome 149 desktop catalog).
++Complete identity rotation requires a second compatible identity with the same
++OS, CPU architecture, bitness, mobile mode, and browser major. The current
++catalog has no such alternative, so rotation is unavailable; fingerprint refresh
++and explicit preset activation remain available.
+ 
+ ## Capture and verification
+ 
+@@ -24,7 +26,8 @@ Host emission goldens (`chromium_149_mac
+ ClientHello handshake bodies captured from the Chromium 149.0.7827.114
+ production SSLClientSocket path with Persona seed `0x42…` and generation 7
+ (default) / 8 (ML-DSA). Regression tests recreate the same feature state, seed,
+-and generation and compare parsed protocol fields after GREASE normalization.
++and generation and compare parsed protocol fields after GREASE normalization
++and extension-order sorting. Raw fixtures and their hashes remain unchanged.
+ 
+ Independent **Chrome-for-Testing 149.0.7827.115** captures (not Persona-steered)
+ are stored under `reference/`:
+@@ -35,9 +38,8 @@ are stored under `reference/`:
+ 
+ Parsed comparison (GREASE stripped): **ciphers, signature algorithms, supported
+ versions, supported groups, and ALPN are identical** across those CFT macOS and
+-Linux captures. Extension order differs and is intentionally seed-steered on the
+-Nitrous host. Windows x64 Chrome-for-Testing was downloaded for archival; native
+-Windows execution was not available on the capture host, so Windows identity
++Linux captures. Extension order varies per connection on the Nitrous host.
++Windows x64 Chrome-for-Testing was downloaded for archival; native Windows execution was not available on the capture host, so Windows identity
+ shares the verified Chrome 149 desktop network cohort.
+ 
+ ## Adding a template
+@@ -49,7 +51,19 @@ TLS, HTTP/2, and HTTP/3 behavior from th
+ JA3/JA4 or protocol fields by hand, and do not add combinations that the
+ current Chromium, BoringSSL, or QUIC stack cannot emit.
+ 
+-Persona mode derives separate connection-scoped seeds for TLS extension order,
+-HTTP/3 GREASE, and QUIC transport parameter ordering. These seeds never replace
+-Chromium's cryptographic randomness for connection IDs, key shares, session
+-tokens, or TLS key material.
++Persona identity and rendering seeds do not control TLS extension order, QUIC
++transport parameter ordering, GREASE transport parameters, or HTTP/3 GREASE.
++These use the native Chromium/BoringSSL/QUIC generators on every connection.
++HTTP/3 reserved SETTINGS values use the native uint32 range. Signature profile
++selection and structural SETTINGS order remain template-controlled. Refreshing
++a Persona does not promise a different JA4.
++
++Preset revision 2 uses Chromium's Chrome 149 brand generator and an empty Linux
++platformVersion in requests, pages, and workers. Activation, save, and import
++migrate only records with a known sourcePresetId and untouched legacy UA/UA-CH
++fields. The original record is retained as legacyNetworkSettings. Other records
++retain their values and expose a reviewed upgrade candidate. Reads never migrate
++an active identity; activation commits migration together with the network state.
++Historical cross-OS rotation overrides fail closed until an activation transaction
++rebinds the profile to its declared identity. Protection-policy upgrades and route
++consent are still required independently.
+--- a/net/quic/quic_chromium_client_session.cc
++++ b/net/quic/quic_chromium_client_session.cc
+@@ -1733,8 +1733,6 @@ void QuicChromiumClientSession::OnCanCre
+ quic::QuicSSLConfig QuicChromiumClientSession::GetSSLConfig() const {
+   quic::QuicSSLConfig config = quic::QuicSpdyClientSessionBase::GetSSLConfig();
+   if (wire_serialization_options_) {
+-    config.extension_permutation_seed =
+-        wire_serialization_options_->tls_extension_permutation_seed;
+     config.verify_algorithm_prefs.emplace(
+         wire_serialization_options_->tls_verify_algorithm_prefs.begin(),
+         wire_serialization_options_->tls_verify_algorithm_prefs.end());
+--- a/net/quic/quic_session_pool.cc
++++ b/net/quic/quic_session_pool.cc
+@@ -33,7 +33,6 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/trace_event/trace_event.h"
+ #include "base/values.h"
+-#include "crypto/hash.h"
+ #include "crypto/openssl_util.h"
+ #include "net/base/address_list.h"
+ #include "net/base/connection_endpoint_metadata.h"
+@@ -108,20 +107,6 @@ enum InitialRttEstimateSource {
+   INITIAL_RTT_SOURCE_MAX,
+ };
+ 
+-std::array<uint8_t, 32> DeriveNetworkPersonaQuicSeed(
+-    const NetworkPersonaConfig& config,
+-    std::string_view domain) {
+-  std::string input(
+-      reinterpret_cast<const char*>(config.deterministic_seed.data()),
+-      config.deterministic_seed.size());
+-  for (int shift = 56; shift >= 0; shift -= 8) {
+-    input.push_back(
+-        static_cast<char>((config.generation >> shift) & 0xff));
+-  }
+-  input.append(domain);
+-  return crypto::hash::Sha256(input);
+-}
+-
+ // These values are persisted to logs. Entries should not be renumbered and
+ // numeric values should never be reused.
+ enum FindMatchingIpSessionResult {
+@@ -2103,12 +2088,6 @@ QuicSessionPool::CreateSessionHelper(
+         FindNetworkPersonaTemplate(network_persona_config_->template_id);
+     CHECK(network_template);
+     quic::QuicWireSerializationOptions wire_options;
+-    wire_options.transport_parameter_seed = DeriveNetworkPersonaQuicSeed(
+-        *network_persona_config_, "nitrous-quic-transport-parameters");
+-    wire_options.http3_seed = DeriveNetworkPersonaQuicSeed(
+-        *network_persona_config_, "nitrous-http3-frames");
+-    wire_options.tls_extension_permutation_seed =
+-        DeriveNetworkPersonaTlsExtensionSeed(*network_persona_config_);
+     const auto verify_prefs = GetNetworkPersonaTlsVerifyAlgorithmPrefs(
+         network_template->tls_signature_profile);
+     wire_options.tls_verify_algorithm_prefs.assign(verify_prefs.begin(),
+--- a/net/quic/quic_session_pool_test.cc
++++ b/net/quic/quic_session_pool_test.cc
+@@ -14717,9 +14717,7 @@ TEST_P(QuicSessionPoolTest, NetworkPerso
+   QuicChromiumClientSession* session = GetActiveSession(kDefaultDestination);
+   ASSERT_TRUE(session);
+   const quic::QuicSSLConfig config = session->GetSSLConfig();
+-  ASSERT_TRUE(config.extension_permutation_seed);
+-  EXPECT_EQ(DeriveNetworkPersonaTlsExtensionSeed(persona_config),
+-            *config.extension_permutation_seed);
++  EXPECT_FALSE(config.extension_permutation_seed);
+   ASSERT_TRUE(config.verify_algorithm_prefs);
+   const auto verify_prefs = GetNetworkPersonaTlsVerifyAlgorithmPrefs(
+       TlsSignatureProfile::kChromium149Mldsa);
+--- a/net/socket/ssl_client_socket_impl.cc
++++ b/net/socket/ssl_client_socket_impl.cc
+@@ -674,12 +674,6 @@ int SSLClientSocketImpl::Init() {
+     if (!network_template) {
+       return ERR_INVALID_ARGUMENT;
+     }
+-    const auto permutation_seed = DeriveNetworkPersonaTlsExtensionSeed(
+-        *ssl_config_.network_persona_config);
+-    if (!SSL_set_extension_permutation_seed(
+-            ssl_.get(), permutation_seed.data(), permutation_seed.size())) {
+-      return ERR_UNEXPECTED;
+-    }
+   }
+ 
+   const bool host_is_ip_address =
+--- a/net/socket/ssl_client_socket_unittest.cc
++++ b/net/socket/ssl_client_socket_unittest.cc
+@@ -1900,9 +1900,12 @@ TEST_F(SSLClientSocketTest, NetworkPerso
+   connect(kChromium149DefaultTemplateId, 7);
+   connect(kChromium149DefaultTemplateId, 8);
+   connect(kChromium149MldsaTemplateId, 8);
++  connect(0, 7);
++  connect(0, 7);
+ 
+-  ASSERT_EQ(4u, profiles.size());
+-  EXPECT_EQ(profiles[0].extension_order, profiles[1].extension_order);
++  ASSERT_EQ(6u, profiles.size());
++  EXPECT_NE(profiles[4].extension_order, profiles[5].extension_order);
++  EXPECT_NE(profiles[0].extension_order, profiles[1].extension_order);
+   EXPECT_NE(profiles[1].extension_order, profiles[2].extension_order);
+   EXPECT_FALSE(std::ranges::contains(profiles[2].signature_algorithms,
+                                      SSL_SIGN_ML_DSA_44));
+@@ -1913,12 +1916,23 @@ TEST_F(SSLClientSocketTest, NetworkPerso
+   EXPECT_TRUE(std::ranges::contains(profiles[3].signature_algorithms,
+                                     SSL_SIGN_ML_DSA_87));
+ 
+-  const auto default_capture = LoadCapturedClientHelloProfile(
++  auto default_capture = LoadCapturedClientHelloProfile(
+       "chromium_149_macos_default_client_hello.hex");
+-  const auto mldsa_capture = LoadCapturedClientHelloProfile(
++  auto mldsa_capture = LoadCapturedClientHelloProfile(
+       "chromium_149_macos_mldsa_client_hello.hex");
+   ASSERT_TRUE(default_capture);
+   ASSERT_TRUE(mldsa_capture);
++  // Captures preserve raw evidence; compare structure independently of the
++  // native per-connection extension permutation.
++  std::ranges::sort(default_capture->extension_order);
++  std::ranges::sort(mldsa_capture->extension_order);
++  for (auto& profile : profiles) {
++    std::ranges::sort(profile.extension_order);
++  }
++  EXPECT_EQ(profiles[4], profiles[5]);
++  EXPECT_EQ(profiles[0].cipher_suites, profiles[4].cipher_suites);
++  EXPECT_EQ(profiles[0], profiles[1]);
++  EXPECT_EQ(profiles[1], profiles[2]);
+   EXPECT_EQ(*default_capture, profiles[0]);
+   EXPECT_EQ(*mldsa_capture, profiles[3]);
+ }
+--- a/net/third_party/quiche/src/quiche/quic/core/crypto/transport_parameters.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/crypto/transport_parameters.cc
+@@ -783,15 +783,15 @@ bool TransportParameters::AreValid(std::
+ 
+ TransportParameters::~TransportParameters() = default;
+ 
+-bool SerializeTransportParameters(const TransportParameters& in,
+-                                  std::vector<uint8_t>* out) {
+-  return SerializeTransportParameters(in, out, nullptr);
+-}
+-
+ bool SerializeTransportParameters(
+     const TransportParameters& in,
+     std::vector<uint8_t>* out,
+-    const QuicWireSerializationOptions* wire_options) {
++    const QuicWireSerializationOptions* /*wire_options*/) {
++  return SerializeTransportParameters(in, out);
++}
++
++bool SerializeTransportParameters(const TransportParameters& in,
++                                  std::vector<uint8_t>* out) {
+   std::string error_details;
+   if (!in.AreValid(&error_details)) {
+     QUIC_BUG(invalid transport parameters)
+@@ -937,37 +937,19 @@ bool SerializeTransportParameters(
+   // "Reserved Transport Parameters" section of RFC 9000.
+   // This forces receivers to support unexpected input.
+   QuicRandom* random = QuicRandom::GetInstance();
+-  std::optional<QuicWireDeterministicRandom> deterministic_random;
+-  if (wire_options) {
+-    deterministic_random.emplace(wire_options->transport_parameter_seed);
+-  }
+-  const auto next_insecure_value = [&]() {
+-    return deterministic_random ? deterministic_random->NextUint64()
+-                                : random->InsecureRandUint64();
+-  };
+   // Transport parameter identifiers are 62 bits long so we need to
+   // ensure that the output of the computation below fits in 62 bits.
+-  uint64_t grease_id64 =
+-      (deterministic_random ? deterministic_random->NextUint64()
+-                            : random->RandUint64()) %
+-      ((1ULL << 62) - 31);
++  uint64_t grease_id64 = random->RandUint64() % ((1ULL << 62) - 31);
+   // Make sure grease_id % 31 == 27. Note that this is not uniformely
+   // distributed but is acceptable since no security depends on this
+   // randomness.
+   grease_id64 = (grease_id64 / 31) * 31 + 27;
+   TransportParameters::TransportParameterId grease_id =
+       static_cast<TransportParameters::TransportParameterId>(grease_id64);
+-  const size_t grease_length =
+-      (deterministic_random ? deterministic_random->NextUint64()
+-                            : random->RandUint64()) %
+-      kMaxGreaseLength;
++  const size_t grease_length = random->RandUint64() % kMaxGreaseLength;
+   QUICHE_DCHECK_GE(kMaxGreaseLength, grease_length);
+   char grease_contents[kMaxGreaseLength];
+-  if (deterministic_random) {
+-    deterministic_random->FillBytes(grease_contents, grease_length);
+-  } else {
+-    random->RandBytes(grease_contents, grease_length);
+-  }
++  random->RandBytes(grease_contents, grease_length);
+   custom_parameters[grease_id] = std::string(grease_contents, grease_length);
+ 
+   // Custom parameters.
+@@ -976,17 +958,11 @@ bool SerializeTransportParameters(
+     parameter_ids.push_back(kv.first);
+   }
+ 
+-  if (deterministic_random) {
+-    // ParameterMap is a flat hash map. Canonicalize its contribution before
+-    // applying the deterministic permutation so output is process-stable.
+-    std::sort(parameter_ids.begin(), parameter_ids.end());
+-  }
+-
+   // Randomize order of sent transport parameters by walking the array
+   // backwards and swapping each element with a random earlier one.
+   for (size_t i = parameter_ids.size() - 1; i > 0; i--) {
+     std::swap(parameter_ids[i],
+-              parameter_ids[next_insecure_value() % (i + 1)]);
++              parameter_ids[random->InsecureRandUint64() % (i + 1)]);
+   }
+ 
+   out->resize(max_transport_param_length);
+@@ -1389,16 +1365,10 @@ bool SerializeTransportParameters(
+             in.version_information->other_versions;
+         // Insert one GREASE version at a random index.
+         const size_t grease_index =
+-            next_insecure_value() % (other_versions.size() + 1);
+-        const QuicVersionLabel grease_version =
+-            deterministic_random
+-                ? static_cast<QuicVersionLabel>(
+-                      (deterministic_random->NextUint64() &
+-                       ~static_cast<uint64_t>(kReservedVersionMask)) |
+-                      kReservedVersionBits)
+-                : CreateQuicVersionLabel(QuicVersionReservedForNegotiation());
++            random->InsecureRandUint64() % (other_versions.size() + 1);
+         other_versions.insert(
+-            other_versions.begin() + grease_index, grease_version);
++            other_versions.begin() + grease_index,
++            CreateQuicVersionLabel(QuicVersionReservedForNegotiation()));
+         const uint64_t version_information_length =
+             sizeof(in.version_information->chosen_version) +
+             sizeof(QuicVersionLabel) * other_versions.size();
+--- a/net/third_party/quiche/src/quiche/quic/core/crypto/transport_parameters_test.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/crypto/transport_parameters_test.cc
+@@ -1147,7 +1147,7 @@ TEST_P(TransportParametersTest, Serializ
+   }
+ }
+ 
+-TEST_P(TransportParametersTest, SerializationIsStableWithWireOptions) {
++TEST_P(TransportParametersTest, SerializationRemainsRandomWithWireOptions) {
+   TransportParameters params;
+   params.perspective = Perspective::IS_CLIENT;
+   if (!GetQuicRestartFlag(quic_stop_parsing_legacy_version_info) ||
+@@ -1163,17 +1163,23 @@ TEST_P(TransportParametersTest, Serializ
+       CreateFakeInitialSourceConnectionId();
+ 
+   QuicWireSerializationOptions options;
+-  options.transport_parameter_seed.fill(0x42);
+   std::vector<uint8_t> first;
+   std::vector<uint8_t> second;
+   ASSERT_TRUE(SerializeTransportParameters(params, &first, &options));
+   ASSERT_TRUE(SerializeTransportParameters(params, &second, &options));
+-  EXPECT_EQ(first, second);
+-
+-  options.transport_parameter_seed[0] ^= 0xff;
+-  std::vector<uint8_t> changed;
+-  ASSERT_TRUE(SerializeTransportParameters(params, &changed, &options));
+-  EXPECT_NE(first, changed);
++  EXPECT_NE(first, second);
++  TransportParameters first_params;
++  TransportParameters second_params;
++  std::string error;
++  ASSERT_TRUE(ParseTransportParameters(version_, Perspective::IS_CLIENT,
++                                       first.data(), first.size(),
++                                       &first_params, &error));
++  ASSERT_TRUE(ParseTransportParameters(version_, Perspective::IS_CLIENT,
++                                       second.data(), second.size(),
++                                       &second_params, &error));
++  RemoveGreaseParameters(&first_params);
++  RemoveGreaseParameters(&second_params);
++  EXPECT_EQ(first_params, second_params);
+ }
+ 
+ TEST_P(TransportParametersTest, Degrease) {
+--- a/net/third_party/quiche/src/quiche/quic/core/http/quic_send_control_stream.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/http/quic_send_control_stream.cc
+@@ -64,23 +64,14 @@ void QuicSendControlStream::MaybeSendSet
+   SettingsFrame settings = settings_;
+   const auto& wire_options =
+       spdy_session_->config()->wire_serialization_options();
+-  std::optional<QuicWireDeterministicRandom> deterministic_random;
+   std::vector<uint64_t> settings_order;
+   if (wire_options) {
+-    deterministic_random.emplace(wire_options->http3_seed);
+     settings_order = wire_options->http3_settings_order;
+   }
+   // https://tools.ietf.org/html/draft-ietf-quic-http-25#section-7.2.4.1
+   // specifies that setting identifiers of 0x1f * N + 0x21 are reserved and
+   // greasing should be attempted.
+-  if (deterministic_random) {
+-    const uint64_t setting_id =
+-        0x1fULL * (deterministic_random->NextUint64() % ((1ULL << 57) - 1)) +
+-        0x21ULL;
+-    settings.values[setting_id] =
+-        deterministic_random->NextUint64() % (1ULL << 62);
+-    settings_order.push_back(setting_id);
+-  } else if (!GetQuicFlag(quic_enable_http3_grease_randomness)) {
++  if (!GetQuicFlag(quic_enable_http3_grease_randomness)) {
+     settings.values[0x40] = 20;
+   } else {
+     uint32_t result;
+@@ -103,19 +94,8 @@ void QuicSendControlStream::MaybeSendSet
+   // https://tools.ietf.org/html/draft-ietf-quic-http-25#section-7.2.9
+   // specifies that a reserved frame type has no semantic meaning and should be
+   // discarded. A greasing frame is added here.
+-  if (deterministic_random) {
+-    const uint64_t random_value = deterministic_random->NextUint64();
+-    const uint64_t frame_type =
+-        0x1fULL * (random_value % ((1ULL << 57) - 1)) + 0x21ULL;
+-    std::string payload(random_value % 4, '\0');
+-    deterministic_random->FillBytes(payload.data(), payload.size());
+-    WriteOrBufferData(
+-        HttpEncoder::SerializeGreasingFrame(frame_type, std::move(payload)),
+-        /*fin = */ false, nullptr);
+-  } else {
+-    WriteOrBufferData(HttpEncoder::SerializeGreasingFrame(), /*fin = */ false,
+-                      nullptr);
+-  }
++  WriteOrBufferData(HttpEncoder::SerializeGreasingFrame(), /*fin = */ false,
++                    nullptr);
+ }
+ 
+ void QuicSendControlStream::MaybeSendOriginFrame(
+--- a/net/third_party/quiche/src/quiche/quic/core/http/quic_send_control_stream_test.cc
++++ b/net/third_party/quiche/src/quiche/quic/core/http/quic_send_control_stream_test.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "quiche/quic/core/http/quic_send_control_stream.h"
+ 
++#include <limits>
+ #include <memory>
+ #include <optional>
+ #include <ostream>
+@@ -14,6 +15,7 @@
+ #include "absl/strings/escaping.h"
+ #include "absl/strings/string_view.h"
+ #include "quiche/quic/core/crypto/null_encrypter.h"
++#include "quiche/quic/core/quic_data_reader.h"
+ #include "quiche/quic/platform/api/quic_flags.h"
+ #include "quiche/quic/test_tools/quic_config_peer.h"
+ #include "quiche/quic/test_tools/quic_spdy_session_peer.h"
+@@ -98,6 +100,68 @@ class QuicSendControlStreamTest : public
+     session_.OnConfigNegotiated();
+   }
+ 
++  void ExpectNativeGrease(bool wire_options, bool randomness) {
++    SetQuicFlag(quic_enable_http3_grease_randomness, randomness);
++    if (wire_options) {
++      QuicWireSerializationOptions options;
++      options.http3_settings_order = {1, 6, 7};
++      session_.config()->set_wire_serialization_options(std::move(options));
++    }
++    Initialize();
++    char buffer[2048] = {};
++    QuicDataWriter writer(sizeof(buffer), buffer);
++    EXPECT_CALL(session_, WritevData(send_control_stream_->id(), _, _, _, _, _))
++        .WillRepeatedly(
++            [&](QuicStreamId, size_t length, QuicStreamOffset offset,
++                StreamSendingState, TransmissionType,
++                std::optional<EncryptionLevel>) {
++              send_control_stream_->WriteStreamData(offset, length, &writer);
++              return QuicConsumedData(length, false);
++            });
++    send_control_stream_->MaybeSendSettingsFrame();
++    QuicDataReader reader(writer.data(), writer.length());
++    uint64_t type;
++    uint64_t length;
++    ASSERT_TRUE(reader.ReadVarInt62(&type));
++    EXPECT_EQ(kControlStream, type);
++    ASSERT_TRUE(reader.ReadVarInt62(&type));
++    EXPECT_EQ(0x04u, type);
++    ASSERT_TRUE(reader.ReadVarInt62(&length));
++    absl::string_view settings_bytes;
++    ASSERT_TRUE(reader.ReadStringPiece(&settings_bytes, length));
++    QuicDataReader settings(settings_bytes.data(), settings_bytes.size());
++    int reserved_settings = 0;
++    constexpr uint64_t kMaxNativeReservedId =
++        0x1fULL * std::numeric_limits<uint32_t>::max() + 0x21ULL;
++    while (!settings.IsDoneReading()) {
++      uint64_t id;
++      uint64_t value;
++      ASSERT_TRUE(settings.ReadVarInt62(&id));
++      ASSERT_TRUE(settings.ReadVarInt62(&value));
++      if (id >= 0x21 && (id - 0x21) % 0x1f == 0) {
++        ++reserved_settings;
++        EXPECT_LE(id, kMaxNativeReservedId);
++        EXPECT_LE(value, std::numeric_limits<uint32_t>::max());
++        if (!randomness) {
++          EXPECT_EQ(0x40u, id);
++          EXPECT_EQ(20u, value);
++        }
++      }
++    }
++    EXPECT_EQ(1, reserved_settings);
++    ASSERT_TRUE(reader.ReadVarInt62(&type));
++    EXPECT_GE(type, 0x21u);
++    EXPECT_LE(type, kMaxNativeReservedId);
++    EXPECT_EQ(0u, (type - 0x21) % 0x1f);
++    ASSERT_TRUE(reader.ReadVarInt62(&length));
++    EXPECT_LE(length, 3u);
++    EXPECT_EQ(length, reader.BytesRemaining());
++    if (!randomness) {
++      EXPECT_EQ(0x40u, type);
++      EXPECT_EQ(1u, length);
++    }
++  }
++
+   Perspective perspective() const { return GetParam().perspective; }
+ 
+   MockQuicConnectionHelper helper_;
+@@ -231,6 +295,18 @@ TEST_P(QuicSendControlStreamTest, WriteS
+       expected_write_data.length());
+ }
+ 
++TEST_P(QuicSendControlStreamTest, WireOptionsKeepNativeGreaseBounds) {
++  ExpectNativeGrease(/*wire_options=*/true, /*randomness=*/true);
++}
++
++TEST_P(QuicSendControlStreamTest, NativeGreaseBounds) {
++  ExpectNativeGrease(/*wire_options=*/false, /*randomness=*/true);
++}
++
++TEST_P(QuicSendControlStreamTest, WireOptionsRespectNativeGreaseFlag) {
++  ExpectNativeGrease(/*wire_options=*/true, /*randomness=*/false);
++}
++
+ TEST_P(QuicSendControlStreamTest, WriteSettingsOnlyOnce) {
+   Initialize();
+   testing::InSequence s;
+--- a/net/third_party/quiche/src/quiche/quic/core/quic_wire_serialization.h
++++ b/net/third_party/quiche/src/quiche/quic/core/quic_wire_serialization.h
+@@ -5,59 +5,18 @@
+ #ifndef NET_THIRD_PARTY_QUICHE_SRC_QUICHE_QUIC_CORE_QUIC_WIRE_SERIALIZATION_H_
+ #define NET_THIRD_PARTY_QUICHE_SRC_QUICHE_QUIC_CORE_QUIC_WIRE_SERIALIZATION_H_
+ 
+-#include <array>
+-#include <cstddef>
+ #include <cstdint>
+ #include <vector>
+ 
+ namespace quic {
+ 
+-// Optional connection-scoped controls for non-cryptographic wire
+-// randomization. This must never be used for connection IDs, key material,
+-// tokens, or other security-sensitive randomness.
++// Connection-scoped protocol structure. Random fields always use the native
++// per-connection generators, independently of Persona identity seeds.
+ struct QuicWireSerializationOptions {
+-  std::array<uint8_t, 32> transport_parameter_seed = {};
+-  std::array<uint8_t, 32> http3_seed = {};
+-  std::array<uint8_t, 32> tls_extension_permutation_seed = {};
+   std::vector<uint16_t> tls_verify_algorithm_prefs;
+   std::vector<uint64_t> http3_settings_order;
+ };
+ 
+-class QuicWireDeterministicRandom {
+- public:
+-  explicit QuicWireDeterministicRandom(
+-      const std::array<uint8_t, 32>& deterministic_seed) {
+-    for (uint8_t byte : deterministic_seed) {
+-      state_ = (state_ ^ byte) * 0x100000001b3ULL;
+-    }
+-  }
+-
+-  uint64_t NextUint64() {
+-    // SplitMix64 is used only to decorrelate non-security-sensitive wire
+-    // ordering and GREASE values.
+-    uint64_t value = (state_ += 0x9e3779b97f4a7c15ULL);
+-    value = (value ^ (value >> 30)) * 0xbf58476d1ce4e5b9ULL;
+-    value = (value ^ (value >> 27)) * 0x94d049bb133111ebULL;
+-    return value ^ (value >> 31);
+-  }
+-
+-  void FillBytes(void* output, size_t length) {
+-    auto* bytes = static_cast<uint8_t*>(output);
+-    while (length > 0) {
+-      const uint64_t value = NextUint64();
+-      const size_t chunk = length < sizeof(value) ? length : sizeof(value);
+-      for (size_t i = 0; i < chunk; ++i) {
+-        bytes[i] = static_cast<uint8_t>(value >> (i * 8));
+-      }
+-      bytes += chunk;
+-      length -= chunk;
+-    }
+-  }
+-
+- private:
+-  uint64_t state_ = 0xcbf29ce484222325ULL;
+-};
+-
+ }  // namespace quic
+ 
+ #endif  // NET_THIRD_PARTY_QUICHE_SRC_QUICHE_QUIC_CORE_QUIC_WIRE_SERIALIZATION_H_
+--- a/chrome/browser/net/profile_network_context_service.cc
++++ b/chrome/browser/net/profile_network_context_service.cc
+@@ -208,6 +208,23 @@ class ChromeDomainReliabilityDelegate
+ 
+ namespace {
+ 
++const base::DictValue* GetEnabledNetworkPersona(const PrefService& prefs) {
++  const auto& state = prefs.GetDict(helium_persona::prefs::kState);
++  const auto* active_id = state.FindString("activePersonaId");
++  const auto* personas = state.FindList("personas");
++  if (!active_id || !personas) {
++    return nullptr;
++  }
++  for (const auto& value : *personas) {
++    const auto* persona = value.GetIfDict();
++    const auto* id = persona ? persona->FindString("id") : nullptr;
++    if (id && *id == *active_id && persona->FindBool("enabled").value_or(false)) {
++      return persona;
++    }
++  }
++  return nullptr;
++}
++
+ bool* g_discard_domain_reliability_uploads_for_testing = nullptr;
+ 
+ const char kHttpCacheFinchExperimentGroups[] =
+@@ -717,22 +734,14 @@ network::mojom::NetworkPersonaConfigPtr
+ ProfileNetworkContextService::CreateNetworkPersonaConfig(
+     std::optional<uint32_t> identity_template_id,
+     std::optional<uint64_t> generation) const {
+-  const base::DictValue& state =
+-      profile_->GetPrefs()->GetDict(helium_persona::prefs::kState);
+-  const std::string* active_id = state.FindString("activePersonaId");
+-  const base::ListValue* personas = state.FindList("personas");
+-  const base::DictValue* active_persona = nullptr;
+-  if (active_id && personas) {
+-    for (const base::Value& value : *personas) {
+-      const base::DictValue* persona = value.GetIfDict();
+-      const std::string* id = persona ? persona->FindString("id") : nullptr;
+-      if (id && *id == *active_id) {
+-        active_persona = persona;
+-        break;
+-      }
+-    }
++  const auto* active_persona = GetEnabledNetworkPersona(*profile_->GetPrefs());
++  if (!active_persona) {
++    return nullptr;
+   }
+-  if (!active_persona || !active_persona->FindBool("enabled").value_or(false)) {
++  const auto* active_id = active_persona->FindString("id");
++  const auto* declared_identity =
++      helium_persona::ResolvePersonaIdentityTemplate(*active_persona);
++  if (!declared_identity || !active_id) {
+     return nullptr;
+   }
+ 
+@@ -741,47 +750,13 @@ ProfileNetworkContextService::CreateNetw
+   const int stored_identity_id =
+       identity_template_id ? static_cast<int>(*identity_template_id)
+                            : rotation.FindInt("identityTemplateId").value_or(0);
+-  const helium_persona::PersonaIdentityTemplate* identity =
+-      stored_identity_id > 0 ? helium_persona::FindPersonaIdentityTemplate(
+-                                   static_cast<uint32_t>(stored_identity_id))
+-                             : nullptr;
+-  if (!identity) {
+-    // Prefer an explicit Device Pack id on the persona, then exact claim match,
+-    // then cohort-compatible match (same OS/arch/major with network variants).
+-    if (std::optional<int> pack_id = active_persona->FindInt("devicePackId");
+-        pack_id && *pack_id > 0) {
+-      identity = helium_persona::FindPersonaIdentityTemplate(
+-          static_cast<uint32_t>(*pack_id));
+-    }
+-  }
+-  if (!identity) {
+-    const base::DictValue* ua_ch = active_persona->FindDict("uaCh");
+-    if (stored_identity_id > 0 || !ua_ch) {
++  const auto* identity = declared_identity;
++  if (stored_identity_id > 0) {
++    identity = helium_persona::FindPersonaIdentityTemplate(stored_identity_id);
++    if (!identity || !helium_persona::ArePersonaIdentityTemplatesCompatible(
++                         *declared_identity, *identity)) {
+       return nullptr;
+     }
+-    const auto find_string = [](const base::DictValue& dict,
+-                                std::string_view key) -> std::string_view {
+-      const std::string* value = dict.FindString(key);
+-      return value ? *value : std::string_view();
+-    };
+-    identity = helium_persona::MatchPersonaIdentityTemplate(
+-        find_string(*active_persona, "userAgent"),
+-        find_string(*active_persona, "platform"),
+-        find_string(*ua_ch, "platform"), find_string(*ua_ch, "platformVersion"),
+-        find_string(*ua_ch, "fullVersion"), find_string(*ua_ch, "architecture"),
+-        find_string(*ua_ch, "bitness"),
+-        ua_ch->FindBool("mobile").value_or(false),
+-        ua_ch->FindBool("wow64").value_or(false));
+-    if (!identity) {
+-      identity = helium_persona::MatchCompatiblePersonaIdentityTemplate(
+-          find_string(*active_persona, "platform"),
+-          find_string(*ua_ch, "architecture"), find_string(*ua_ch, "bitness"),
+-          find_string(*ua_ch, "fullVersion"),
+-          ua_ch->FindBool("mobile").value_or(false));
+-    }
+-  }
+-  if (!identity || !active_id) {
+-    return nullptr;
+   }
+ 
+   uint64_t resolved_generation = 0;
+@@ -852,7 +827,19 @@ void ProfileNetworkContextService::Resum
+ 
+ void ProfileNetworkContextService::ApplyNetworkPersonaConfig(
+     NetworkPersonaUpdateCallback callback) {
+-  ApplyNetworkPersonaConfig(CreateNetworkPersonaConfig(), std::move(callback));
++  auto config = CreateNetworkPersonaConfig();
++  if (!config && GetEnabledNetworkPersona(*profile_->GetPrefs())) {
++    // An invalid persisted identity is not permission to fall back to native
++    // traffic. Keep every loaded partition blocked until activation repairs it.
++    SetNetworkPersonaRequestsBlocked(
++        true, base::BindOnce(
++                  [](NetworkPersonaUpdateCallback callback, bool) {
++                    std::move(callback).Run(false);
++                  },
++                  std::move(callback)));
++    return;
++  }
++  ApplyNetworkPersonaConfig(std::move(config), std::move(callback));
+ }
+ 
+ void ProfileNetworkContextService::ApplySocksCredentials() {
+@@ -1005,6 +992,11 @@ void ProfileNetworkContextService::Apply
+ 
+ void ProfileNetworkContextService::ReleaseNetworkPersonaRequestGate(
+     NetworkPersonaUpdateCallback callback) {
++  if (GetEnabledNetworkPersona(*profile_->GetPrefs()) &&
++      !CreateNetworkPersonaConfig()) {
++    RestoreNetworkPersonaRequestGateAfterFailedRelease(std::move(callback));
++    return;
++  }
+   SetNetworkPersonaRequestsBlocked(false, std::move(callback));
+ }
+ 
+@@ -1896,7 +1888,9 @@ void ProfileNetworkContextService::Confi
+                  : nullptr)
+           : CreateNetworkPersonaConfig();
+   network_context_params->block_network_persona_requests =
+-      network_persona_requests_blocked_;
++      network_persona_requests_blocked_ ||
++      (GetEnabledNetworkPersona(*profile_->GetPrefs()) &&
++       !CreateNetworkPersonaConfig());
+ 
+   network_context_params->accept_language = ComputeAcceptLanguage();
+   network_context_params->enable_referrers = enable_referrers_.GetValue();
+--- a/chrome/browser/net/profile_network_context_service_browsertest.cc
++++ b/chrome/browser/net/profile_network_context_service_browsertest.cc
+@@ -482,6 +482,53 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkCon
+             params.network_persona_config->template_id);
+ }
+ 
++IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest,
++                       HistoricalCrossOsIdentityStaysBlockedUntilReactivation) {
++  auto* persona_service = helium_persona::PersonaServiceFactory::GetForProfile(
++      browser()->profile());
++  ASSERT_TRUE(persona_service);
++  auto created = persona_service->CreatePersonaProfile("Identity repair");
++  const std::string id = *created.FindString("personaId");
++  auto persona = persona_service->ResolvePersonaById(id).FindDict("requested")->Clone();
++  persona.SetByDottedPath("network.routeMode", "direct");
++  ASSERT_TRUE(persona_service->SavePersona(persona).FindBool("ok").value_or(false));
++  base::test::TestFuture<base::DictValue> activated;
++  persona_service->SetActivePersona(id, activated.GetCallback());
++  ASSERT_TRUE(activated.Take().FindBool("ok").value_or(false));
++
++  auto* service = ProfileNetworkContextServiceFactory::GetForContext(
++      browser()->profile());
++  auto* prefs = browser()->profile()->GetPrefs();
++  service->SuppressNetworkPersonaPrefUpdates();
++  auto rotation = prefs->GetDict(helium_persona::prefs::kFingerprintRotationEpoch).Clone();
++  rotation.Set("identityTemplateId",
++               static_cast<int>(helium_persona::kChromium149WindowsX64IdentityTemplateId));
++  prefs->SetDict(helium_persona::prefs::kFingerprintRotationEpoch, std::move(rotation));
++  network::mojom::NetworkContextParams blocked_params;
++  cert_verifier::mojom::CertVerifierCreationParams blocked_cert_params;
++  service->ConfigureNetworkContextParams(false, base::FilePath(),
++                                         &blocked_params, &blocked_cert_params);
++  EXPECT_TRUE(blocked_params.block_network_persona_requests);
++  base::test::TestFuture<bool> resumed;
++  service->ResumeNetworkPersonaPrefUpdates(resumed.GetCallback());
++  EXPECT_FALSE(resumed.Get());
++  base::test::TestFuture<bool> released;
++  service->ReleaseNetworkPersonaRequestGate(released.GetCallback());
++  EXPECT_FALSE(released.Get());
++  EXPECT_EQ(helium_persona::PersonaResolutionStatus::kPersonaUnavailable,
++            persona_service->ResolveActivePersona().status);
++
++  base::test::TestFuture<base::DictValue> repaired;
++  persona_service->SetActivePersona(id, repaired.GetCallback());
++  ASSERT_TRUE(repaired.Take().FindBool("ok").value_or(false));
++  network::mojom::NetworkContextParams repaired_params;
++  cert_verifier::mojom::CertVerifierCreationParams repaired_cert_params;
++  service->ConfigureNetworkContextParams(false, base::FilePath(),
++                                         &repaired_params, &repaired_cert_params);
++  EXPECT_FALSE(repaired_params.block_network_persona_requests);
++  EXPECT_TRUE(repaired_params.network_persona_config);
++}
++
+ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest, CacheSize) {
+   // We don't have a great way of directly checking that the disk cache has the
+   // correct max size, but we can make sure that we set up our network context

@@ -1538,5 +1538,25 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
     "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
     "message": "移植可能な音声エンジンがないため、保護されたプロファイルでは音声合成が無効です。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches to a compatible browser and network identity for the same operating system and CPU architecture. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "同じオペレーティングシステムと CPU アーキテクチャに対応するブラウザとネットワークの識別情報に切り替えます。ネットワークスタックが新しい識別情報を受け入れると、このプロファイルのタブが再読み込みされます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "No second compatible identity is available for this operating system, CPU architecture, and device configuration. Fingerprint refresh remains available.",
+    "message": "このオペレーティングシステム、CPU アーキテクチャ、デバイス構成に対応する別の識別情報はありません。フィンガープリントの更新は引き続き利用できます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "A profile update is available. Review network identity defaults and any older protection settings. Custom values change only when you save the reviewed update; older protection policies still require an upgrade before activation.",
+    "message": "プロファイルの更新が利用可能です。ネットワーク識別情報の既定値と古い保護設定を確認してください。カスタム値は、確認した更新を保存した場合にのみ変更されます。古い保護ポリシーは、有効化する前に引き続きアップグレードが必要です。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review profile update",
+    "message": "プロファイルの更新を確認"
   }
 ]

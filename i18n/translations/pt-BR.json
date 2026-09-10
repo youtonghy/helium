@@ -1539,5 +1539,25 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
     "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
     "message": "Perfis protegidos desativam a síntese de voz porque não há um mecanismo de voz portátil disponível."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches to a compatible browser and network identity for the same operating system and CPU architecture. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "Isso alterna para uma identidade de navegador e de rede compatível com o mesmo sistema operacional e arquitetura de CPU. As abas deste perfil serão recarregadas depois que a pilha de rede aceitar a nova identidade."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "No second compatible identity is available for this operating system, CPU architecture, and device configuration. Fingerprint refresh remains available.",
+    "message": "Não há outra identidade compatível com este sistema operacional, arquitetura de CPU e configuração do dispositivo. A atualização da impressão digital continua disponível."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "A profile update is available. Review network identity defaults and any older protection settings. Custom values change only when you save the reviewed update; older protection policies still require an upgrade before activation.",
+    "message": "Uma atualização está disponível para este perfil. Revise os valores padrão da identidade de rede e as configurações de proteção antigas. Os valores personalizados só mudam quando você salva a atualização revisada. As políticas de proteção antigas ainda precisam ser atualizadas antes da ativação."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review profile update",
+    "message": "Revisar atualização do perfil"
   }
 ]

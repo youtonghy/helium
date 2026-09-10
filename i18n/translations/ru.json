@@ -1538,5 +1538,25 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
     "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
     "message": "Защищённые профили отключают синтез речи, поскольку переносимый речевой движок отсутствует."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROTATE_IDENTITY_DIALOG_BODY",
+    "source": "This switches to a compatible browser and network identity for the same operating system and CPU architecture. Open tabs in this profile will reload after the network stack accepts the new identity.",
+    "message": "Будет выполнено переключение на совместимую идентичность браузера и сети для той же операционной системы и архитектуры процессора. Вкладки этого профиля будут перезагружены после того, как сетевой стек примет новую идентичность."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_IDENTITY_ROTATION_UNAVAILABLE",
+    "source": "No second compatible identity is available for this operating system, CPU architecture, and device configuration. Fingerprint refresh remains available.",
+    "message": "Для этой операционной системы, архитектуры процессора и конфигурации устройства нет другой совместимой идентичности. Обновление отпечатка по-прежнему доступно."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "A profile update is available. Review network identity defaults and any older protection settings. Custom values change only when you save the reviewed update; older protection policies still require an upgrade before activation.",
+    "message": "Для этого профиля доступно обновление. Проверьте значения сетевой идентичности по умолчанию и старые настройки защиты. Пользовательские значения изменятся только после сохранения проверенного обновления. Старые политики защиты по-прежнему необходимо обновить перед активацией."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review profile update",
+    "message": "Проверить обновление профиля"
   }
 ]
