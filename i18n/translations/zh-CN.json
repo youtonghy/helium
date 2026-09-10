@@ -1688,5 +1688,140 @@
     "name": "IDS_SETTINGS_NITROUS_PROXY_CLEAR_PASSWORD",
     "source": "Clear saved password",
     "message": "清除已保存的密码"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY",
+    "source": "Save and apply",
+    "message": "保存并应用"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY_DESCRIPTION",
+    "source": "Changing identity fields in the active profile restarts its workers and reloads its open tabs. Name and icon changes apply immediately.",
+    "message": "更改活动配置文件的身份字段会重启其 Worker 并重新加载已打开的标签页。名称和图标的更改会立即生效。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED",
+    "source": "Unsupported",
+    "message": "不支持"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED_FIELDS",
+    "source": "Font rasterizer settings, WebGL capability profiles, and hardware noise are unsupported. Imported values are preserved for compatibility and do not change rendering.",
+    "message": "不支持字体栅格化设置、WebGL 能力配置和硬件噪声。导入的值会保留以保持兼容，但不会改变渲染结果。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_DIFFERENCES_DESCRIPTION",
+    "source": "Saved values that differ from the active browser identity are shown below. Device Pack constraints can replace user agent and UA-CH values. Unsaved changes are not included.",
+    "message": "下方显示已保存值与当前浏览器身份的差异。设备包约束可能替换用户代理和 UA-CH 值。未保存的更改不在其中。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_FIELD",
+    "source": "Field",
+    "message": "字段"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REQUESTED_VALUE",
+    "source": "Saved value",
+    "message": "已保存值"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_VALUE",
+    "source": "Effective value",
+    "message": "实际生效值"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "Unsupported rendering-engine metadata. Imported values are preserved but do not select a font rasterizer.",
+    "message": "不支持的渲染引擎元数据。导入的值会保留，但不会用于选择字体栅格化引擎。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "Unsupported legacy setting. WebGL capability ranges and shader precision use the real driver values; pixel noise is controlled separately.",
+    "message": "不支持的旧版设置。WebGL 能力范围和着色器精度使用驱动程序的真实值；像素噪声单独控制。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "Review and upgrade this profile before activation. Its older protection settings and any implicit direct connection need confirmation.",
+    "message": "激活前请检查并升级此配置。旧版保护设置和任何隐式直连都需要确认。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review protection upgrade",
+    "message": "检查保护升级"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_REVIEW",
+    "source": "Review the updated values, then save. The original configuration will be kept in the exported profile. Bundled fonts can change page layout and fingerprint values.",
+    "message": "检查更新后的值，然后保存。原始配置会保留在导出的配置中。内置字体可能改变页面布局和指纹值。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNSET",
+    "source": "Choose a proxy or explicitly allow direct connections",
+    "message": "选择代理或明确允许直连"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_SELECTION_REQUIRED",
+    "source": "Choose a proxy or explicitly allow direct connections before activating this profile.",
+    "message": "激活此配置前，请选择代理或明确允许直连。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNAVAILABLE",
+    "source": "The selected route is unavailable. Choose a valid route; the previous identity and route remain in use.",
+    "message": "所选路由不可用。请选择有效路由；之前的身份和路由将继续使用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SPEECH_UNAVAILABLE",
+    "source": "Speech synthesis is disabled for protected profiles. Saved voice names are retained for compatibility; no portable voice engine is available.",
+    "message": "受保护的配置已禁用语音合成。保存的语音名称仅为兼容性保留；目前没有可移植语音引擎。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_WINDOWS_EVIDENCE",
+    "source": "Windows network templates are inferred and lack an independent Windows capture. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "Windows 网络模板由推断得出，缺少独立的 Windows 抓包证据。路由绑定和已生效的保护路径不能验证完整设备身份。原生 GPU 能力仍依赖宿主。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_TEMPLATE_EVIDENCE",
+    "source": "Network templates have reference captures and still require verification in the running browser. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "网络模板有参考抓包，但仍需在运行中的浏览器里验证。路由绑定和已生效的保护路径不能验证完整设备身份。原生 GPU 能力仍依赖宿主。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_COLOR_GAMUT",
+    "source": "Color gamut exposed to websites",
+    "message": "向网站报告的色域"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DYNAMIC_RANGE",
+    "source": "Dynamic range exposed to websites",
+    "message": "向网站报告的动态范围"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STANDARD_RANGE",
+    "source": "Standard",
+    "message": "标准"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_HIGH_RANGE",
+    "source": "High",
+    "message": "高"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REDUCED_MOTION",
+    "source": "Tell websites to reduce motion",
+    "message": "告知网站减少动态效果"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "Protected profiles load these families from the bundled Noto resources. They do not enumerate installed system fonts. Websites can still provide their own web fonts.",
+    "message": "受保护的配置从内置 Noto 资源加载这些字体，不枚举已安装的系统字体。网站仍可提供自己的网页字体。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP",
+    "source": "Legacy voice metadata is retained for export. It does not enable speech synthesis or connect to system voices.",
+    "message": "旧版语音元数据会保留供导出，不会启用语音合成或连接系统语音。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
+    "message": "由于没有可移植语音引擎，受保护的配置禁用语音合成。"
   }
 ]

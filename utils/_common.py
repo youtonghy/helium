@@ -37,6 +37,7 @@ class ExtractorEnum: #pylint: disable=too-few-public-methods
     ZIP = 'zip'
     TAR = 'tar'
     WINRAR = 'winrar'
+    FILE = 'file'
 
 
 class SetLogLevel(argparse.Action): #pylint: disable=too-few-public-methods

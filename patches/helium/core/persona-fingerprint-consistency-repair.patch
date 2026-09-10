@@ -1,0 +1,3018 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -2024,6 +2024,30 @@
+     <message name="IDS_SETTINGS_PERSONA_SECTION_EDIT_DESC" desc="Description under the edit profile section. NAME is the selected profile display name.">
+       Selected profile: <ph name="NAME">$1<ex>Work laptop</ex></ph>
+     </message>
++    <message name="IDS_SETTINGS_PERSONA_SAVE_AND_APPLY" desc="Persona configuration consistency UI">
++      Save and apply
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_SAVE_AND_APPLY_DESCRIPTION" desc="Persona configuration consistency UI">
++      Changing identity fields in the active profile restarts its workers and reloads its open tabs. Name and icon changes apply immediately.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_UNSUPPORTED" desc="Label on unsupported Persona fields">
++      Unsupported
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_UNSUPPORTED_FIELDS" desc="Persona configuration consistency UI">
++      Font rasterizer settings, WebGL capability profiles, and hardware noise are unsupported. Imported values are preserved for compatibility and do not change rendering.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_EFFECTIVE_DIFFERENCES_DESCRIPTION" desc="Persona configuration consistency UI">
++      Saved values that differ from the active browser identity are shown below. Device Pack constraints can replace user agent and UA-CH values. Unsaved changes are not included.
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_EFFECTIVE_FIELD" desc="Persona configuration consistency UI">
++      Field
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_REQUESTED_VALUE" desc="Persona configuration consistency UI">
++      Saved value
++    </message>
++    <message name="IDS_SETTINGS_PERSONA_EFFECTIVE_VALUE" desc="Persona configuration consistency UI">
++      Effective value
++    </message>
+     <message name="IDS_SETTINGS_PERSONA_SAVE" desc="Button label to save the persona profile being edited">
+       Save
+     </message>
+@@ -2235,7 +2259,7 @@
+       Font engine
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP" desc="Help text for the persona font engine field">
+-      Stores font engine metadata such as directwrite, coretext, or freetype. It is not currently applied to every font rendering path.
++      Unsupported rendering-engine metadata. Imported values are preserved but do not select a font rasterizer.
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_FIELD_AUDIO_BASE_LATENCY_LABEL" desc="Label for the persona audio base latency field">
+       Audio base latency
+@@ -2271,7 +2295,7 @@
+       Hardware noise
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP" desc="Help text for the persona hardware noise toggle">
+-      Applies deterministic noise to supported low-level hardware readback paths. CPU and memory values use their explicit fields instead.
++      Unsupported legacy setting. WebGL capability ranges and shader precision use the real driver values; pixel noise is controlled separately.
+     </message>
+     <message name="IDS_SETTINGS_PERSONA_FIELD_GEOLOCATION_OVERRIDE_LABEL" desc="Label for the persona geolocation override toggle">
+       Geolocation override
+--- /dev/null
++++ b/chrome/browser/helium_persona/persona_fingerprint_consistency_browsertest.cc
+@@ -0,0 +1,346 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include <memory>
++#include <string>
++
++#include "base/check.h"
++#include "base/functional/bind.h"
++#include "base/notreached.h"
++#include "base/test/run_until.h"
++#include "base/test/test_future.h"
++#include "base/values.h"
++#include "chrome/browser/helium_persona/persona_service.h"
++#include "chrome/browser/helium_persona/persona_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "content/public/browser/host_zoom_map.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_request.h"
++#include "net/test/embedded_test_server/http_response.h"
++#include "third_party/blink/public/common/page/page_zoom.h"
++
++namespace helium_persona {
++namespace {
++
++std::unique_ptr<net::test_server::HttpResponse> HandleFingerprintPage(
++    const net::test_server::HttpRequest& request) {
++  if (request.relative_url != "/fingerprint-consistency.html" &&
++      request.relative_url != "/fingerprint-worker.js") {
++    return nullptr;
++  }
++  auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++  if (request.relative_url == "/fingerprint-worker.js") {
++    response->set_content_type("application/javascript");
++    response->set_content(R"JS(
++      const canvas = new OffscreenCanvas(200, 40);
++      const ctx = canvas.getContext('2d');
++      ctx.font = '16px sans-serif';
++      self.onmessage = () => self.postMessage({
++        language: navigator.language,
++        width: ctx.measureText('worker measurement').width,
++      });
++    )JS");
++  } else {
++    response->set_content_type("text/html");
++    response->set_content(R"HTML(
++      <!doctype html><title>Fingerprint consistency</title>
++      <script>
++        window.worker = new Worker('/fingerprint-worker.js');
++        window.workerReady = new Promise(resolve => {
++          worker.onmessage = event => resolve(event.data);
++          worker.postMessage('measure');
++        });
++      </script>
++    )HTML");
++  }
++  return response;
++}
++
++constexpr char kScreenConsistency[] = R"JS(
++  (async () => {
++    await new Promise(resolve => requestAnimationFrame(resolve));
++    return {
++      width: screen.width, height: screen.height, dpr: devicePixelRatio,
++      consistent: matchMedia(`(device-width: ${screen.width}px)`).matches &&
++          matchMedia(`(device-height: ${screen.height}px)`).matches &&
++          matchMedia(`(resolution: ${devicePixelRatio}dppx)`).matches &&
++          matchMedia(`(color: ${screen.colorDepth / 3})`).matches,
++      viewportIsActual: matchMedia(`(width: ${innerWidth}px)`).matches,
++    };
++  })()
++)JS";
++
++constexpr char kGeometryConsistency[] = R"JS(
++  (() => {
++    document.body.innerHTML = `
++      <div id="box" style="position:absolute;left:12.25px;top:19.5px;
++          width:123.25px;height:36.5px"></div>
++      <div id="lines" style="position:absolute;left:21px;top:67px;
++          width:80px;font:16px sans-serif">one two three four five six seven</div>`;
++    const vector = rect => [rect.x, rect.y, rect.width, rect.height];
++    const equal = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 0.00002);
++    const box = document.getElementById('box');
++    const selected = document.createRange();
++    selected.selectNode(box);
++    const elementRect = vector(box.getBoundingClientRect());
++    const rangeRect = vector(selected.getBoundingClientRect());
++    const fragments = document.createRange();
++    fragments.selectNodeContents(document.getElementById('lines'));
++    const rects = Array.from(fragments.getClientRects()).filter(r => r.width && r.height);
++    const bounds = fragments.getBoundingClientRect();
++    const finite = rects.every(r => vector(r).every(Number.isFinite) && r.width >= 0 && r.height >= 0);
++    const union = rects.length > 1 &&
++        Math.abs(bounds.left - Math.min(...rects.map(r => r.left))) < 0.00002 &&
++        Math.abs(bounds.top - Math.min(...rects.map(r => r.top))) < 0.00002 &&
++        Math.abs(bounds.right - Math.max(...rects.map(r => r.right))) < 0.00002 &&
++        Math.abs(bounds.bottom - Math.max(...rects.map(r => r.bottom))) < 0.00002;
++    return {
++      elementRect,
++      consistent: equal(elementRect, rangeRect) &&
++          equal(elementRect, vector(box.getClientRects()[0])) &&
++          equal(rangeRect, vector(selected.getClientRects()[0])),
++      stable: equal(elementRect, vector(box.getBoundingClientRect())),
++      finite, union,
++    };
++  })()
++)JS";
++
++constexpr char kWebGLReadback[] = R"JS(
++  (() => {
++    const gl = document.createElement('canvas').getContext('webgl');
++    if (!gl) return {supported: false};
++    const line = Array.from(gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE));
++    const point = Array.from(gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE));
++    const caps = [line, point];
++    for (const shader of [gl.VERTEX_SHADER, gl.FRAGMENT_SHADER]) {
++      for (const type of [gl.LOW_FLOAT, gl.MEDIUM_FLOAT, gl.HIGH_FLOAT,
++                          gl.LOW_INT, gl.MEDIUM_INT, gl.HIGH_INT]) {
++        const precision = gl.getShaderPrecisionFormat(shader, type);
++        caps.push([precision.rangeMin, precision.rangeMax, precision.precision]);
++      }
++    }
++    gl.clearColor(.3, .4, .5, 1);
++    gl.clear(gl.COLOR_BUFFER_BIT);
++    const pixels = new Uint8Array(32 * 16 * 4);
++    const again = new Uint8Array(pixels.length);
++    gl.readPixels(0, 0, 32, 16, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
++    gl.readPixels(0, 0, 32, 16, gl.RGBA, gl.UNSIGNED_BYTE, again);
++    return {supported: true, caps: JSON.stringify(caps),
++      ordered: line[0] <= line[1] && point[0] <= point[1] && caps.flat().every(Number.isFinite),
++      pixels: Array.from(pixels).join(','),
++      stable: pixels.every((value, index) => value === again[index]),
++      error: gl.getError()};
++  })()
++)JS";
++
++}  // namespace
++
++class PersonaFingerprintConsistencyBrowserTest : public InProcessBrowserTest {
++ protected:
++  void SetUpOnMainThread() override {
++    host_resolver()->AddRule("*", "127.0.0.1");
++    embedded_test_server()->RegisterRequestHandler(
++        base::BindRepeating(&HandleFingerprintPage));
++    ASSERT_TRUE(embedded_test_server()->Start());
++    ASSERT_TRUE(content::NavigateToURL(contents(), PageURL()));
++  }
++
++  content::WebContents* contents() {
++    return browser()->tab_strip_model()->GetActiveWebContents();
++  }
++  PersonaService* service() {
++    return PersonaServiceFactory::GetForProfile(browser()->profile());
++  }
++  GURL PageURL() {
++    return embedded_test_server()->GetURL("/fingerprint-consistency.html");
++  }
++
++  base::DictValue CreateProfile() {
++    auto created = service()->CreatePersonaProfile("Consistency");
++    const auto* id = created.FindString("personaId");
++    CHECK(id);
++    for (const auto& value : *created.FindDict("state")->FindList("personas")) {
++      if (*value.GetDict().FindString("id") == *id) {
++        auto profile = value.GetDict().Clone();
++        auto* advanced = profile.EnsureDict("advanced");
++        advanced->Set("fontMetricNoise", true);
++        advanced->Set("clientRectNoise", true);
++        advanced->Set("canvasNoise", true);
++        profile.EnsureDict("region")->Set("locale", "en-US");
++        profile.EnsureDict("region")->Set("acceptLanguage", "en-US,en;q=0.9");
++        CHECK(service()->SavePersona(profile).FindBool("ok").value_or(false));
++        return profile;
++      }
++    }
++    NOTREACHED();
++  }
++
++  void Activate(const std::string& id) {
++    base::test::TestFuture<base::DictValue> result;
++    service()->SetActivePersona(id, result.GetCallback());
++    ASSERT_TRUE(result.Take().FindBool("ok").value_or(false));
++    ASSERT_TRUE(content::NavigateToURL(contents(), PageURL()));
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(PersonaFingerprintConsistencyBrowserTest,
++                       ScreenMediaAndDprAgreeInMainAndCrossOriginFrames) {
++  auto profile = CreateProfile();
++  const auto* id = profile.FindString("id");
++  profile.EnsureDict("screen")->Set("width", 2400);
++  profile.EnsureDict("screen")->Set("height", 1600);
++  profile.EnsureDict("screen")->Set("deviceScaleFactor", 1.25);
++  ASSERT_TRUE(service()->SavePersona(profile).FindBool("ok").value_or(false));
++  Activate(*id);
++  const auto child_url =
++      embedded_test_server()->GetURL("b.test", "/title1.html");
++  ASSERT_EQ(true, content::EvalJs(contents(), content::JsReplace(R"JS(
++    new Promise(resolve => {
++      const frame = document.createElement('iframe');
++      frame.onload = () => resolve(true);
++      frame.src = $1;
++      document.body.append(frame);
++    })
++  )JS",
++                                                                 child_url)));
++  for (double zoom : {1.0, 1.5, 2.0}) {
++    content::HostZoomMap::SetZoomLevel(contents(),
++                                       blink::ZoomFactorToZoomLevel(zoom));
++    for (auto* frame :
++         {contents()->GetPrimaryMainFrame(),
++          content::ChildFrameAt(contents()->GetPrimaryMainFrame(), 0)}) {
++      ASSERT_TRUE(frame);
++      const auto values =
++          content::EvalJs(frame, kScreenConsistency).ExtractDict().Clone();
++      EXPECT_EQ(2400, values.FindInt("width").value_or(0));
++      EXPECT_EQ(1600, values.FindInt("height").value_or(0));
++      EXPECT_NEAR(1.25 * zoom, values.FindDouble("dpr").value_or(0), 0.00001);
++      EXPECT_TRUE(values.FindBool("consistent").value_or(false));
++      EXPECT_TRUE(values.FindBool("viewportIsActual").value_or(false));
++    }
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaFingerprintConsistencyBrowserTest,
++                       ElementRangeAndFragmentUnionShareReadbackTransform) {
++  const auto baseline =
++      content::EvalJs(contents(), kGeometryConsistency).ExtractDict().Clone();
++  auto profile = CreateProfile();
++  Activate(*profile.FindString("id"));
++  const auto before =
++      content::EvalJs(contents(), kGeometryConsistency).ExtractDict().Clone();
++  EXPECT_TRUE(before.FindBool("consistent").value_or(false));
++  EXPECT_TRUE(before.FindBool("stable").value_or(false));
++  EXPECT_TRUE(before.FindBool("finite").value_or(false));
++  EXPECT_TRUE(before.FindBool("union").value_or(false));
++  EXPECT_NE(*baseline.FindList("elementRect"), *before.FindList("elementRect"));
++  ASSERT_TRUE(service()
++                  ->RefreshFingerprint(FingerprintRefreshScope::kProfile, "")
++                  .FindBool("ok")
++                  .value_or(false));
++  ASSERT_TRUE(content::NavigateToURL(contents(), PageURL()));
++  const auto refreshed =
++      content::EvalJs(contents(), kGeometryConsistency).ExtractDict().Clone();
++  EXPECT_NE(*before.FindList("elementRect"),
++            *refreshed.FindList("elementRect"));
++  Activate("default");
++  const auto disabled =
++      content::EvalJs(contents(), kGeometryConsistency).ExtractDict().Clone();
++  EXPECT_EQ(*baseline.FindList("elementRect"),
++            *disabled.FindList("elementRect"));
++}
++
++IN_PROC_BROWSER_TEST_F(
++    PersonaFingerprintConsistencyBrowserTest,
++    ActiveSaveRecreatesDocumentAndWorkerWithMatchingIdentity) {
++  auto profile = CreateProfile();
++  Activate(*profile.FindString("id"));
++  const auto before =
++      content::EvalJs(contents(), "workerReady").ExtractDict().Clone();
++  ASSERT_EQ("en-US", *before.FindString("language"));
++  ASSERT_TRUE(content::ExecJs(contents(), "window.oldDocumentMarker = true;"));
++  profile.EnsureDict("region")->Set("locale", "de-DE");
++  profile.EnsureDict("region")->Set("acceptLanguage", "de-DE,de;q=0.9");
++  profile.EnsureDict("region")->Set("timezone", "Europe/Berlin");
++  profile.EnsureDict("screen")->Set("width", 2400);
++  base::test::TestFuture<base::DictValue> result;
++  service()->SavePersonaAndApply(profile, result.GetCallback());
++  ASSERT_TRUE(result.Take().FindBool("ok").value_or(false));
++  ASSERT_TRUE(content::WaitForLoadStop(contents()));
++  EXPECT_EQ(true, content::EvalJs(contents(),
++                                  "window.oldDocumentMarker === undefined"));
++  EXPECT_EQ("de-DE", content::EvalJs(contents(), "navigator.language"));
++  EXPECT_EQ(2400, content::EvalJs(contents(), "screen.width"));
++  const auto worker =
++      content::EvalJs(contents(), "workerReady").ExtractDict().Clone();
++  EXPECT_EQ("de-DE", *worker.FindString("language"));
++  EXPECT_NE(before.FindDouble("width"), worker.FindDouble("width"));
++  const double main_width = content::EvalJs(contents(), R"JS(
++    (() => {
++      const ctx = document.createElement('canvas').getContext('2d');
++      ctx.font = '16px sans-serif';
++      return ctx.measureText('worker measurement').width;
++    })()
++  )JS")
++                                .ExtractDouble();
++  EXPECT_EQ(main_width, worker.FindDouble("width").value_or(0));
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaFingerprintConsistencyBrowserTest,
++                       MetadataSaveKeepsLiveIdentityAuditConsistent) {
++  auto profile = CreateProfile();
++  Activate(*profile.FindString("id"));
++  ASSERT_TRUE(content::EvalJs(contents(), "workerReady").is_ok());
++  ASSERT_TRUE(content::ExecJs(contents(), "window.documentMarker = true;"));
++  profile.Set("displayName", "Renamed without reload");
++  base::test::TestFuture<base::DictValue> saved;
++  service()->SavePersonaAndApply(profile, saved.GetCallback());
++  ASSERT_TRUE(saved.Take().FindBool("ok").value_or(false));
++  EXPECT_EQ(true, content::EvalJs(contents(), "window.documentMarker"));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return !browser()
++                ->profile()
++                ->GetDefaultStoragePartition()
++                ->GetHeliumPersonaWorkerSurfaceProbes()
++                .empty();
++  }));
++  base::test::TestFuture<base::DictValue> result;
++  service()->GetPersonaAudit(result.GetCallback());
++  const auto audit = result.Take();
++  const auto* evidence = audit.FindDict("runtimeEvidence");
++  ASSERT_TRUE(evidence);
++  EXPECT_EQ(0,
++            evidence->FindDict("frames")->FindInt("mismatched").value_or(-1));
++  EXPECT_EQ(0,
++            evidence->FindDict("workers")->FindInt("mismatched").value_or(-1));
++}
++
++IN_PROC_BROWSER_TEST_F(PersonaFingerprintConsistencyBrowserTest,
++                       WebGLPreservesNativeCapsAndKeepsPixelNoise) {
++  const auto baseline =
++      content::EvalJs(contents(), kWebGLReadback).ExtractDict().Clone();
++  if (!baseline.FindBool("supported").value_or(false)) {
++    GTEST_SKIP() << "WebGL unavailable on this test host";
++  }
++  auto profile = CreateProfile();
++  Activate(*profile.FindString("id"));
++  const auto persona =
++      content::EvalJs(contents(), kWebGLReadback).ExtractDict().Clone();
++  EXPECT_EQ(*baseline.FindString("caps"), *persona.FindString("caps"));
++  EXPECT_TRUE(persona.FindBool("ordered").value_or(false));
++  EXPECT_TRUE(persona.FindBool("stable").value_or(false));
++  EXPECT_EQ(0, persona.FindInt("error").value_or(-1));
++  EXPECT_NE(*baseline.FindString("pixels"), *persona.FindString("pixels"));
++}
++
++}  // namespace helium_persona
+--- a/chrome/browser/helium_persona/persona_service.cc
++++ b/chrome/browser/helium_persona/persona_service.cc
+@@ -344,7 +344,8 @@ FingerprintSeedState ReadFingerprintSeed
+ }
+ 
+ FingerprintSeedState PrepareFingerprintSeedState(
+-    const PrefService& pref_service) {
++    const PrefService& pref_service,
++    bool evaluate_daily) {
+   FingerprintSeedState state = ReadFingerprintSeedState(pref_service);
+   const std::string current_day = GetCurrentLocalDay();
+   const bool replace_fixed_seed =
+@@ -353,8 +354,8 @@ FingerprintSeedState PrepareFingerprintS
+       state.profile_salt != state.fixed_seed;
+   const bool replace_random_seed =
+       state.seed_mode != kFingerprintSeedModeFixed &&
+-      (state.profile_salt.empty() ||
+-       (state.rotate_daily && state.last_rotation_day != current_day));
++      (state.profile_salt.empty() || (evaluate_daily && state.rotate_daily &&
++                                      state.last_rotation_day != current_day));
+   if (replace_fixed_seed || replace_random_seed) {
+     state.profile_salt =
+         replace_fixed_seed ? state.fixed_seed : MakeFingerprintSalt();
+@@ -364,7 +365,12 @@ FingerprintSeedState PrepareFingerprintS
+                        base::NumberToString(NextGeneration(ReadGeneration(
+                            state.rotation.Find("globalGeneration")))));
+   }
+-  if (state.seed_mode != kFingerprintSeedModeFixed && state.rotate_daily) {
++  if (const auto* epoch = state.rotation.FindString("global");
++      !epoch || epoch->empty()) {
++    state.rotation.Set("global", MakeIsoTimestamp());
++  }
++  if (evaluate_daily && state.seed_mode != kFingerprintSeedModeFixed &&
++      state.rotate_daily) {
+     state.last_rotation_day = current_day;
+   }
+   return state;
+@@ -1562,7 +1568,7 @@ base::DictValue NormalizePersona(const b
+     advanced->Set("audioNoise", true);
+   }
+   if (!advanced->FindBool("hardwareNoise").has_value()) {
+-    advanced->Set("hardwareNoise", true);
++    advanced->Set("hardwareNoise", false);
+   }
+   if (!advanced->FindBool("fontMetricNoise").has_value()) {
+     advanced->Set("fontMetricNoise", false);
+@@ -1839,6 +1845,53 @@ const base::Value* FindPersonaPath(const
+   return nullptr;
+ }
+ 
++// Legacy fields remain round-trippable but have no rendering consumer.
++constexpr std::string_view kUnsupportedPersonaFields[] = {
++    "fontRendering.id",           "fontRendering.engine",
++    "fontRendering.antialiasing", "fontRendering.subpixelRendering",
++    "fontRendering.lcdText",      "gpu.webglProfile",
++    "gpu.webgl2Profile",          "advanced.hardwareNoise"};
++
++base::DictValue PersonaFieldCapabilities() {
++  base::DictValue capabilities;
++  for (auto path : kUnsupportedPersonaFields) {
++    capabilities.Set(path, "unsupported");
++  }
++  for (auto path :
++       {"platform", "userAgent", "uaCh.platform", "uaCh.platformVersion",
++        "uaCh.architecture", "uaCh.bitness", "uaCh.fullVersion"}) {
++    capabilities.Set(path, "device_pack_constrained");
++  }
++  for (auto path : {"screen.width", "screen.height", "screen.deviceScaleFactor",
++                    "advanced.canvasNoise", "advanced.audioNoise",
++                    "advanced.fontMetricNoise", "advanced.clientRectNoise"}) {
++    capabilities.Set(path, "implemented");
++  }
++  return capabilities;
++}
++
++base::DictValue PersonaFieldDiagnostics(const base::DictValue& persona) {
++  base::DictValue diagnostics;
++  for (auto path : kUnsupportedPersonaFields) {
++    if (FindPersonaPath(persona, path)) {
++      diagnostics.Set(path, "unsupported");
++    }
++  }
++  return diagnostics;
++}
++
++void RejectUnsupportedPersonaChanges(const base::DictValue& candidate,
++                                     const base::DictValue& existing,
++                                     base::DictValue* errors) {
++  for (auto path : kUnsupportedPersonaFields) {
++    const base::Value* requested = FindPersonaPath(candidate, path);
++    const base::Value* saved = FindPersonaPath(existing, path);
++    if (requested && (!saved || *requested != *saved)) {
++      errors->Set(path, "unsupported");
++    }
++  }
++}
++
+ void AppendPersonaDiff(const base::DictValue& requested,
+                        const base::DictValue& effective,
+                        std::string_view path,
+@@ -1997,6 +2050,15 @@ void SetEmptyRuntimeEvidence(base::DictV
+                                  .Set("partialContexts", 0)));
+ }
+ 
++bool PersonaSnapshotsHaveSameIdentity(
++    const blink::HeliumPersonaSnapshot& actual,
++    const blink::HeliumPersonaSnapshot& expected) {
++  auto identity = actual;
++  // Presentation metadata may change without restarting web execution contexts.
++  identity.name = expected.name;
++  return identity == expected;
++}
++
+ class PersonaSurfaceProbeOperation
+     : public base::RefCounted<PersonaSurfaceProbeOperation> {
+  public:
+@@ -2062,7 +2124,8 @@ class PersonaSurfaceProbeOperation
+       ++unreachable_;
+     } else {
+       ObserveRuntimeSurfaces(*probe);
+-      bool matches = probe->snapshot == expected_snapshot_;
++      bool matches =
++          PersonaSnapshotsHaveSameIdentity(probe->snapshot, expected_snapshot_);
+       const std::array<bool, 5> applied_tokens = AppliedNoiseTokens(*probe);
+       for (size_t i = 0; i < expected_tokens_.size(); ++i) {
+         if (expected_tokens_[i] != applied_tokens[i]) {
+@@ -2194,8 +2257,8 @@ class PersonaSurfaceProbeOperation
+       }
+ 
+       ObserveRuntimeSurfaces(*worker_probe->probe);
+-      bool matches =
+-          worker_probe->probe->snapshot == expected_snapshot_;
++      bool matches = PersonaSnapshotsHaveSameIdentity(
++          worker_probe->probe->snapshot, expected_snapshot_);
+       const std::array<bool, 5> applied_tokens =
+           AppliedNoiseTokens(*worker_probe->probe);
+       for (size_t i = 0; i < kWorkerNoiseTokenCount; ++i) {
+@@ -2258,11 +2321,11 @@ class PersonaSurfaceProbeOperation
+             : "not_observed";
+     base::DictValue tokens;
+     for (size_t i = 0; i < kNoiseTokenNames.size(); ++i) {
+-      const char* token_status =
+-          total_ == 0u              ? "not_applicable"
+-          : token_mismatches_[i] > 0u ? "mismatched"
+-          : unreachable_ > 0u        ? "partially_verified"
+-                                     : "matched";
++      const char* token_status = i == 2u                     ? "unsupported"
++                                 : total_ == 0u              ? "not_applicable"
++                                 : token_mismatches_[i] > 0u ? "mismatched"
++                                 : unreachable_ > 0u ? "partially_verified"
++                                                     : "matched";
+       tokens.Set(kNoiseTokenNames[i],
+                  base::DictValue()
+                      .Set("expected", expected_tokens_[i])
+@@ -2272,16 +2335,13 @@ class PersonaSurfaceProbeOperation
+     base::DictValue worker_tokens;
+     for (size_t i = 0; i < kNoiseTokenNames.size(); ++i) {
+       const char* token_status =
+-          i >= kWorkerNoiseTokenCount
+-              ? "not_applicable"
+-          : worker_total_ == 0u
+-              ? "not_applicable"
+-          : worker_unreported_ == worker_total_
+-              ? "unreported"
+-          : worker_token_mismatches_[i] > 0u
+-              ? "mismatched"
+-          : worker_unreported_ > 0u ? "partially_verified"
+-                                    : "matched";
++          i == 2u                               ? "unsupported"
++          : i >= kWorkerNoiseTokenCount         ? "not_applicable"
++          : worker_total_ == 0u                 ? "not_applicable"
++          : worker_unreported_ == worker_total_ ? "unreported"
++          : worker_token_mismatches_[i] > 0u    ? "mismatched"
++          : worker_unreported_ > 0u             ? "partially_verified"
++                                                : "matched";
+       worker_tokens.Set(
+           kNoiseTokenNames[i],
+           base::DictValue()
+@@ -2729,6 +2789,7 @@ base::DictValue PersonaService::GetPerso
+       .Set("supportedWebRtcModes", std::move(web_rtc_modes))
+       .Set("launchSelectionModes", std::move(launch_selection_modes))
+       .Set("fingerprintRotationScopes", std::move(rotation_scopes))
++      .Set("fieldCapabilities", PersonaFieldCapabilities())
+       .Set("activationOutcome",
+            base::DictValue()
+                .Set("commitStates", std::move(activation_commit_states))
+@@ -2749,17 +2810,14 @@ base::DictValue PersonaService::GetPerso
+                .Set("network", "barrier_checked_transactional_fanout")
+                .Set("webGpu", "runtime_identity_and_capability_profile")
+                .Set("mediaOutput", "runtime_latency_and_output_callback")
+-               .Set("mediaDevices",
+-                    "synthetic_enumeration_capture_fail_closed")
++               .Set("mediaDevices", "synthetic_enumeration_capture_fail_closed")
+                .Set("probe", "partial"))
+-      .Set("runtimeEvidence",
+-           base::DictValue()
+-               .Set("workerTypes",
+-                    base::ListValue()
+-                        .Append("dedicated")
+-                        .Append("shared")
+-                        .Append("service"))
+-               .Set("workerClientRect", "not_applicable"));
++      .Set("runtimeEvidence", base::DictValue()
++                                  .Set("workerTypes", base::ListValue()
++                                                          .Append("dedicated")
++                                                          .Append("shared")
++                                                          .Append("service"))
++                                  .Set("workerClientRect", "not_applicable"));
+ }
+ 
+ base::DictValue PersonaService::ValidatePersonaConfig(
+@@ -2767,6 +2825,13 @@ base::DictValue PersonaService::Validate
+   base::DictValue normalized = ValidatePersona(payload);
+   base::DictValue field_errors = GetPersonaFieldErrors(normalized);
+   AddNetworkRouteFieldError(normalized, &field_errors);
++  const base::DictValue state = ReadState();
++  if (const auto* id = normalized.FindString("id")) {
++    if (const auto* existing =
++            FindPersonaInList(state.FindList("personas"), *id)) {
++      RejectUnsupportedPersonaChanges(normalized, *existing, &field_errors);
++    }
++  }
+   if (!PersonaHasRequiredFields(normalized) && field_errors.empty()) {
+     field_errors.Set("persona", "missing_required_fields");
+   }
+@@ -2779,6 +2844,7 @@ base::DictValue PersonaService::Validate
+   return base::DictValue()
+       .Set("ok", field_errors.empty())
+       .Set("schema", kPersonaExportSchema)
++      .Set("fieldDiagnostics", PersonaFieldDiagnostics(normalized))
+       .Set("normalized", std::move(normalized))
+       .Set("fieldErrors", std::move(field_errors));
+ }
+@@ -2804,6 +2870,8 @@ base::DictValue PersonaService::ResolveP
+   const bool active = GetActivePersonaId(state) == persona_id;
+   response.Set("active", active);
+   response.Set("requested", persona->Clone());
++  response.Set("fieldCapabilities", PersonaFieldCapabilities());
++  response.Set("fieldDiagnostics", PersonaFieldDiagnostics(*persona));
+   if (!active) {
+     response.Set("ok", true);
+     response.Set("status", "not_active");
+@@ -2847,7 +2915,7 @@ base::DictValue PersonaService::GetEffec
+   const base::DictValue* effective = response.FindDict("effective");
+   base::ListValue diff;
+   if (requested && effective) {
+-    constexpr std::array<std::string_view, 31> kComparableFields = {
++    constexpr std::array<std::string_view, 34> kComparableFields = {
+         "enabled",
+         "id",
+         "name",
+@@ -2860,6 +2928,9 @@ base::DictValue PersonaService::GetEffec
+         "uaCh.platformVersion",
+         "uaCh.architecture",
+         "uaCh.bitness",
++        "uaCh.fullVersion",
++        "uaCh.mobile",
++        "uaCh.model",
+         "gpu.vendor",
+         "gpu.renderer",
+         "hardware.hardwareConcurrency",
+@@ -3052,6 +3123,39 @@ base::DictValue PersonaService::CreatePe
+ }
+ 
+ base::DictValue PersonaService::SavePersona(const base::DictValue& payload) {
++  bool requires_activation = false;
++  base::DictValue response = PreparePersonaSave(payload, &requires_activation);
++  if (!response.FindBool("ok").value_or(false)) {
++    return response;
++  }
++  if (requires_activation) {
++    return MakeResponse(
++        false, ReadState(),
++        base::DictValue().Set("persona", "requires_activation"));
++  }
++  WriteState(response.FindDict("state")->Clone());
++  return response;
++}
++
++void PersonaService::SavePersonaAndApply(const base::DictValue& payload,
++                                         OperationCallback callback) {
++  bool requires_activation = false;
++  base::DictValue response = PreparePersonaSave(payload, &requires_activation);
++  if (response.FindBool("ok").value_or(false)) {
++    if (requires_activation) {
++      StartPersonaActivation(response.FindDict("state")->Clone(),
++                             *payload.FindString("id"), std::nullopt,
++                             std::move(callback));
++      return;
++    }
++    WriteState(response.FindDict("state")->Clone());
++  }
++  std::move(callback).Run(std::move(response));
++}
++
++base::DictValue PersonaService::PreparePersonaSave(
++    const base::DictValue& payload,
++    bool* requires_activation) {
+   base::DictValue state = ReadState();
+   if (IsIdentityTransitionBusy()) {
+     return MakeResponse(false, std::move(state),
+@@ -3079,6 +3183,7 @@ base::DictValue PersonaService::SavePers
+   base::DictValue validated = ValidatePersona(payload);
+   base::DictValue errors = GetPersonaFieldErrors(validated);
+   AddNetworkRouteFieldError(validated, &errors);
++  RejectUnsupportedPersonaChanges(validated, *existing, &errors);
+   if (GetActivePersonaId(state) == *payload_id &&
+       GetPersonaNetworkRouteId(validated) !=
+           GetPersonaNetworkRouteId(*existing)) {
+@@ -3092,6 +3197,11 @@ base::DictValue PersonaService::SavePers
+   }
+ 
+   base::DictValue persona = NormalizePersona(validated, *payload_id);
++  for (auto path : kUnsupportedPersonaFields) {
++    if (const auto* saved = FindPersonaPath(*existing, path)) {
++      persona.SetByDottedPath(path, saved->Clone());
++    }
++  }
+   const std::string* display_name = persona.FindString("displayName");
+   persona.Set("name", display_name ? *display_name : "Custom Persona");
+   if (const std::string* created_at = existing->FindString("createdAt")) {
+@@ -3102,8 +3212,18 @@ base::DictValue PersonaService::SavePers
+   }
+   persona.Set("modifiedAt", MakeIsoTimestamp());
+   persona.Set("enabled", true);
++  // Only presentation metadata may bypass the execution-context transaction.
++  auto identity_fields = [](const base::DictValue& value) {
++    base::DictValue identity = value.Clone();
++    for (const char* key : {"name", "displayName", "icon", "createdAt",
++                            "modifiedAt", "lastUsedAt"}) {
++      identity.Remove(key);
++    }
++    return identity;
++  };
++  *requires_activation = GetActivePersonaId(state) == *payload_id &&
++                         identity_fields(persona) != identity_fields(*existing);
+   state.Set("personas", UpsertPersona(state.FindList("personas"), persona));
+-  WriteState(state.Clone());
+   return MakeResponse(true, std::move(state));
+ }
+ 
+@@ -3131,6 +3251,7 @@ base::DictValue PersonaService::ImportPe
+   int skipped_count = 0;
+   const std::string name_suffix = MakeImportNameSuffix();
+   base::DictValue field_errors;
++  base::DictValue field_diagnostics;
+ 
+   for (size_t index = 0; index < payload->size(); ++index) {
+     const auto& value = (*payload)[index];
+@@ -3167,6 +3288,8 @@ base::DictValue PersonaService::ImportPe
+       persona.Set("name", display_name);
+       persona.Set("displayName", display_name);
+     }
++    field_diagnostics.Set(base::NumberToString(index),
++                          PersonaFieldDiagnostics(persona));
+     personas.Append(std::move(persona));
+     ++imported_count;
+   }
+@@ -3177,6 +3300,7 @@ base::DictValue PersonaService::ImportPe
+   }
+   base::DictValue response = MakeResponse(imported_count > 0, std::move(state),
+                                           std::move(field_errors));
++  response.Set("fieldDiagnostics", std::move(field_diagnostics));
+   response.Set("importedCount", imported_count);
+   response.Set("skippedCount", skipped_count);
+   return response;
+@@ -3347,7 +3471,7 @@ void PersonaService::StartPersonaActivat
+           : std::string();
+   pending_persona_activation_->candidate_fingerprint_seed =
+       identity_template_id
+-          ? PrepareFingerprintSeedState(*prefs_)
++          ? PrepareFingerprintSeedState(*prefs_, !daily_seed_evaluated_)
+           : pending_persona_activation_->old_fingerprint_seed.Clone();
+   pending_persona_activation_->candidate_state = std::move(state);
+   pending_persona_activation_->candidate_route_id = candidate_route_id;
+@@ -3754,6 +3878,10 @@ void PersonaService::FinishPersonaActiva
+       pending_persona_activation_->created_persona_id) {
+     response.Set("personaId", *pending_persona_activation_->created_persona_id);
+   }
++  if (response.FindBool("ok").value_or(false) &&
++      pending_persona_activation_->identity_template_id) {
++    daily_seed_evaluated_ = true;
++  }
+   OperationCallback callback = std::move(pending_persona_activation_->callback);
+   if (identity_rotation_delegate_) {
+     identity_rotation_delegate_->ReleaseExecutionContextQuiescence();
+@@ -3878,21 +4006,32 @@ void PersonaService::SetLaunchSelectionM
+   }
+ }
+ 
+-void PersonaService::RefreshFingerprint(
++base::DictValue PersonaService::RefreshFingerprint(
+     FingerprintRefreshScope scope,
+     const std::string& site_origin_or_empty) {
+   if (!prefs_ || IsIdentityTransitionBusy()) {
+-    return;
++    return base::DictValue().Set("ok", false).Set("error", "inProgress");
++  }
++  if (scope == FingerprintRefreshScope::kSite) {
++    const PersonaResolution resolution = ResolveActivePersona();
++    if (resolution.status != PersonaResolutionStatus::kPersonaReady) {
++      return base::DictValue().Set("ok", false).Set("error", "unavailable");
++    }
++    if (resolution.snapshot.fingerprint_rotation_scope !=
++        kFingerprintRotationScopeSiteProfile) {
++      return base::DictValue()
++          .Set("ok", false)
++          .Set("error", "unsupported_scope");
++    }
+   }
+ 
+   base::DictValue rotation_epoch =
+       prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
+-  if (scope == FingerprintRefreshScope::kSite &&
+-      !site_origin_or_empty.empty()) {
++  if (scope == FingerprintRefreshScope::kSite) {
+     const GURL site_url(site_origin_or_empty);
+     const url::Origin site_origin = url::Origin::Create(site_url);
+     if (!site_url.SchemeIsHTTPOrHTTPS() || site_origin.opaque()) {
+-      return;
++      return base::DictValue().Set("ok", false).Set("error", "invalid_origin");
+     }
+     const std::string scope_key = site_origin.Serialize();
+     base::DictValue* sites = rotation_epoch.EnsureDict("sites");
+@@ -3914,15 +4053,13 @@ void PersonaService::RefreshFingerprint(
+   }
+   prefs_->SetDict(kPersonaFingerprintRotationEpochPref,
+                   std::move(rotation_epoch));
++  return base::DictValue().Set("ok", true);
+ }
+ 
+ base::DictValue PersonaService::GetFingerprintSettings() const {
+   if (!prefs_) {
+     return base::DictValue().Set("ok", false).Set("error", "unavailable");
+   }
+-  if (!IsIdentityTransitionBusy()) {
+-    EnsureFingerprintSeedForCurrentDay();
+-  }
+   return MakeFingerprintSettingsResponse(prefs_, true);
+ }
+ 
+@@ -4045,7 +4182,7 @@ void PersonaService::RotateIdentity(Oper
+ 
+   FingerprintSeedState old_fingerprint_seed = ReadFingerprintSeedState(*prefs_);
+   FingerprintSeedState candidate_fingerprint_seed =
+-      PrepareFingerprintSeedState(*prefs_);
++      PrepareFingerprintSeedState(*prefs_, !daily_seed_evaluated_);
+   const uint64_t old_generation =
+       ReadGeneration(old_fingerprint_seed.rotation.Find("globalGeneration"));
+   const uint64_t new_generation = NextGeneration(ReadGeneration(
+@@ -4407,11 +4544,10 @@ void PersonaService::SetIdentityRotation
+ }
+ 
+ blink::HeliumPersonaSnapshot PersonaService::GetActiveSnapshot() const {
+-  return BuildActiveSnapshot(/*ensure_fingerprint_state=*/true);
++  return BuildActiveSnapshot();
+ }
+ 
+-blink::HeliumPersonaSnapshot PersonaService::BuildActiveSnapshot(
+-    bool ensure_fingerprint_state) const {
++blink::HeliumPersonaSnapshot PersonaService::BuildActiveSnapshot() const {
+   base::DictValue state = ReadState();
+   const base::DictValue* persona =
+       FindPersonaInList(state.FindList("personas"), GetActivePersonaId(state));
+@@ -4436,34 +4572,24 @@ blink::HeliumPersonaSnapshot PersonaServ
+ 
+   if (const std::string* value = persona->FindString("id")) {
+     snapshot.id = *value;
+-    if (ensure_fingerprint_state) {
+-      snapshot.fingerprint_profile_salt = GetOrCreateFingerprintProfileSalt();
+-      snapshot.fingerprint_rotation_global_epoch =
+-          GetOrCreateFingerprintGlobalEpoch();
+-    } else {
+-      const std::string profile_salt =
+-          prefs_->GetString(kPersonaFingerprintProfileSaltPref);
+-      const std::string seed_mode =
+-          prefs_->GetString(prefs::kFingerprintSeedMode);
+-      const std::string fixed_seed =
+-          prefs_->GetString(prefs::kFingerprintFixedSeed);
+-      const bool fixed_seed_mismatch =
+-          seed_mode == kFingerprintSeedModeFixed &&
+-          (!IsValidFingerprintSeed(fixed_seed) || profile_salt != fixed_seed);
+-      const bool daily_rotation_due =
+-          prefs_->GetBoolean(prefs::kFingerprintRotateDaily) &&
+-          prefs_->GetString(prefs::kFingerprintLastRotationDay) !=
+-              GetCurrentLocalDay();
+-      const std::string* global_epoch =
+-          prefs_->GetDict(kPersonaFingerprintRotationEpochPref)
+-              .FindString("global");
+-      if (profile_salt.empty() || fixed_seed_mismatch || daily_rotation_due ||
+-          !global_epoch || global_epoch->empty()) {
+-        return blink::HeliumPersonaSnapshot();
+-      }
+-      snapshot.fingerprint_profile_salt = profile_salt;
+-      snapshot.fingerprint_rotation_global_epoch = *global_epoch;
++    const std::string& profile_salt =
++        prefs_->GetString(kPersonaFingerprintProfileSaltPref);
++    const std::string& fixed_seed =
++        prefs_->GetString(prefs::kFingerprintFixedSeed);
++    const bool fixed_seed_mismatch =
++        prefs_->GetString(prefs::kFingerprintSeedMode) ==
++            kFingerprintSeedModeFixed &&
++        (!IsValidFingerprintSeed(fixed_seed) || profile_salt != fixed_seed);
++    const std::string* global_epoch =
++        prefs_->GetDict(kPersonaFingerprintRotationEpochPref)
++            .FindString("global");
++    // Reads never rotate an active session, including across local midnight.
++    if (profile_salt.empty() || fixed_seed_mismatch || !global_epoch ||
++        global_epoch->empty()) {
++      return blink::HeliumPersonaSnapshot();
+     }
++    snapshot.fingerprint_profile_salt = profile_salt;
++    snapshot.fingerprint_rotation_global_epoch = *global_epoch;
+     snapshot.noise_seed = snapshot.fingerprint_profile_salt + "\n" + *value;
+   }
+   const base::DictValue* fingerprint_rotation =
+@@ -4603,8 +4729,7 @@ blink::HeliumPersonaSnapshot PersonaServ
+       FindNestedBool(*persona, "advanced", "canvasNoise").value_or(true);
+   snapshot.audio_noise =
+       FindNestedBool(*persona, "advanced", "audioNoise").value_or(true);
+-  snapshot.hardware_noise =
+-      FindNestedBool(*persona, "advanced", "hardwareNoise").value_or(true);
++  snapshot.hardware_noise = false;
+   snapshot.font_metric_noise =
+       FindNestedBool(*persona, "advanced", "fontMetricNoise").value_or(false);
+   snapshot.client_rect_noise =
+@@ -4720,21 +4845,7 @@ blink::HeliumPersonaSnapshot PersonaServ
+       }
+     }
+   }
+-  if (const std::string* value =
+-          FindNestedString(*persona, "fontRendering", "engine")) {
+-    snapshot.font_rendering_engine = *value;
+-  }
+-  if (const std::string* value =
+-          FindNestedString(*persona, "fontRendering", "id")) {
+-    snapshot.font_rendering_id = *value;
+-  }
+-  snapshot.font_antialiasing =
+-      FindNestedBool(*persona, "fontRendering", "antialiasing").value_or(false);
+-  snapshot.font_subpixel_rendering =
+-      FindNestedBool(*persona, "fontRendering", "subpixelRendering")
+-          .value_or(false);
+-  snapshot.font_lcd_text =
+-      FindNestedBool(*persona, "fontRendering", "lcdText").value_or(false);
++  // Font rasterizer claims are legacy metadata, not effective capabilities.
+   snapshot.hardware_concurrency =
+       FindNestedInt(*persona, "hardware", "hardwareConcurrency").value_or(0);
+   snapshot.device_memory =
+@@ -4938,8 +5049,7 @@ PersonaResolution PersonaService::Resolv
+     return resolution;
+   }
+ 
+-  blink::HeliumPersonaSnapshot snapshot =
+-      BuildActiveSnapshot(/*ensure_fingerprint_state=*/false);
++  blink::HeliumPersonaSnapshot snapshot = BuildActiveSnapshot();
+   if (!snapshot.enabled || snapshot.id != *active_id ||
+       snapshot.locale.empty() || snapshot.timezone.empty()) {
+     return resolution;
+@@ -4988,46 +5098,6 @@ void PersonaService::WriteState(base::Di
+   }
+ }
+ 
+-std::string PersonaService::GetOrCreateFingerprintProfileSalt() const {
+-  if (!prefs_) {
+-    return "transient-profile";
+-  }
+-
+-  EnsureFingerprintSeedForCurrentDay();
+-  return prefs_->GetString(kPersonaFingerprintProfileSaltPref);
+-}
+-
+-void PersonaService::EnsureFingerprintSeedForCurrentDay() const {
+-  if (!prefs_) {
+-    return;
+-  }
+-
+-  const std::string mode = prefs_->GetString(prefs::kFingerprintSeedMode);
+-  if (mode == kFingerprintSeedModeFixed) {
+-    const std::string fixed_seed =
+-        prefs_->GetString(prefs::kFingerprintFixedSeed);
+-    if (IsValidFingerprintSeed(fixed_seed) &&
+-        prefs_->GetString(kPersonaFingerprintProfileSaltPref) != fixed_seed) {
+-      ReplaceFingerprintSeed(fixed_seed);
+-    }
+-    return;
+-  }
+-
+-  const bool rotate_daily = prefs_->GetBoolean(prefs::kFingerprintRotateDaily);
+-  const std::string current_day = GetCurrentLocalDay();
+-  const bool seed_missing =
+-      prefs_->GetString(kPersonaFingerprintProfileSaltPref).empty();
+-  const bool day_changed =
+-      rotate_daily &&
+-      prefs_->GetString(prefs::kFingerprintLastRotationDay) != current_day;
+-  if (seed_missing || day_changed) {
+-    ReplaceFingerprintSeed(MakeFingerprintSalt());
+-  }
+-  if (rotate_daily) {
+-    prefs_->SetString(prefs::kFingerprintLastRotationDay, current_day);
+-  }
+-}
+-
+ void PersonaService::ReplaceFingerprintSeed(const std::string& seed) const {
+   DCHECK(prefs_);
+   prefs_->SetString(kPersonaFingerprintProfileSaltPref, seed);
+@@ -5043,25 +5113,6 @@ void PersonaService::ReplaceFingerprintS
+                   std::move(rotation_epoch));
+ }
+ 
+-std::string PersonaService::GetOrCreateFingerprintGlobalEpoch() const {
+-  if (!prefs_) {
+-    return MakeIsoTimestamp(base::Time::UnixEpoch());
+-  }
+-
+-  base::DictValue rotation_epoch =
+-      prefs_->GetDict(kPersonaFingerprintRotationEpochPref).Clone();
+-  const std::string* global_epoch = rotation_epoch.FindString("global");
+-  if (global_epoch && !global_epoch->empty()) {
+-    return *global_epoch;
+-  }
+-
+-  const std::string epoch = MakeIsoTimestamp();
+-  rotation_epoch.Set("global", epoch);
+-  prefs_->SetDict(kPersonaFingerprintRotationEpochPref,
+-                  std::move(rotation_epoch));
+-  return epoch;
+-}
+-
+ bool PersonaService::IsIdentityTransitionBusy() const {
+   return pending_persona_activation_ || pending_identity_rotation_ ||
+          network_identity_transition_in_progress_;
+--- a/chrome/browser/helium_persona/persona_service.h
++++ b/chrome/browser/helium_persona/persona_service.h
+@@ -108,6 +108,8 @@ class PersonaService : public KeyedServi
+   void GetPersonaAudit(OperationCallback callback) const;
+   base::DictValue CreatePersonaProfile(const std::string& display_name);
+   base::DictValue SavePersona(const base::DictValue& payload);
++  void SavePersonaAndApply(const base::DictValue& payload,
++                           OperationCallback callback);
+   base::DictValue ImportPersonas(const base::DictValue& bundle);
+   base::DictValue ClonePresetIntoProfile(const std::string& preset_id);
+   void ClonePresetAndActivate(const std::string& preset_id,
+@@ -119,8 +121,8 @@ class PersonaService : public KeyedServi
+   void SetLastUsedPersonaId(const std::string& persona_id);
+   std::string GetLaunchSelectionMode() const;
+   void SetLaunchSelectionMode(const std::string& mode);
+-  void RefreshFingerprint(FingerprintRefreshScope scope,
+-                          const std::string& site_origin_or_empty);
++  base::DictValue RefreshFingerprint(FingerprintRefreshScope scope,
++                                     const std::string& site_origin_or_empty);
+   base::DictValue GetFingerprintSettings() const;
+   base::DictValue SetFixedFingerprintSeed(const std::string& seed);
+   base::DictValue GenerateRandomFingerprintSeed();
+@@ -144,12 +146,10 @@ class PersonaService : public KeyedServi
+   void WriteState(base::DictValue state);
+   void AddNetworkRouteFieldError(const base::DictValue& persona,
+                                  base::DictValue* errors) const;
+-  blink::HeliumPersonaSnapshot BuildActiveSnapshot(
+-      bool ensure_fingerprint_state) const;
+-  void EnsureFingerprintSeedForCurrentDay() const;
++  base::DictValue PreparePersonaSave(const base::DictValue& payload,
++                                     bool* requires_activation);
++  blink::HeliumPersonaSnapshot BuildActiveSnapshot() const;
+   void ReplaceFingerprintSeed(const std::string& seed) const;
+-  std::string GetOrCreateFingerprintProfileSalt() const;
+-  std::string GetOrCreateFingerprintGlobalEpoch() const;
+   bool IsIdentityTransitionBusy() const;
+   void StartPersonaActivation(base::DictValue state,
+                               const std::string& persona_id,
+@@ -210,6 +210,8 @@ class PersonaService : public KeyedServi
+   std::unique_ptr<PendingIdentityRotation> pending_identity_rotation_;
+   bool network_identity_transition_in_progress_ = false;
+   bool network_identity_degraded_ = false;
++  // Consumed only by a successful activation; failed candidates may retry.
++  bool daily_seed_evaluated_ = false;
+   base::WeakPtrFactory<PersonaService> weak_ptr_factory_{this};
+ };
+ 
+--- a/chrome/browser/helium_persona/persona_service_unittest.cc
++++ b/chrome/browser/helium_persona/persona_service_unittest.cc
+@@ -14,6 +14,8 @@
+ #include <vector>
+ 
+ #include "base/test/test_future.h"
++#include "base/time/time.h"
++#include "base/time/time_override.h"
+ #include "base/values.h"
+ #include "chrome/browser/helium_persona/persona_identity_template.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+@@ -40,6 +42,10 @@ constexpr char kFingerprintLastRotationD
+ constexpr char kFingerprintLastChangedPref[] =
+     "helium.persona.fingerprint_last_changed";
+ constexpr char kDefaultPersonaId[] = "default";
++base::Time fingerprint_test_now;
++base::Time FingerprintTestTimeNow() {
++  return fingerprint_test_now;
++}
+ 
+ const base::DictValue* FindPersona(const base::ListValue* personas,
+                                    const std::string& id) {
+@@ -94,6 +100,13 @@ base::DictValue ActivatePersona(PersonaS
+   return result.Take();
+ }
+ 
++base::DictValue SaveAndApplyPersona(PersonaService* service,
++                                    const base::DictValue& payload) {
++  base::test::TestFuture<base::DictValue> result;
++  service->SavePersonaAndApply(payload, result.GetCallback());
++  return result.Take();
++}
++
+ base::DictValue GetPersonaAudit(PersonaService* service) {
+   base::test::TestFuture<base::DictValue> result;
+   service->GetPersonaAudit(result.GetCallback());
+@@ -1074,20 +1087,21 @@ TEST_F(PersonaServiceTest, SnapshotUsesR
+   struct PlatformExpectation {
+     const char* os;
+     const char* navigator_platform;
++    uint32_t device_pack_id;
+   };
+-  constexpr std::array<PlatformExpectation, 5> kExpectations = {{
+-      {"macOS", "MacIntel"},
+-      {"Windows", "Win32"},
+-      {"Linux", "Linux x86_64"},
+-      {"Chrome OS", "Linux x86_64"},
+-      {"Android", "Linux armv81"},
++  constexpr std::array<PlatformExpectation, 3> kExpectations = {{
++      {"macOS", "MacIntel", kChromium149MacArmIdentityTemplateId},
++      {"Windows", "Win32", kChromium149WindowsX64IdentityTemplateId},
++      {"Linux", "Linux x86_64", kChromium149LinuxX64IdentityTemplateId},
+   }};
+ 
+   for (const auto& expectation : kExpectations) {
+     base::DictValue payload = created_persona->Clone();
+     payload.Set("platform", expectation.os);
++    payload.Set("devicePackId", static_cast<int>(expectation.device_pack_id));
+     payload.EnsureDict("uaCh")->Set("platform", expectation.os);
+-    base::DictValue save_response = service_->SavePersona(payload);
++    base::DictValue save_response =
++        SaveAndApplyPersona(service_.get(), payload);
+     ASSERT_TRUE(save_response.FindBool("ok").value_or(false));
+     const std::string* id = payload.FindString("id");
+     ASSERT_TRUE(id);
+@@ -2355,11 +2369,16 @@ TEST_F(PersonaServiceTest, SiteRefreshIn
+ }
+ 
+ TEST_F(PersonaServiceTest, SiteRefreshMigratesLegacyStringEpoch) {
++  const auto created = service_->CreatePersonaProfile("Legacy");
++  ASSERT_TRUE(ActivatePersona(service_.get(), *created.FindString("personaId"))
++                  .FindBool("ok")
++                  .value_or(false));
+   constexpr char kScopeKey[] = "https://legacy.example";
+   base::DictValue sites;
+   sites.Set(kScopeKey, "2026-01-02T03:04:05.000Z");
+-  prefs_.SetDict(kPersonaFingerprintRotationEpochPref,
+-                 base::DictValue().Set("sites", std::move(sites)));
++  auto rotation = prefs_.GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  rotation.Set("sites", std::move(sites));
++  prefs_.SetDict(kPersonaFingerprintRotationEpochPref, std::move(rotation));
+ 
+   const blink::HeliumPersonaSnapshot legacy = service_->GetActiveSnapshot();
+   ASSERT_EQ(1u, legacy.fingerprint_rotation_site_epochs.size());
+@@ -2396,20 +2415,102 @@ TEST_F(PersonaServiceTest, FixedSeedIsVa
+   EXPECT_FALSE(accepted.FindBool("rotateDaily").value_or(true));
+ }
+ 
+-TEST_F(PersonaServiceTest, DailyRandomRotationRunsOnlyOnceForAStaleDay) {
++TEST_F(PersonaServiceTest,
++       DailyRotationIsTransactionalAndStableAcrossMidnight) {
++  fingerprint_test_now = base::Time::Now();
++  base::subtle::ScopedTimeClockOverrides clock_override(&FingerprintTestTimeNow,
++                                                        nullptr, nullptr);
+   constexpr char kPreviousSeed[] =
+       "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+   prefs_.SetString(kPersonaFingerprintProfileSaltPref, kPreviousSeed);
+-  prefs_.SetString(kFingerprintSeedModePref, "random");
+   prefs_.SetBoolean(kFingerprintRotateDailyPref, true);
+   prefs_.SetString(kFingerprintLastRotationDayPref, "1970-01-01");
++  const auto created = service_->CreatePersonaProfile("Daily");
++  const std::string id = *created.FindString("personaId");
++
++  EXPECT_EQ(kPreviousSeed,
++            *service_->GetFingerprintSettings().FindString("seed"));
++  ASSERT_TRUE(
++      ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  const auto first = service_->GetActiveSnapshot();
++  EXPECT_NE(kPreviousSeed, first.fingerprint_profile_salt);
++  const auto committed_rotation =
++      prefs_.GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  const auto committed_day = prefs_.GetString(kFingerprintLastRotationDayPref);
++
++  fingerprint_test_now += base::Days(2);
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaReady,
++            service_->ResolveActivePersona().status);
++  EXPECT_EQ(first.fingerprint_profile_salt,
++            *service_->GetFingerprintSettings().FindString("seed"));
++  ASSERT_TRUE(
++      ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  EXPECT_EQ(committed_rotation,
++            prefs_.GetDict(kPersonaFingerprintRotationEpochPref));
++  EXPECT_EQ(committed_day, prefs_.GetString(kFingerprintLastRotationDayPref));
++
++  // The next browser session evaluates the stale day on its first activation.
++  service_ = std::make_unique<PersonaService>(&prefs_);
++  ASSERT_TRUE(
++      ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  EXPECT_NE(first.fingerprint_profile_salt,
++            service_->GetActiveSnapshot().fingerprint_profile_salt);
++}
++
++TEST_F(PersonaServiceTest, FingerprintReadsNeverInitializeSeedState) {
++  service_->GetFingerprintSettings();
++  service_->GetActiveSnapshot();
++  service_->ResolveActivePersona();
++  EXPECT_TRUE(prefs_.GetString(kPersonaFingerprintProfileSaltPref).empty());
++  EXPECT_TRUE(prefs_.GetDict(kPersonaFingerprintRotationEpochPref).empty());
++}
++
++TEST_F(PersonaServiceTest, DailyRotationRetriesAfterRejectedActivation) {
++  constexpr char kSeed[] =
++      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
++  prefs_.SetString(kPersonaFingerprintProfileSaltPref, kSeed);
++  prefs_.SetBoolean(kFingerprintRotateDailyPref, true);
++  prefs_.SetString(kFingerprintLastRotationDayPref, "1970-01-01");
++  const auto created = service_->CreatePersonaProfile("Daily retry");
++  const std::string id = *created.FindString("personaId");
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  auto* pending = delegate.get();
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  base::test::TestFuture<base::DictValue> failed;
++  service_->SetActivePersona(id, failed.GetCallback());
++  EXPECT_NE(kSeed, pending->apply_calls.front().fingerprint_profile_salt);
++  EXPECT_EQ(kSeed, *service_->GetFingerprintSettings().FindString("seed"));
++  pending->CompleteNextApply(false);
++  pending->CompleteNextApply(true);
++  EXPECT_FALSE(failed.Take().FindBool("ok").value_or(true));
++  EXPECT_EQ("1970-01-01", prefs_.GetString(kFingerprintLastRotationDayPref));
++  EXPECT_EQ(kSeed, prefs_.GetString(kPersonaFingerprintProfileSaltPref));
+ 
+-  const base::DictValue first = service_->GetFingerprintSettings();
+-  ASSERT_TRUE(first.FindString("seed"));
+-  EXPECT_NE(kPreviousSeed, *first.FindString("seed"));
++  base::test::TestFuture<base::DictValue> retried;
++  service_->SetActivePersona(id, retried.GetCallback());
++  const auto candidate = pending->apply_calls.front().fingerprint_profile_salt;
++  EXPECT_NE(kSeed, candidate);
++  pending->CompleteNextApply(true);
++  EXPECT_TRUE(retried.Take().FindBool("ok").value_or(false));
++  EXPECT_EQ(candidate, prefs_.GetString(kPersonaFingerprintProfileSaltPref));
++}
+ 
+-  const base::DictValue second = service_->GetFingerprintSettings();
+-  EXPECT_EQ(*first.FindString("seed"), *second.FindString("seed"));
++TEST_F(PersonaServiceTest, FixedSeedSurvivesActivationAndSessionRestart) {
++  constexpr char kSeed[] =
++      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
++  ASSERT_TRUE(
++      service_->SetFixedFingerprintSeed(kSeed).FindBool("ok").value_or(false));
++  const auto created = service_->CreatePersonaProfile("Fixed");
++  const std::string id = *created.FindString("personaId");
++  ASSERT_TRUE(
++      ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  const auto before =
++      prefs_.GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  service_ = std::make_unique<PersonaService>(&prefs_);
++  ASSERT_TRUE(
++      ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  EXPECT_EQ(kSeed, service_->GetActiveSnapshot().fingerprint_profile_salt);
++  EXPECT_EQ(before, prefs_.GetDict(kPersonaFingerprintRotationEpochPref));
+ }
+ 
+ TEST_F(PersonaServiceTest, ExitCleanupClearsOnlyRandomFingerprintState) {
+@@ -2580,4 +2681,188 @@ TEST_F(PersonaServiceTest, SaveRejectsWe
+ 
+ }  // namespace
+ 
++TEST_F(PersonaServiceTest,
++       ActiveSaveWaitsForNetworkAndExecutionContextRestart) {
++  const auto created = service_->CreatePersonaProfile("Editing");
++  const std::string id = *created.FindString("personaId");
++  ASSERT_TRUE(
++      ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  const auto before = prefs_.GetDict(kPersonaStatePref).Clone();
++  auto payload = FindPersona(before.FindList("personas"), id)->Clone();
++  payload.EnsureDict("screen")->Set("width", 2400);
++  EXPECT_EQ("requires_activation", *service_->SavePersona(payload)
++                                        .FindDict("fieldErrors")
++                                        ->FindString("persona"));
++  EXPECT_EQ(before, prefs_.GetDict(kPersonaStatePref));
++
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  auto* pending = delegate.get();
++  pending->defer_restart = true;
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  base::test::TestFuture<base::DictValue> result;
++  service_->SavePersonaAndApply(payload, result.GetCallback());
++  EXPECT_FALSE(result.IsReady());
++  EXPECT_EQ(before, prefs_.GetDict(kPersonaStatePref));
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaUnavailable,
++            service_->ResolveActivePersona().status);
++  EXPECT_FALSE(service_->SavePersona(payload).FindBool("ok").value_or(true));
++  pending->CompleteNextApply(true);
++  EXPECT_FALSE(result.IsReady());
++  pending->StartRestart();
++  pending->CompleteRestart();
++  const auto response = result.Take();
++  EXPECT_TRUE(response.FindBool("ok").value_or(false));
++  EXPECT_EQ("committed", *response.FindString("commitState"));
++  EXPECT_EQ("restarted", *response.FindString("restartResult"));
++  EXPECT_EQ(2400, service_->GetActiveSnapshot().screen_width);
++}
++
++TEST_F(PersonaServiceTest, ActiveMetadataSaveSkipsRestart) {
++  const auto created = service_->CreatePersonaProfile("Metadata");
++  const std::string id = *created.FindString("personaId");
++  ASSERT_TRUE(
++      ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  const auto before = service_->GetPersonaState();
++  auto payload = FindPersona(before.FindList("personas"), id)->Clone();
++  payload.Set("displayName", "Renamed");
++  payload.Set("icon", "work");
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  auto* pending = delegate.get();
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  EXPECT_TRUE(SaveAndApplyPersona(service_.get(), payload)
++                  .FindBool("ok")
++                  .value_or(false));
++  EXPECT_TRUE(pending->apply_calls.empty());
++  EXPECT_EQ(0, pending->restart_count);
++  EXPECT_EQ("Renamed", service_->GetActiveSnapshot().name);
++}
++
++TEST_F(PersonaServiceTest, ActiveSaveRollsBackRejectedCandidate) {
++  const auto created = service_->CreatePersonaProfile("Rollback");
++  const std::string id = *created.FindString("personaId");
++  ASSERT_TRUE(
++      ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  const auto before = prefs_.GetDict(kPersonaStatePref).Clone();
++  auto payload = FindPersona(before.FindList("personas"), id)->Clone();
++  payload.EnsureDict("region")->Set("timezone", "Europe/Berlin");
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  auto* pending = delegate.get();
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  base::test::TestFuture<base::DictValue> result;
++  service_->SavePersonaAndApply(payload, result.GetCallback());
++  pending->CompleteNextApply(false);
++  pending->CompleteNextApply(true);
++  EXPECT_FALSE(result.Take().FindBool("ok").value_or(true));
++  EXPECT_EQ(before, prefs_.GetDict(kPersonaStatePref));
++  EXPECT_EQ(PersonaResolutionStatus::kPersonaReady,
++            service_->ResolveActivePersona().status);
++}
++
++TEST_F(PersonaServiceTest, ActiveSaveRollsBackRestartDispatchFailure) {
++  const auto created = service_->CreatePersonaProfile("Restart rollback");
++  const std::string id = *created.FindString("personaId");
++  ASSERT_TRUE(
++      ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  const auto before = prefs_.GetDict(kPersonaStatePref).Clone();
++  auto payload = FindPersona(before.FindList("personas"), id)->Clone();
++  payload.EnsureDict("screen")->Set("width", 2400);
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  auto* pending = delegate.get();
++  pending->defer_restart = true;
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  base::test::TestFuture<base::DictValue> result;
++  service_->SavePersonaAndApply(payload, result.GetCallback());
++  pending->CompleteNextApply(true);
++  pending->FailRestartAfterIsolation();
++  const auto failed = result.Take();
++  EXPECT_FALSE(failed.FindBool("ok").value_or(true));
++  EXPECT_EQ("rolled_back", *failed.FindString("commitState"));
++  EXPECT_EQ(before, prefs_.GetDict(kPersonaStatePref));
++}
++
++TEST_F(PersonaServiceTest, ActiveSavePreservesConcurrentPrefChanges) {
++  const auto created = service_->CreatePersonaProfile("Concurrent save");
++  const std::string id = *created.FindString("personaId");
++  ASSERT_TRUE(
++      ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  auto state = prefs_.GetDict(kPersonaStatePref).Clone();
++  auto payload = FindPersona(state.FindList("personas"), id)->Clone();
++  payload.EnsureDict("screen")->Set("width", 2400);
++  auto delegate = std::make_unique<FakeIdentityRotationDelegate>();
++  auto* pending = delegate.get();
++  service_->SetIdentityRotationDelegateForTesting(std::move(delegate));
++  base::test::TestFuture<base::DictValue> result;
++  service_->SavePersonaAndApply(payload, result.GetCallback());
++  state.Set("externalChange", true);
++  prefs_.SetDict(kPersonaStatePref, state.Clone());
++  pending->CompleteNextApply(true);
++  pending->CompleteNextApply(true);
++  EXPECT_FALSE(result.Take().FindBool("ok").value_or(true));
++  EXPECT_EQ(state, prefs_.GetDict(kPersonaStatePref));
++}
++
++TEST_F(PersonaServiceTest, SiteRefreshRejectsUnsupportedScopeAndInvalidOrigin) {
++  const auto created = service_->CreatePersonaProfile("Scope");
++  const std::string id = *created.FindString("personaId");
++  auto payload =
++      FindPersona(created.FindDict("state")->FindList("personas"), id)->Clone();
++  payload.EnsureDict("advanced")
++      ->EnsureDict("fingerprintRotation")
++      ->Set("scope", "profile");
++  ASSERT_TRUE(service_->SavePersona(payload).FindBool("ok").value_or(false));
++  ASSERT_TRUE(
++      ActivatePersona(service_.get(), id).FindBool("ok").value_or(false));
++  const auto before =
++      prefs_.GetDict(kPersonaFingerprintRotationEpochPref).Clone();
++  const auto rejected = service_->RefreshFingerprint(
++      FingerprintRefreshScope::kSite, "https://a.example");
++  EXPECT_EQ("unsupported_scope", *rejected.FindString("error"));
++  EXPECT_EQ(before, prefs_.GetDict(kPersonaFingerprintRotationEpochPref));
++  payload.EnsureDict("advanced")
++      ->EnsureDict("fingerprintRotation")
++      ->Set("scope", "site_profile");
++  ASSERT_TRUE(SaveAndApplyPersona(service_.get(), payload)
++                  .FindBool("ok")
++                  .value_or(false));
++  for (const char* origin : {"", "file:///tmp/a", "data:text/html,a"}) {
++    EXPECT_EQ(
++        "invalid_origin",
++        *service_->RefreshFingerprint(FingerprintRefreshScope::kSite, origin)
++             .FindString("error"));
++  }
++  EXPECT_EQ(before, prefs_.GetDict(kPersonaFingerprintRotationEpochPref));
++}
++
++TEST_F(PersonaServiceTest, LegacyUnsupportedFieldsRoundTripButCannotBeEdited) {
++  const auto created = service_->CreatePersonaProfile("Legacy capability");
++  const std::string id = *created.FindString("personaId");
++  auto payload =
++      FindPersona(created.FindDict("state")->FindList("personas"), id)->Clone();
++  payload.EnsureDict("fontRendering")->Set("engine", "LegacyEngine");
++  payload.EnsureDict("advanced")->Set("hardwareNoise", true);
++  EXPECT_FALSE(service_->SavePersona(payload).FindBool("ok").value_or(true));
++  EXPECT_FALSE(
++      service_->ValidatePersonaConfig(payload).FindBool("ok").value_or(true));
++  auto imported = service_->ImportPersonas(
++      base::DictValue()
++          .Set("schema", "Nitrous.persona/v2")
++          .Set("personas", base::ListValue().Append(payload.Clone())));
++  ASSERT_TRUE(imported.FindBool("ok").value_or(false));
++  EXPECT_EQ("unsupported", *imported.FindDict("fieldDiagnostics")
++                                ->FindDict("0")
++                                ->FindString("fontRendering.engine"));
++  const auto* imported_personas =
++      imported.FindDict("state")->FindList("personas");
++  auto legacy = imported_personas->back().GetDict().Clone();
++  EXPECT_EQ("LegacyEngine",
++            *legacy.FindDict("fontRendering")->FindString("engine"));
++  legacy.Set("displayName", "Kept legacy values");
++  EXPECT_TRUE(service_->SavePersona(legacy).FindBool("ok").value_or(false));
++  ASSERT_TRUE(ActivatePersona(service_.get(), *legacy.FindString("id"))
++                  .FindBool("ok")
++                  .value_or(false));
++  EXPECT_FALSE(service_->GetActiveSnapshot().hardware_noise);
++  EXPECT_TRUE(service_->GetActiveSnapshot().font_rendering_engine.empty());
++}
++
+ }  // namespace helium_persona
+--- a/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_browser_proxy.ts
+@@ -18,6 +18,7 @@ export interface PersonaPageResponse {
+   skippedCount?: number;
+   commitState?: string;
+   restartResult?: string;
++  fieldDiagnostics?: Record<string, unknown>;
+ }
+ 
+ export interface PersonaProfilesResponse {
+@@ -64,7 +65,9 @@ export interface PersonaResolutionRespon
+   source?: string;
+   requested?: PersonaRecord|null;
+   effective?: Record<string, unknown>|null;
+-  diff?: Array<Record<string, unknown>>;
++  diff?: string[];
++  fieldCapabilities?: Record<string, string>;
++  fieldDiagnostics?: Record<string, string>;
+   assurance?: Record<string, unknown>;
+   transition?: Record<string, unknown>;
+ }
+--- a/chrome/browser/resources/settings/privacy_page/persona_config.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_config.ts
+@@ -228,7 +228,7 @@ const DEFAULT_ADVANCED = {
+   clientHintsEnabled: true,
+   canvasNoise: true,
+   audioNoise: true,
+-  hardwareNoise: true,
++  hardwareNoise: false,
+   fontMetricNoise: false,
+   clientRectNoise: false,
+   allowBackgroundSync: false,
+@@ -644,3 +644,28 @@ export function parsePersonaImportPayloa
+   }
+   return bundle['personas'] as PersonaRecord[];
+ }
++
++export interface PersonaEffectiveDifference {
++  field: string;
++  requested: string;
++  effective: string;
++}
++
++export function personaEffectiveDifferences(
++    requested: Record<string, unknown>, effective: Record<string, unknown>,
++    fields: string[]): PersonaEffectiveDifference[] {
++  const atPath = (record: Record<string, unknown>, path: string): unknown => {
++    let value: unknown = record;
++    for (const key of path.split('.')) {
++      value = asObject(value)[key];
++    }
++    return value;
++  };
++  const display = (value: unknown): string =>
++      typeof value === 'string' ? value : JSON.stringify(value) ?? '';
++  return fields.map(field => ({
++    field,
++    requested: display(atPath(requested, field)),
++    effective: display(atPath(effective, field)),
++  }));
++}
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.html
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.html
+@@ -2,6 +2,20 @@
+ <!-- You can use, redistribute, and/or modify this source code under -->
+ <!-- the terms of the GPL-3.0 license that can be found in the LICENSE file. -->
+ <style include="cr-shared-style settings-shared md-select">
++  .effective-differences {
++    border-collapse: collapse;
++    margin: 0 var(--cr-section-padding);
++    table-layout: fixed;
++    width: calc(100% - 2 * var(--cr-section-padding));
++  }
++  .effective-differences th, .effective-differences td {
++    border-bottom: var(--cr-separator-line);
++    overflow-wrap: anywhere;
++    padding: 8px;
++    text-align: start;
++    vertical-align: top;
++  }
++
+   .section-heading {
+     align-items: center;
+   }
+@@ -997,13 +1011,14 @@
+       <div class="field">
+         <div class="field-label">
+           <span>$i18n{personaFieldFontEngineLabel}</span>
++          <span class="chip">$i18n{personaUnsupported}</span>
+           <cr-tooltip-icon icon-class="cr:help-outline"
+               icon-aria-label="$i18n{personaFieldHelp}"
+               tooltip-text="$i18n{personaFieldFontEngineTooltip}">
+           </cr-tooltip-icon>
+         </div>
+         <cr-input aria-label="$i18n{personaFieldFontEngineLabel}"
+-            value="{{editablePersona_.fontRendering.engine}}"></cr-input>
++            value="[[editablePersona_.fontRendering.engine]]" disabled></cr-input>
+       </div>
+       <div class="field">
+         <div class="field-label">
+@@ -1106,13 +1121,14 @@
+       <div class="field">
+         <div class="field-label">
+           <span>$i18n{personaFieldHardwareNoiseLabel}</span>
++          <span class="chip">$i18n{personaUnsupported}</span>
+           <cr-tooltip-icon icon-class="cr:help-outline"
+               icon-aria-label="$i18n{personaFieldHelp}"
+               tooltip-text="$i18n{personaFieldHardwareNoiseTooltip}">
+           </cr-tooltip-icon>
+         </div>
+         <cr-toggle aria-label="$i18n{personaFieldHardwareNoiseLabel}"
+-            checked="{{editablePersona_.advanced.hardwareNoise}}"></cr-toggle>
++            disabled></cr-toggle>
+       </div>
+       <div class="field">
+         <div class="field-label">
+@@ -1381,6 +1397,27 @@
+         </div>
+       </template>
+     </div>
++    <p class="status-message">$i18n{personaUnsupportedFields}</p>
++    <template is="dom-if"
++        if="[[isActiveEditor_(editablePersona_.id, activePersonaId_)]]">
++      <p class="status-message">$i18n{personaSaveAndApplyDescription}</p>
++      <template is="dom-if" if="[[effectiveDifferences_.length]]">
++        <p class="status-message">$i18n{personaEffectiveDifferencesDescription}</p>
++        <table class="effective-differences">
++          <thead><tr>
++            <th>$i18n{personaEffectiveField}</th>
++            <th>$i18n{personaRequestedValue}</th>
++            <th>$i18n{personaEffectiveValue}</th>
++          </tr></thead>
++          <tbody>
++            <template is="dom-repeat" items="[[effectiveDifferences_]]">
++              <tr><td>[[item.field]]</td><td>[[item.requested]]</td>
++                <td>[[item.effective]]</td></tr>
++            </template>
++          </tbody>
++        </table>
++      </template>
++    </template>
+     <div class="actions">
+       <cr-button on-click="onCancelPersonaClick_"
+           disabled="[[isCancelDisabled_(hasUnsavedChanges_, pending_)]]">
+@@ -1388,7 +1425,7 @@
+       </cr-button>
+       <cr-button class="action-button" on-click="onSavePersonaClick_"
+           disabled="[[!canSavePersona_(editablePersona_.id, pending_)]]">
+-        $i18n{personaSave}
++        [[saveLabel_(editablePersona_.id, activePersonaId_)]]
+       </cr-button>
+     </div>
+ </settings-subpage>
+--- a/chrome/browser/resources/settings/privacy_page/persona_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/persona_page.ts
+@@ -22,6 +22,7 @@ import type {NitrousProxyRoute} from './
+ import {NitrousProxyBrowserProxyImpl} from './nitrous_proxy_browser_proxy.js';
+ import type {
+   PersonaRecord,
++  PersonaEffectiveDifference,
+   PersonaState,
+   PersonaTextFields,
+ } from './persona_config.js';
+@@ -31,6 +32,7 @@ import {
+   parsePersonaImportPayload,
+   PERSONA_EXPORT_SCHEMA,
+   preparePersonaForSave,
++  personaEffectiveDifferences,
+ } from './persona_config.js';
+ import {getTemplate} from './persona_page.html.js';
+ 
+@@ -442,6 +444,7 @@ export class SettingsPersonaPageElement
+   static get properties() {
+     return {
+       activePersonaId_: {type: String, value: ''},
++      effectiveDifferences_: {type: Array, value: () => []},
+       editablePersona_: {type: Object, value: () => createEmptyPersona()},
+       lastUsedPersonaId_: {type: String, value: ''},
+       launchSelectionMode_: {type: String, value: 'always_ask'},
+@@ -476,6 +479,8 @@ export class SettingsPersonaPageElement
+   }
+ 
+   declare private activePersonaId_: string;
++  declare private effectiveDifferences_: PersonaEffectiveDifference[];
++  private effectiveRequest_ = 0;
+   declare private editablePersona_: PersonaRecord;
+   declare private lastUsedPersonaId_: string;
+   declare private launchSelectionMode_: string;
+@@ -538,6 +543,7 @@ export class SettingsPersonaPageElement
+         (Array.isArray(state.personas) ? state.personas : []);
+     this.profiles_ = profiles;
+     this.activePersonaId_ = state.activePersonaId || profilesResponse?.activePersonaId || '';
++    void this.refreshEffectiveDifferences_();
+     this.lastUsedPersonaId_ =
+         state.lastUsedPersonaId || profilesResponse?.lastUsedPersonaId || '';
+     this.launchSelectionMode_ =
+@@ -716,6 +722,31 @@ export class SettingsPersonaPageElement
+     this.saveStatusIsError_ = false;
+   }
+ 
++  private async refreshEffectiveDifferences_() {
++    const request = ++this.effectiveRequest_;
++    this.effectiveDifferences_ = [];
++    try {
++      const result =
++          await PersonaBrowserProxyImpl.getInstance().getEffectivePersona();
++      if (request === this.effectiveRequest_ && result.requested &&
++          result.effective && result.personaId === this.activePersonaId_) {
++        this.effectiveDifferences_ = personaEffectiveDifferences(
++            result.requested, result.effective, result.diff || []);
++      }
++    } catch {
++      // A closed Settings page or unavailable Persona has no effective table.
++    }
++  }
++
++  private isActiveEditor_(personaId: string, activePersonaId: string): boolean {
++    return personaId !== 'default' && personaId === activePersonaId;
++  }
++
++  private saveLabel_(personaId: string, activePersonaId: string): string {
++    return this.i18n(this.isActiveEditor_(personaId, activePersonaId) ?
++        'personaSaveAndApply' : 'personaSave');
++  }
++
+   private async onSavePersonaClick_() {
+     if (this.pending_) {
+       return;
+--- a/chrome/browser/ui/views/persona/persona_indicator_menu_model.cc
++++ b/chrome/browser/ui/views/persona/persona_indicator_menu_model.cc
+@@ -120,8 +120,11 @@ void PersonaIndicatorMenuModel::RefreshA
+   if (!web_contents) {
+     return;
+   }
+-  service->RefreshFingerprint(
++  const base::DictValue result = service->RefreshFingerprint(
+       helium_persona::FingerprintRefreshScope::kSite, *site_origin);
++  if (!result.FindBool("ok").value_or(false)) {
++    return;
++  }
+   web_contents->GetController().Reload(content::ReloadType::NORMAL, true);
+ }
+ 
+@@ -183,7 +186,9 @@ bool PersonaIndicatorMenuModel::IsComman
+     auto* service = GetPersonaService();
+     return service && GetActiveSiteOrigin().has_value() &&
+            service->ResolveActivePersona().status ==
+-               helium_persona::PersonaResolutionStatus::kPersonaReady;
++               helium_persona::PersonaResolutionStatus::kPersonaReady &&
++           service->GetActiveSnapshot().fingerprint_rotation_scope ==
++               "site_profile";
+   }
+ 
+   for (const PersonaCommand& command : persona_commands_) {
+--- a/chrome/browser/ui/webui/settings/persona_handler.cc
++++ b/chrome/browser/ui/webui/settings/persona_handler.cc
+@@ -209,8 +209,11 @@ void PersonaHandler::HandleSavePersona(c
+ 
+   helium_persona::PersonaService* service = GetPersonaService(profile_);
+   CHECK(service);
+-  ResolveJavascriptCallback(callback_id,
+-                            service->SavePersona(args[1].GetDict()));
++  CHECK(callback_id.is_string());
++  service->SavePersonaAndApply(
++      args[1].GetDict(),
++      base::BindOnce(&PersonaHandler::OnSetActivePersonaFinished,
++                     weak_ptr_factory_.GetWeakPtr(), callback_id.GetString()));
+ }
+ 
+ void PersonaHandler::HandleImportPersonas(const base::ListValue& args) {
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -2370,6 +2370,16 @@ void AddPrivacyStrings(content::WebUIDat
+       {"personaClonePreset", IDS_SETTINGS_PERSONA_CLONE_PRESET},
+       {"personaSectionEdit", IDS_SETTINGS_PERSONA_SECTION_EDIT},
+       {"personaSectionEditDesc", IDS_SETTINGS_PERSONA_SECTION_EDIT_DESC},
++      {"personaSaveAndApply", IDS_SETTINGS_PERSONA_SAVE_AND_APPLY},
++      {"personaSaveAndApplyDescription",
++       IDS_SETTINGS_PERSONA_SAVE_AND_APPLY_DESCRIPTION},
++      {"personaUnsupported", IDS_SETTINGS_PERSONA_UNSUPPORTED},
++      {"personaUnsupportedFields", IDS_SETTINGS_PERSONA_UNSUPPORTED_FIELDS},
++      {"personaEffectiveDifferencesDescription",
++       IDS_SETTINGS_PERSONA_EFFECTIVE_DIFFERENCES_DESCRIPTION},
++      {"personaEffectiveField", IDS_SETTINGS_PERSONA_EFFECTIVE_FIELD},
++      {"personaRequestedValue", IDS_SETTINGS_PERSONA_REQUESTED_VALUE},
++      {"personaEffectiveValue", IDS_SETTINGS_PERSONA_EFFECTIVE_VALUE},
+       {"personaSave", IDS_SETTINGS_PERSONA_SAVE},
+       {"personaFieldHelp", IDS_SETTINGS_PERSONA_FIELD_HELP},
+       {"personaFieldCustomOption", IDS_SETTINGS_PERSONA_FIELD_CUSTOM_OPTION},
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -3580,6 +3580,7 @@ if (!is_android) {
+       "../browser/glic/suggestions/zero_state_suggestions_browsertest.cc",
+       "../browser/guest_view/mime_handler_view/chrome_mime_handler_view_browsertest.cc",
+       "../browser/helium_persona/persona_audio_readback_browsertest.cc",
++      "../browser/helium_persona/persona_fingerprint_consistency_browsertest.cc",
+       "../browser/helium_persona/persona_font_virtualization_browsertest.cc",
+       "../browser/hid/hid_browsertest.cc",
+       "../browser/icon_loader_browsertest.cc",
+--- a/chrome/test/data/webui/settings/persona_config_test.ts
++++ b/chrome/test/data/webui/settings/persona_config_test.ts
+@@ -15,6 +15,7 @@ import {
+   createPersonaDraft,
+   parsePersonaImportPayload,
+   preparePersonaForSave,
++  personaEffectiveDifferences,
+   resolveFontScript,
+ } from 'chrome://settings/privacy_page/persona_config.js';
+ 
+@@ -287,4 +288,28 @@ suite('PersonaConfig', () => {
+     assertTrue(draft.fonts.families.includes('Helvetica Neue'));
+     assertFalse(draft.fonts.families.includes('PingFang SC'));
+   });
++  test('preserves unsupported legacy fields while editing supported values', () => {
++    const draft = createPersonaDraft({
++      id: 'legacy', displayName: 'Legacy',
++      fontRendering: {engine: 'LegacyEngine', id: 'legacy', antialiasing: true},
++      gpu: {webglProfile: {maxCombinedTextureImageUnits: 192}},
++      advanced: {hardwareNoise: true},
++    });
++    const copy = createPersonaDraft(draft);
++    copy.screen.width = 2400;
++    assertEquals('LegacyEngine', copy.fontRendering.engine);
++    assertTrue(copy.advanced.hardwareNoise);
++    assertDeepEquals({maxCombinedTextureImageUnits: 192}, copy.gpu['webglProfile']);
++  });
++
++  test('formats saved and effective Device Pack constraints separately', () => {
++    assertDeepEquals([
++      {field: 'userAgent', requested: 'custom UA', effective: 'cohort UA'},
++      {field: 'uaCh.architecture', requested: 'x86', effective: 'arm'},
++    ], personaEffectiveDifferences(
++        {userAgent: 'custom UA', uaCh: {architecture: 'x86'}},
++        {userAgent: 'cohort UA', uaCh: {architecture: 'arm'}},
++        ['userAgent', 'uaCh.architecture']));
++  });
++
+ });
+--- a/content/browser/client_hints/client_hints.cc
++++ b/content/browser/client_hints/client_hints.cc
+@@ -266,7 +266,7 @@ void AddDPRHeader(net::HttpRequestHeader
+   DCHECK(context);
+   const double device_pixel_ratio =
+       persona_device_scale_factor && *persona_device_scale_factor > 0.0
+-          ? *persona_device_scale_factor
++          ? *persona_device_scale_factor * GetZoomFactor(context, url)
+           : GetDeviceScaleFactor() * GetZoomFactor(context, url);
+   SetHeaderToDouble(headers,
+                     use_deprecated_version ? WebClientHintsType::kDpr_DEPRECATED
+--- a/content/browser/client_hints/client_hints_unittest.cc
++++ b/content/browser/client_hints/client_hints_unittest.cc
+@@ -12,6 +12,7 @@
+ #include "base/strings/string_util.h"
+ #include "base/test/scoped_feature_list.h"
+ #include "base/time/time.h"
++#include "content/public/browser/host_zoom_map.h"
+ #include "content/public/test/mock_client_hints_controller_delegate.h"
+ #include "content/public/test/test_browser_context.h"
+ #include "content/test/test_render_frame_host.h"
+@@ -25,6 +26,7 @@
+ #include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
+ #include "testing/gmock/include/gmock/gmock-matchers.h"
+ #include "third_party/blink/public/common/client_hints/client_hints.h"
++#include "third_party/blink/public/common/page/page_zoom.h"
+ 
+ namespace content {
+ 
+@@ -544,6 +546,15 @@ TEST_F(ClientHintsTest, AddNavigationReq
+   EXPECT_EQ("8", headers.GetHeader("sec-ch-device-memory").value_or(""));
+   EXPECT_EQ("1.25", headers.GetHeader("dpr").value_or(""));
+   EXPECT_EQ("1.25", headers.GetHeader("sec-ch-dpr").value_or(""));
++  HostZoomMap::GetDefaultForBrowserContext(browser_context())
++      ->SetZoomLevelForHost(main_url.host(), blink::ZoomFactorToZoomLevel(2.0));
++  net::HttpRequestHeaders zoomed;
++  AddNavigationRequestClientHintsHeaders(
++      origin, &zoomed, browser_context(), &delegate,
++      /*is_ua_override_on=*/false, main_frame_node,
++      /*container_policy=*/{}, std::nullopt, &snapshot);
++  EXPECT_EQ("2.5", zoomed.GetHeader("dpr").value_or(""));
++  EXPECT_EQ("2.5", zoomed.GetHeader("sec-ch-dpr").value_or(""));
+ }
+ 
+ TEST_F(ClientHintsTest, AddNavigationRequestClientHintsHeaders_Subframe) {
+--- a/content/browser/helium_noise/noise_token_data.cc
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -58,8 +58,8 @@ std::string FindSiteEpoch(const blink::H
+                        : persona.fingerprint_rotation_global_epoch;
+ }
+ 
+-uint64_t FindGeneration(const blink::HeliumPersonaSnapshot& persona,
+-                        const url::Origin& origin) {
++uint64_t FindSiteGeneration(const blink::HeliumPersonaSnapshot& persona,
++                            const url::Origin& origin) {
+   if (persona.fingerprint_rotation_scope ==
+       kFingerprintRotationScopeSiteProfile) {
+     const auto* site_rotation = FindSiteRotation(persona, origin);
+@@ -67,7 +67,7 @@ uint64_t FindGeneration(const blink::Hel
+       return site_rotation->generation;
+     }
+   }
+-  return persona.fingerprint_generation;
++  return 0;
+ }
+ 
+ int64_t RotationBucket(const blink::HeliumPersonaSnapshot& persona,
+@@ -95,10 +95,10 @@ int64_t RotationBucket(const blink::Heli
+ 
+ std::string BuildSeed(const url::Origin& origin,
+                       const blink::HeliumPersonaSnapshot& persona) {
+-  std::string seed =
+-      persona.fingerprint_profile_salt.empty()
+-          ? persona.noise_seed
+-          : persona.fingerprint_profile_salt + "\n" + persona.id;
++  std::string seed = "persona-noise-v2\n";
++  seed += persona.fingerprint_profile_salt.empty()
++              ? persona.noise_seed
++              : persona.fingerprint_profile_salt + "\n" + persona.id;
+   seed.push_back('\n');
+   seed.append(persona.fingerprint_rotation_scope);
+   if (persona.fingerprint_rotation_scope ==
+@@ -107,7 +107,9 @@ std::string BuildSeed(const url::Origin&
+     seed.append(origin.Serialize());
+   }
+   seed.push_back('\n');
+-  seed.append(base::NumberToString(FindGeneration(persona, origin)));
++  seed.append(base::NumberToString(persona.fingerprint_generation));
++  seed.push_back('\n');
++  seed.append(base::NumberToString(FindSiteGeneration(persona, origin)));
+   seed.push_back('\n');
+   seed.append(base::NumberToString(RotationBucket(persona, origin)));
+   return seed;
+@@ -159,7 +161,6 @@ blink::HeliumNoiseTokenMap HeliumNoiseTo
+   blink::HeliumNoiseTokenMap tokens;
+   AddToken(tokens, seed, origin, persona, blink::HeliumNoiseFeature::kCanvas);
+   AddToken(tokens, seed, origin, persona, blink::HeliumNoiseFeature::kAudio);
+-  AddToken(tokens, seed, origin, persona, blink::HeliumNoiseFeature::kHardware);
+   AddToken(tokens, seed, origin, persona,
+            blink::HeliumNoiseFeature::kFontMetric);
+   AddToken(tokens, seed, origin, persona,
+@@ -184,8 +185,7 @@ std::optional<blink::NoiseToken> HeliumN
+       !persona_snapshot.audio_noise) {
+     return std::nullopt;
+   }
+-  if (feature == blink::HeliumNoiseFeature::kHardware &&
+-      !persona_snapshot.hardware_noise) {
++  if (feature == blink::HeliumNoiseFeature::kHardware) {
+     return std::nullopt;
+   }
+   if (feature == blink::HeliumNoiseFeature::kFontMetric &&
+--- a/content/browser/helium_noise/noise_token_data_unittest.cc
++++ b/content/browser/helium_noise/noise_token_data_unittest.cc
+@@ -94,8 +94,6 @@ bool AnyFeatureChanged(const blink::Heli
+              TokenValue(after, blink::HeliumNoiseFeature::kCanvas) ||
+          TokenValue(before, blink::HeliumNoiseFeature::kAudio) !=
+              TokenValue(after, blink::HeliumNoiseFeature::kAudio) ||
+-         TokenValue(before, blink::HeliumNoiseFeature::kHardware) !=
+-             TokenValue(after, blink::HeliumNoiseFeature::kHardware) ||
+          TokenValue(before, blink::HeliumNoiseFeature::kFontMetric) !=
+              TokenValue(after, blink::HeliumNoiseFeature::kFontMetric) ||
+          TokenValue(before, blink::HeliumNoiseFeature::kClientRect) !=
+@@ -119,13 +117,11 @@ TEST_F(HeliumNoiseTokenDataTest,
+   const blink::HeliumNoiseTokenMap after =
+       HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
+ 
+-  EXPECT_EQ(5u, before.size());
++  EXPECT_EQ(4u, before.size());
+   EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kCanvas),
+             TokenValue(after, blink::HeliumNoiseFeature::kCanvas));
+   EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kAudio),
+             TokenValue(after, blink::HeliumNoiseFeature::kAudio));
+-  EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kHardware),
+-            TokenValue(after, blink::HeliumNoiseFeature::kHardware));
+   EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kFontMetric),
+             TokenValue(after, blink::HeliumNoiseFeature::kFontMetric));
+   EXPECT_EQ(TokenValue(before, blink::HeliumNoiseFeature::kClientRect),
+@@ -160,8 +156,6 @@ TEST_F(HeliumNoiseTokenDataTest,
+   EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
+             TokenValue(tokens, blink::HeliumNoiseFeature::kAudio));
+   EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
+-            TokenValue(tokens, blink::HeliumNoiseFeature::kHardware));
+-  EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
+             TokenValue(tokens, blink::HeliumNoiseFeature::kFontMetric));
+   EXPECT_NE(TokenValue(tokens, blink::HeliumNoiseFeature::kCanvas),
+             TokenValue(tokens, blink::HeliumNoiseFeature::kClientRect));
+@@ -263,4 +257,58 @@ TEST_F(HeliumNoiseTokenDataTest,
+ 
+ }  // namespace
+ 
++TEST_F(HeliumNoiseTokenDataTest,
++       FirstSiteThenProfileRefreshChangesBothOrigins) {
++  const auto a = url::Origin::Create(GURL("https://a.example"));
++  const auto b = url::Origin::Create(GURL("https://b.example"));
++  auto persona = MakeSeededPersona("fixed-profile-seed");
++  persona.fingerprint_generation = 1;
++  persona.fingerprint_rotation_global_epoch = "2100-01-01T00:00:00Z";
++  auto token = [&](const url::Origin& origin) {
++    return TokenValue(
++        HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona),
++        blink::HeliumNoiseFeature::kCanvas);
++  };
++  const auto initial_a = token(a);
++  const auto initial_b = token(b);
++  persona.fingerprint_rotation_site_epochs.push_back(
++      {a.Serialize(), persona.fingerprint_rotation_global_epoch, 1});
++  const auto site_a = token(a);
++  EXPECT_NE(initial_a, site_a);
++  EXPECT_EQ(initial_b, token(b));
++  ++persona.fingerprint_generation;
++  EXPECT_NE(site_a, token(a));
++  EXPECT_NE(initial_b, token(b));
++  EXPECT_EQ(token(a), token(a));
++  EXPECT_EQ("fixed-profile-seed", persona.fingerprint_profile_salt);
++}
++
++TEST_F(HeliumNoiseTokenDataTest, ProfileScopeIgnoresSiteGeneration) {
++  const auto origin = url::Origin::Create(GURL("https://a.example"));
++  auto persona = MakeSeededPersona("fixed-profile-seed");
++  for (const char* scope : {"profile", "global"}) {
++    persona.fingerprint_rotation_scope = scope;
++    persona.fingerprint_rotation_site_epochs.clear();
++    const auto before =
++        HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona);
++    persona.fingerprint_rotation_site_epochs.push_back(
++        {origin.Serialize(), "1970-01-01T00:00:00Z", 100});
++    EXPECT_FALSE(AnyFeatureChanged(
++        before,
++        HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona)));
++  }
++}
++
++TEST_F(HeliumNoiseTokenDataTest, LegacyHardwareNoiseNeverIssuesAToken) {
++  const auto origin = url::Origin::Create(GURL("https://a.example"));
++  auto persona = MakeSeededPersona("fixed-profile-seed");
++  persona.hardware_noise = true;
++  EXPECT_FALSE(HeliumNoiseTokenData::GetFeatureToken(
++      &browser_context_, origin, persona,
++      blink::HeliumNoiseFeature::kHardware));
++  EXPECT_EQ(0u,
++            HeliumNoiseTokenData::GetTokens(&browser_context_, origin, persona)
++                .count(blink::HeliumNoiseFeature::kHardware));
++}
++
+ }  // namespace content
+--- a/third_party/blink/renderer/core/BUILD.gn
++++ b/third_party/blink/renderer/core/BUILD.gn
+@@ -412,6 +412,7 @@ component("core") {
+     "//components/shared_highlighting/core/common",
+     "//components/subresource_filter/core/common",
+     "//components/web_package",
++    "//crypto",
+     "//gin",
+     "//gpu/config",
+     "//mojo/public/cpp/bindings",
+--- a/third_party/blink/renderer/core/canvas_interventions/noise_helper.cc
++++ b/third_party/blink/renderer/core/canvas_interventions/noise_helper.cc
+@@ -6,8 +6,10 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <cmath>
+ #include <cstddef>
+ #include <cstdint>
++#include <string>
+ #include <vector>
+ 
+ #include "base/check_op.h"
+@@ -15,6 +17,8 @@
+ #include "base/containers/span_writer.h"
+ #include "base/numerics/byte_conversions.h"
+ #include "base/numerics/safe_conversions.h"
++#include "base/strings/string_number_conversions.h"
++#include "crypto/hmac.h"
+ #include "third_party/blink/renderer/core/canvas_interventions/noise_hash.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+@@ -24,6 +28,58 @@
+ 
+ namespace blink {
+ 
++double PersonaMeasurementNoise(const NoiseToken& token,
++                               std::string_view measurement) {
++  const auto key = base::U64ToBigEndian(token.Value());
++  const auto digest =
++      crypto::hmac::SignSha256(key, base::as_byte_span(measurement));
++  const uint32_t sample = base::U32FromBigEndian(base::span(digest).first<4>());
++  return (static_cast<double>(sample) / 4294967295.0) * 2.0 - 1.0;
++}
++
++namespace {
++
++double PersonaCoordinate(double value, const NoiseToken& token, char axis) {
++  if (!std::isfinite(value) || value == 0 || std::abs(value) > 1e7) {
++    return value;
++  }
++  const double lower = std::floor(value);
++  auto offset = [&](double knot) {
++    if (knot == 0) {
++      return 0.0;
++    }
++    return 0.01 *
++           PersonaMeasurementNoise(token, std::string("rect-v2/") + axis + "/" +
++                                              base::NumberToString(knot));
++  };
++  // Adjacent knots differ by at most .02, so the slope is always positive.
++  return value + std::lerp(offset(lower), offset(lower + 1), value - lower);
++}
++
++}  // namespace
++
++gfx::RectF ApplyPersonaClientRectNoise(const gfx::RectF& rect,
++                                       const NoiseToken& token) {
++  if (!std::isfinite(rect.x()) || !std::isfinite(rect.y()) ||
++      !std::isfinite(rect.right()) || !std::isfinite(rect.bottom())) {
++    return rect;
++  }
++  const float left = PersonaCoordinate(rect.x(), token, 'x');
++  const float top = PersonaCoordinate(rect.y(), token, 'y');
++  const float right = PersonaCoordinate(rect.right(), token, 'x');
++  const float bottom = PersonaCoordinate(rect.bottom(), token, 'y');
++  return gfx::RectF(left, top, std::max(0.0f, right - left),
++                    std::max(0.0f, bottom - top));
++}
++
++gfx::RectF ApplyPersonaClientRectNoise(const gfx::RectF& rect,
++                                       ExecutionContext* context) {
++  return context && context->ClientRectNoiseToken()
++             ? ApplyPersonaClientRectNoise(rect,
++                                           *context->ClientRectNoiseToken())
++             : rect;
++}
++
+ namespace {
+ 
+ constexpr uint8_t kMaxClosePixelDelta = 10u;
+--- a/third_party/blink/renderer/core/canvas_interventions/noise_helper.h
++++ b/third_party/blink/renderer/core/canvas_interventions/noise_helper.h
+@@ -6,17 +6,29 @@
+ #define THIRD_PARTY_BLINK_RENDERER_CORE_CANVAS_INTERVENTIONS_NOISE_HELPER_H_
+ 
+ #include <cstdint>
++#include <string_view>
+ 
+ #include "base/containers/span.h"
+ #include "base/memory/scoped_refptr.h"
+ #include "third_party/blink/renderer/core/canvas_interventions/noise_hash.h"
+ #include "third_party/blink/renderer/core/core_export.h"
+ #include "third_party/skia/include/core/SkAlphaType.h"
++#include "ui/gfx/geometry/rect_f.h"
+ 
+ namespace blink {
+ class ExecutionContext;
+ class StaticBitmapImage;
+ 
++// Domain-separated HMAC output in [-1, 1], keyed by the rendering token.
++CORE_EXPORT double PersonaMeasurementNoise(const NoiseToken& token,
++                                           std::string_view measurement);
++// A bounded monotone coordinate map makes unions commute with readback and
++// gives identical raw Element/Range geometry identical results.
++CORE_EXPORT gfx::RectF ApplyPersonaClientRectNoise(const gfx::RectF& rect,
++                                                   ExecutionContext* context);
++CORE_EXPORT gfx::RectF ApplyPersonaClientRectNoise(const gfx::RectF& rect,
++                                                   const NoiseToken& token);
++
+ // Adds noise to the provided pixels in place, using |token_hash| as the
+ // source for pseudo-randomness. This function assumes that there are 4
+ // channels per pixel.
+--- a/third_party/blink/renderer/core/canvas_interventions/noise_helper_unittest.cc
++++ b/third_party/blink/renderer/core/canvas_interventions/noise_helper_unittest.cc
+@@ -5,6 +5,7 @@
+ #include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
+ 
+ #include <array>
++#include <cmath>
+ #include <cstddef>
+ #include <cstdint>
+ #include <memory>
+@@ -23,11 +24,11 @@
+ #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
+ #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
+ #include "third_party/blink/renderer/platform/testing/task_environment.h"
++#include "third_party/googletest/src/googletest/include/gtest/gtest.h"
+ #include "third_party/skia/include/core/SkCanvas.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "third_party/skia/include/core/SkColorSpace.h"
+ #include "third_party/skia/include/core/SkSurface.h"
+-#include "third_party/googletest/src/googletest/include/gtest/gtest.h"
+ #include "url/gurl.h"
+ 
+ namespace blink {
+@@ -416,4 +417,52 @@ TEST_F(NoiseHelperTest, NoisePixelsAlpha
+ }
+ 
+ }  // namespace
++TEST(NoiseHelperTest, PersonaClientRectNoisePreservesUnionAndDegenerateRects) {
++  const NoiseToken token(1234567);
++  const gfx::RectF first(12.25f, 19.5f, 30.125f, 7.75f);
++  const gfx::RectF second(53.125f, 32.25f, 11.25f, 7.75f);
++  const auto a = ApplyPersonaClientRectNoise(first, token);
++  const auto b = ApplyPersonaClientRectNoise(second, token);
++  const auto bounding =
++      ApplyPersonaClientRectNoise(gfx::UnionRects(first, second), token);
++  const auto united = gfx::UnionRects(a, b);
++  EXPECT_NEAR(bounding.x(), united.x(), 0.00001);
++  EXPECT_NEAR(bounding.y(), united.y(), 0.00001);
++  EXPECT_NEAR(bounding.right(), united.right(), 0.00001);
++  EXPECT_NEAR(bounding.bottom(), united.bottom(), 0.00001);
++  EXPECT_EQ(a, ApplyPersonaClientRectNoise(first, token));
++  EXPECT_NE(a, ApplyPersonaClientRectNoise(first, NoiseToken(9876543)));
++  EXPECT_EQ(gfx::RectF(), ApplyPersonaClientRectNoise(gfx::RectF(), token));
++  const auto caret =
++      ApplyPersonaClientRectNoise(gfx::RectF(12, 19, 0, 10), token);
++  EXPECT_EQ(0, caret.width());
++  EXPECT_GE(caret.height(), 0);
++  EXPECT_EQ(first, ApplyPersonaClientRectNoise(first, nullptr));
++}
++
++TEST(NoiseHelperTest,
++     PersonaClientRectNoiseIsBoundedMonotoneAndMeasurementKeyed) {
++  const NoiseToken token(1234567);
++  float previous_right = -1000;
++  bool different_offsets = false;
++  double first_offset = 0;
++  for (int i = 0; i < 2048; ++i) {
++    const float x = -128.0f + i * 0.125f;
++    const gfx::RectF rect(x, 5, 0.00001f, 3);
++    const auto noised = ApplyPersonaClientRectNoise(rect, token);
++    EXPECT_TRUE(std::isfinite(noised.x()));
++    EXPECT_GE(noised.x(), previous_right);
++    EXPECT_GE(noised.width(), 0);
++    EXPECT_LE(std::abs(noised.x() - x), 0.01001);
++    const double offset = noised.x() - x;
++    if (i == 0) {
++      first_offset = offset;
++    } else {
++      different_offsets |= offset != first_offset;
++    }
++    previous_right = noised.x();
++  }
++  EXPECT_TRUE(different_offsets);
++}
++
+ }  // namespace blink
+--- a/third_party/blink/renderer/core/css/css_paint_value.cc
++++ b/third_party/blink/renderer/core/css/css_paint_value.cc
+@@ -162,7 +162,11 @@ scoped_refptr<Image> CSSPaintValue::GetI
+               GetName(), target_size, zoom, generator.WorkletId(),
+               std::move(style_data.value()),
+               std::move(cross_thread_input_arguments),
+-              std::move(input_property_keys));
++              std::move(input_property_keys),
++              document.GetFrame() &&
++                      document.GetFrame()->GetHeliumPersonaSnapshot()
++                  ? std::optional<double>(document.DevicePixelRatio())
++                  : std::nullopt);
+       return PaintWorkletDeferredImage::Create(std::move(input), target_size);
+     }
+   }
+--- a/third_party/blink/renderer/core/css/cssom/css_paint_worklet_input.cc
++++ b/third_party/blink/renderer/core/css/cssom/css_paint_worklet_input.cc
+@@ -15,10 +15,12 @@ CSSPaintWorkletInput::CSSPaintWorkletInp
+     int worklet_id,
+     PaintWorkletStylePropertyMap::CrossThreadData data,
+     Vector<std::unique_ptr<CrossThreadStyleValue>> parsed_input_arguments,
+-    cc::PaintWorkletInput::PropertyKeys property_keys)
++    cc::PaintWorkletInput::PropertyKeys property_keys,
++    std::optional<double> persona_device_pixel_ratio)
+     : PaintWorkletInput(container_size, worklet_id, property_keys),
+       name_(name),
+       effective_zoom_(effective_zoom),
++      device_pixel_ratio_(persona_device_pixel_ratio.value_or(effective_zoom)),
+       style_map_data_(std::move(data)),
+       parsed_input_arguments_(std::move(parsed_input_arguments)) {}
+ 
+--- a/third_party/blink/renderer/core/css/cssom/css_paint_worklet_input.h
++++ b/third_party/blink/renderer/core/css/cssom/css_paint_worklet_input.h
+@@ -6,6 +6,7 @@
+ #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_CSSOM_CSS_PAINT_WORKLET_INPUT_H_
+ 
+ #include <memory>
++#include <optional>
+ #include <utility>
+ 
+ #include "third_party/blink/renderer/core/core_export.h"
+@@ -32,12 +33,14 @@ class CORE_EXPORT CSSPaintWorkletInput :
+       int worklet_id,
+       PaintWorkletStylePropertyMap::CrossThreadData values,
+       Vector<std::unique_ptr<CrossThreadStyleValue>> parsed_input_args,
+-      cc::PaintWorkletInput::PropertyKeys property_keys);
++      cc::PaintWorkletInput::PropertyKeys property_keys,
++      std::optional<double> persona_device_pixel_ratio = std::nullopt);
+ 
+   ~CSSPaintWorkletInput() override = default;
+ 
+   // These accessors are safe on any thread.
+   float EffectiveZoom() const { return effective_zoom_; }
++  double DevicePixelRatio() const { return device_pixel_ratio_; }
+   const Vector<std::unique_ptr<CrossThreadStyleValue>>& ParsedInputArguments()
+       const {
+     return parsed_input_arguments_;
+@@ -58,6 +61,7 @@ class CORE_EXPORT CSSPaintWorkletInput :
+  private:
+   const String name_;
+   const float effective_zoom_;
++  const double device_pixel_ratio_;
+   PaintWorkletStylePropertyMap::CrossThreadData style_map_data_;
+   Vector<std::unique_ptr<CrossThreadStyleValue>> parsed_input_arguments_;
+ };
+--- a/third_party/blink/renderer/core/css/media_values.cc
++++ b/third_party/blink/renderer/core/css/media_values.cc
+@@ -5,6 +5,7 @@
+ #include "third_party/blink/renderer/core/css/media_values.h"
+ 
+ #include "third_party/blink/public/common/css/scripting.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/renderer/core/css/css_resolution_units.h"
+ #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
+ #include "third_party/blink/renderer/core/css/media_feature_overrides.h"
+@@ -163,6 +164,9 @@ double MediaValues::CalculateDynamicView
+ }
+ 
+ int MediaValues::CalculateDeviceWidth(LocalFrame* frame) {
++  if (const auto* snapshot = frame->GetHeliumPersonaSnapshot()) {
++    return snapshot->screen_width;
++  }
+   DCHECK(frame && frame->View() && frame->GetSettings() && frame->GetPage());
+   const display::ScreenInfo& screen_info =
+       frame->GetPage()->GetChromeClient().GetScreenInfo(*frame);
+@@ -175,6 +179,9 @@ int MediaValues::CalculateDeviceWidth(Lo
+ }
+ 
+ int MediaValues::CalculateDeviceHeight(LocalFrame* frame) {
++  if (const auto* snapshot = frame->GetHeliumPersonaSnapshot()) {
++    return snapshot->screen_height;
++  }
+   DCHECK(frame && frame->View() && frame->GetSettings() && frame->GetPage());
+   const display::ScreenInfo& screen_info =
+       frame->GetPage()->GetChromeClient().GetScreenInfo(*frame);
+@@ -206,6 +213,9 @@ bool MediaValues::CalculateDeviceSupport
+ }
+ 
+ int MediaValues::CalculateColorBitsPerComponent(LocalFrame* frame) {
++  if (const auto* snapshot = frame->GetHeliumPersonaSnapshot()) {
++    return snapshot->color_depth / 3;
++  }
+   DCHECK(frame);
+   DCHECK(frame->GetPage());
+   const display::ScreenInfo& screen_info =
+@@ -217,6 +227,9 @@ int MediaValues::CalculateColorBitsPerCo
+ }
+ 
+ int MediaValues::CalculateMonochromeBitsPerComponent(LocalFrame* frame) {
++  if (const auto* snapshot = frame->GetHeliumPersonaSnapshot()) {
++    return 0;
++  }
+   DCHECK(frame);
+   DCHECK(frame->GetPage());
+   const display::ScreenInfo& screen_info =
+--- a/third_party/blink/renderer/core/dom/element.cc
++++ b/third_party/blink/renderer/core/dom/element.cc
+@@ -76,6 +76,7 @@
+ #include "third_party/blink/renderer/core/animation/keyframe_effect_model.h"
+ #include "third_party/blink/renderer/core/animation/timing.h"
+ #include "third_party/blink/renderer/core/animation/timing_input.h"
++#include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
+ #include "third_party/blink/renderer/core/css/container_query_data.h"
+ #include "third_party/blink/renderer/core/css/container_query_evaluator.h"
+ #include "third_party/blink/renderer/core/css/container_query_list.h"
+@@ -314,33 +315,6 @@ namespace blink {
+ 
+ namespace {
+ 
+-// Client rect noise (Persona). Deterministic sub-pixel jitter applied to
+-// Element.getClientRects() / getBoundingClientRect() so the reported geometry
+-// varies slightly between personas while staying stable for a given persona
+-// and element (same token + same layout => same result).
+-constexpr uint64_t kClientRectFnvPrime = 0x00000100000001b3;
+-constexpr double kHeliumClientRectNoiseDelta = 0.001;
+-
+-uint64_t MixHeliumClientRectNoise(uint64_t hash, uint64_t value) {
+-  hash ^= value;
+-  hash *= kClientRectFnvPrime;
+-  return hash;
+-}
+-
+-double ApplyHeliumClientRectNoise(double value,
+-                                  uint64_t token_hash,
+-                                  uint64_t field_index) {
+-  if (!std::isfinite(value) || value == 0.0) {
+-    return value;
+-  }
+-  const uint64_t field_hash =
+-      MixHeliumClientRectNoise(token_hash, field_index);
+-  const double direction = (field_hash & 1) ? 1.0 : -1.0;
+-  const double magnitude =
+-      1.0 + static_cast<double>((field_hash >> 1) % 31);
+-  return value + direction * magnitude * kHeliumClientRectNoiseDelta;
+-}
+-
+ class DisplayLockStyleScope {
+   STACK_ALLOCATED();
+ 
+@@ -3467,22 +3441,9 @@ DOMRectList* Element::getClientRects() {
+     GetDocument().AdjustRectForScrollAndAbsoluteZoom(rect,
+                                                      *element_layout_object);
+   }
+-  if (ExecutionContext* execution_context =
+-          GetDocument().GetExecutionContext()) {
+-    if (const std::optional<NoiseToken>& token =
+-            execution_context->ClientRectNoiseToken()) {
+-      const uint64_t token_hash = token->Value();
+-      for (auto& rect : rects) {
+-        rect.set_x(static_cast<float>(ApplyHeliumClientRectNoise(
+-            rect.x(), token_hash, 0)));
+-        rect.set_y(static_cast<float>(ApplyHeliumClientRectNoise(
+-            rect.y(), token_hash, 1)));
+-        rect.set_width(static_cast<float>(ApplyHeliumClientRectNoise(
+-            rect.width(), token_hash, 2)));
+-        rect.set_height(static_cast<float>(ApplyHeliumClientRectNoise(
+-            rect.height(), token_hash, 3)));
+-      }
+-    }
++  for (auto& rect : rects) {
++    rect =
++        ApplyPersonaClientRectNoise(rect, GetDocument().GetExecutionContext());
+   }
+   return MakeGarbageCollected<DOMRectList>(rects);
+ }
+@@ -3543,19 +3504,11 @@ DOMRect* Element::GetBoundingClientRectF
+   // TODO(crbug.com/1499981): This should be removed once synchronized scrolling
+   // impact is understood.
+   SyncScrollAttemptHeuristic::DidAccessScrollOffset();
+-  DOMRect* rect = GetBoundingClientRect();
+-  if (ExecutionContext* execution_context =
+-          GetDocument().GetExecutionContext()) {
+-    if (const std::optional<NoiseToken>& token =
+-            execution_context->ClientRectNoiseToken()) {
+-      const uint64_t token_hash = token->Value();
+-      rect->setX(ApplyHeliumClientRectNoise(rect->x(), token_hash, 0));
+-      rect->setY(ApplyHeliumClientRectNoise(rect->y(), token_hash, 1));
+-      rect->setWidth(ApplyHeliumClientRectNoise(rect->width(), token_hash, 2));
+-      rect->setHeight(ApplyHeliumClientRectNoise(rect->height(), token_hash, 3));
+-    }
+-  }
+-  return rect;
++  GetDocument().EnsurePaintLocationDataValidForNode(
++      this, DocumentUpdateReason::kJavaScript);
++  return DOMRect::FromRectF(
++      ApplyPersonaClientRectNoise(GetBoundingClientRectNoLifecycleUpdate(),
++                                  GetDocument().GetExecutionContext()));
+ }
+ 
+ ContainerQueryList* Element::matchContainer(const String& query) {
+--- a/third_party/blink/renderer/core/dom/range.cc
++++ b/third_party/blink/renderer/core/dom/range.cc
+@@ -25,6 +25,7 @@
+ 
+ #include "third_party/blink/renderer/core/dom/range.h"
+ 
++#include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
+ #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
+ #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
+ #include "third_party/blink/renderer/core/dom/character_data.h"
+@@ -1662,14 +1663,20 @@ DOMRectList* Range::getClientRects() con
+   Vector<gfx::QuadF> quads;
+   GetBorderAndTextQuads(quads);
+ 
+-  return MakeGarbageCollected<DOMRectList>(quads);
++  Vector<gfx::RectF> rects;
++  for (const auto& quad : quads) {
++    rects.push_back(ApplyPersonaClientRectNoise(
++        quad.BoundingBox(), owner_document_->GetExecutionContext()));
++  }
++  return MakeGarbageCollected<DOMRectList>(rects);
+ }
+ 
+ DOMRect* Range::getBoundingClientRect() const {
+   // TODO(crbug.com/1499981): This should be removed once synchronized scrolling
+   // impact is understood.
+   SyncScrollAttemptHeuristic::DidAccessScrollOffset();
+-  return DOMRect::FromRectF(BoundingRect());
++  return DOMRect::FromRectF(ApplyPersonaClientRectNoise(
++      BoundingRect(), owner_document_->GetExecutionContext()));
+ }
+ 
+ // TODO(editing-dev): We should make
+--- a/third_party/blink/renderer/core/exported/web_view_test.cc
++++ b/third_party/blink/renderer/core/exported/web_view_test.cc
+@@ -53,6 +53,7 @@
+ #include "skia/ext/font_utils.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
+ #include "third_party/blink/public/common/input/web_input_event.h"
+ #include "third_party/blink/public/common/input/web_keyboard_event.h"
+@@ -89,6 +90,7 @@
+ #include "third_party/blink/renderer/core/css/css_style_declaration.h"
+ #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
+ #include "third_party/blink/renderer/core/css/media_query_matcher.h"
++#include "third_party/blink/renderer/core/css/media_values_dynamic.h"
+ #include "third_party/blink/renderer/core/css/properties/longhands.h"
+ #include "third_party/blink/renderer/core/dom/document.h"
+ #include "third_party/blink/renderer/core/dom/element.h"
+@@ -104,6 +106,7 @@
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/frame/local_frame_view.h"
++#include "third_party/blink/renderer/core/frame/screen.h"
+ #include "third_party/blink/renderer/core/frame/settings.h"
+ #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+ #include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
+@@ -7138,4 +7141,48 @@ TEST_F(WebViewTest, KeyboardFocusOnTabin
+   EXPECT_EQ(KURL("http://example.com/"), web_view->target_url_);
+ }
+ 
++TEST_F(WebViewTest, PersonaScreenAndDprIgnoreHostDisplayChanges) {
++  class PersonaClient : public frame_test_helpers::TestWebFrameClient {
++   public:
++    const HeliumPersonaSnapshot& GetHeliumPersonaSnapshot() const override {
++      return persona;
++    }
++    HeliumPersonaSnapshot persona;
++  } client;
++  client.persona.enabled = true;
++  client.persona.screen_width = 1440;
++  client.persona.screen_height = 900;
++  client.persona.device_scale_factor = 1.25;
++  client.persona.color_depth = 24;
++  WebViewImpl* view = web_view_helper_.Initialize(&client);
++  frame_test_helpers::LoadHTMLString(
++      view->MainFrameImpl(), "<div>screen</div>",
++      url_test_helpers::ToKURL("http://example.com/"));
++  auto* frame = view->MainFrameImpl()->GetFrame();
++  auto* media = MakeGarbageCollected<MediaValuesDynamic>(frame);
++  for (float host_scale : {1.0f, 2.0f}) {
++    blink::VisualProperties properties;
++    properties.screen_infos = display::ScreenInfos(display::ScreenInfo());
++    properties.screen_infos.mutable_current().rect = gfx::Rect(2560, 1600);
++    properties.screen_infos.mutable_current().device_scale_factor = host_scale;
++    properties.new_size_device_px = gfx::Size(800, 600);
++    properties.visible_viewport_size_device_px = gfx::Size(800, 600);
++    view->MainFrameWidget()->ApplyVisualProperties(properties);
++    view->MainFrameWidget()->SetZoomLevel(ZoomFactorToZoomLevel(1.5));
++    EXPECT_EQ(1440, frame->DomWindow()->screen()->width());
++    EXPECT_EQ(900, media->DeviceHeight());
++    EXPECT_EQ(1440, media->DeviceWidth());
++    EXPECT_EQ(8, media->ColorBitsPerComponent());
++    EXPECT_NEAR(1.875, frame->DomWindow()->devicePixelRatio(), 0.00001);
++    EXPECT_NEAR(1.875, frame->GetDocument()->DevicePixelRatio(), 0.00001);
++    EXPECT_NEAR(1.875, media->DevicePixelRatio(), 0.00001);
++  }
++  client.persona.enabled = false;
++  EXPECT_EQ(2560, frame->DomWindow()->screen()->width());
++  EXPECT_EQ(2560, media->DeviceWidth());
++  EXPECT_NEAR(3.0, frame->DomWindow()->devicePixelRatio(), 0.00001);
++  // The client is stack-owned and must outlive the frame.
++  web_view_helper_.Reset();
++}
++
+ }  // namespace blink
+--- a/third_party/blink/renderer/core/frame/local_dom_window.cc
++++ b/third_party/blink/renderer/core/frame/local_dom_window.cc
+@@ -1823,12 +1823,9 @@ CSSStyleDeclaration* LocalDOMWindow::get
+ }
+ 
+ double LocalDOMWindow::devicePixelRatio() const {
+-  if (const HeliumPersonaSnapshot* snapshot = GetPersonaSnapshot(this);
+-      snapshot && snapshot->device_scale_factor > 0.0) {
+-    return snapshot->device_scale_factor;
+-  }
+-  if (!GetFrame())
++  if (!GetFrame()) {
+     return 0.0;
++  }
+ 
+   return GetFrame()->DevicePixelRatio();
+ }
+--- a/third_party/blink/renderer/core/frame/local_frame.cc
++++ b/third_party/blink/renderer/core/frame/local_frame.cc
+@@ -58,6 +58,7 @@
+ #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+ #include "third_party/blink/public/common/chrome_debug_urls.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_persona/persona_snapshot.h"
+ #include "third_party/blink/public/common/input/web_input_event_attribution.h"
+ #include "third_party/blink/public/common/loader/lcp_critical_path_predictor_util.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+@@ -1838,12 +1839,32 @@ mojom::blink::DevicePostureType LocalFra
+   return mojo_handler_->GetDevicePosture();
+ }
+ 
++const HeliumPersonaSnapshot* LocalFrame::GetHeliumPersonaSnapshot() const {
++  if (!Client() || !Client()->GetWebFrame() ||
++      !Client()->GetWebFrame()->Client()) {
++    return nullptr;
++  }
++  const auto& snapshot =
++      Client()->GetWebFrame()->Client()->GetHeliumPersonaSnapshot();
++  return snapshot.IsEnabled() ? &snapshot : nullptr;
++}
++
+ double LocalFrame::DevicePixelRatio() const {
+   if (!page_)
+     return 0;
+ 
+   double ratio = page_->InspectorDeviceScaleFactorOverride();
+   ratio *= LayoutZoomFactor();
++  if (const auto* snapshot = GetHeliumPersonaSnapshot();
++      snapshot && snapshot->device_scale_factor > 0) {
++    // Layout zoom includes the host scale and page zoom. Replace only the
++    // host scale, leaving page/CSS zoom and actual layout geometry intact.
++    const float host_scale = GetChromeClient().WindowToViewportScalar(
++        const_cast<LocalFrame*>(this), 1.0f);
++    if (host_scale > 0) {
++      ratio *= snapshot->device_scale_factor / host_scale;
++    }
++  }
+   return ratio;
+ }
+ 
+--- a/third_party/blink/renderer/core/frame/local_frame.h
++++ b/third_party/blink/renderer/core/frame/local_frame.h
+@@ -127,6 +127,7 @@ class Color;
+ class ContentCaptureManager;
+ class CoreProbeSink;
+ class Document;
++struct HeliumPersonaSnapshot;
+ class Editor;
+ class Element;
+ class EventHandler;
+@@ -442,6 +443,7 @@ class CORE_EXPORT LocalFrame final
+                       float text_zoom_factor,
+                       float css_zoom_factor);
+ 
++  const HeliumPersonaSnapshot* GetHeliumPersonaSnapshot() const;
+   double DevicePixelRatio() const;
+ 
+   // Informs the local root's document and its local descendant subtree that a
+--- a/third_party/blink/renderer/core/frame/screen.cc
++++ b/third_party/blink/renderer/core/frame/screen.cc
+@@ -47,15 +47,9 @@ namespace blink {
+ namespace {
+ 
+ const HeliumPersonaSnapshot* GetPersonaSnapshot(LocalDOMWindow* window) {
+-  if (!window || !window->GetFrame() || !window->GetFrame()->Client() ||
+-      !window->GetFrame()->Client()->GetWebFrame() ||
+-      !window->GetFrame()->Client()->GetWebFrame()->Client()) {
+-    return nullptr;
+-  }
+-  const HeliumPersonaSnapshot& snapshot =
+-      window->GetFrame()->Client()->GetWebFrame()->Client()
+-          ->GetHeliumPersonaSnapshot();
+-  return snapshot.IsEnabled() ? &snapshot : nullptr;
++  return window && window->GetFrame()
++             ? window->GetFrame()->GetHeliumPersonaSnapshot()
++             : nullptr;
+ }
+ 
+ }  // namespace
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.cc
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+@@ -8,17 +8,17 @@
+ #include <cstdint>
+ 
+ #include "base/numerics/checked_math.h"
++#include "base/strings/string_number_conversions.h"
+ #include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_align.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_baseline.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_text_cluster_options.h"
++#include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
+ #include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
+ #include "third_party/blink/renderer/core/html/canvas/text_cluster.h"
+ #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+ #include "third_party/blink/renderer/platform/fonts/character_range.h"
+ #include "third_party/blink/renderer/platform/fonts/font.h"
+-#include "third_party/blink/renderer/platform/fonts/persona_cjk_fallback_font.h"
+-#include "third_party/blink/renderer/platform/wtf/text/code_point_iterator.h"
+ #include "third_party/blink/renderer/platform/fonts/font_description.h"
+ #include "third_party/blink/renderer/platform/fonts/font_metrics.h"
+ #include "third_party/blink/renderer/platform/fonts/plain_text_node.h"
+@@ -36,29 +36,6 @@
+ namespace blink {
+ 
+ constexpr int kHangingAsPercentOfAscent = 80;
+-constexpr uint64_t kFnvPrime = 0x00000100000001b3;
+-constexpr double kHeliumFontMetricNoiseDelta = 0.001;
+-constexpr uint64_t kMeasureTextNoiseDomain = 0x6d65617375726554;
+-constexpr uint64_t kPrivateCjkFallbackDomain = 0x70726976434a4b00;
+-constexpr uint64_t kRegularFallbackDomain = 0x726567756c617200;
+-
+-uint64_t MixHeliumFontMetricNoise(uint64_t hash, uint64_t value) {
+-  hash ^= value;
+-  hash *= kFnvPrime;
+-  return hash;
+-}
+-
+-double ApplyHeliumFontMetricNoise(double value,
+-                                  uint64_t token_hash,
+-                                  uint64_t field_index) {
+-  if (!std::isfinite(value) || value == 0.0)
+-    return value;
+-  const uint64_t field_hash = MixHeliumFontMetricNoise(token_hash, field_index);
+-  const double direction = (field_hash & 1) ? 1.0 : -1.0;
+-  const double magnitude = 1.0 + static_cast<double>((field_hash >> 1) % 31);
+-  return value + direction * magnitude * kHeliumFontMetricNoiseDelta;
+-}
+-
+ float TextMetrics::GetFontBaseline(
+     const V8CanvasTextBaseline::Enum text_baseline,
+     const SimpleFontData& font_data) {
+@@ -108,40 +85,31 @@ void TextMetrics::Trace(Visitor* visitor
+ }
+ 
+ void TextMetrics::ApplyFontMetricNoise(const NoiseToken& token) {
+-  uint64_t token_hash =
+-      MixHeliumFontMetricNoise(token.Value(), kMeasureTextNoiseDomain);
+-  bool contains_cjk = false;
+-  for (UChar32 character : text_) {
+-    token_hash = MixHeliumFontMetricNoise(
+-        token_hash, static_cast<uint32_t>(character));
+-    contains_cjk |= IsPersonaCjkCharacter(character);
+-  }
+-  token_hash = MixHeliumFontMetricNoise(
+-      token_hash, contains_cjk ? kPrivateCjkFallbackDomain
+-                               : kRegularFallbackDomain);
+-  width_ = ApplyHeliumFontMetricNoise(width_, token_hash, 1);
+-  actual_bounding_box_left_ =
+-      ApplyHeliumFontMetricNoise(actual_bounding_box_left_, token_hash, 2);
+-  actual_bounding_box_right_ =
+-      ApplyHeliumFontMetricNoise(actual_bounding_box_right_, token_hash, 3);
+-  font_bounding_box_ascent_ =
+-      ApplyHeliumFontMetricNoise(font_bounding_box_ascent_, token_hash, 4);
+-  font_bounding_box_descent_ =
+-      ApplyHeliumFontMetricNoise(font_bounding_box_descent_, token_hash, 5);
+-  actual_bounding_box_ascent_ =
+-      ApplyHeliumFontMetricNoise(actual_bounding_box_ascent_, token_hash, 6);
+-  actual_bounding_box_descent_ =
+-      ApplyHeliumFontMetricNoise(actual_bounding_box_descent_, token_hash, 7);
+-  em_height_ascent_ =
+-      ApplyHeliumFontMetricNoise(em_height_ascent_, token_hash, 8);
+-  em_height_descent_ =
+-      ApplyHeliumFontMetricNoise(em_height_descent_, token_hash, 9);
+-  baselines_->setAlphabetic(
+-      ApplyHeliumFontMetricNoise(baselines_->alphabetic(), token_hash, 10));
+-  baselines_->setHanging(
+-      ApplyHeliumFontMetricNoise(baselines_->hanging(), token_hash, 11));
+-  baselines_->setIdeographic(
+-      ApplyHeliumFontMetricNoise(baselines_->ideographic(), token_hash, 12));
++  const std::string text = text_.Utf8();
++  std::string measurement =
++      "text-v2/" + base::NumberToString(text.size()) + "/" + text;
++  if (font_) {
++    measurement += "\n" + font_->GetFontDescription().ToString().Utf8();
++  }
++  double extent = 1.0;
++  for (double value :
++       {width_, actual_bounding_box_left_, actual_bounding_box_right_,
++        font_bounding_box_ascent_, font_bounding_box_descent_,
++        actual_bounding_box_ascent_, actual_bounding_box_descent_,
++        em_height_ascent_, em_height_descent_, baselines_->alphabetic(),
++        baselines_->hanging(), baselines_->ideographic()}) {
++    if (!std::isfinite(value)) {
++      return;
++    }
++    measurement += "\n" + base::NumberToString(value);
++    extent = std::max(extent, std::abs(value));
++  }
++  // One positive scale per axis preserves baselines and bounding relations.
++  // Different text, fonts, and sizes receive independent bounded transforms.
++  noise_scale_x_ =
++      1.0 + 0.01 * PersonaMeasurementNoise(token, measurement + "/x") / extent;
++  noise_scale_y_ =
++      1.0 + 0.01 * PersonaMeasurementNoise(token, measurement + "/y") / extent;
+ }
+ 
+ TextMetrics::TextMetrics() : baselines_(Baselines::Create()) {}
+@@ -402,6 +370,11 @@ const HeapVector<Member<DOMRectReadOnly>
+       }
+     }
+   }
++  for (auto& rect : selection_rects) {
++    rect = DOMRectReadOnly::Create(
++        rect->x() * noise_scale_x_, rect->y() * noise_scale_y_,
++        rect->width() * noise_scale_x_, rect->height() * noise_scale_y_);
++  }
+   return selection_rects;
+ }
+ 
+@@ -466,7 +439,10 @@ DOMRectReadOnly* TextMetrics::getActualB
+         static_cast<void*>(&bounding_box));
+   }
+   bounding_box.Offset(-text_align_dx_, baseline_y);
+-  return DOMRectReadOnly::FromRectF(bounding_box);
++  return DOMRectReadOnly::Create(bounding_box.x() * noise_scale_x_,
++                                 bounding_box.y() * noise_scale_y_,
++                                 bounding_box.width() * noise_scale_x_,
++                                 bounding_box.height() * noise_scale_y_);
+ }
+ 
+ namespace {
+@@ -603,12 +579,15 @@ HeapVector<Member<TextCluster>> TextMetr
+     if (cluster->end() <= start or end <= cluster->start()) {
+       continue;
+     }
++    cluster->OffsetPosition(cluster->x() * (noise_scale_x_ - 1),
++                            cluster->y() * (noise_scale_y_ - 1));
+     clusters_for_range.push_back(cluster);
+   }
+   return clusters_for_range;
+ }
+ 
+ unsigned TextMetrics::getIndexFromOffset(double x) {
++  x /= noise_scale_x_;
+   if (runs_with_offset_.empty()) {
+     return 0;
+   }
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.h
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.h
+@@ -58,20 +58,36 @@ class CORE_EXPORT TextMetrics final : pu
+               const String& text,
+               PlainTextPainter& text_painter);
+ 
+-  double width() const { return width_; }
+-  double actualBoundingBoxLeft() const { return actual_bounding_box_left_; }
+-  double actualBoundingBoxRight() const { return actual_bounding_box_right_; }
+-  double fontBoundingBoxAscent() const { return font_bounding_box_ascent_; }
+-  double fontBoundingBoxDescent() const { return font_bounding_box_descent_; }
+-  double actualBoundingBoxAscent() const { return actual_bounding_box_ascent_; }
+-  double alphabeticBaseline() const { return baselines_->alphabetic(); }
+-  double hangingBaseline() const { return baselines_->hanging(); }
+-  double ideographicBaseline() const { return baselines_->ideographic(); }
++  double width() const { return width_ * noise_scale_x_; }
++  double actualBoundingBoxLeft() const {
++    return actual_bounding_box_left_ * noise_scale_x_;
++  }
++  double actualBoundingBoxRight() const {
++    return actual_bounding_box_right_ * noise_scale_x_;
++  }
++  double fontBoundingBoxAscent() const {
++    return font_bounding_box_ascent_ * noise_scale_y_;
++  }
++  double fontBoundingBoxDescent() const {
++    return font_bounding_box_descent_ * noise_scale_y_;
++  }
++  double actualBoundingBoxAscent() const {
++    return actual_bounding_box_ascent_ * noise_scale_y_;
++  }
++  double alphabeticBaseline() const {
++    return baselines_->alphabetic() * noise_scale_y_;
++  }
++  double hangingBaseline() const {
++    return baselines_->hanging() * noise_scale_y_;
++  }
++  double ideographicBaseline() const {
++    return baselines_->ideographic() * noise_scale_y_;
++  }
+   double actualBoundingBoxDescent() const {
+-    return actual_bounding_box_descent_;
++    return actual_bounding_box_descent_ * noise_scale_y_;
+   }
+-  double emHeightAscent() const { return em_height_ascent_; }
+-  double emHeightDescent() const { return em_height_descent_; }
++  double emHeightAscent() const { return em_height_ascent_ * noise_scale_y_; }
++  double emHeightDescent() const { return em_height_descent_ * noise_scale_y_; }
+ 
+   static float GetFontBaseline(const V8CanvasTextBaseline::Enum,
+                                const SimpleFontData&);
+@@ -133,6 +149,9 @@ class CORE_EXPORT TextMetrics final : pu
+       const TextClusterOptions* options,
+       ExceptionState* exception_state);
+ 
++  // Keep shaping data raw; transform only web-exposed measurements.
++  double noise_scale_x_ = 1.0;
++  double noise_scale_y_ = 1.0;
+   // x-direction
+   double width_ = 0.0;
+   double actual_bounding_box_left_ = 0.0;
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics_test.cc
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics_test.cc
+@@ -8,6 +8,8 @@
+ #include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_align.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_baseline.h"
++#include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
++#include "third_party/blink/renderer/platform/bindings/exception_state.h"
+ #include "third_party/blink/renderer/platform/fonts/font.h"
+ #include "third_party/blink/renderer/platform/fonts/plain_text_painter.h"
+ #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+@@ -282,4 +284,71 @@ TEST_F(TextMetricsTest, FontMetricNoiseS
+   EXPECT_NE(first->width() - first_width, second->width() - second_width);
+ }
+ 
++TEST_F(TextMetricsTest, FontMetricNoisePreservesRelatedExtendedMeasurements) {
++  auto* painter =
++      MakeGarbageCollected<PlainTextPainter>(PlainTextPainter::kCanvas);
++  const String text = "test text";
++  auto* metrics = MakeGarbageCollected<TextMetrics>(
++      GetFont(kLatinFont), TextDirection::kLtr,
++      V8CanvasTextBaseline::Enum::kAlphabetic, V8CanvasTextAlign::Enum::kLeft,
++      text, *painter);
++  const double raw_width = metrics->width();
++  DummyExceptionStateForTesting exception_state;
++  const auto raw_selection =
++      metrics->getSelectionRects(0, text.length(), exception_state);
++  const auto* raw_box =
++      metrics->getActualBoundingBox(0, text.length(), exception_state);
++  metrics->ApplyFontMetricNoise(NoiseToken(1234567));
++  const double scale = metrics->width() / raw_width;
++  const auto selection =
++      metrics->getSelectionRects(0, text.length(), exception_state);
++  ASSERT_EQ(raw_selection.size(), selection.size());
++  for (wtf_size_t i = 0; i < selection.size(); ++i) {
++    EXPECT_DOUBLE_EQ(raw_selection[i]->width() * scale, selection[i]->width());
++    EXPECT_DOUBLE_EQ(-metrics->fontBoundingBoxAscent(), selection[i]->y());
++    EXPECT_DOUBLE_EQ(
++        metrics->fontBoundingBoxAscent() + metrics->fontBoundingBoxDescent(),
++        selection[i]->height());
++  }
++  const auto* box =
++      metrics->getActualBoundingBox(0, text.length(), exception_state);
++  EXPECT_DOUBLE_EQ(raw_box->width() * scale, box->width());
++  EXPECT_EQ(text.length(), metrics->getIndexFromOffset(metrics->width()));
++  const double once = metrics->width();
++  metrics->ApplyFontMetricNoise(NoiseToken(1234567));
++  EXPECT_EQ(once, metrics->width());
++  metrics->ApplyFontMetricNoise(NoiseToken(7654321));
++  EXPECT_NE(once, metrics->width());
++}
++
++TEST_F(TextMetricsTest, FontMetricNoiseSeparatesFontSizeAndKeepsEmptyWidth) {
++  auto* painter =
++      MakeGarbageCollected<PlainTextPainter>(PlainTextPainter::kCanvas);
++  FontDescription::VariantLigatures ligatures;
++  const auto* large_font = blink::test::CreateTestFont(
++      AtomicString("Roboto"),
++      blink::test::PlatformTestDataPath(
++          "third_party/Roboto/roboto-regular.woff2"),
++      24.0, &ligatures);
++  auto measure = [&](const Font* font, const String& text) {
++    return MakeGarbageCollected<TextMetrics>(
++        font, TextDirection::kLtr, V8CanvasTextBaseline::Enum::kAlphabetic,
++        V8CanvasTextAlign::Enum::kLeft, text, *painter);
++  };
++  auto* small = measure(GetFont(kLatinFont), "size check");
++  auto* large = measure(large_font, "size check");
++  const double small_raw = small->width();
++  const double large_raw = large->width();
++  small->ApplyFontMetricNoise(NoiseToken(1234567));
++  large->ApplyFontMetricNoise(NoiseToken(1234567));
++  EXPECT_NE(small->width() - small_raw, large->width() - large_raw);
++  EXPECT_NEAR(small_raw, small->width(), 0.01001);
++  EXPECT_NEAR(large_raw, large->width(), 0.01001);
++  auto* empty = measure(GetFont(kLatinFont), "");
++  empty->ApplyFontMetricNoise(NoiseToken(1234567));
++  EXPECT_EQ(0, empty->width());
++  EXPECT_EQ(0, empty->actualBoundingBoxLeft());
++  EXPECT_EQ(0, empty->actualBoundingBoxRight());
++}
++
+ }  // namespace blink
+--- a/third_party/blink/renderer/modules/csspaint/paint_worklet_proxy_client.cc
++++ b/third_party/blink/renderer/modules/csspaint/paint_worklet_proxy_client.cc
+@@ -201,7 +201,7 @@ PaintRecord PaintWorkletProxyClient::Pai
+ 
+   const CSSPaintWorkletInput* input =
+       To<CSSPaintWorkletInput>(compositor_input);
+-  device_pixel_ratio_ = input->EffectiveZoom();
++  device_pixel_ratio_ = input->DevicePixelRatio();
+   definition = global_scope->FindDefinition(input->NameCopy());
+   return definition->Paint(compositor_input, animated_property_values);
+ }
+--- a/third_party/blink/renderer/modules/csspaint/paint_worklet_proxy_client_test.cc
++++ b/third_party/blink/renderer/modules/csspaint/paint_worklet_proxy_client_test.cc
+@@ -228,10 +228,15 @@ void RunPaintTestOnWorklet(WorkerThread*
+   scoped_refptr<CSSPaintWorkletInput> input =
+       base::MakeRefCounted<CSSPaintWorkletInput>(
+           "foo", gfx::SizeF(100, 100), 1.0f, 1, std::move(data),
+-          std::move(input_arguments), std::move(property_keys));
++          std::move(input_arguments), std::move(property_keys), 2.5);
+   PaintRecord record = proxy_client->Paint(input.get(), {});
+   EXPECT_FALSE(record.empty());
+ 
++  EXPECT_EQ(1.0f, input->EffectiveZoom());
++  EXPECT_EQ(2.5, proxy_client->DevicePixelRatio());
++  for (const auto& global_scope : proxy_client->GetGlobalScopesForTesting()) {
++    EXPECT_EQ(2.5, global_scope->devicePixelRatio());
++  }
+   waitable_event->Signal();
+ }
+ 
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -235,33 +235,6 @@ const HeliumPersonaSnapshot* GetPersonaS
+   return nullptr;
+ }
+ 
+-std::optional<uint64_t> GetHardwareNoiseHash(ExecutionContext* context,
+-                                             uint64_t field) {
+-  if (!context || !context->HardwareNoiseToken()) {
+-    return std::nullopt;
+-  }
+-  NoiseHash hash(*context->HardwareNoiseToken());
+-  hash.Update(field);
+-  return hash.GetTokenHashForTesting();
+-}
+-
+-GLfloat ApplyHardwareFloatNoise(GLfloat value, uint64_t hash) {
+-  if (value <= 0.0f) {
+-    return value;
+-  }
+-  const GLfloat direction = (hash & 1) ? 1.0f : -1.0f;
+-  const GLfloat magnitude = 1.0f + static_cast<GLfloat>((hash >> 1) % 5);
+-  return std::max<GLfloat>(0.0f, value + direction * magnitude * 0.01f);
+-}
+-
+-GLint ApplyHardwareIntNoise(GLint value, uint64_t hash) {
+-  if (value <= 0) {
+-    return value;
+-  }
+-  const GLint delta = (hash & 1) ? 1 : -1;
+-  return std::max<GLint>(1, value + delta);
+-}
+-
+ enum class WebGLANGLEImplementation {
+   // These values are persisted to logs. Entries should not be renumbered and
+   // numeric values should never be reused.
+@@ -3965,15 +3938,6 @@ ScriptValue WebGLRenderingContextBase::g
+       return GetUnsignedIntParameter(script_state, pname);
+     case GL_ALIASED_LINE_WIDTH_RANGE:
+     case GL_ALIASED_POINT_SIZE_RANGE:
+-      if (auto hash = GetHardwareNoiseHash(Host()->GetTopExecutionContext(),
+-                                           pname)) {
+-        std::array<GLfloat, 2> value = {0};
+-        ContextGL()->GetFloatv(pname, value.data());
+-        value[0] = ApplyHardwareFloatNoise(value[0], *hash);
+-        value[1] = ApplyHardwareFloatNoise(value[1], *hash >> 8);
+-        return WebGLAny(script_state,
+-                        DOMFloat32Array::Create(base::span(value)));
+-      }
+       return GetWebGLFloatArrayParameter(script_state, pname);
+     case GL_ALPHA_BITS:
+       if (drawing_buffer_->RequiresAlphaChannelToBePreserved())
+@@ -4504,12 +4468,6 @@ WebGLShaderPrecisionFormat* WebGLRenderi
+   GLint precision = 0;
+   ContextGL()->GetShaderPrecisionFormat(shader_type, precision_type, range,
+                                         &precision);
+-  if (auto hash = GetHardwareNoiseHash(Host()->GetTopExecutionContext(),
+-                                       shader_type ^ precision_type)) {
+-    range[0] = ApplyHardwareIntNoise(range[0], *hash);
+-    range[1] = ApplyHardwareIntNoise(range[1], *hash >> 8);
+-    precision = ApplyHardwareIntNoise(precision, *hash >> 16);
+-  }
+   return MakeGarbageCollected<WebGLShaderPrecisionFormat>(range[0], range[1],
+                                                           precision);
+ }

@@ -121,15 +121,6 @@ _PERSONA_RUNTIME_HOOK_GROUPS = {
         # WebGL1 and WebGL2 ArrayBufferView readPixels (not PIXEL_PACK GPU path).
         'format == GL_RGBA && type == GL_UNSIGNED_BYTE && width > 0',
     ),
-    'hardware webgl noise': (
-        'HardwareNoiseToken',
-        'GetHardwareNoiseHash',
-        'ApplyHardwareFloatNoise',
-        'ApplyHardwareIntNoise(precision',
-        # GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT intentionally un-noised: real
-        # drivers report exact powers of two (typically 16); a perturbed
-        # fractional value creates a fingerprinting signal instead of hiding one.
-    ),
     'audio render noise': (
         'ApplyHeliumAudioNoise',
         'AudioNoiseToken',
@@ -138,7 +129,7 @@ _PERSONA_RUNTIME_HOOK_GROUPS = {
     'font metric noise': (
         'ApplyFontMetricNoise',
         'FontMetricNoiseToken',
-        'kHeliumFontMetricNoiseDelta',
+        'PersonaMeasurementNoise',
     ),
 }
 
@@ -288,12 +279,10 @@ _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS = {
         'editablePersona_.fonts.id',
         'fontFamiliesText_',
         'fontAliasesText_',
-        'editablePersona_.fontRendering.engine',
     ),
     'manual noise toggles': (
         'editablePersona_.advanced.canvasNoise',
         'editablePersona_.advanced.audioNoise',
-        'editablePersona_.advanced.hardwareNoise',
         'editablePersona_.advanced.fontMetricNoise',
         'editablePersona_.advanced.clientRectNoise',
     ),
@@ -332,7 +321,7 @@ _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS = {
         'editablePersona_.advanced.allowRealBatteryStatus',
         'editablePersona_.advanced.allowPlatformCredentials',
         'editablePersona_.advanced.allowPaymentHandler',
-        'editablePersona_.advanced.allowSpeechSynthesis',
+        'personaSpeechUnavailable',
         'editablePersona_.advanced.allowWebPrinting',
         'editablePersona_.advanced.allowShapeDetection',
         'editablePersona_.advanced.allowWebOtp',
@@ -360,13 +349,128 @@ _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS = {
     ),
 }
 
-_PERSONA_RANDOMIZATION_FIELD_GROUPS = {}
+# These are structural coverage checks, not proof that the browser tests passed.
+# Each group ties configuration/state to its actual reader and regression test.
+_PERSONA_FINGERPRINT_FILE_GROUPS = {
+    'preset policy version and explicit network intent': (
+        ('chrome/browser/helium_persona/persona_service.cc', 'MakeProtectionUpgrade('),
+        ('chrome/browser/helium_persona/persona_service.cc', 'InheritNetworkRoute('),
+        ('chrome/browser/helium_persona/persona_service.cc', 'GetActivationErrors('),
+        ('chrome/browser/helium_persona/persona_service.cc', 'legacyProtectionSettings'),
+        ('chrome/browser/helium_persona/persona_service_unittest.cc',
+         'AllPresetsUsePortableProtectionPolicy'),
+        ('chrome/browser/helium_persona/persona_service_unittest.cc',
+         'InvalidInheritedRouteNeverFallsBackToDirect'),
+        ('chrome/browser/helium_persona/persona_service_unittest.cc',
+         'UpgradeCandidateIsReadOnlyAndBacksUpCustomSettingsOnce'),
+    ),
+    'portable font rendering and exhaustive private fallback': (
+        ('third_party/blink/renderer/platform/fonts/persona_cjk_fallback_font.cc',
+         'SkTypeface_Make_Fontations'),
+        ('third_party/blink/renderer/platform/fonts/font_platform_data.cc', 'CreatePortableSkFont'),
+        ('third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc',
+         'GetPrivateFallbackFontDataAt('),
+        ('third_party/blink/renderer/core/css/local_font_face_source.cc',
+         'PersonaFontPolicy::GetFontData('),
+        ('third_party/blink/public/blink_resources.grd', 'IDR_NITROUS_PERSONA_FONT_CJK_LICENSE'),
+        ('third_party/blink/renderer/platform/fonts/font_fallback_iterator_test.cc',
+         'PortableFallbackExhaustsWithoutHostFontsIncludingEmoji'),
+    ),
+    'speech denial across renderer and browser': (
+        ('third_party/blink/renderer/modules/speech/speech_synthesis.cc',
+         'ResetPersonaSpeechState('),
+        ('third_party/blink/renderer/modules/speech/speech_synthesis.cc', 'PostNotAllowedError('),
+        ('content/browser/browser_interface_binders.cc', 'BindPersonaSpeechSynthesis'),
+        ('content/browser/speech/speech_synthesis_impl.cc', 'IsPersonaProtected()'),
+        ('third_party/blink/renderer/modules/speech/speech_synthesis_test.cc',
+         'DeniesBindingAndDelayedHostVoices'),
+    ),
+    'Persona media preferences': (
+        ('third_party/blink/renderer/core/css/media_values.cc', 'snapshot->color_gamut'),
+        ('third_party/blink/renderer/core/css/media_values.cc', 'snapshot->dynamic_range'),
+        ('third_party/blink/renderer/core/css/media_values.cc', 'snapshot->prefers_reduced_motion'),
+        ('third_party/blink/renderer/core/css/media_values_test.cc',
+         'PersonaMediaPreferencesIgnoreHostAndCacheConsistently'),
+        ('chrome/browser/helium_persona/persona_fingerprint_consistency_browsertest.cc',
+         'PersonaMediaPreferencesAndSpeechAreExplicit'),
+    ),
+    'seed lifecycle and independent generations': (
+        ('chrome/browser/resources/settings/privacy_page/persona_page.html',
+         'editablePersona_.advanced.fingerprintRotation.scope'),
+        ('chrome/browser/helium_persona/persona_service.cc', '!daily_seed_evaluated_'),
+        ('content/browser/helium_noise/noise_token_data.cc', 'persona-noise-v2'),
+        ('content/browser/helium_noise/noise_token_data.cc', 'persona.fingerprint_generation'),
+        ('content/browser/helium_noise/noise_token_data.cc', 'FindSiteGeneration(persona, origin)'),
+        ('chrome/browser/helium_persona/persona_service_unittest.cc',
+         'DailyRotationIsTransactionalAndStableAcrossMidnight'),
+        ('content/browser/helium_noise/noise_token_data_unittest.cc',
+         'FirstSiteThenProfileRefreshChangesBothOrigins'),
+    ),
+    'active configuration transaction': (
+        ('chrome/browser/ui/webui/settings/persona_handler.cc', 'service->SavePersonaAndApply('),
+        ('chrome/browser/helium_persona/persona_service.cc', 'identity_fields(persona)'),
+        ('chrome/browser/helium_persona/persona_service.cc', 'StartPersonaActivation('),
+        ('chrome/browser/helium_persona/persona_service_unittest.cc',
+         'ActiveSaveWaitsForNetworkAndExecutionContextRestart'),
+        ('chrome/browser/helium_persona/persona_fingerprint_consistency_browsertest.cc',
+         'ActiveSaveRecreatesDocumentAndWorkerWithMatchingIdentity'),
+    ),
+    'screen and zoom consumers': (
+        ('third_party/blink/renderer/core/frame/screen.cc', 'GetHeliumPersonaSnapshot()'),
+        ('third_party/blink/renderer/core/frame/local_frame.cc',
+         'snapshot->device_scale_factor / host_scale'),
+        ('third_party/blink/renderer/core/css/media_values.cc', 'snapshot->screen_width'),
+        ('third_party/blink/renderer/core/css/media_values.cc', 'snapshot->screen_height'),
+        ('third_party/blink/renderer/core/css/media_values.cc', 'snapshot->color_depth / 3'),
+        ('content/browser/client_hints/client_hints.cc',
+         '? *persona_device_scale_factor * GetZoomFactor(context, url)'),
+        ('third_party/blink/renderer/modules/csspaint/paint_worklet_proxy_client.cc',
+         'input->DevicePixelRatio()'),
+        ('third_party/blink/renderer/core/exported/web_view_test.cc',
+         'PersonaScreenAndDprIgnoreHostDisplayChanges'),
+        ('chrome/browser/helium_persona/persona_fingerprint_consistency_browsertest.cc',
+         'ScreenMediaAndDprAgreeInMainAndCrossOriginFrames'),
+    ),
+    'legal WebGL capabilities and retained pixel noise': (
+        ('third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc',
+         'NoisePixels('),
+        ('chrome/browser/helium_persona/persona_fingerprint_consistency_browsertest.cc',
+         'WebGLPreservesNativeCapsAndKeepsPixelNoise'),
+        ('chrome/browser/helium_persona/persona_service.cc', 'snapshot.hardware_noise = false'),
+    ),
+    'Element and Range geometry readbacks': (
+        ('third_party/blink/renderer/core/dom/element.cc', 'ApplyPersonaClientRectNoise('),
+        ('third_party/blink/renderer/core/dom/range.cc', 'ApplyPersonaClientRectNoise('),
+        ('third_party/blink/renderer/core/canvas_interventions/noise_helper.cc',
+         'crypto::hmac::SignSha256('),
+        ('third_party/blink/renderer/core/canvas_interventions/noise_helper_unittest.cc',
+         'PersonaClientRectNoisePreservesUnionAndDegenerateRects'),
+    ),
+    'measurement-keyed font readbacks': (
+        ('third_party/blink/renderer/core/html/canvas/text_metrics.cc', 'PersonaMeasurementNoise('),
+        ('third_party/blink/renderer/core/html/canvas/text_metrics.cc', 'GetFontDescription()'),
+        ('third_party/blink/renderer/core/html/canvas/text_metrics_test.cc',
+         'FontMetricNoisePreservesRelatedExtendedMeasurements'),
+        ('third_party/blink/renderer/core/html/canvas/text_metrics_test.cc',
+         'FontMetricNoiseSeparatesFontSizeAndKeepsEmptyWidth'),
+    ),
+    'unsupported field compatibility and effective values': (
+        ('chrome/browser/helium_persona/persona_service.cc', 'RejectUnsupportedPersonaChanges('),
+        ('chrome/browser/resources/settings/privacy_page/persona_page.html',
+         'personaUnsupportedFields'),
+        ('chrome/browser/resources/settings/privacy_page/persona_page.ts', 'getEffectivePersona()'),
+        ('chrome/browser/helium_persona/persona_service_unittest.cc',
+         'LegacyUnsupportedFieldsRoundTripButCannotBeEdited'),
+        ('chrome/test/data/webui/settings/persona_config_test.ts', 'personaEffectiveDifferences('),
+    ),
+}
 
-
-def _is_persona_randomization_patch(relative_path):
-    """Return whether a persona patch participates in settings randomization."""
-    patch_name = Path(str(relative_path)).name
-    return 'random' in patch_name
+_PERSONA_FINGERPRINT_FORBIDDEN_TOKENS = {
+    'third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc': (
+        'GetHardwareNoiseHash', 'ApplyHardwareFloatNoise', 'ApplyHardwareIntNoise'),
+    'chrome/browser/helium_persona/persona_service.cc': ('EnsureFingerprintSeedForCurrentDay',
+                                                         'GetOrCreateFingerprintProfileSalt'),
+}
 
 
 def _read_series_file(patches_dir, series_file, join_dir=False):
@@ -484,7 +588,9 @@ def _should_include_persona_patch(relative_path, include_patch=None):
     """Return True when a series entry should be scanned for persona tokens."""
     if include_patch:
         return include_patch(relative_path)
-    return str(relative_path).startswith('helium/core/persona-')
+    # Other patches can add fingerprint controls or remove a Persona consumer.
+    # The owning source path, not a patch filename, determines coverage.
+    return True
 
 
 def _apply_persona_patch_line(lines_by_path, line, source_path, target_path):
@@ -658,27 +764,18 @@ def check_persona_profile_management_coverage(patches_dir, series_path=Path('ser
 
 
 def check_persona_randomization_coverage(patches_dir, series_path=Path('series')):
-    """
-    Checks settings randomization coverage when a randomization patch exists.
-
-    Returns True if required randomization tokens are missing; False otherwise.
-    """
-    randomization_patches = [
-        entry for entry in _read_series_file(patches_dir, series_path)
-        if str(entry).startswith('helium/core/persona-') and _is_persona_randomization_patch(entry)
-    ]
-    if not randomization_patches:
-        return False
-
-    if not _PERSONA_RANDOMIZATION_FIELD_GROUPS:
-        get_logger().warning(
-            'Persona randomization patch(es) present without configured coverage token groups: %s',
-            ', '.join(randomization_patches))
-        return True
-
-    return _check_persona_token_groups(patches_dir, 'randomization',
-                                       _PERSONA_RANDOMIZATION_FIELD_GROUPS, series_path,
-                                       _is_persona_randomization_patch)
+    """Check fingerprint configuration, consumers and tests across the whole queue."""
+    warnings = _check_persona_file_token_groups(patches_dir, 'fingerprint',
+                                                _PERSONA_FINGERPRINT_FILE_GROUPS, series_path)
+    lines_by_path = _collect_persona_patch_lines(patches_dir, series_path)
+    for path, tokens in _PERSONA_FINGERPRINT_FORBIDDEN_TOKENS.items():
+        text = '\n'.join(lines_by_path.get(path, []))
+        present = [token for token in tokens if token in text]
+        if present:
+            get_logger().warning('Persona fingerprint obsolete consumers in %s: %s', path,
+                                 ', '.join(present))
+            warnings = True
+    return warnings
 
 
 def check_persona_settings_manual_field_coverage(patches_dir, series_path=Path('series')):

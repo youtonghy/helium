@@ -75,7 +75,7 @@ class DownloadInfo: #pylint: disable=too-few-public-methods
                 for x in _optional_keys
             },
             schema.Optional('extractor'): schema.Or(ExtractorEnum.TAR, ExtractorEnum.SEVENZIP,
-                                                    ExtractorEnum.WINRAR),
+                                                    ExtractorEnum.WINRAR, ExtractorEnum.FILE),
             schema.Optional(schema.Or(*_hashes)): schema.And(str, len),
             schema.Optional('hash_url'): lambda x: DownloadInfo._is_hash_url(x), #pylint: disable=unnecessary-lambda
         }
@@ -231,7 +231,9 @@ def _download_if_needed(file_path, url, show_progress):
     if shutil.which('curl'):
         get_logger().debug('Using curl')
         try:
-            subprocess.run(['curl', '-fL', '-o', str(tmp_file_path), '-C', '-', url], check=True)
+            subprocess.run(['curl', '--globoff', '-fL', '-o',
+                            str(tmp_file_path), '-C', '-', url],
+                           check=True)
         except subprocess.CalledProcessError as exc:
             get_logger().error('curl failed. Re-run the download command to resume downloading.')
             raise exc
@@ -356,6 +358,15 @@ def unpack_downloads(download_info, cache_dir, components, output_dir, extractor
         extractor_name = download_properties.extractor \
                             or get_extractor_for(download_properties.download_filename)
 
+        if extractor_name == ExtractorEnum.FILE:
+            # Recheck cached resources before replacing an installed font/license.
+            check_downloads(download_info, cache_dir, [download_name])
+            if download_properties.strip_leading_dirs:
+                raise ValueError('strip_leading_dirs is not supported for individual files')
+            destination = output_dir / Path(download_properties.output_path)
+            destination.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(download_path, destination / download_path.name)
+            continue
         if extractor_name == ExtractorEnum.ZIP:
             extractor_func = extract_zip_file
         elif extractor_name == ExtractorEnum.SEVENZIP:

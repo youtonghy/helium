@@ -1403,5 +1403,140 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_TOOLTIP",
     "source": "Overrides navigator.connection.saveData, reporting data-saver mode to sites.",
     "message": "Переопределяет navigator.connection.saveData, сообщая сайтам о режиме экономии данных."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY",
+    "source": "Save and apply",
+    "message": "Сохранить и применить"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY_DESCRIPTION",
+    "source": "Changing identity fields in the active profile restarts its workers and reloads its open tabs. Name and icon changes apply immediately.",
+    "message": "Изменение полей идентификации активного профиля перезапускает его воркеры и перезагружает открытые вкладки. Изменения имени и значка применяются сразу."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED",
+    "source": "Unsupported",
+    "message": "Не поддерживается"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED_FIELDS",
+    "source": "Font rasterizer settings, WebGL capability profiles, and hardware noise are unsupported. Imported values are preserved for compatibility and do not change rendering.",
+    "message": "Настройки растеризации шрифтов, профили возможностей WebGL и аппаратный шум не поддерживаются. Импортированные значения сохраняются для совместимости и не влияют на отрисовку."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_DIFFERENCES_DESCRIPTION",
+    "source": "Saved values that differ from the active browser identity are shown below. Device Pack constraints can replace user agent and UA-CH values. Unsaved changes are not included.",
+    "message": "Ниже показаны сохранённые значения, отличающиеся от текущих данных идентификации браузера. Ограничения пакета устройства могут заменять значения User-Agent и UA-CH. Несохранённые изменения не учитываются."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_FIELD",
+    "source": "Field",
+    "message": "Поле"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REQUESTED_VALUE",
+    "source": "Saved value",
+    "message": "Сохранённое значение"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_VALUE",
+    "source": "Effective value",
+    "message": "Действующее значение"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "Unsupported rendering-engine metadata. Imported values are preserved but do not select a font rasterizer.",
+    "message": "Неподдерживаемые метаданные движка отрисовки. Импортированные значения сохраняются, но не определяют растеризатор шрифтов."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "Unsupported legacy setting. WebGL capability ranges and shader precision use the real driver values; pixel noise is controlled separately.",
+    "message": "Устаревшая неподдерживаемая настройка. Диапазоны возможностей WebGL и точность шейдеров используют реальные значения драйвера; пиксельный шум управляется отдельно."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "Review and upgrade this profile before activation. Its older protection settings and any implicit direct connection need confirmation.",
+    "message": "Перед активацией проверьте и обновите этот профиль. Старые настройки защиты и неявное прямое подключение требуют подтверждения."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review protection upgrade",
+    "message": "Проверить обновление защиты"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_REVIEW",
+    "source": "Review the updated values, then save. The original configuration will be kept in the exported profile. Bundled fonts can change page layout and fingerprint values.",
+    "message": "Проверьте обновлённые значения и сохраните их. Исходная конфигурация останется в экспортированном профиле. Встроенные шрифты могут изменить вёрстку страниц и значения цифрового отпечатка."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNSET",
+    "source": "Choose a proxy or explicitly allow direct connections",
+    "message": "Выбрать прокси или явно разрешить прямые подключения"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_SELECTION_REQUIRED",
+    "source": "Choose a proxy or explicitly allow direct connections before activating this profile.",
+    "message": "Перед активацией профиля выберите прокси или явно разрешите прямые подключения."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNAVAILABLE",
+    "source": "The selected route is unavailable. Choose a valid route; the previous identity and route remain in use.",
+    "message": "Выбранный маршрут недоступен. Выберите действующий маршрут; прежние идентификационные данные и маршрут остаются в использовании."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SPEECH_UNAVAILABLE",
+    "source": "Speech synthesis is disabled for protected profiles. Saved voice names are retained for compatibility; no portable voice engine is available.",
+    "message": "Синтез речи отключён для защищённых профилей. Сохранённые названия голосов оставлены для совместимости; переносимый речевой движок отсутствует."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_WINDOWS_EVIDENCE",
+    "source": "Windows network templates are inferred and lack an independent Windows capture. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "Сетевые шаблоны Windows основаны на предположениях и не подтверждены независимым захватом трафика Windows. Привязка маршрута и активные механизмы защиты не проверяют идентичность устройства целиком. Нативные возможности GPU по-прежнему зависят от хоста."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_TEMPLATE_EVIDENCE",
+    "source": "Network templates have reference captures and still require verification in the running browser. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "Для сетевых шаблонов есть эталонные захваты трафика, но их ещё нужно проверить в работающем браузере. Привязка маршрута и активные механизмы защиты не проверяют идентичность устройства целиком. Нативные возможности GPU по-прежнему зависят от хоста."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_COLOR_GAMUT",
+    "source": "Color gamut exposed to websites",
+    "message": "Цветовой охват, сообщаемый сайтам"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DYNAMIC_RANGE",
+    "source": "Dynamic range exposed to websites",
+    "message": "Динамический диапазон, сообщаемый сайтам"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STANDARD_RANGE",
+    "source": "Standard",
+    "message": "Стандартный"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_HIGH_RANGE",
+    "source": "High",
+    "message": "Высокий"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REDUCED_MOTION",
+    "source": "Tell websites to reduce motion",
+    "message": "Просить сайты уменьшить анимацию"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "Protected profiles load these families from the bundled Noto resources. They do not enumerate installed system fonts. Websites can still provide their own web fonts.",
+    "message": "Защищённые профили загружают эти семейства из встроенных ресурсов Noto, не перечисляя установленные системные шрифты. Сайты могут по-прежнему предоставлять собственные веб-шрифты."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP",
+    "source": "Legacy voice metadata is retained for export. It does not enable speech synthesis or connect to system voices.",
+    "message": "Старые метаданные голосов сохраняются для экспорта. Они не включают синтез речи и не подключаются к системным голосам."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
+    "message": "Защищённые профили отключают синтез речи, поскольку переносимый речевой движок отсутствует."
   }
 ]

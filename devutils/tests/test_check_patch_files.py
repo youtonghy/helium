@@ -18,13 +18,13 @@ sys.path.pop(0)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from check_patch_files import (
-    _PERSONA_BUILD_INTEGRITY_FILE_GROUPS, _PERSONA_PROFILE_MANAGEMENT_GROUPS,
-    _PERSONA_CONTRACT_GROUPS, _PERSONA_RUNTIME_HOOK_GROUPS, _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS,
-    check_persona_build_integrity, check_persona_contract_coverage,
-    check_persona_profile_management_coverage, check_persona_runtime_hook_coverage,
-    check_persona_randomization_coverage, check_persona_settings_i18n_key_coverage,
-    check_persona_settings_manual_field_coverage, check_series_duplicates,
-    check_tracked_patch_backups, check_unused_patches)
+    _PERSONA_FINGERPRINT_FILE_GROUPS, _PERSONA_BUILD_INTEGRITY_FILE_GROUPS,
+    _PERSONA_PROFILE_MANAGEMENT_GROUPS, _PERSONA_CONTRACT_GROUPS, _PERSONA_RUNTIME_HOOK_GROUPS,
+    _PERSONA_SETTINGS_MANUAL_FIELD_GROUPS, check_persona_build_integrity,
+    check_persona_contract_coverage, check_persona_profile_management_coverage,
+    check_persona_runtime_hook_coverage, check_persona_randomization_coverage,
+    check_persona_settings_i18n_key_coverage, check_persona_settings_manual_field_coverage,
+    check_series_duplicates, check_tracked_patch_backups, check_unused_patches)
 
 sys.path.pop(0)
 
@@ -304,21 +304,69 @@ def test_check_persona_settings_manual_field_coverage():
         assert not check_persona_settings_manual_field_coverage(patches_dir)
 
         _write_persona_guard_patch(
-            patches_dir, full_guard_tokens.replace('editablePersona_.fontRendering.engine\n', ''))
+            patches_dir, full_guard_tokens.replace('editablePersona_.advanced.fontMetricNoise\n',
+                                                   ''))
         assert check_persona_settings_manual_field_coverage(patches_dir)
 
 
-def test_check_persona_randomization_coverage_requires_configured_tokens():
-    """Test randomization patches cannot silently bypass coverage checks."""
+def _fingerprint_files():
+    files = {}
+    for requirements in _PERSONA_FINGERPRINT_FILE_GROUPS.values():
+        for path, token in requirements:
+            files.setdefault(path, []).append(token)
+    return {path: '\n'.join(tokens) for path, tokens in files.items()}
 
+
+def test_check_persona_randomization_coverage_requires_consumers_and_tests():
+    """Ordinary patch names require the same field/consumer/test coverage."""
     with tempfile.TemporaryDirectory() as tmpdirname:
         patches_dir = Path(tmpdirname)
-
-        _write_persona_guard_patch(patches_dir, 'SavePersona();', 'persona-settings-ui.patch')
+        files = _fingerprint_files()
+        _write_multi_file_patch(patches_dir, files, 'fingerprint-control-settings.patch')
         assert not check_persona_randomization_coverage(patches_dir)
 
-        _write_persona_guard_patch(patches_dir, 'SavePersona();',
-                                   'persona-consistent-randomize-ui.patch')
+        css_path = 'third_party/blink/renderer/core/css/media_values.cc'
+        css = files.pop(css_path)
+        # Even matching getters in another file cannot substitute for CSS.
+        files['third_party/blink/renderer/core/frame/screen.cc'] += '\n' + css
+        _write_multi_file_patch(patches_dir, files, 'settings.patch')
+        assert check_persona_randomization_coverage(patches_dir)
+
+
+def test_fingerprint_coverage_rejects_comments_and_later_removals():
+    """Comments, metadata and non-Persona patch names cannot mask a missing reader."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        patches_dir = Path(tmpdirname)
+        files = _fingerprint_files()
+        target = 'third_party/blink/renderer/core/css/media_values.cc'
+        original = files[target]
+        files[target] = '\n'.join('// ' + line for line in original.splitlines())
+        _write_multi_file_patch(patches_dir, files, 'controls.patch')
+        patch_path = patches_dir / 'helium/core/controls.patch'
+        patch_path.write_text('Description: ' + original.replace('\n', ' ') + '\n' +
+                              patch_path.read_text(encoding=ENCODING),
+                              encoding=ENCODING)
+        assert check_persona_randomization_coverage(patches_dir)
+
+        files[target] = original
+        entries = ['helium/core/controls.patch', 'helium/core/remove-css.patch']
+        _write_multi_file_patch(patches_dir, files, 'controls.patch', entries)
+        removed = patches_dir / 'helium/core/remove-css.patch'
+        removed.write_text(
+            f'--- a/{target}\n+++ b/{target}\n'
+            '@@ -1,1 +0,0 @@\n-snapshot->screen_width\n',
+            encoding=ENCODING)
+        assert check_persona_randomization_coverage(patches_dir)
+
+
+def test_fingerprint_coverage_rejects_hardware_cap_perturbation():
+    """Keeping pixel noise does not excuse reintroducing invalid WebGL caps."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        patches_dir = Path(tmpdirname)
+        files = _fingerprint_files()
+        target = 'third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc'
+        files[target] += '\nApplyHardwareFloatNoise(value, hash);'
+        _write_multi_file_patch(patches_dir, files, 'capability.patch')
         assert check_persona_randomization_coverage(patches_dir)
 
 
@@ -333,5 +381,7 @@ if __name__ == '__main__':
     test_check_persona_contract_coverage()
     test_check_persona_profile_management_coverage()
     test_check_persona_runtime_hook_coverage()
-    test_check_persona_randomization_coverage_requires_configured_tokens()
+    test_check_persona_randomization_coverage_requires_consumers_and_tests()
+    test_fingerprint_coverage_rejects_comments_and_later_removals()
+    test_fingerprint_coverage_rejects_hardware_cap_perturbation()
     test_check_persona_settings_manual_field_coverage()

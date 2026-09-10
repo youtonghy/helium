@@ -1688,5 +1688,140 @@
     "name": "IDS_SETTINGS_NITROUS_PROXY_CLEAR_PASSWORD",
     "source": "Clear saved password",
     "message": "清除已儲存的密碼"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY",
+    "source": "Save and apply",
+    "message": "儲存並套用"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY_DESCRIPTION",
+    "source": "Changing identity fields in the active profile restarts its workers and reloads its open tabs. Name and icon changes apply immediately.",
+    "message": "變更使用中設定檔的身分欄位會重新啟動其 Worker，並重新載入已開啟的分頁。名稱和圖示的變更會立即生效。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED",
+    "source": "Unsupported",
+    "message": "不支援"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED_FIELDS",
+    "source": "Font rasterizer settings, WebGL capability profiles, and hardware noise are unsupported. Imported values are preserved for compatibility and do not change rendering.",
+    "message": "不支援字型點陣化設定、WebGL 能力設定檔和硬體雜訊。匯入的值會保留以維持相容性，但不會改變算繪結果。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_DIFFERENCES_DESCRIPTION",
+    "source": "Saved values that differ from the active browser identity are shown below. Device Pack constraints can replace user agent and UA-CH values. Unsaved changes are not included.",
+    "message": "下方顯示已儲存值與目前瀏覽器身分的差異。裝置套件的限制可能取代使用者代理程式和 UA-CH 值。不包含尚未儲存的變更。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_FIELD",
+    "source": "Field",
+    "message": "欄位"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REQUESTED_VALUE",
+    "source": "Saved value",
+    "message": "已儲存值"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_VALUE",
+    "source": "Effective value",
+    "message": "實際生效值"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "Unsupported rendering-engine metadata. Imported values are preserved but do not select a font rasterizer.",
+    "message": "不支援的算繪引擎中繼資料。匯入的值會保留，但不會用於選擇字型點陣化引擎。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "Unsupported legacy setting. WebGL capability ranges and shader precision use the real driver values; pixel noise is controlled separately.",
+    "message": "不支援的舊版設定。WebGL 能力範圍和著色器精確度使用驅動程式的實際值；像素雜訊則另行控制。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "Review and upgrade this profile before activation. Its older protection settings and any implicit direct connection need confirmation.",
+    "message": "啟用前請檢查並升級此設定檔。舊版保護設定和任何隱含的直接連線都需要確認。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review protection upgrade",
+    "message": "檢查保護升級"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_REVIEW",
+    "source": "Review the updated values, then save. The original configuration will be kept in the exported profile. Bundled fonts can change page layout and fingerprint values.",
+    "message": "檢查更新後的值，然後儲存。原始設定會保留在匯出的設定檔中。內建字型可能改變頁面版面配置和指紋值。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNSET",
+    "source": "Choose a proxy or explicitly allow direct connections",
+    "message": "選擇代理伺服器或明確允許直接連線"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_SELECTION_REQUIRED",
+    "source": "Choose a proxy or explicitly allow direct connections before activating this profile.",
+    "message": "啟用此設定檔前，請選擇代理伺服器或明確允許直接連線。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNAVAILABLE",
+    "source": "The selected route is unavailable. Choose a valid route; the previous identity and route remain in use.",
+    "message": "所選路由無法使用。請選擇有效路由；先前的身分和路由將繼續使用。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SPEECH_UNAVAILABLE",
+    "source": "Speech synthesis is disabled for protected profiles. Saved voice names are retained for compatibility; no portable voice engine is available.",
+    "message": "受保護的設定檔已停用語音合成。儲存的語音名稱僅為相容性保留；目前沒有可攜式語音引擎。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_WINDOWS_EVIDENCE",
+    "source": "Windows network templates are inferred and lack an independent Windows capture. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "Windows 網路範本是推估結果，缺少獨立的 Windows 封包擷取證據。路由綁定和已生效的保護路徑無法驗證完整裝置身分。原生 GPU 能力仍依賴主機。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_TEMPLATE_EVIDENCE",
+    "source": "Network templates have reference captures and still require verification in the running browser. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "網路範本有參考封包擷取資料，但仍需在執行中的瀏覽器驗證。路由綁定和已生效的保護路徑無法驗證完整裝置身分。原生 GPU 能力仍依賴主機。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_COLOR_GAMUT",
+    "source": "Color gamut exposed to websites",
+    "message": "向網站回報的色域"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DYNAMIC_RANGE",
+    "source": "Dynamic range exposed to websites",
+    "message": "向網站回報的動態範圍"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STANDARD_RANGE",
+    "source": "Standard",
+    "message": "標準"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_HIGH_RANGE",
+    "source": "High",
+    "message": "高"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REDUCED_MOTION",
+    "source": "Tell websites to reduce motion",
+    "message": "告知網站減少動態效果"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "Protected profiles load these families from the bundled Noto resources. They do not enumerate installed system fonts. Websites can still provide their own web fonts.",
+    "message": "受保護的設定檔從內建 Noto 資源載入這些字型，不列舉已安裝的系統字型。網站仍可提供自己的網頁字型。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP",
+    "source": "Legacy voice metadata is retained for export. It does not enable speech synthesis or connect to system voices.",
+    "message": "舊版語音中繼資料會保留供匯出，不會啟用語音合成或連接系統語音。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
+    "message": "由於沒有可攜式語音引擎，受保護的設定檔會停用語音合成。"
   }
 ]

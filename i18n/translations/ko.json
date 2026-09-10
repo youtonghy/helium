@@ -1403,5 +1403,140 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_TOOLTIP",
     "source": "Overrides navigator.connection.saveData, reporting data-saver mode to sites.",
     "message": "navigator.connection.saveData를 덮어써 사이트에 데이터 절약 모드를 보고합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY",
+    "source": "Save and apply",
+    "message": "저장 및 적용"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY_DESCRIPTION",
+    "source": "Changing identity fields in the active profile restarts its workers and reloads its open tabs. Name and icon changes apply immediately.",
+    "message": "활성 프로필의 식별 정보를 변경하면 해당 Worker가 다시 시작되고 열려 있는 탭이 새로고침됩니다. 이름과 아이콘 변경은 즉시 적용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED",
+    "source": "Unsupported",
+    "message": "지원되지 않음"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED_FIELDS",
+    "source": "Font rasterizer settings, WebGL capability profiles, and hardware noise are unsupported. Imported values are preserved for compatibility and do not change rendering.",
+    "message": "글꼴 래스터화 설정, WebGL 기능 프로필 및 하드웨어 노이즈는 지원되지 않습니다. 가져온 값은 호환성을 위해 유지되지만 렌더링에는 영향을 주지 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_DIFFERENCES_DESCRIPTION",
+    "source": "Saved values that differ from the active browser identity are shown below. Device Pack constraints can replace user agent and UA-CH values. Unsaved changes are not included.",
+    "message": "저장된 값과 현재 브라우저 식별 정보의 차이가 아래에 표시됩니다. 기기 팩의 제약에 따라 사용자 에이전트와 UA-CH 값이 대체될 수 있습니다. 저장하지 않은 변경 사항은 포함되지 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_FIELD",
+    "source": "Field",
+    "message": "항목"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REQUESTED_VALUE",
+    "source": "Saved value",
+    "message": "저장된 값"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_VALUE",
+    "source": "Effective value",
+    "message": "실제 적용 값"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "Unsupported rendering-engine metadata. Imported values are preserved but do not select a font rasterizer.",
+    "message": "지원되지 않는 렌더링 엔진 메타데이터입니다. 가져온 값은 유지되지만 글꼴 래스터라이저를 선택하는 데 사용되지 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "Unsupported legacy setting. WebGL capability ranges and shader precision use the real driver values; pixel noise is controlled separately.",
+    "message": "지원되지 않는 이전 설정입니다. WebGL 기능 범위와 셰이더 정밀도는 드라이버의 실제 값을 사용하며 픽셀 노이즈는 별도로 제어됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "Review and upgrade this profile before activation. Its older protection settings and any implicit direct connection need confirmation.",
+    "message": "활성화하기 전에 이 프로필의 보호 설정을 검토하고 업그레이드하세요. 이전 보호 설정과 암묵적인 직접 연결은 확인이 필요합니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review protection upgrade",
+    "message": "보호 설정 업그레이드 검토"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_REVIEW",
+    "source": "Review the updated values, then save. The original configuration will be kept in the exported profile. Bundled fonts can change page layout and fingerprint values.",
+    "message": "변경된 값을 검토한 후 저장하세요. 원래 설정은 내보낸 프로필에 보존됩니다. 내장 글꼴로 인해 페이지 레이아웃과 지문 값이 바뀔 수 있습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNSET",
+    "source": "Choose a proxy or explicitly allow direct connections",
+    "message": "프록시를 선택하거나 직접 연결을 명시적으로 허용"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_SELECTION_REQUIRED",
+    "source": "Choose a proxy or explicitly allow direct connections before activating this profile.",
+    "message": "이 프로필을 활성화하기 전에 프록시를 선택하거나 직접 연결을 명시적으로 허용하세요."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNAVAILABLE",
+    "source": "The selected route is unavailable. Choose a valid route; the previous identity and route remain in use.",
+    "message": "선택한 경로를 사용할 수 없습니다. 유효한 경로를 선택하세요. 이전 신원과 경로가 계속 사용됩니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SPEECH_UNAVAILABLE",
+    "source": "Speech synthesis is disabled for protected profiles. Saved voice names are retained for compatibility; no portable voice engine is available.",
+    "message": "보호된 프로필에서는 음성 합성이 비활성화됩니다. 저장된 음성 이름은 호환성을 위해 보존되며, 이식 가능한 음성 엔진은 없습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_WINDOWS_EVIDENCE",
+    "source": "Windows network templates are inferred and lack an independent Windows capture. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "Windows 네트워크 템플릿은 추론에 기반하며 독립적인 Windows 패킷 캡처가 없습니다. 경로 연결과 활성 보호 기능만으로 전체 기기 신원이 검증되지는 않습니다. 기본 GPU 기능은 여전히 호스트에 따라 달라집니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_TEMPLATE_EVIDENCE",
+    "source": "Network templates have reference captures and still require verification in the running browser. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "네트워크 템플릿에 참조 캡처가 있지만 실행 중인 브라우저에서 검증해야 합니다. 경로 연결과 활성 보호 기능만으로 전체 기기 신원이 검증되지는 않습니다. 기본 GPU 기능은 여전히 호스트에 따라 달라집니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_COLOR_GAMUT",
+    "source": "Color gamut exposed to websites",
+    "message": "웹사이트에 제공할 색 영역"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DYNAMIC_RANGE",
+    "source": "Dynamic range exposed to websites",
+    "message": "웹사이트에 제공할 동적 범위"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STANDARD_RANGE",
+    "source": "Standard",
+    "message": "표준"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_HIGH_RANGE",
+    "source": "High",
+    "message": "높음"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REDUCED_MOTION",
+    "source": "Tell websites to reduce motion",
+    "message": "웹사이트에 동작 줄이기 요청"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "Protected profiles load these families from the bundled Noto resources. They do not enumerate installed system fonts. Websites can still provide their own web fonts.",
+    "message": "보호된 프로필은 내장 Noto 리소스에서 이 글꼴들을 불러오며 설치된 시스템 글꼴을 열거하지 않습니다. 웹사이트는 자체 웹 글꼴을 계속 제공할 수 있습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP",
+    "source": "Legacy voice metadata is retained for export. It does not enable speech synthesis or connect to system voices.",
+    "message": "이전 음성 메타데이터는 내보내기용으로 보존됩니다. 음성 합성을 활성화하거나 시스템 음성에 연결하지 않습니다."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
+    "message": "이식 가능한 음성 엔진이 없으므로 보호된 프로필에서는 음성 합성이 비활성화됩니다."
   }
 ]

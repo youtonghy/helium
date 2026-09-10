@@ -4,6 +4,10 @@ Nitrous separates rendering fingerprint refresh from complete browser identity
 rotation. The operations use the same Persona seed lineage, but they have
 different scopes and reload behavior.
 
+Preset protection version 1, portable fonts, explicit route intent, legacy
+upgrade behavior, and their verification limits are documented in
+[Persona preset privacy policy](persona-preset-privacy-policy.md).
+
 ## Success standard: controlled browser cohort
 
 The product goal is **not** perfect hardware cloning of an arbitrary Windows or
@@ -44,7 +48,7 @@ Presets for OS families that lack captured network variants ship with
 ## Fingerprint refresh
 
 Use **Refresh fingerprints** in Persona settings to increment the Profile's
-fingerprint generation. Canvas, font metrics, Audio, hardware readbacks, and
+fingerprint generation. Canvas, font metrics, Audio, geometry readbacks, and
 other generation-aware rendering surfaces receive new deterministic tokens
 after pages are reloaded. The selected complete browser identity, UA, UA-CH,
 and platform remain unchanged. Within that identity, Profile refresh may select
@@ -53,7 +57,10 @@ switching to a different complete identity template.
 
 Use **Refresh fingerprints for this site** in the Persona indicator menu to
 increment only the active HTTP(S) origin's rendering generation. The command
-is available only when a Persona is active and reloads only the active tab.
+is available only when a Persona is active with `site_profile` rotation scope,
+and reloads only the active tab. The service returns `unsupported_scope` for a
+site refresh under `profile` or `global` scope, and `invalid_origin` for a
+non-HTTP(S) origin. An empty origin never falls through to Profile refresh.
 Site refresh never installs a site-specific TLS, HTTP/2, or HTTP/3 template;
 network identity remains Profile-scoped so connection reuse cannot mix
 identities between origins.
@@ -62,6 +69,92 @@ Within one Persona and generation, repeated reads are stable. Automatic
 rotation also includes its configured time bucket in the seed. A manual
 refresh increments generation independently of that bucket, so it changes the
 tokens even when the current time bucket is still zero.
+
+Rendering token derivation uses the `persona-noise-v2` domain and includes
+Profile generation and site generation as separate inputs. A missing or legacy
+string-only site record has site generation zero. Refreshing site A advances
+only A's site generation; a later Profile refresh advances the Profile generation
+for A and every other origin, even if A has its own epoch record. Existing
+Profile seeds, Persona ids and site epoch records are retained.
+
+This derivation change produces a one-time change in rendering tokens, including
+for fixed seeds. It does not rewrite the seed shown in Settings. A fixed seed
+still participates in manual generation changes and the configured rotation
+bucket; it is not a promise that outputs remain unchanged across those events.
+
+## Daily seed lifecycle
+
+Daily random-seed rotation is evaluated on the first successful enabled Persona
+activation in each browser session. Seed preparation belongs to the activation
+candidate: the old seed and date remain persisted until network acceptance, and
+rollback restores them. Failed activation does not consume the session check,
+so a retry can evaluate the stale day again.
+
+`GetFingerprintSettings`, `GetActiveSnapshot` and `ResolveActivePersona` are
+read-only. They do not initialize or replace a seed. A browser session that
+crosses local midnight keeps its committed seed and remains available; switching
+Personas during that session does not trigger another daily replacement. There
+is no daily timer, midnight reload, or midnight request block. A fresh Profile
+gets its initial seed through activation or an explicit seed operation. Fixed
+seed mode disables daily and exit-cleanup automation.
+
+## Editing an active Persona
+
+Settings uses `SavePersonaAndApply`. An inactive Persona is saved immediately.
+For an active Persona, changes to identity fields use the same request gate,
+network acknowledgement, state compare-and-set, execution-context restart and
+rollback path as activation. Settings waits for that result and labels the
+action **Save and apply**, with an inline notice about reloading Profile tabs
+and restarting workers.
+
+Changes confined to name, display name and icon do not restart execution
+contexts. Runtime identity audits ignore the presentation-only snapshot name
+when comparing frame and worker evidence. The legacy synchronous `SavePersona`
+entry rejects active identity edits with `requires_activation`; it cannot bypass
+the transaction. Changing the active named network route through this save path
+remains rejected by its existing reactivation rule.
+
+## Rendering consistency and field support
+
+Screen width/height, CSS `device-width`/`device-height`, and color depth resolve
+the same active Persona. The configured device scale factor is a baseline:
+page zoom continues to affect `window.devicePixelRatio`, CSS resolution, document
+DPR, DPR Client Hints and PaintWorklet readbacks. Actual viewport dimensions and
+layout zoom remain Chromium's values. Off-thread PaintWorklet carries the
+exposed DPR separately from the effective zoom used for painting.
+
+WebGL line-width ranges, point-size ranges and shader precision are returned
+unchanged from the driver. Independent perturbation of these capabilities could
+turn a valid range such as Metal's `[1, 1]` into an invalid range. Canvas and
+WebGL pixel-readback noise remain enabled independently.
+
+Element and Range rectangle bindings share a bounded, monotone coordinate map
+keyed by the client-rectangle token and coordinate. The map preserves zero
+dimensions, ordering and bounding unions, and applies only when returning web
+readbacks. Identical raw geometry maps to identical exposed geometry. Font
+metrics use HMAC-derived scales keyed by the text, font description and raw
+metrics; related scalar fields, selection rectangles, bounding boxes, clusters
+and hit-test offsets share those scales. Neither approach changes layout or
+claims that arbitrary adversarial measurements are indistinguishable from a
+different physical device.
+
+The following fields are retained as legacy metadata and reported as
+`unsupported` in contract/effective/import diagnostics:
+
+- `fontRendering.id`, `engine`, `antialiasing`, `subpixelRendering`, `lcdText`
+- `gpu.webglProfile`, including `maxCombinedTextureImageUnits`
+- `gpu.webgl2Profile`, including `uniformBufferOffsetAlignment`
+- `advanced.hardwareNoise`
+
+Old imports and unchanged saves preserve these values. New changes to them are
+rejected, and the corresponding Settings controls are disabled. No hardware
+noise token is issued. Device Pack-constrained UA and UA-CH fields remain
+editable as requested values; the active editor shows saved/effective
+differences without expanding the verified identity catalog.
+
+The [fingerprint coverage matrix](persona-fingerprint-coverage.md) records the
+configuration-to-consumer mapping and regression tests. Source coverage checks
+and patch fresh-apply validation do not execute those Chromium tests.
 
 ## Complete identity rotation
 
@@ -73,10 +166,9 @@ and protocol sessions from the old generation, clears TLS session state, stops
 workers, and reloads the Profile's open tabs.
 
 Complete identity rotation requires at least two verified complete templates.
-The production catalog currently contains one complete Chrome 149/macOS arm64
-identity, so the control is intentionally unavailable. Tests use an injected
-second template to verify the transaction and rollback mechanism; that test
-fixture is not a production identity.
+Availability follows the catalog described below. Transaction tests also use
+injected templates to exercise acceptance and rollback independently of the
+production catalog.
 
 ## WebRTC
 
@@ -161,9 +253,10 @@ marked `networkReady`.
 
 ## Import and export
 
-`Nitrous.persona/v2` is the current export schema. `helium.persona/v1` remains
-accepted only as a legacy import format; new exports never use the legacy
-name. Runtime Profile generation, per-origin generation epochs, active network
+`Nitrous.persona/v3` is the current export schema. `Nitrous.persona/v2` and
+`helium.persona/v1` remain accepted as legacy import formats. New exports retain
+the protection policy version and any original configuration backup.
+Runtime Profile generation, per-origin generation epochs, active network
 sessions, and TLS session state are stored separately and are not transferred
 with an exported Persona. Importing a Persona therefore does not clone the
 source Profile's live fingerprint generation. Imported Personas still must
@@ -171,7 +264,11 @@ bind a verified Device Pack before activation.
 
 ## Named network routes
 
-A Persona may reference a Profile-scoped route through `network.routeId`.
+A Persona references a Profile-scoped proxy through `network.routeId` with
+`network.routeMode = proxy`, or explicitly permits direct access with
+`routeMode = direct`. An empty route id alone does not authorize direct access.
+New preset copies inherit a valid active proxy or remain inactive with
+`routeMode = unset` until the user chooses a route.
 Routes are stored separately from Personas and contain a stable id, display
 name, mode, host, port, optional SOCKS5 credentials, and enforcement setting.
 Credentials are never returned to Settings, CDP, export, effective, or audit
@@ -232,9 +329,9 @@ instantaneous process-wide atomicity. The system route rejects credentialed
 routes and route changes while enabled.
 
 Active routes cannot be edited or deleted in place. Create a replacement route,
-bind it to an inactive Persona, and activate that Persona through the
-transaction. An active Persona likewise cannot change its `network.routeId`
-through a plain save.
+then bind it through Persona activation or the active profile's Save and Apply
+transaction. A plain save cannot change an active Persona's route; the Settings
+save action uses the transaction and rolls back a failed route switch.
 
 ## Introspection and automation
 

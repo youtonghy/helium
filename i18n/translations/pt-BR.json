@@ -1404,5 +1404,140 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_TOOLTIP",
     "source": "Overrides navigator.connection.saveData, reporting data-saver mode to sites.",
     "message": "Substitui navigator.connection.saveData e informa o modo de economia de dados aos sites."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY",
+    "source": "Save and apply",
+    "message": "Salvar e aplicar"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY_DESCRIPTION",
+    "source": "Changing identity fields in the active profile restarts its workers and reloads its open tabs. Name and icon changes apply immediately.",
+    "message": "Alterar os campos de identidade do perfil ativo reinicia seus workers e recarrega suas abas abertas. As alterações de nome e ícone são aplicadas imediatamente."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED",
+    "source": "Unsupported",
+    "message": "Não compatível"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED_FIELDS",
+    "source": "Font rasterizer settings, WebGL capability profiles, and hardware noise are unsupported. Imported values are preserved for compatibility and do not change rendering.",
+    "message": "As configurações de rasterização de fontes, os perfis de recursos WebGL e o ruído de hardware não são compatíveis. Os valores importados são preservados por compatibilidade e não alteram a renderização."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_DIFFERENCES_DESCRIPTION",
+    "source": "Saved values that differ from the active browser identity are shown below. Device Pack constraints can replace user agent and UA-CH values. Unsaved changes are not included.",
+    "message": "Os valores salvos que diferem da identidade ativa do navegador são exibidos abaixo. As restrições do pacote de dispositivo podem substituir os valores do agente do usuário e de UA-CH. As alterações não salvas não são incluídas."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_FIELD",
+    "source": "Field",
+    "message": "Campo"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REQUESTED_VALUE",
+    "source": "Saved value",
+    "message": "Valor salvo"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_VALUE",
+    "source": "Effective value",
+    "message": "Valor efetivo"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "Unsupported rendering-engine metadata. Imported values are preserved but do not select a font rasterizer.",
+    "message": "Metadados do mecanismo de renderização não compatíveis. Os valores importados são preservados, mas não selecionam um rasterizador de fontes."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "Unsupported legacy setting. WebGL capability ranges and shader precision use the real driver values; pixel noise is controlled separately.",
+    "message": "Configuração antiga não compatível. Os intervalos de recursos WebGL e a precisão dos shaders usam os valores reais do driver; o ruído de pixels é controlado separadamente."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "Review and upgrade this profile before activation. Its older protection settings and any implicit direct connection need confirmation.",
+    "message": "Revise e atualize este perfil antes de ativá-lo. As configurações de proteção antigas e qualquer conexão direta implícita precisam de confirmação."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review protection upgrade",
+    "message": "Revisar atualização da proteção"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_REVIEW",
+    "source": "Review the updated values, then save. The original configuration will be kept in the exported profile. Bundled fonts can change page layout and fingerprint values.",
+    "message": "Revise os valores atualizados e salve. A configuração original será mantida no perfil exportado. As fontes incluídas podem alterar o layout das páginas e os valores da impressão digital."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNSET",
+    "source": "Choose a proxy or explicitly allow direct connections",
+    "message": "Escolher um proxy ou permitir explicitamente conexões diretas"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_SELECTION_REQUIRED",
+    "source": "Choose a proxy or explicitly allow direct connections before activating this profile.",
+    "message": "Escolha um proxy ou permita explicitamente conexões diretas antes de ativar este perfil."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNAVAILABLE",
+    "source": "The selected route is unavailable. Choose a valid route; the previous identity and route remain in use.",
+    "message": "A rota selecionada está indisponível. Escolha uma rota válida; a identidade e a rota anteriores continuarão em uso."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SPEECH_UNAVAILABLE",
+    "source": "Speech synthesis is disabled for protected profiles. Saved voice names are retained for compatibility; no portable voice engine is available.",
+    "message": "A síntese de voz está desativada em perfis protegidos. Os nomes de vozes salvos são mantidos por compatibilidade; não há um mecanismo de voz portátil disponível."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_WINDOWS_EVIDENCE",
+    "source": "Windows network templates are inferred and lack an independent Windows capture. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "Os modelos de rede do Windows são inferidos e não têm uma captura independente do Windows. A vinculação de rota e as proteções ativas não verificam toda a identidade do dispositivo. Os recursos nativos da GPU ainda dependem do sistema hospedeiro."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_TEMPLATE_EVIDENCE",
+    "source": "Network templates have reference captures and still require verification in the running browser. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "Os modelos de rede têm capturas de referência, mas ainda precisam ser verificados no navegador em execução. A vinculação de rota e as proteções ativas não verificam toda a identidade do dispositivo. Os recursos nativos da GPU ainda dependem do sistema hospedeiro."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_COLOR_GAMUT",
+    "source": "Color gamut exposed to websites",
+    "message": "Gama de cores informada aos sites"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DYNAMIC_RANGE",
+    "source": "Dynamic range exposed to websites",
+    "message": "Faixa dinâmica informada aos sites"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STANDARD_RANGE",
+    "source": "Standard",
+    "message": "Padrão"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_HIGH_RANGE",
+    "source": "High",
+    "message": "Alta"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REDUCED_MOTION",
+    "source": "Tell websites to reduce motion",
+    "message": "Pedir aos sites para reduzir o movimento"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "Protected profiles load these families from the bundled Noto resources. They do not enumerate installed system fonts. Websites can still provide their own web fonts.",
+    "message": "Perfis protegidos carregam estas famílias dos recursos Noto incluídos, sem enumerar as fontes instaladas no sistema. Os sites ainda podem fornecer suas próprias fontes web."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP",
+    "source": "Legacy voice metadata is retained for export. It does not enable speech synthesis or connect to system voices.",
+    "message": "Os metadados de voz antigos são mantidos para exportação. Eles não ativam a síntese de voz nem se conectam às vozes do sistema."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
+    "message": "Perfis protegidos desativam a síntese de voz porque não há um mecanismo de voz portátil disponível."
   }
 ]

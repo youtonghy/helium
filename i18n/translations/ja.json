@@ -1403,5 +1403,140 @@
     "name": "IDS_SETTINGS_PERSONA_FIELD_SAVE_DATA_TOOLTIP",
     "source": "Overrides navigator.connection.saveData, reporting data-saver mode to sites.",
     "message": "navigator.connection.saveData を上書きし、省データモードをサイトに報告します。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY",
+    "source": "Save and apply",
+    "message": "保存して適用"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY_DESCRIPTION",
+    "source": "Changing identity fields in the active profile restarts its workers and reloads its open tabs. Name and icon changes apply immediately.",
+    "message": "使用中のプロファイルの識別情報を変更すると、その Worker が再起動し、開いているタブが再読み込みされます。名前とアイコンの変更はすぐに適用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED",
+    "source": "Unsupported",
+    "message": "非対応"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED_FIELDS",
+    "source": "Font rasterizer settings, WebGL capability profiles, and hardware noise are unsupported. Imported values are preserved for compatibility and do not change rendering.",
+    "message": "フォントのラスタライズ設定、WebGL 機能プロファイル、ハードウェアノイズには対応していません。インポートした値は互換性のために保持されますが、描画には影響しません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_DIFFERENCES_DESCRIPTION",
+    "source": "Saved values that differ from the active browser identity are shown below. Device Pack constraints can replace user agent and UA-CH values. Unsaved changes are not included.",
+    "message": "保存済みの値と使用中のブラウザの識別情報との差異を以下に示します。デバイスパックの制約により、ユーザーエージェントと UA-CH の値が置き換えられる場合があります。未保存の変更は含まれません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_FIELD",
+    "source": "Field",
+    "message": "項目"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REQUESTED_VALUE",
+    "source": "Saved value",
+    "message": "保存済みの値"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_VALUE",
+    "source": "Effective value",
+    "message": "適用されている値"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "Unsupported rendering-engine metadata. Imported values are preserved but do not select a font rasterizer.",
+    "message": "非対応の描画エンジンのメタデータです。インポートした値は保持されますが、フォントのラスタライザーの選択には使用されません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "Unsupported legacy setting. WebGL capability ranges and shader precision use the real driver values; pixel noise is controlled separately.",
+    "message": "非対応の旧設定です。WebGL の機能範囲とシェーダー精度にはドライバーの実際の値が使用されます。ピクセルノイズは個別に制御されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "Review and upgrade this profile before activation. Its older protection settings and any implicit direct connection need confirmation.",
+    "message": "有効にする前に、このプロファイルの保護設定を確認して更新してください。古い保護設定と暗黙の直接接続には確認が必要です。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "Review protection upgrade",
+    "message": "保護設定の更新を確認"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_REVIEW",
+    "source": "Review the updated values, then save. The original configuration will be kept in the exported profile. Bundled fonts can change page layout and fingerprint values.",
+    "message": "更新後の値を確認して保存してください。元の設定はエクスポートしたプロファイルに保持されます。同梱フォントによってページのレイアウトやフィンガープリント値が変わる場合があります。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNSET",
+    "source": "Choose a proxy or explicitly allow direct connections",
+    "message": "プロキシを選択するか、直接接続を明示的に許可"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_SELECTION_REQUIRED",
+    "source": "Choose a proxy or explicitly allow direct connections before activating this profile.",
+    "message": "このプロファイルを有効にする前に、プロキシを選択するか、直接接続を明示的に許可してください。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNAVAILABLE",
+    "source": "The selected route is unavailable. Choose a valid route; the previous identity and route remain in use.",
+    "message": "選択した経路は利用できません。有効な経路を選択してください。以前の識別情報と経路が引き続き使用されます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SPEECH_UNAVAILABLE",
+    "source": "Speech synthesis is disabled for protected profiles. Saved voice names are retained for compatibility; no portable voice engine is available.",
+    "message": "保護されたプロファイルでは音声合成が無効です。保存された音声名は互換性のために保持されますが、移植可能な音声エンジンはありません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_WINDOWS_EVIDENCE",
+    "source": "Windows network templates are inferred and lack an independent Windows capture. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "Windows のネットワークテンプレートは推定に基づき、独立した Windows のパケットキャプチャがありません。経路の関連付けや保護機能の動作は、デバイスの識別情報全体を検証するものではありません。ネイティブ GPU 機能は引き続きホストに依存します。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_TEMPLATE_EVIDENCE",
+    "source": "Network templates have reference captures and still require verification in the running browser. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host.",
+    "message": "ネットワークテンプレートには参考キャプチャがありますが、実行中のブラウザでの検証が必要です。経路の関連付けや保護機能の動作は、デバイスの識別情報全体を検証するものではありません。ネイティブ GPU 機能は引き続きホストに依存します。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_COLOR_GAMUT",
+    "source": "Color gamut exposed to websites",
+    "message": "ウェブサイトに通知する色域"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DYNAMIC_RANGE",
+    "source": "Dynamic range exposed to websites",
+    "message": "ウェブサイトに通知するダイナミックレンジ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STANDARD_RANGE",
+    "source": "Standard",
+    "message": "標準"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_HIGH_RANGE",
+    "source": "High",
+    "message": "高"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REDUCED_MOTION",
+    "source": "Tell websites to reduce motion",
+    "message": "動きを減らすようウェブサイトに通知"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "Protected profiles load these families from the bundled Noto resources. They do not enumerate installed system fonts. Websites can still provide their own web fonts.",
+    "message": "保護されたプロファイルでは、同梱の Noto リソースからこれらのフォントを読み込みます。インストール済みのシステムフォントは列挙しません。ウェブサイト独自のウェブフォントは引き続き利用できます。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP",
+    "source": "Legacy voice metadata is retained for export. It does not enable speech synthesis or connect to system voices.",
+    "message": "従来の音声メタデータはエクスポート用に保持されます。音声合成を有効にしたり、システムの音声に接続したりすることはありません。"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "Protected profiles disable speech synthesis because no portable voice engine is available.",
+    "message": "移植可能な音声エンジンがないため、保護されたプロファイルでは音声合成が無効です。"
   }
 ]

@@ -2868,6 +2868,168 @@
     "message": "Clear saved password"
   },
   {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona configuration consistency UI",
+    "message": "Save and apply"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SAVE_AND_APPLY_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona configuration consistency UI",
+    "message": "Changing identity fields in the active profile restarts its workers and reloads its open tabs. Name and icon changes apply immediately."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Label on unsupported Persona fields",
+    "message": "Unsupported"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_UNSUPPORTED_FIELDS",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona configuration consistency UI",
+    "message": "Font rasterizer settings, WebGL capability profiles, and hardware noise are unsupported. Imported values are preserved for compatibility and do not change rendering."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_DIFFERENCES_DESCRIPTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona configuration consistency UI",
+    "message": "Saved values that differ from the active browser identity are shown below. Device Pack constraints can replace user agent and UA-CH values. Unsaved changes are not included."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_FIELD",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona configuration consistency UI",
+    "message": "Field"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REQUESTED_VALUE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona configuration consistency UI",
+    "message": "Saved value"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_EFFECTIVE_VALUE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona configuration consistency UI",
+    "message": "Effective value"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_ENGINE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona font engine field",
+    "message": "Unsupported rendering-engine metadata. Imported values are preserved but do not select a font rasterizer."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_HARDWARE_NOISE_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona hardware noise toggle",
+    "message": "Unsupported legacy setting. WebGL capability ranges and shader precision use the real driver values; pixel noise is controlled separately."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE_REQUIRED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Review and upgrade this profile before activation. Its older protection settings and any implicit direct connection need confirmation."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_UPGRADE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Review protection upgrade"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_PROTECTION_REVIEW",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Review the updated values, then save. The original configuration will be kept in the exported profile. Bundled fonts can change page layout and fingerprint values."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNSET",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Choose a proxy or explicitly allow direct connections"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_SELECTION_REQUIRED",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Choose a proxy or explicitly allow direct connections before activating this profile."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_ROUTE_UNAVAILABLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "The selected route is unavailable. Choose a valid route; the previous identity and route remain in use."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_SPEECH_UNAVAILABLE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Speech synthesis is disabled for protected profiles. Saved voice names are retained for compatibility; no portable voice engine is available."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_WINDOWS_EVIDENCE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Windows network templates are inferred and lack an independent Windows capture. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_TEMPLATE_EVIDENCE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Network templates have reference captures and still require verification in the running browser. Route binding and active protection paths do not verify the entire device identity. Native GPU capabilities remain dependent on the host."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_COLOR_GAMUT",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Color gamut exposed to websites"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_DYNAMIC_RANGE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Dynamic range exposed to websites"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_STANDARD_RANGE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Standard"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_HIGH_RANGE",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "High"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_REDUCED_MOTION",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Persona protection policy and explicit route selection",
+    "message": "Tell websites to reduce motion"
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_FONT_FAMILIES_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona font families list field",
+    "message": "Protected profiles load these families from the bundled Noto resources. They do not enumerate installed system fonts. Websites can still provide their own web fonts."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_SPEECH_VOICES_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona speech voices",
+    "message": "Legacy voice metadata is retained for export. It does not enable speech synthesis or connect to system voices."
+  },
+  {
+    "name": "IDS_SETTINGS_PERSONA_FIELD_ALLOW_SPEECH_SYNTHESIS_TOOLTIP",
+    "source": "chrome/app/settings_strings.grdp",
+    "context": "Help text for the persona speech synthesis gate",
+    "message": "Protected profiles disable speech synthesis because no portable voice engine is available."
+  },
+  {
     "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
     "source": "chrome/app/generated_resources.grd",
     "context": "The name of the macOS system Translate command in the content area context menu",

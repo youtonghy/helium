@@ -505,6 +505,9 @@ def manifest_output_paths():
             output_path = parser[component].get('output_path', fallback=None)
             if not output_path or output_path.strip() in ('', './', '.'):
                 continue
+            if parser[component].get('extractor') == 'file':
+                output_path = str(
+                    Path(output_path.strip()) / parser[component]['download_filename'])
             entries.append((manifest, component, output_path.strip()))
     return entries
 

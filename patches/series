@@ -233,3 +233,5 @@ helium/core/persona-output-surface-assurance.patch
 helium/core/persona-runtime-capability-assurance.patch
 helium/core/persona-media-surface-completion.patch
 helium/core/persona-build-compatibility-fixes.patch
+helium/core/persona-fingerprint-consistency-repair.patch
+helium/core/persona-preset-privacy-policy.patch

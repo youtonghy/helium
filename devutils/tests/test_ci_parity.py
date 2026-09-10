@@ -6,6 +6,7 @@ green, so the parity mechanisms need regression protection of their own.
 """
 
 import configparser
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -128,3 +129,19 @@ def test_declared_download_components_have_output_paths_to_verify():
             if output_path.strip() not in ('', './', '.'):
                 checked += 1
     assert checked >= 4, 'expected the bundled dependencies to be verifiable'
+
+
+def test_freshness_checks_each_resource_in_a_shared_directory(tmp_path, monkeypatch):
+    """An existing font directory cannot hide a missing new font or license."""
+    spec = importlib.util.spec_from_file_location('validation_font_test', RUNNER)
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    manifest = tmp_path / 'fonts.ini'
+    manifest.write_text(
+        '[sans]\noutput_path=fonts\nextractor=file\ndownload_filename=sans.ttf\n'
+        '[license]\noutput_path=fonts\nextractor=file\ndownload_filename=OFL.txt\n',
+        encoding='utf-8')
+    monkeypatch.setattr(runner, 'ROOT', tmp_path)
+    monkeypatch.setattr(runner, 'SOURCE_MANIFESTS', ['fonts.ini'])
+    paths = {entry[2] for entry in runner.manifest_output_paths()}
+    assert paths == {'fonts/sans.ttf', 'fonts/OFL.txt'}
